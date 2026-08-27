@@ -27,6 +27,12 @@ const subagentRequestSchema = z.object({
     .describe(
       "Response verbosity for a new subagent conversation. Applied only when this agent_id is first created; later values do not change that conversation."
     ),
+  memory: z
+    .boolean()
+    .default(true)
+    .describe(
+      "Whether a new subagent can use memory from outside its current conversation. Set false for an isolated agent with no prior memory. Best for isolated reviews. Applied only when this agent_id is first created."
+    ),
 })
 
 const subagentRunResultSchema = z.object({
@@ -91,7 +97,13 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
 
         try {
           const result = await chatGptSubagents.ask(
-            { agentId: agent.agent_id, prompt: agent.prompt, oververbosity: agent.oververbosity, notificationSessionId },
+            {
+              agentId: agent.agent_id,
+              prompt: agent.prompt,
+              oververbosity: agent.oververbosity,
+              memory: agent.memory,
+              notificationSessionId,
+            },
             ctx.mcpReq.signal
           )
           turns.push({

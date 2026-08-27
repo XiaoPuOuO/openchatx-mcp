@@ -41,6 +41,7 @@ const RATE_LIMIT_ERROR_MESSAGE =
   "ChatGPT temporarily rate limited conversation access. New subagent turns are blocked during a 15-minute cooldown. Existing turns remain available through subagent_result. Do not retry automatically."
 const SUBMISSION_GRACE_MS = 500
 const MANAGED_VIEWPORT = { width: 412, height: 915 } as const
+const TEMPORARY_CHAT_URL = "https://chatgpt.com/?temporary-chat=true"
 
 const INJECTED_PROMPT =
   "Respond terse like smart caveman — drop articles, filler, pleasantries. Fragments OK. Technical terms exact. Code unchanged. Pattern: [thing] [action] [reason]. [next step].\n\nNot use `subagent` or `computer_*` tools."
@@ -156,7 +157,7 @@ export async function askSubagent(
     if (state.rateLimitedUntil > 0) await clearExpiredRateLimit(state, signal)
     else await detectRateLimit(state)
 
-    agent = state.agents.get(request.agentId) ?? (await createAgent(state, request.agentId, signal))
+    agent = state.agents.get(request.agentId) ?? (await createAgent(state, request.agentId, signal, request.memory ?? true))
     const activeAgent = agent
     await waitForInterTurn(state, agent, signal)
     const page = await ensureAgentPage(state, agent, signal)
@@ -230,16 +231,22 @@ export async function pollSubagent(
   return turnResult(state, turn)
 }
 
-export async function createAgent(state: ChatGptSubagentRuntimeState, agentId: string, signal?: AbortSignal): Promise<BrowserAgentState> {
+export async function createAgent(
+  state: ChatGptSubagentRuntimeState,
+  agentId: string,
+  signal?: AbortSignal,
+  memory = true
+): Promise<BrowserAgentState> {
   const persisted = state.store?.get(agentId)
   const agent: BrowserAgentState = {
     agentId,
     status: "idle",
     lastUsedAt: Date.now(),
     turnCount: persisted?.turnCount ?? 0,
-    conversationUrl: persisted?.conversationUrl,
+    conversationUrl: persisted?.conversationUrl ?? (memory ? undefined : TEMPORARY_CHAT_URL),
   }
   await ensureAgentPage(state, agent, signal)
+  if (!persisted && !memory) agent.conversationUrl = undefined
   state.agents.set(agentId, agent)
   return agent
 }

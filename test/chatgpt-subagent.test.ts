@@ -98,6 +98,32 @@ test("new agents start from configured project URL", async () => {
   assert.deepEqual(navigations, ["https://chatgpt.com/g/g-p-example/project"])
 })
 
+test("memoryless agents start in temporary chat without retaining a conversation URL", async () => {
+  const runtime = createRuntime({ chatGptUrl: "https://chatgpt.com/g/g-p-example/project" })
+  let currentUrl = "about:blank"
+  const navigations: string[] = []
+  const page = {
+    isClosed: () => false,
+    url: () => currentUrl,
+    setViewportSize: async () => undefined,
+    goto: async (url: string) => {
+      currentUrl = url
+      navigations.push(url)
+    },
+    close: async () => undefined,
+    locator: (selector: string) => ({
+      first: () => ({ count: async () => (selector === "#prompt-textarea" ? 1 : 0), isVisible: async () => selector === "#prompt-textarea" }),
+    }),
+  }
+  installBackgroundPage(runtime, page)
+
+  const agent = await createAgent(runtime, "memoryless-agent", undefined, false)
+
+  assert.equal(agent.page, page)
+  assert.equal(agent.conversationUrl, undefined)
+  assert.deepEqual(navigations, ["https://chatgpt.com/?temporary-chat=true"])
+})
+
 test("same agent keeps one page across multiple turns and captures conversation id from CDP", async () => {
   const runtime = createRuntime({ chatGptUrl: "https://chatgpt.com/g/g-p-example/project" })
   let currentUrl = "https://chatgpt.com/g/g-p-example/project"

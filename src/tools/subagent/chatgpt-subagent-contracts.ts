@@ -13,6 +13,7 @@ export interface ChatGptSubagentRequest {
   prompt: string
   agentId: string
   oververbosity: number
+  memory?: boolean
   notificationSessionId?: string
 }
 
