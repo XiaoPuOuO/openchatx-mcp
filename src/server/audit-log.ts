@@ -35,6 +35,7 @@ interface ToolResponseSummary {
 }
 
 export class McpAuditLogger {
+  // Session IDS are NOT private, aliases are using to make it human readable
   private readonly sessionAliases = new Map<string, string>()
 
   constructor(
