@@ -8,3 +8,4 @@ summary: "Browser-backed ChatGPT subagent architecture, completion, recovery, an
 - [Browser ChatGPT Subagents](./browser-chatgpt-subagents.md) — Browser-backed ChatGPT subagent lifecycle, conversation persistence, page ownership, submission, and recovery behavior.
 - [ChatGPT CDP Transport](./chatgpt-cdp-transport.md) — Observed private ChatGPT Web turn transport used by Shellby's raw-CDP subagent completion tracker.
 - [Subagent Completion](./subagent-completion.md) — Subagent completion detection, event delivery, bounded recovery, result settlement, and failure semantics.
+- [Subagent Tracking](./subagent-tracking.md) — Session traceability for MCP callers, attempted browser-subagent lineage correlation, live ChatGPT transport findings, limitations, and the decision to avoid inferred parent tracking for now.
