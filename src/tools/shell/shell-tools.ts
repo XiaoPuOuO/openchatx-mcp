@@ -196,9 +196,9 @@ function pollSnapshotResult(snapshot: ShellSnapshot) {
 
   const structuredContent: ShellPollOutput = {
     status: snapshot.status,
+    ...(snapshot.exit_code !== null ? { exit_code: snapshot.exit_code } : {}),
     output: withApplyPatchToolHint(snapshot.output),
   }
-  if (snapshot.exit_code !== null) structuredContent.exit_code = snapshot.exit_code
   if (snapshot.status === "running" || snapshot.output_truncated) structuredContent.next_cursor = snapshot.next_cursor
   if (snapshot.dropped_output_bytes > 0) structuredContent.dropped_output_bytes = snapshot.dropped_output_bytes
   if (snapshot.commands) structuredContent.commands = compactBatchCommands(snapshot.commands)
@@ -223,10 +223,10 @@ function compactBatchCommands(commands: NonNullable<ShellSnapshot["commands"]>):
 function compactShellSnapshot(snapshot: ShellSnapshot, shellId: string): ShellRunOutput {
   const compact: ShellRunOutput = {
     status: snapshot.status,
+    ...(snapshot.exit_code !== null ? { exit_code: snapshot.exit_code } : {}),
     cwd: snapshot.cwd,
     output: withApplyPatchToolHint(snapshot.output),
   }
-  if (snapshot.exit_code !== null) compact.exit_code = snapshot.exit_code
   if (shellId !== DEFAULT_SHELL_ID) compact.shell_id = shellId
   if (snapshot.status === "running" || snapshot.output_truncated) {
     compact.request_id = snapshot.request_id

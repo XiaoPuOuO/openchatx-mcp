@@ -19,8 +19,20 @@ interface JsonRpcToolCall {
 }
 
 export interface McpAuditCall {
-  readonly needsResponseBody: boolean
-  finish(input: { httpStatus: number; state: "finished" | "closed"; responseBody?: string }): void
+  finish(input: {
+    httpStatus: number
+    state: "finished" | "closed"
+    responseBody?: string
+    responseBytes?: number
+    responseBodyTruncated?: boolean
+  }): void
+}
+
+interface ToolResponseSummary {
+  failed: boolean
+  failureMessage?: string
+  modelOutput?: string
+  structuredContent?: Record<string, unknown>
 }
 
 export class McpAuditLogger {
@@ -51,15 +63,18 @@ export class McpAuditLogger {
       const startedTime = this.now()
       const inputTokens = countTokens(JSON.stringify(parsed.arguments ?? {}))
       let finished = false
-      const captureOutput = !parsed.name.startsWith("computer_")
 
       return [
         {
-          needsResponseBody: captureOutput,
-          finish: ({ httpStatus, state, responseBody }) => {
+          finish: ({ httpStatus, state, responseBody, responseBytes, responseBodyTruncated }) => {
             if (finished) return
             finished = true
             const toolResponse = parseToolResponse(responseBody, parsed.id)
+            const exitCode = toolResponse.structuredContent?.exit_code
+            const shellExitFailed =
+              (parsed.name === "shell_run" || parsed.name === "shell_poll") &&
+              typeof exitCode === "number" &&
+              exitCode !== 0
             this.append(
               formatEntry({
                 time: startedTime,
@@ -69,9 +84,12 @@ export class McpAuditLogger {
                 httpStatus,
                 state,
                 inputTokens,
-                outputTokens: captureOutput && toolResponse.modelOutput !== undefined ? countTokens(toolResponse.modelOutput) : undefined,
-                toolFailed: toolResponse.failed,
+                outputTokens: toolResponse.modelOutput !== undefined ? countTokens(toolResponse.modelOutput) : undefined,
+                responseBytes,
+                responseBodyTruncated,
+                toolFailed: toolResponse.failed || shellExitFailed,
                 failureMessage: toolResponse.failureMessage,
+                responseSummary: toolResponse,
               })
             )
           },
@@ -91,7 +109,10 @@ export class McpAuditLogger {
 }
 
 export function formatAuditTime(date: Date): string {
-  return `${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}:${twoDigits(date.getSeconds())}`
+  const hours = date.getHours()
+  const hour = hours % 12 || 12
+  const meridiem = hours < 12 ? "AM" : "PM"
+  return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()} ${hour}:${twoDigits(date.getMinutes())} ${meridiem}`
 }
 
 export function characterCount(value: string): number {
@@ -107,16 +128,28 @@ function formatEntry(input: {
   state: "finished" | "closed"
   inputTokens: number
   outputTokens?: number
+  responseBytes?: number
+  responseBodyTruncated?: boolean
   toolFailed: boolean
   failureMessage?: string
+  responseSummary: ToolResponseSummary
 }): string {
   const abnormal = input.httpStatus >= 400 || input.state !== "finished" ? ` - HTTP ${input.httpStatus} ${input.state}` : ""
   const tokenCounts = ` - ${input.inputTokens} in${input.outputTokens !== undefined ? ` / ${input.outputTokens} out` : ""}`
   const invocationMarkers = formatInvocationMarkers(input.argumentsValue)
+  const responseMarker =
+    input.outputTokens === undefined && input.responseBytes
+      ? ` - response_bytes=${input.responseBytes}${input.responseBodyTruncated ? " - audit_capture_truncated" : ""}`
+      : ""
   const tag = auditTag(input)
   const tagPrefix = tag ? `${tag} ` : ""
-  const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${invocationMarkers}${abnormal} - ${formatAuditTime(input.time)}`
-  const details = formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage)
+  const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${invocationMarkers}${responseMarker}${abnormal} - ${formatAuditTime(input.time)}`
+  const details = [
+    formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage),
+    formatResponseSummary(input.toolName, input.responseSummary),
+  ]
+    .filter(Boolean)
+    .join("\n")
   return details ? `${heading}\n${details}\n\n` : `${heading}\n\n`
 }
 
@@ -175,7 +208,7 @@ function formatArguments(toolName: string, value: unknown, toolFailed: boolean, 
   return `args: ${yamlString(truncate(serialized, MAX_INLINE_ARGUMENT_CHARS))}`
 }
 
-function parseToolResponse(responseBody: string | undefined, responseId?: unknown): { failed: boolean; failureMessage?: string; modelOutput?: string } {
+function parseToolResponse(responseBody: string | undefined, responseId?: unknown): ToolResponseSummary {
   if (!responseBody) return { failed: false }
   const payloads = parseResponsePayloads(responseBody)
   let modelOutput: string | undefined
@@ -190,8 +223,8 @@ function parseToolResponse(responseBody: string | undefined, responseId?: unknow
       if (modelOutput === undefined) modelOutput = serializeModelFacingToolResult(result)
       const structuredContent = asRecord(result.structuredContent)
       const resultOutput = structuredContent && typeof structuredContent.output === "string" ? structuredContent.output : undefined
-      if (result.isError !== true) continue
-      if (resultOutput) return { failed: true, failureMessage: resultOutput, modelOutput }
+      if (result.isError !== true) return { failed: false, modelOutput, structuredContent }
+      if (resultOutput) return { failed: true, failureMessage: resultOutput, modelOutput, structuredContent }
       const content = result.content
       if (Array.isArray(content)) {
         const message = content
@@ -200,12 +233,64 @@ function parseToolResponse(responseBody: string | undefined, responseId?: unknow
           .filter((item) => item.type === "text" && typeof item.text === "string")
           .map((item) => item.text as string)
           .join("\n")
-        if (message) return { failed: true, failureMessage: message, modelOutput }
+        if (message) return { failed: true, failureMessage: message, modelOutput, structuredContent }
       }
-      return { failed: true, modelOutput }
+      return { failed: true, modelOutput, structuredContent }
+    }
+  }
+  const partialStructuredContent = extractFlatStructuredContent(responseBody)
+  if (partialStructuredContent) {
+    return {
+      failed: responseBody.includes('"isError":true'),
+      structuredContent: partialStructuredContent,
     }
   }
   return { failed: responseBody.includes('"isError":true'), modelOutput }
+}
+
+function extractFlatStructuredContent(responseBody: string): Record<string, unknown> | undefined {
+  const complete = responseBody.match(/"structuredContent":(\{[^{}]*\})/)
+  const beforeOutput = responseBody.match(/"structuredContent":(\{[^{}]*),"output":/)
+  const json = complete?.[1] ?? (beforeOutput?.[1] ? `${beforeOutput[1]}}` : undefined)
+  if (!json) return undefined
+  try {
+    return asRecord(JSON.parse(json) as unknown)
+  } catch {
+    return undefined
+  }
+}
+
+function formatResponseSummary(toolName: string, summary: ToolResponseSummary): string {
+  const value = summary.structuredContent
+  if (!value) return ""
+
+  if (toolName === "shell_run" || toolName === "shell_poll") {
+    const parts = [
+      typeof value.status === "string" ? `status=${yamlString(value.status)}` : "",
+      typeof value.exit_code === "number" || value.exit_code === null ? `exit_code=${value.exit_code}` : "",
+      typeof value.cwd === "string" ? `cwd=${yamlString(value.cwd)}` : "",
+      typeof value.next_cursor === "number" ? `next_cursor=${value.next_cursor}` : "",
+      typeof value.output_truncated === "boolean" ? `output_truncated=${value.output_truncated}` : "",
+      typeof value.output_dropped === "boolean" ? `output_dropped=${value.output_dropped}` : "",
+      typeof value.dropped_output_bytes === "number" ? `dropped_output_bytes=${value.dropped_output_bytes}` : "",
+    ].filter(Boolean)
+    return parts.length ? `result: ${parts.join(" ")}` : ""
+  }
+
+  if (toolName.startsWith("computer_")) {
+    const parts = [
+      typeof value.snapshot_id === "string" ? `snapshot_id=${yamlString(value.snapshot_id)}` : "",
+      typeof value.application_name === "string" ? `app=${yamlString(value.application_name)}` : "",
+      typeof value.window_title === "string" ? `window=${yamlString(value.window_title)}` : "",
+      typeof value.is_dialog === "boolean" ? `dialog=${value.is_dialog}` : "",
+      typeof value.capture_mode === "string" ? `capture_mode=${yamlString(value.capture_mode)}` : "",
+      typeof value.element_count === "number" ? `elements=${value.element_count}` : "",
+      typeof value.interactable_count === "number" ? `interactable=${value.interactable_count}` : "",
+    ].filter(Boolean)
+    return parts.length ? `result: ${parts.join(" ")}` : ""
+  }
+
+  return ""
 }
 
 function serializeModelFacingToolResult(value: Record<string, unknown>): string | undefined {
@@ -278,6 +363,8 @@ function isToolListRequest(value: unknown): boolean {
 function twoDigits(value: number): string {
   return String(value).padStart(2, "0")
 }
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

@@ -13,7 +13,7 @@ import { PeekabooClient } from "../tools/computer/peekaboo.js"
 import { createShellSessionManager, type ShellSessionManager } from "../tools/shell/session-manager.js"
 import { WebPageOpener } from "../tools/web/web-open.js"
 
-const MAX_AUDIT_RESPONSE_BODY_BYTES = 64 * 1024
+const MAX_AUDIT_RESPONSE_BODY_BYTES = 8 * 1024
 
 interface InFlightMcpRequest {
   server: ReturnType<typeof createMcpServer>
@@ -62,13 +62,15 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const handleMcpPost = async (req: Request, res: Response): Promise<void> => {
     const auditCalls = auditLogger?.startToolCalls(req.body) ?? []
     let responseBody = Buffer.alloc(0)
+    let responseBytes = 0
     let responseBodyTruncated = false
-    const captureResponseBody = auditCalls.some((call) => call.needsResponseBody)
-    if (captureResponseBody) {
+    if (auditCalls.length > 0) {
       trackResponse(res, (chunk) => {
+        responseBytes += chunk.byteLength
         if (responseBodyTruncated) return
-        if (responseBody.byteLength + chunk.byteLength > MAX_AUDIT_RESPONSE_BODY_BYTES) {
-          responseBody = Buffer.alloc(0)
+        const remaining = MAX_AUDIT_RESPONSE_BODY_BYTES - responseBody.byteLength
+        if (chunk.byteLength > remaining) {
+          if (remaining > 0) responseBody = Buffer.concat([responseBody, chunk.subarray(0, remaining)])
           responseBodyTruncated = true
           return
         }
@@ -83,7 +85,9 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
         auditCall.finish({
           httpStatus: res.statusCode,
           state,
-          ...(auditCall.needsResponseBody && !responseBodyTruncated ? { responseBody: responseBody.toString("utf8") } : {}),
+          responseBytes,
+          responseBodyTruncated,
+          ...(responseBody.length > 0 ? { responseBody: responseBody.toString("utf8") } : {}),
         })
       }
     }

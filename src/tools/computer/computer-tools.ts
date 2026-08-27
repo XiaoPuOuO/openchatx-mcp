@@ -764,6 +764,7 @@ function observationResult(observation: PeekabooObservation): CallToolResult {
   const target = [application, windowTitle].filter(Boolean).join(" — ") || "computer"
 
   return {
+    structuredContent,
     content: [
       {
         type: "text",
@@ -775,7 +776,6 @@ function observationResult(observation: PeekabooObservation): CallToolResult {
         mimeType: observation.mimeType,
       },
     ],
-    structuredContent,
   }
 }
 
