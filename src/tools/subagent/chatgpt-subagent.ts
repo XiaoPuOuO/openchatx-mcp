@@ -86,8 +86,8 @@ export interface ChatGptSubagentRuntimeState {
   turns: Map<string, BrowserTurnState>
   activeOperations: Map<string, string | null>
   pendingEvents: Map<string, string[]>
-  subagentSessions: Map<string, string>
-  pendingToolCalls: Array<{ agentId: string; toolName: string; createdAt: number }>
+  parentSessionsBySession: Map<string, string>
+  pendingToolCalls: Array<{ parentSessionId: string; toolName: string; createdAt: number }>
   recentSessionToolCalls: Array<{ sessionId: string; toolName: string; createdAt: number }>
   rateLimitedUntil: number
   browser?: Browser
@@ -116,7 +116,7 @@ export function createChatGptSubagentRuntimeState(options: ChatGptSubagentOption
     turns: new Map(),
     activeOperations: new Map(),
     pendingEvents: new Map(),
-    subagentSessions: new Map(),
+    parentSessionsBySession: new Map(),
     pendingToolCalls: [],
     recentSessionToolCalls: [],
     rateLimitedUntil: 0,
@@ -134,7 +134,7 @@ export function createChatGptSubagentService(options: ChatGptSubagentOptions = {
     ask: (request, signal) => askSubagent(state, request, signal),
     poll: (turnId, waitMs, signal) => pollSubagent(state, turnId, waitMs, signal),
     drainEvents: (sessionId) => drainPendingEvents(state, sessionId),
-    agentIdForSession: (sessionId) => state.subagentSessions.get(sessionId),
+    parentSessionForSession: (sessionId) => state.parentSessionsBySession.get(sessionId),
     observeSessionToolCall: (sessionId, toolName) => observeSessionToolCall(state, sessionId, toolName),
     dispose: () => disposeSubagents(state),
   }
@@ -188,7 +188,7 @@ export async function askSubagent(
     observation = await observeAssistantResponse(page, {
       prompt: submittedPrompt,
       onConversationId: (conversationId) => bindConversation(state, activeAgent, conversationId, state.chatGptUrl),
-      onToolCall: (recipient, text) => registerPendingToolCall(state, activeAgent.agentId, recipient, text),
+      onToolCall: (recipient, text) => registerPendingToolCall(state, turn.parentSessionId, recipient, text),
       onActivity: (activity) => {
         activeAgent.status = activity
         turn.lastActivityAt = Date.now()
@@ -368,7 +368,7 @@ export async function disposeSubagents(state: ChatGptSubagentRuntimeState): Prom
   state.turns.clear()
   state.activeOperations.clear()
   state.pendingEvents.clear()
-  state.subagentSessions.clear()
+  state.parentSessionsBySession.clear()
   state.pendingToolCalls.length = 0
   state.recentSessionToolCalls.length = 0
   state.context = undefined
@@ -440,7 +440,8 @@ function drainPendingEvents(state: ChatGptSubagentRuntimeState, sessionId?: stri
   return events
 }
 
-function registerPendingToolCall(state: ChatGptSubagentRuntimeState, agentId: string, recipient: string, text: string): void {
+function registerPendingToolCall(state: ChatGptSubagentRuntimeState, parentSessionId: string | undefined, recipient: string, text: string): void {
+  if (!parentSessionId) return
   const toolName = toolNameFromCall(recipient, text)
   if (!toolName) return
   const cutoff = Date.now() - SESSION_CORRELATION_TTL_MS
@@ -448,15 +449,15 @@ function registerPendingToolCall(state: ChatGptSubagentRuntimeState, agentId: st
   const recentIndex = state.recentSessionToolCalls.findIndex((call) => call.toolName === toolName)
   if (recentIndex >= 0) {
     const [recent] = state.recentSessionToolCalls.splice(recentIndex, 1)
-    if (recent) bindSubagentSession(state, recent.sessionId, agentId)
+    if (recent) bindParentSession(state, recent.sessionId, parentSessionId)
     return
   }
   state.pendingToolCalls = state.pendingToolCalls.filter((call) => call.createdAt >= cutoff).slice(-31)
-  state.pendingToolCalls.push({ agentId, toolName, createdAt: Date.now() })
+  state.pendingToolCalls.push({ parentSessionId, toolName, createdAt: Date.now() })
 }
 
 export function observeSessionToolCall(state: ChatGptSubagentRuntimeState, sessionId: string, toolName: string): string | undefined {
-  const known = state.subagentSessions.get(sessionId)
+  const known = state.parentSessionsBySession.get(sessionId)
   if (known) return known
   const cutoff = Date.now() - SESSION_CORRELATION_TTL_MS
   state.pendingToolCalls = state.pendingToolCalls.filter((call) => call.createdAt >= cutoff)
@@ -464,8 +465,8 @@ export function observeSessionToolCall(state: ChatGptSubagentRuntimeState, sessi
   if (index >= 0) {
     const [call] = state.pendingToolCalls.splice(index, 1)
     if (call) {
-      bindSubagentSession(state, sessionId, call.agentId)
-      return call.agentId
+      bindParentSession(state, sessionId, call.parentSessionId)
+      return call.parentSessionId
     }
   }
   state.recentSessionToolCalls = state.recentSessionToolCalls.filter((call) => call.createdAt >= cutoff).slice(-31)
@@ -473,9 +474,9 @@ export function observeSessionToolCall(state: ChatGptSubagentRuntimeState, sessi
   return undefined
 }
 
-function bindSubagentSession(state: ChatGptSubagentRuntimeState, sessionId: string, agentId: string): void {
-  if (state.subagentSessions.get(sessionId) === agentId) return
-  state.subagentSessions.set(sessionId, agentId)
+function bindParentSession(state: ChatGptSubagentRuntimeState, sessionId: string, parentSessionId: string): void {
+  if (state.parentSessionsBySession.get(sessionId) === parentSessionId) return
+  state.parentSessionsBySession.set(sessionId, parentSessionId)
 }
 
 function toolNameFromCall(recipient: string, text: string): string | undefined {

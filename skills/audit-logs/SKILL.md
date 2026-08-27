@@ -25,7 +25,7 @@ Source of truth for format:
 - `out` = model-facing output tokens when captured
 - final time = local call start time
 
-Tool calls may include `session: <X-OpenAI-Session>` and known browser subagents also include `subagent: <agent_id>`. The first child call may contain only `session` if the subagent binding is learned just after that request.
+Tool calls may include `session: <X-OpenAI-Session>` and known browser subagents also include `parent_session: <X-OpenAI-Session>`. Presence of `parent_session` means the caller is a known browser subagent. The first child call may contain only `session` if the lineage binding is learned just after that request.
 
 ## Tool Bodies
 

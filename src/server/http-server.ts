@@ -62,10 +62,10 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const handleMcpPost = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
     const toolName = firstToolCallName(req.body)
-    const subagentId = sessionId
-      ? chatGptSubagents.agentIdForSession?.(sessionId) ?? (toolName ? chatGptSubagents.observeSessionToolCall?.(sessionId, toolName) : undefined)
+    const parentSessionId = sessionId
+      ? (chatGptSubagents.parentSessionForSession?.(sessionId) ?? (toolName ? chatGptSubagents.observeSessionToolCall?.(sessionId, toolName) : undefined))
       : undefined
-    const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId, subagentId }) ?? []
+    const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId, parentSessionId }) ?? []
     let responseBody = Buffer.alloc(0)
     let responseBytes = 0
     let responseBodyTruncated = false

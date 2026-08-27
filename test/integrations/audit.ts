@@ -19,7 +19,7 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
       return { turnId, status: "completed", response: "done" }
     },
     observeSessionToolCall(sessionId, toolName) {
-      return sessionId === "child-session" && toolName === "shell_list" ? "child-agent" : undefined
+      return sessionId === "child-session" && toolName === "shell_list" ? "parent-session" : undefined
     },
     async dispose() {},
   }
@@ -48,5 +48,5 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   assert.match(log, /audit-check/)
   assert.match(log, /Inspect the audit path\./)
   assert.match(log, /session: "child-session"/)
-  assert.match(log, /subagent: "child-agent"/)
+  assert.match(log, /parent_session: "parent-session"/)
 })

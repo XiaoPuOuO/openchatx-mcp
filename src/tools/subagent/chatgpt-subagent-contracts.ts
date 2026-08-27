@@ -61,7 +61,7 @@ export interface ChatGptSubagentService {
   ask(request: ChatGptSubagentRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
   poll(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult>
   drainEvents?(sessionId?: string): string[]
-  agentIdForSession?(sessionId: string): string | undefined
+  parentSessionForSession?(sessionId: string): string | undefined
   observeSessionToolCall?(sessionId: string, toolName: string): string | undefined
   dispose(): Promise<void>
 }

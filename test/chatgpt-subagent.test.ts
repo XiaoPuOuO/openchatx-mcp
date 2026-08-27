@@ -24,7 +24,13 @@ import {
 } from "../src/tools/subagent/chatgpt-subagent.js"
 
 function createRuntime(options: ChatGptSubagentOptions = {}): ChatGptSubagentRuntimeState {
-  return createChatGptSubagentRuntimeState({ cdpEndpoint: "http://127.0.0.1:1", interactionDelayMs: 0, minInterTurnDelayMs: 0, persistAgents: false, ...options })
+  return createChatGptSubagentRuntimeState({
+    cdpEndpoint: "http://127.0.0.1:1",
+    interactionDelayMs: 0,
+    minInterTurnDelayMs: 0,
+    persistAgents: false,
+    ...options,
+  })
 }
 
 function installBackgroundPage(runtime: ChatGptSubagentRuntimeState, page: object): void {
@@ -178,7 +184,7 @@ test("same agent keeps one page across multiple turns and captures conversation 
   assert.equal(firstResult.response, "answer-1")
   assert.equal(agent.status, "idle")
   assert.equal(agent.conversationUrl, "https://chatgpt.com/c/conversation-1")
-  assert.equal(runtime.subagentSessions.get("child-session-1"), "multi")
+  assert.equal(runtime.parentSessionsBySession.get("child-session-1"), "parent-session-1")
   assert.deepEqual(runtime.pendingEvents.get("parent-session-1"), ["agent_finished:multi:multi_turn_1"])
   assert.equal(runtime.pendingEvents.has(""), false)
   assert.match(inserted, /Respond terse like smart caveman/)

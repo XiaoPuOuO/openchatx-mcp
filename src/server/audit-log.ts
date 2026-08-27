@@ -19,18 +19,12 @@ interface JsonRpcToolCall {
 }
 
 export interface McpAuditCall {
-  finish(input: {
-    httpStatus: number
-    state: "finished" | "closed"
-    responseBody?: string
-    responseBytes?: number
-    responseBodyTruncated?: boolean
-  }): void
+  finish(input: { httpStatus: number; state: "finished" | "closed"; responseBody?: string; responseBytes?: number; responseBodyTruncated?: boolean }): void
 }
 
 export interface McpAuditContext {
   sessionId?: string
-  subagentId?: string
+  parentSessionId?: string
 }
 
 interface ToolResponseSummary {
@@ -76,10 +70,7 @@ export class McpAuditLogger {
             finished = true
             const toolResponse = parseToolResponse(responseBody, parsed.id)
             const exitCode = toolResponse.structuredContent?.exit_code
-            const shellExitFailed =
-              (parsed.name === "shell_run" || parsed.name === "shell_poll") &&
-              typeof exitCode === "number" &&
-              exitCode !== 0
+            const shellExitFailed = (parsed.name === "shell_run" || parsed.name === "shell_poll") && typeof exitCode === "number" && exitCode !== 0
             this.append(
               formatEntry({
                 time: startedTime,
@@ -164,7 +155,7 @@ function formatEntry(input: {
 function formatAuditContext(context: McpAuditContext): string {
   const lines: string[] = []
   if (context.sessionId) lines.push(`session: ${yamlString(context.sessionId)}`)
-  if (context.subagentId) lines.push(`subagent: ${yamlString(context.subagentId)}`)
+  if (context.parentSessionId) lines.push(`parent_session: ${yamlString(context.parentSessionId)}`)
   return lines.join("\n")
 }
 
