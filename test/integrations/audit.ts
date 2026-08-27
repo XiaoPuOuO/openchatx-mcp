@@ -11,6 +11,7 @@ import { connectClient, startMcpHttpServer } from "./helpers.js"
 test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "mcp-audit-integration-"))
   const auditPath = join(root, "agent-commands.yaml")
+  let observedToolCalls = 0
   const chatGptSubagents: ChatGptSubagentService = {
     async ask({ agentId }) {
       return { agentId, turnId: `turn-${agentId}`, status: "running" }
@@ -18,8 +19,12 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     async poll(turnId) {
       return { turnId, status: "completed", response: "done" }
     },
+    parentSessionForSession(sessionId) {
+      return sessionId === "child-session" ? "parent-session" : undefined
+    },
     observeSessionToolCall(sessionId, toolName) {
-      return sessionId === "child-session" && toolName === "shell_list" ? "parent-session" : undefined
+      observedToolCalls += 1
+      return sessionId === "child-session" && toolName ? "parent-session" : undefined
     },
     async dispose() {},
   }
@@ -49,4 +54,5 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   assert.match(log, /Inspect the audit path\./)
   assert.match(log, /session: "child-session"/)
   assert.match(log, /parent_session: "parent-session"/)
+  assert.equal(observedToolCalls, 2)
 })

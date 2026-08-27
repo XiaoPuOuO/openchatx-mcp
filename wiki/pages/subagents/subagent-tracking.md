@@ -1,5 +1,5 @@
 ---
-summary: "Session traceability for MCP callers, attempted browser-subagent lineage correlation, live ChatGPT transport findings, limitations, and the decision to avoid inferred parent tracking for now."
+summary: "Session traceability for MCP callers, browser-subagent lineage correlation, live ChatGPT transport findings, known failure modes, and current best-effort behavior."
 paths:
   - src/server/http-server.ts
   - src/server/audit-log.ts
@@ -67,6 +67,9 @@ The implementation is acceptable as best-effort inference but has important weak
 - A short window can miss a subagent that waits before using Shellby.
 - Increasing the window makes name-only matching more dangerous because more unrelated calls accumulate.
 - Subagents commonly make many tool calls. Correlation cannot assume that only the first or next call matters. Any later unambiguous call should be able to establish the child session mapping.
+- Once a child session is known, its later browser-observed tool calls still have to be reconciled against that child's incoming MCP calls. Otherwise the browser observation can remain pending and later attach an unrelated caller to the child's parent.
+
+Live validation reproduced that stale-candidate failure: child B was correctly mapped to parent A, B later called `shell_run`, and the leftover browser-side `shell_run` candidate caused A's next ordinary `shell_run` to be incorrectly mapped as `A -> A`. The fix keeps known child sessions flowing through correlation. A known incoming child call consumes a matching pending browser observation for its already-known parent, or records a known recent call so a later browser observation can consume it without rebinding any session (`src/server/http-server.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
 
 If heuristic correlation were retained, matching `tool name + canonicalized arguments` would be substantially stronger than matching only the tool name. Object keys should be recursively sorted for comparison while array order remains significant. A five-minute buffer is then more defensible. The matcher should retain multiple calls from both sides and allow any exact match to bind the child session. Tool-name-only fallback should occur only when arguments are genuinely unavailable and exactly one candidate is unambiguous.
 
@@ -86,7 +89,7 @@ An assistant connector call in the subagent CDP stream includes:
 A representative connector payload was shaped like:
 
 ```json
-{"path":"/Shellby MCP/<link>/shell_list","args":{}}
+{ "path": "/Shellby MCP/<link>/shell_list", "args": {} }
 ```
 
 The corresponding `role: "tool"` result message also appeared in the live CDP stream. It carried the same ChatGPT `request_id`, `turn_exchange_id`, and `working_turn_id`; its `parent_id` pointed to the assistant tool-call message; and its metadata contained `invoked_resource` identifying the Shellby MCP resource. This gives ChatGPT itself a deterministic call/result relationship inside the browser turn.
@@ -118,23 +121,26 @@ bind B -> A
 
 After that first direct observation, every future MCP call carrying B is known to belong to the same child caller. No timeout or repeated matching is necessary.
 
-## Current Decision
+## Current State
 
-For now, do not infer browser-subagent caller lineage. The useful traceability primitive is simply:
+The repository currently retains best-effort lineage inference. Every tool call is still attributed directly to its own `X-OpenAI-Session`; known browser subagents additionally receive `parent_session` after correlation establishes `child session -> parent session`.
+
+Live validation after restarting the current implementation showed that the basic model works in practice:
 
 ```text
-X-OpenAI-Session = conversation making this MCP request
+parent A
+└── child B
+    └── grandchild C
 ```
 
-Track that session on each caller's tool activity and audit entries. Keep the launching session only where it is directly known and operationally required, such as scoping that launch's detached completion NOTICE. Do not classify a later MCP caller as a subagent and do not maintain an inferred `child session -> parent session` relationship until a deterministic shared identifier is proven.
+Both `B -> A` and nested `C -> B` were learned correctly. The first child call can still lack `parent_session` because the browser and MCP observations race. Later calls use the remembered mapping.
 
-This means the lineage-specific machinery introduced by `ae95680` and refined by `728ce5f` is intended to be removed: `parentSessionsBySession`, pending/recent correlation buffers, correlation TTL logic, CDP tool-call observation used only for lineage, `observeSessionToolCall`, and `parent_session` audit classification.
-
-This leaves a simpler invariant: every tool call is attributable to the opaque ChatGPT session that actually made it, while Shellby makes no unsupported claim about relationships between sessions.
+The matcher remains heuristic and `parent_session` should therefore be treated as best-effort operational traceability rather than authoritative identity. A deterministic shared identifier remains the preferred future simplification. The stale-candidate false-positive described above is specifically guarded against, but same-tool races between still-unknown concurrent sessions remain possible.
 
 ## Validation Notes
 
-At review time the session/lineage implementation passed the focused tests, the full 189-test suite, and TypeScript type-checking. A live child call also confirmed that ordinary caller and child MCP requests receive distinct `X-OpenAI-Session` values.
+At initial review time the session/lineage implementation passed the focused tests, the full 189-test suite, and TypeScript type-checking. A live child call also confirmed that ordinary caller and child MCP requests receive distinct `X-OpenAI-Session` values.
+
+Later live validation exercised direct children, repeated calls, two concurrently launched subagents, and a nested grandchild. Correlation successfully learned direct and nested parent relationships. That same run exposed the stale known-child candidate bug that could produce a false self-parent mapping; regression coverage now verifies that known child calls consume their own candidates and that HTTP tool calls still pass through the reconciliation hook even after a session already has a known parent.
 
 One live test initially showed the older `session-map` / `subagent:` audit format because the running MCP process had not yet loaded repository `HEAD`. Runtime process version must therefore be distinguished from checked-out source while validating this area. Server restart remains an operator action.
-

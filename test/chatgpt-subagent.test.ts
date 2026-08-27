@@ -199,6 +199,17 @@ test("same agent keeps one page across multiple turns and captures conversation 
   await disposeSubagents(runtime)
 })
 
+test("known child calls consume their own correlation candidates instead of rebinding the parent", () => {
+  const runtime = createRuntime()
+  runtime.parentSessionsBySession.set("child-session", "parent-session")
+  runtime.pendingToolCalls.push({ parentSessionId: "parent-session", toolName: "shell_run", createdAt: Date.now() })
+
+  assert.equal(observeSessionToolCall(runtime, "child-session", "shell_run"), "parent-session")
+  assert.equal(runtime.pendingToolCalls.length, 0)
+  assert.equal(observeSessionToolCall(runtime, "parent-session", "shell_run"), undefined)
+  assert.equal(runtime.parentSessionsBySession.get("parent-session"), undefined)
+})
+
 test("first-turn oververbosity injection exactly matches the previous prompt contract", () => {
   const injected =
     "Respond terse like smart caveman — drop articles, filler, pleasantries. Fragments OK. Technical terms exact. Code unchanged. Pattern: [thing] [action] [reason]. [next step].\n\nNot use `subagent` or `computer_*` tools."

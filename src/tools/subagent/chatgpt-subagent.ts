@@ -88,7 +88,7 @@ export interface ChatGptSubagentRuntimeState {
   pendingEvents: Map<string, string[]>
   parentSessionsBySession: Map<string, string>
   pendingToolCalls: Array<{ parentSessionId: string; toolName: string; createdAt: number }>
-  recentSessionToolCalls: Array<{ sessionId: string; toolName: string; createdAt: number }>
+  recentSessionToolCalls: Array<{ sessionId: string; toolName: string; parentSessionId?: string; createdAt: number }>
   rateLimitedUntil: number
   browser?: Browser
   context?: BrowserContext
@@ -446,7 +446,12 @@ function registerPendingToolCall(state: ChatGptSubagentRuntimeState, parentSessi
   if (!toolName) return
   const cutoff = Date.now() - SESSION_CORRELATION_TTL_MS
   state.recentSessionToolCalls = state.recentSessionToolCalls.filter((call) => call.createdAt >= cutoff)
-  const recentIndex = state.recentSessionToolCalls.findIndex((call) => call.toolName === toolName)
+  const knownRecentIndex = state.recentSessionToolCalls.findIndex((call) => call.toolName === toolName && call.parentSessionId === parentSessionId)
+  if (knownRecentIndex >= 0) {
+    state.recentSessionToolCalls.splice(knownRecentIndex, 1)
+    return
+  }
+  const recentIndex = state.recentSessionToolCalls.findIndex((call) => call.toolName === toolName && call.parentSessionId === undefined)
   if (recentIndex >= 0) {
     const [recent] = state.recentSessionToolCalls.splice(recentIndex, 1)
     if (recent) bindParentSession(state, recent.sessionId, parentSessionId)
@@ -458,9 +463,18 @@ function registerPendingToolCall(state: ChatGptSubagentRuntimeState, parentSessi
 
 export function observeSessionToolCall(state: ChatGptSubagentRuntimeState, sessionId: string, toolName: string): string | undefined {
   const known = state.parentSessionsBySession.get(sessionId)
-  if (known) return known
   const cutoff = Date.now() - SESSION_CORRELATION_TTL_MS
   state.pendingToolCalls = state.pendingToolCalls.filter((call) => call.createdAt >= cutoff)
+  state.recentSessionToolCalls = state.recentSessionToolCalls.filter((call) => call.createdAt >= cutoff).slice(-31)
+  if (known) {
+    const index = state.pendingToolCalls.findIndex((call) => call.toolName === toolName && call.parentSessionId === known)
+    if (index >= 0) {
+      state.pendingToolCalls.splice(index, 1)
+    } else {
+      state.recentSessionToolCalls.push({ sessionId, toolName, parentSessionId: known, createdAt: Date.now() })
+    }
+    return known
+  }
   const index = state.pendingToolCalls.findIndex((call) => call.toolName === toolName)
   if (index >= 0) {
     const [call] = state.pendingToolCalls.splice(index, 1)
@@ -469,7 +483,6 @@ export function observeSessionToolCall(state: ChatGptSubagentRuntimeState, sessi
       return call.parentSessionId
     }
   }
-  state.recentSessionToolCalls = state.recentSessionToolCalls.filter((call) => call.createdAt >= cutoff).slice(-31)
   state.recentSessionToolCalls.push({ sessionId, toolName, createdAt: Date.now() })
   return undefined
 }

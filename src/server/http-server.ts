@@ -63,7 +63,9 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     const sessionId = requestSessionId(req)
     const toolName = firstToolCallName(req.body)
     const parentSessionId = sessionId
-      ? (chatGptSubagents.parentSessionForSession?.(sessionId) ?? (toolName ? chatGptSubagents.observeSessionToolCall?.(sessionId, toolName) : undefined))
+      ? toolName
+        ? chatGptSubagents.observeSessionToolCall?.(sessionId, toolName)
+        : chatGptSubagents.parentSessionForSession?.(sessionId)
       : undefined
     const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId, parentSessionId }) ?? []
     let responseBody = Buffer.alloc(0)
