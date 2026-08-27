@@ -103,7 +103,7 @@ test("aliases audit sessions in first-seen order without logging raw ids", async
   const request = { method: "tools/call", params: { name: "shell_list", arguments: {} } }
 
   const [first] = logger.startToolCalls(request, { sessionId: "raw-session-a" })
-  const [second] = logger.startToolCalls(request, { sessionId: "raw-session-b", parentSessionId: "raw-session-a" })
+  const [second] = logger.startToolCalls(request, { sessionId: "raw-session-b" })
   assert.ok(first)
   assert.ok(second)
 
@@ -111,7 +111,7 @@ test("aliases audit sessions in first-seen order without logging raw ids", async
   first.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /session: "agent-2"\nparent_session: "agent-1"/)
+  assert.match(log, /session: "agent-2"/)
   assert.match(log, /session: "agent-1"/)
   assert.doesNotMatch(log, /raw-session-a|raw-session-b/)
 })

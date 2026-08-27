@@ -15,17 +15,10 @@ export async function observeAssistantResponse(
     prompt: string
     onActivity?: (activity: ChatGptSubagentActivity) => void
     onConversationId?: (conversationId: string) => void
-    onToolCall?: (recipient: string, text: string) => void
   }
 ): Promise<AssistantResponseObservation> {
-  const seenToolCalls = new Set<string>()
-  const onToolCall = (messageId: string, recipient: string, text: string): void => {
-    if (seenToolCalls.has(messageId)) return
-    seenToolCalls.add(messageId)
-    input.onToolCall?.(recipient, text)
-  }
-  const webSocketTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId, onToolCall)
-  const httpTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId, onToolCall)
+  const webSocketTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
+  const httpTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
   const requestIds = new Set<string>()
   const buffers = new Map<string, string>()
   let cdp: CDPSession | undefined

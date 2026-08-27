@@ -13,7 +13,7 @@ export interface ChatGptSubagentRequest {
   prompt: string
   agentId: string
   oververbosity: number
-  parentSessionId?: string
+  notificationSessionId?: string
 }
 
 export interface ChatGptSubagentStartResult {
@@ -61,7 +61,5 @@ export interface ChatGptSubagentService {
   ask(request: ChatGptSubagentRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
   poll(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult>
   drainEvents?(sessionId?: string): string[]
-  parentSessionForSession?(sessionId: string): string | undefined
-  observeSessionToolCall?(sessionId: string, toolName: string): string | undefined
   dispose(): Promise<void>
 }

@@ -16,7 +16,6 @@ import {
   disposeSubagents,
   endAgentOperation,
   ensureAgentPage,
-  observeSessionToolCall,
   pollSubagent,
   type BrowserAgentState,
   type BrowserTurnState,
@@ -101,7 +100,6 @@ test("new agents start from configured project URL", async () => {
 
 test("same agent keeps one page across multiple turns and captures conversation id from CDP", async () => {
   const runtime = createRuntime({ chatGptUrl: "https://chatgpt.com/g/g-p-example/project" })
-  assert.equal(observeSessionToolCall(runtime, "child-session-1", "shell_list"), undefined)
   let currentUrl = "https://chatgpt.com/g/g-p-example/project"
   let inserted = ""
   let frameHandler: ((event: { response?: { payloadData?: string } }) => void) | undefined
@@ -179,17 +177,16 @@ test("same agent keeps one page across multiple turns and captures conversation 
   runtime.context = { pages: () => [page] } as never
   runtime.agents.set(agent.agentId, agent)
 
-  const first = await askSubagent(runtime, { agentId: "multi", prompt: "first", oververbosity: 2, parentSessionId: "parent-session-1" })
+  const first = await askSubagent(runtime, { agentId: "multi", prompt: "first", oververbosity: 2, notificationSessionId: "session-1" })
   const firstResult = await pollSubagent(runtime, first.turnId, 100)
   assert.equal(firstResult.response, "answer-1")
   assert.equal(agent.status, "idle")
   assert.equal(agent.conversationUrl, "https://chatgpt.com/c/conversation-1")
-  assert.equal(runtime.parentSessionsBySession.get("child-session-1"), "parent-session-1")
-  assert.deepEqual(runtime.pendingEvents.get("parent-session-1"), ["agent_finished:multi:multi_turn_1"])
+  assert.deepEqual(runtime.pendingEvents.get("session-1"), ["agent_finished:multi:multi_turn_1"])
   assert.equal(runtime.pendingEvents.has(""), false)
   assert.match(inserted, /Respond terse like smart caveman/)
 
-  const second = await askSubagent(runtime, { agentId: "multi", prompt: "second", oververbosity: 5, parentSessionId: "parent-session-1" })
+  const second = await askSubagent(runtime, { agentId: "multi", prompt: "second", oververbosity: 5, notificationSessionId: "session-1" })
   const secondResult = await pollSubagent(runtime, second.turnId, 100)
   assert.equal(secondResult.response, "answer-2")
   assert.equal(inserted, "second")
@@ -197,17 +194,6 @@ test("same agent keeps one page across multiple turns and captures conversation 
   assert.equal(agent.turnCount, 2)
   assert.equal(detachCount, 2)
   await disposeSubagents(runtime)
-})
-
-test("known child calls consume their own correlation candidates instead of rebinding the parent", () => {
-  const runtime = createRuntime()
-  runtime.parentSessionsBySession.set("child-session", "parent-session")
-  runtime.pendingToolCalls.push({ parentSessionId: "parent-session", toolName: "shell_run", createdAt: Date.now() })
-
-  assert.equal(observeSessionToolCall(runtime, "child-session", "shell_run"), "parent-session")
-  assert.equal(runtime.pendingToolCalls.length, 0)
-  assert.equal(observeSessionToolCall(runtime, "parent-session", "shell_run"), undefined)
-  assert.equal(runtime.parentSessionsBySession.get("parent-session"), undefined)
 })
 
 test("first-turn oververbosity injection exactly matches the previous prompt contract", () => {

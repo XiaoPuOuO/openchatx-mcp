@@ -5,7 +5,7 @@ import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-su
 import { connectClient, startMcpHttpServer } from "./helpers.js"
 
 test("delivers a completed subagent event on the next MCP response exactly once", { timeout: 10_000 }, async (t) => {
-  const events = new Map([["parent-session", ["agent_finished:reviewer:reviewer_turn_1"]]])
+  const events = new Map([["launch-session", ["agent_finished:reviewer:reviewer_turn_1"]]])
   const chatGptSubagents: ChatGptSubagentService = {
     async ask() {
       throw new Error("unused")
@@ -29,7 +29,7 @@ test("delivers a completed subagent event on the next MCP response exactly once"
   assert.ok(unrelatedText?.type === "text")
   assert.doesNotMatch(unrelatedText.text, /agent_finished/)
 
-  const connected = await connectClient(running.url, "subagent-event-client", undefined, false, "parent-session")
+  const connected = await connectClient(running.url, "subagent-event-client", undefined, false, "launch-session")
   t.after(() => connected.client.close())
 
   const first = await connected.client.callTool({ name: "shell_list", arguments: {} })
@@ -46,14 +46,14 @@ test("delivers a completed subagent event on the next MCP response exactly once"
 test("runs staggered subagents and retrieves turns across MCP client sessions", { timeout: 15_000 }, async (t) => {
   const histories = new Map<string, string[]>()
   const completed = new Map<string, string>()
-  const starts: Array<{ agentId: string; at: number; parentSessionId?: string }> = []
+  const starts: Array<{ agentId: string; at: number; notificationSessionId?: string }> = []
   let activePolls = 0
   let maxActivePolls = 0
 
   const chatGptSubagents: ChatGptSubagentService = {
-    async ask({ agentId, prompt, parentSessionId }) {
+    async ask({ agentId, prompt, notificationSessionId }) {
       if (agentId === "unavailable-agent") throw new Error("browser unavailable")
-      starts.push({ agentId, at: Date.now(), parentSessionId })
+      starts.push({ agentId, at: Date.now(), notificationSessionId })
       const history = histories.get(agentId) ?? []
       history.push(prompt)
       histories.set(agentId, history)
@@ -87,7 +87,7 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
   const running = await startMcpHttpServer({ port: 0, chatGptSubagents })
   t.after(() => running.close())
 
-  const first = await connectClient(running.url, "subagent-client-1", undefined, false, "parent-session-1")
+  const first = await connectClient(running.url, "subagent-client-1", undefined, false, "launch-session-1")
   const started = await first.client.callTool({
     name: "subagent_run",
     arguments: {
@@ -104,8 +104,8 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
     ],
   })
   assert.ok(starts[1]!.at - starts[0]!.at >= 4_500)
-  assert.equal(starts[0]!.parentSessionId, "parent-session-1")
-  assert.equal(starts[1]!.parentSessionId, "parent-session-1")
+  assert.equal(starts[0]!.notificationSessionId, "launch-session-1")
+  assert.equal(starts[1]!.notificationSessionId, "launch-session-1")
   await first.client.close()
 
   const second = await connectClient(running.url, "subagent-client-2")

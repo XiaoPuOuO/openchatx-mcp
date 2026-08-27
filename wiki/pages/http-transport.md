@@ -28,7 +28,7 @@ OpenAI documents three opaque client-provided identifiers on MCP tool calls: `op
 
 Shellby MCP uses `X-OpenAI-Subject` as the remote owner identifier and `X-OpenAI-Session` as best-effort conversation-scoped operational context (`src/server/http-server.ts`, `src/auth/auth.ts`). Session context scopes completion notices and audit activity; it is never authorization state and remains unsuitable for durable user binding. OpenAI marks `openai/userAgent` and `openai/userLocation` as best-effort hints that must not be relied on for authorization.
 
-Browser-backed subagents cannot be identified by directly comparing ChatGPT Web's browser session header with MCP `X-OpenAI-Session`; live validation found those values differ. Shellby instead correlates the child MCP session best-effort from the tool name observed on both the managed page's CDP turn stream and the incoming MCP `tools/call`, then remembers `child X-OpenAI-Session -> parent X-OpenAI-Session` for the rest of the process. The session header remains the caller identity; having a parent session is what classifies that session as a browser subagent (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/chatgpt-subagent-observer.ts`).
+Each MCP request may carry `X-OpenAI-Session`, which Shellby treats as the opaque identity of the ChatGPT conversation making that request. Shellby does not infer relationships between sessions or classify a caller as a browser subagent. Audit output maps distinct raw session values to readable `agent-N` aliases (`src/server/http-server.ts`, `src/server/audit-log.ts`).
 
 ## Connection Model
 

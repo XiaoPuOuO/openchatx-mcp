@@ -61,13 +61,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
 
   const handleMcpPost = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
-    const toolName = firstToolCallName(req.body)
-    const parentSessionId = sessionId
-      ? toolName
-        ? chatGptSubagents.observeSessionToolCall?.(sessionId, toolName)
-        : chatGptSubagents.parentSessionForSession?.(sessionId)
-      : undefined
-    const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId, parentSessionId }) ?? []
+    const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId }) ?? []
     let responseBody = Buffer.alloc(0)
     let responseBytes = 0
     let responseBodyTruncated = false
@@ -107,7 +101,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
       peekaboo,
       webPageOpener,
       toolOutputStructured: options.toolOutputStructured,
-      sessionId,
+      notificationSessionId: sessionId,
     })
     const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -251,16 +245,6 @@ function containsToolCall(payload: unknown): boolean {
     const request = value as { method?: unknown; params?: { name?: unknown } }
     return request.method === "tools/call" && typeof request.params?.name === "string" && request.params.name.length > 0
   })
-}
-
-function firstToolCallName(payload: unknown): string | undefined {
-  const requests = Array.isArray(payload) ? payload : [payload]
-  for (const value of requests) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue
-    const request = value as { method?: unknown; params?: { name?: unknown } }
-    if (request.method === "tools/call" && typeof request.params?.name === "string" && request.params.name.length > 0) return request.params.name
-  }
-  return undefined
 }
 
 function isTrustedRemoteRequest(req: Request): boolean {

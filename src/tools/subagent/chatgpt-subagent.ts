@@ -1,7 +1,7 @@
 import type { Browser, BrowserContext, Page } from "playwright-core"
 
 import { MCP_CONFIG } from "../../config.js"
-import { asRecord, nonNegativeInteger, positiveInteger } from "../../utils.js"
+import { nonNegativeInteger, positiveInteger } from "../../utils.js"
 import {
   assertAuthenticated,
   assertManagedChatGptPage,
@@ -40,7 +40,6 @@ const RATE_LIMIT_DISMISS_SETTLE_MS = 250
 const RATE_LIMIT_ERROR_MESSAGE =
   "ChatGPT temporarily rate limited conversation access. New subagent turns are blocked during a 15-minute cooldown. Existing turns remain available through subagent_result. Do not retry automatically."
 const SUBMISSION_GRACE_MS = 500
-const SESSION_CORRELATION_TTL_MS = 30_000
 const MANAGED_VIEWPORT = { width: 412, height: 915 } as const
 
 const INJECTED_PROMPT =
@@ -61,7 +60,7 @@ export interface BrowserAgentState {
 export interface BrowserTurnState {
   turnId: string
   agentId: string
-  parentSessionId?: string
+  notificationSessionId?: string
   status: "running" | "completed" | "failed"
   recoveryAttempted: boolean
   lastActivityAt: number
@@ -86,9 +85,6 @@ export interface ChatGptSubagentRuntimeState {
   turns: Map<string, BrowserTurnState>
   activeOperations: Map<string, string | null>
   pendingEvents: Map<string, string[]>
-  parentSessionsBySession: Map<string, string>
-  pendingToolCalls: Array<{ parentSessionId: string; toolName: string; createdAt: number }>
-  recentSessionToolCalls: Array<{ sessionId: string; toolName: string; parentSessionId?: string; createdAt: number }>
   rateLimitedUntil: number
   browser?: Browser
   context?: BrowserContext
@@ -116,9 +112,6 @@ export function createChatGptSubagentRuntimeState(options: ChatGptSubagentOption
     turns: new Map(),
     activeOperations: new Map(),
     pendingEvents: new Map(),
-    parentSessionsBySession: new Map(),
-    pendingToolCalls: [],
-    recentSessionToolCalls: [],
     rateLimitedUntil: 0,
     store: options.persistAgents === false ? undefined : createSubagentStore(),
     disposed: false,
@@ -134,8 +127,6 @@ export function createChatGptSubagentService(options: ChatGptSubagentOptions = {
     ask: (request, signal) => askSubagent(state, request, signal),
     poll: (turnId, waitMs, signal) => pollSubagent(state, turnId, waitMs, signal),
     drainEvents: (sessionId) => drainPendingEvents(state, sessionId),
-    parentSessionForSession: (sessionId) => state.parentSessionsBySession.get(sessionId),
-    observeSessionToolCall: (sessionId, toolName) => observeSessionToolCall(state, sessionId, toolName),
     dispose: () => disposeSubagents(state),
   }
 }
@@ -176,7 +167,7 @@ export async function askSubagent(
     const turn: BrowserTurnState = {
       turnId,
       agentId: agent.agentId,
-      parentSessionId: request.parentSessionId,
+      notificationSessionId: request.notificationSessionId,
       status: "running",
       recoveryAttempted: false,
       lastActivityAt: Date.now(),
@@ -188,7 +179,6 @@ export async function askSubagent(
     observation = await observeAssistantResponse(page, {
       prompt: submittedPrompt,
       onConversationId: (conversationId) => bindConversation(state, activeAgent, conversationId, state.chatGptUrl),
-      onToolCall: (recipient, text) => registerPendingToolCall(state, turn.parentSessionId, recipient, text),
       onActivity: (activity) => {
         activeAgent.status = activity
         turn.lastActivityAt = Date.now()
@@ -368,9 +358,6 @@ export async function disposeSubagents(state: ChatGptSubagentRuntimeState): Prom
   state.turns.clear()
   state.activeOperations.clear()
   state.pendingEvents.clear()
-  state.parentSessionsBySession.clear()
-  state.pendingToolCalls.length = 0
-  state.recentSessionToolCalls.length = 0
   state.context = undefined
   state.browser = undefined
   state.connectPromise = undefined
@@ -427,7 +414,7 @@ function completeTurn(state: ChatGptSubagentRuntimeState, turn: BrowserTurnState
   turn.status = "completed"
   turn.response = response
   settleTurn(state, turn, agent)
-  const sessionKey = turn.parentSessionId ?? ""
+  const sessionKey = turn.notificationSessionId ?? ""
   const events = state.pendingEvents.get(sessionKey) ?? []
   events.push(`agent_finished:${turn.agentId}:${turn.turnId}`)
   state.pendingEvents.set(sessionKey, events)
@@ -438,71 +425,6 @@ function drainPendingEvents(state: ChatGptSubagentRuntimeState, sessionId?: stri
   const events = state.pendingEvents.get(key) ?? []
   state.pendingEvents.delete(key)
   return events
-}
-
-function registerPendingToolCall(state: ChatGptSubagentRuntimeState, parentSessionId: string | undefined, recipient: string, text: string): void {
-  if (!parentSessionId) return
-  const toolName = toolNameFromCall(recipient, text)
-  if (!toolName) return
-  const cutoff = Date.now() - SESSION_CORRELATION_TTL_MS
-  state.recentSessionToolCalls = state.recentSessionToolCalls.filter((call) => call.createdAt >= cutoff)
-  const knownRecentIndex = state.recentSessionToolCalls.findIndex((call) => call.toolName === toolName && call.parentSessionId === parentSessionId)
-  if (knownRecentIndex >= 0) {
-    state.recentSessionToolCalls.splice(knownRecentIndex, 1)
-    return
-  }
-  const recentIndex = state.recentSessionToolCalls.findIndex((call) => call.toolName === toolName && call.parentSessionId === undefined)
-  if (recentIndex >= 0) {
-    const [recent] = state.recentSessionToolCalls.splice(recentIndex, 1)
-    if (recent) bindParentSession(state, recent.sessionId, parentSessionId)
-    return
-  }
-  state.pendingToolCalls = state.pendingToolCalls.filter((call) => call.createdAt >= cutoff).slice(-31)
-  state.pendingToolCalls.push({ parentSessionId, toolName, createdAt: Date.now() })
-}
-
-export function observeSessionToolCall(state: ChatGptSubagentRuntimeState, sessionId: string, toolName: string): string | undefined {
-  const known = state.parentSessionsBySession.get(sessionId)
-  const cutoff = Date.now() - SESSION_CORRELATION_TTL_MS
-  state.pendingToolCalls = state.pendingToolCalls.filter((call) => call.createdAt >= cutoff)
-  state.recentSessionToolCalls = state.recentSessionToolCalls.filter((call) => call.createdAt >= cutoff).slice(-31)
-  if (known) {
-    const index = state.pendingToolCalls.findIndex((call) => call.toolName === toolName && call.parentSessionId === known)
-    if (index >= 0) {
-      state.pendingToolCalls.splice(index, 1)
-    } else {
-      state.recentSessionToolCalls.push({ sessionId, toolName, parentSessionId: known, createdAt: Date.now() })
-    }
-    return known
-  }
-  const index = state.pendingToolCalls.findIndex((call) => call.toolName === toolName)
-  if (index >= 0) {
-    const [call] = state.pendingToolCalls.splice(index, 1)
-    if (call) {
-      bindParentSession(state, sessionId, call.parentSessionId)
-      return call.parentSessionId
-    }
-  }
-  state.recentSessionToolCalls.push({ sessionId, toolName, createdAt: Date.now() })
-  return undefined
-}
-
-function bindParentSession(state: ChatGptSubagentRuntimeState, sessionId: string, parentSessionId: string): void {
-  if (state.parentSessionsBySession.get(sessionId) === parentSessionId) return
-  state.parentSessionsBySession.set(sessionId, parentSessionId)
-}
-
-function toolNameFromCall(recipient: string, text: string): string | undefined {
-  const recipientName = recipient.split(".").at(-1)?.trim()
-  if (!recipientName) return undefined
-  if (recipientName !== "call_tool") return recipientName
-  try {
-    const payload = asRecord(JSON.parse(text))
-    if (typeof payload?.path === "string") return payload.path.split("/").filter(Boolean).at(-1)?.trim()
-  } catch {
-    return undefined
-  }
-  return undefined
 }
 
 function failTurn(state: ChatGptSubagentRuntimeState, turn: BrowserTurnState, agent: BrowserAgentState, error: unknown): void {

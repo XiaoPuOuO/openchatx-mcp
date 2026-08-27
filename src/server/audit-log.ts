@@ -24,7 +24,6 @@ export interface McpAuditCall {
 
 export interface McpAuditContext {
   sessionId?: string
-  parentSessionId?: string
 }
 
 interface ToolResponseSummary {
@@ -102,7 +101,6 @@ export class McpAuditLogger {
   private aliasAuditContext(context: McpAuditContext): McpAuditContext {
     return {
       sessionId: context.sessionId ? this.sessionAlias(context.sessionId) : undefined,
-      parentSessionId: context.parentSessionId ? this.sessionAlias(context.parentSessionId) : undefined,
     }
   }
 
@@ -172,10 +170,7 @@ function formatEntry(input: {
 }
 
 function formatAuditContext(context: McpAuditContext): string {
-  const lines: string[] = []
-  if (context.sessionId) lines.push(`session: ${yamlString(context.sessionId)}`)
-  if (context.parentSessionId) lines.push(`parent_session: ${yamlString(context.parentSessionId)}`)
-  return lines.join("\n")
+  return context.sessionId ? `session: ${yamlString(context.sessionId)}` : ""
 }
 
 function formatInvocationMarkers(value: unknown): string {

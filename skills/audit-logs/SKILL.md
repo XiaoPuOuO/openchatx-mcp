@@ -25,7 +25,7 @@ Source of truth for format:
 - `out` = model-facing output tokens when captured
 - final time = local call start time
 
-Tool calls may include `session: <X-OpenAI-Session>` and known browser subagents also include `parent_session: <X-OpenAI-Session>`. Presence of `parent_session` means the caller is a known browser subagent. The first child call may contain only `session` if the lineage binding is learned just after that request.
+Tool calls may include `session: "agent-N"`. The audit logger assigns each distinct `X-OpenAI-Session` a stable first-seen alias such as `agent-1`, `agent-2`, and so on for the logger lifetime. Raw session IDs are not written to the log.
 
 ## Tool Bodies
 
@@ -47,4 +47,4 @@ Tool calls may include `session: <X-OpenAI-Session>` and known browser subagents
 - Shell nonzero exit produces `!` when the bounded result exposes the exit code.
 - Successful tool output bodies are not stored.
 - Entries are written when calls complete, so file order is not guaranteed invocation order.
-- One file may contain multiple sessions; use `session` to group activity and `subagent` when present to distinguish known browser subagents.
+- One file may contain multiple caller sessions; use `session` to group activity.

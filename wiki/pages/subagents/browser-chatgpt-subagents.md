@@ -25,14 +25,13 @@ One process-level service owns:
 agents: agent_id -> lifecycle status + optional page + conversation URL + turn counter + timestamps
 turns: turn_id -> detached local turn state
 activeOperations: agent_id -> reserved/submitted turn
-pendingEvents: parent session -> completion notifications
-parentSessionsBySession: child X-OpenAI-Session -> parent X-OpenAI-Session
+pendingEvents: launching MCP session -> completion notifications
 store: SQLite agent_id -> conversation URL + turn count
 ```
 
-The agent lifecycle reuses the existing activity values: `Working`, `Searching the web`, `Using tools`, and `Generating response`, plus `idle` and `uncertain`. `activeOperations` remains only the concurrency/race lock. Live turns, responses, activity, pending events, child-session mappings, pages, and uncertain status are process-local. The persisted store keeps only conversation URL and turn count (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
+The agent lifecycle reuses the existing activity values: `Working`, `Searching the web`, `Using tools`, and `Generating response`, plus `idle` and `uncertain`. `activeOperations` remains only the concurrency/race lock. Live turns, responses, activity, pending events, pages, and uncertain status are process-local. The persisted store keeps only conversation URL and turn count (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
 
-Subagent lineage is best-effort and does not inspect rendered UI or the injected caveman prompt. Each launched turn already knows the parent `X-OpenAI-Session`. The CDP turn observer sees ChatGPT's tool-call assistant message; connector calls expose a `call_tool` payload whose path ends in the actual MCP tool name. Shellby matches that name against an incoming MCP `tools/call` within a short bounded window and then remembers `child X-OpenAI-Session -> parent X-OpenAI-Session`. Either event may arrive first. A session with a known parent session is therefore a known browser subagent session; `agent_id` is not part of request tracing (`src/tools/subagent/chatgpt-subagent-observer.ts`, `src/tools/subagent/chatgpt-subagent-protocol.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
+The launching MCP session is retained only so a detached `agent_finished` event returns to the conversation that started the turn. Shellby does not infer whether later MCP callers are subagents and does not build relationships between caller sessions. See [Session Tracking](./subagent-tracking.md).
 
 ## Submission
 
