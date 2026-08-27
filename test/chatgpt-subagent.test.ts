@@ -16,6 +16,7 @@ import {
   disposeSubagents,
   endAgentOperation,
   ensureAgentPage,
+  observeSessionToolCall,
   pollSubagent,
   type BrowserAgentState,
   type BrowserTurnState,
@@ -94,6 +95,7 @@ test("new agents start from configured project URL", async () => {
 
 test("same agent keeps one page across multiple turns and captures conversation id from CDP", async () => {
   const runtime = createRuntime({ chatGptUrl: "https://chatgpt.com/g/g-p-example/project" })
+  assert.equal(observeSessionToolCall(runtime, "child-session-1", "shell_list"), undefined)
   let currentUrl = "https://chatgpt.com/g/g-p-example/project"
   let inserted = ""
   let frameHandler: ((event: { response?: { payloadData?: string } }) => void) | undefined
@@ -108,6 +110,15 @@ test("same agent keeps one page across multiple turns and captures conversation 
       `data: ${JSON.stringify({ conversation_id: id, v: { message: { id: `${role}-${sendCount}`, author: { role }, content: { parts: [text] }, status: "finished_successfully", end_turn: endTurn, recipient: "all", metadata: {} } } })}\n\n`
     frameHandler?.({ response: { payloadData: wrap(msg("user", inserted, null, conversationId)) } })
     if (sendCount === 1) assert.equal(runtime.agents.get("multi")?.conversationUrl, `https://chatgpt.com/g/g-p-example/c/${conversationId}`)
+    if (sendCount === 1) {
+      frameHandler?.({
+        response: {
+          payloadData: wrap(
+            `data: ${JSON.stringify({ v: { message: { id: "tool-1", author: { role: "assistant" }, content: { parts: [JSON.stringify({ path: "/Shellby MCP/link-test/shell_list", args: {} })] }, status: "finished_successfully", end_turn: false, recipient: "api_tool.call_tool", metadata: {} } } })}\n\n`
+          ),
+        },
+      })
+    }
     currentUrl = `https://chatgpt.com/c/${conversationId}`
     frameHandler?.({ response: { payloadData: wrap(msg("assistant", answer, true)) } })
     frameHandler?.({ response: { payloadData: wrap(`data: ${JSON.stringify({ type: "message_stream_complete", conversation_id: conversationId })}\n\n`) } })
@@ -162,14 +173,17 @@ test("same agent keeps one page across multiple turns and captures conversation 
   runtime.context = { pages: () => [page] } as never
   runtime.agents.set(agent.agentId, agent)
 
-  const first = await askSubagent(runtime, { agentId: "multi", prompt: "first", oververbosity: 2 })
+  const first = await askSubagent(runtime, { agentId: "multi", prompt: "first", oververbosity: 2, parentSessionId: "parent-session-1" })
   const firstResult = await pollSubagent(runtime, first.turnId, 100)
   assert.equal(firstResult.response, "answer-1")
   assert.equal(agent.status, "idle")
   assert.equal(agent.conversationUrl, "https://chatgpt.com/c/conversation-1")
+  assert.equal(runtime.subagentSessions.get("child-session-1"), "multi")
+  assert.deepEqual(runtime.pendingEvents.get("parent-session-1"), ["agent_finished:multi:multi_turn_1"])
+  assert.equal(runtime.pendingEvents.has(""), false)
   assert.match(inserted, /Respond terse like smart caveman/)
 
-  const second = await askSubagent(runtime, { agentId: "multi", prompt: "second", oververbosity: 5 })
+  const second = await askSubagent(runtime, { agentId: "multi", prompt: "second", oververbosity: 5, parentSessionId: "parent-session-1" })
   const secondResult = await pollSubagent(runtime, second.turnId, 100)
   assert.equal(secondResult.response, "answer-2")
   assert.equal(inserted, "second")

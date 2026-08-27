@@ -21,6 +21,7 @@ export interface CreateMcpServerOptions {
   webPageOpener: WebPageOpener
   applyPatchExecutable?: string
   toolOutputStructured?: ToolOutputStructuredMode
+  sessionId?: string
 }
 
 export function createMcpServer(shells: ShellSessionManager, options: CreateMcpServerOptions): McpServer {
@@ -30,7 +31,7 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
   })
   installToolRegistrationBoundary(server, {
     toolOutputStructured: options.toolOutputStructured ?? MCP_CONFIG.toolOutputStructured,
-    drainPendingEvents: () => options.chatGptSubagents.drainEvents?.() ?? [],
+    drainPendingEvents: () => options.chatGptSubagents.drainEvents?.(options.sessionId) ?? [],
   })
 
   registerShellExecutionTools(server, shells, workspace)
@@ -38,7 +39,7 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
   // registerIosShellTool(server)
   registerApplyPatchTool(server, options.applyPatchExecutable)
   registerShellManagementTools(server, shells)
-  registerSubagentTools(server, options.chatGptSubagents)
+  registerSubagentTools(server, options.chatGptSubagents, options.sessionId)
   registerWebTool(server, options.webPageOpener)
   registerSkillTools(server, workspace)
   registerImageTools(server, workspace)

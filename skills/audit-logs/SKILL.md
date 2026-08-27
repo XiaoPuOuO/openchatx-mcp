@@ -16,7 +16,7 @@ Source of truth for format:
 ## Header
 
 ```text
---- # [!|~] TOOL - DURATIONms - N in [/ N out] [- structured] [- max_output_tokens=N] [- HTTP ...] - HH:MM:SS
+--- # [!|~] TOOL - DURATIONms - N in [/ N out] [- structured] [- max_output_tokens=N] [- HTTP ...] - Mon D h:mm AM/PM
 ```
 
 - `!` = tool/HTTP/connection failure
@@ -24,6 +24,8 @@ Source of truth for format:
 - `in` = tokens from full serialized arguments before log truncation
 - `out` = model-facing output tokens when captured
 - final time = local call start time
+
+Tool calls may include `session: <X-OpenAI-Session>` and known browser subagents also include `subagent: <agent_id>`. The first child call may contain only `session` if the subagent binding is learned just after that request.
 
 ## Tool Bodies
 
@@ -42,8 +44,7 @@ Source of truth for format:
 ## Caveats
 
 - Missing `out` does not mean zero output.
-- Shell nonzero exit may not produce `!`.
+- Shell nonzero exit produces `!` when the bounded result exposes the exit code.
 - Successful tool output bodies are not stored.
 - Entries are written when calls complete, so file order is not guaranteed invocation order.
-- Timestamps have no date.
-- One file may contain multiple sessions.
+- One file may contain multiple sessions; use `session` to group activity and `subagent` when present to distinguish known browser subagents.

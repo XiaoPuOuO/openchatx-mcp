@@ -28,6 +28,11 @@ export interface McpAuditCall {
   }): void
 }
 
+export interface McpAuditContext {
+  sessionId?: string
+  subagentId?: string
+}
+
 interface ToolResponseSummary {
   failed: boolean
   failureMessage?: string
@@ -48,7 +53,7 @@ export class McpAuditLogger {
     }
   }
 
-  startToolCalls(payload: unknown): McpAuditCall[] {
+  startToolCalls(payload: unknown, context: McpAuditContext = {}): McpAuditCall[] {
     const requests = Array.isArray(payload) ? payload : [payload]
     return requests.flatMap((request) => {
       if (isToolListRequest(request)) {
@@ -90,6 +95,7 @@ export class McpAuditLogger {
                 toolFailed: toolResponse.failed || shellExitFailed,
                 failureMessage: toolResponse.failureMessage,
                 responseSummary: toolResponse,
+                context,
               })
             )
           },
@@ -133,6 +139,7 @@ function formatEntry(input: {
   toolFailed: boolean
   failureMessage?: string
   responseSummary: ToolResponseSummary
+  context: McpAuditContext
 }): string {
   const abnormal = input.httpStatus >= 400 || input.state !== "finished" ? ` - HTTP ${input.httpStatus} ${input.state}` : ""
   const tokenCounts = ` - ${input.inputTokens} in${input.outputTokens !== undefined ? ` / ${input.outputTokens} out` : ""}`
@@ -145,12 +152,20 @@ function formatEntry(input: {
   const tagPrefix = tag ? `${tag} ` : ""
   const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${invocationMarkers}${responseMarker}${abnormal} - ${formatAuditTime(input.time)}`
   const details = [
+    formatAuditContext(input.context),
     formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage),
     formatResponseSummary(input.toolName, input.responseSummary),
   ]
     .filter(Boolean)
     .join("\n")
   return details ? `${heading}\n${details}\n\n` : `${heading}\n\n`
+}
+
+function formatAuditContext(context: McpAuditContext): string {
+  const lines: string[] = []
+  if (context.sessionId) lines.push(`session: ${yamlString(context.sessionId)}`)
+  if (context.subagentId) lines.push(`subagent: ${yamlString(context.subagentId)}`)
+  return lines.join("\n")
 }
 
 function formatInvocationMarkers(value: unknown): string {

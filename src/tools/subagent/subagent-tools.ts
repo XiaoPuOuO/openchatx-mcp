@@ -48,7 +48,7 @@ const subagentResultSchema = z.object({
   error: z.string().optional(),
 })
 
-export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatGptSubagentService): void {
+export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatGptSubagentService, parentSessionId?: string): void {
   server.registerTool(
     "subagent_run",
     {
@@ -90,7 +90,10 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
         }
 
         try {
-          const result = await chatGptSubagents.ask({ agentId: agent.agent_id, prompt: agent.prompt, oververbosity: agent.oververbosity }, ctx.mcpReq.signal)
+          const result = await chatGptSubagents.ask(
+            { agentId: agent.agent_id, prompt: agent.prompt, oververbosity: agent.oververbosity, parentSessionId },
+            ctx.mcpReq.signal
+          )
           turns.push({
             agent_id: result.agentId,
             turn_id: result.turnId,

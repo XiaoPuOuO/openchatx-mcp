@@ -18,6 +18,9 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     async poll(turnId) {
       return { turnId, status: "completed", response: "done" }
     },
+    observeSessionToolCall(sessionId, toolName) {
+      return sessionId === "child-session" && toolName === "shell_list" ? "child-agent" : undefined
+    },
     async dispose() {},
   }
   const running = await startMcpHttpServer({
@@ -30,7 +33,7 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     await rm(root, { recursive: true, force: true })
   })
 
-  const connected = await connectClient(running.url, "audit-integration-client")
+  const connected = await connectClient(running.url, "audit-integration-client", undefined, false, "child-session")
   t.after(() => connected.client.close())
   await connected.client.callTool({ name: "shell_list", arguments: {} })
   await connected.client.callTool({
@@ -44,4 +47,6 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   assert.match(log, /subagent_run/)
   assert.match(log, /audit-check/)
   assert.match(log, /Inspect the audit path\./)
+  assert.match(log, /session: "child-session"/)
+  assert.match(log, /subagent: "child-agent"/)
 })

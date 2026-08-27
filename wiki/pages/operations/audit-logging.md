@@ -18,7 +18,9 @@ Canonical behavior for the repository-local MCP tool audit log.
 
 Production injects one `McpAuditLogger` and appends completed `tools/call` activity plus one timestamped line for each `tools/list` request to gitignored `agent-commands.yaml`. Other non-tool MCP requests are ignored. The file is created or repaired with owner-only `0600` permissions. Audit failures are best-effort and never change MCP dispatch (`src/index.ts`, `src/server/http-server.ts`, `src/server/audit-log.ts`, `test/mcp-audit-log.test.ts`).
 
-Each call is one compact YAML document containing the tool name, duration, a human-readable local timestamp such as `Aug 26 11:05 PM`, bounded input context, and model-facing token counts when they can be derived safely. Ordinary tool output is not persisted (`src/server/audit-log.ts`).
+Each call is one compact YAML document containing the tool name, duration, a human-readable local timestamp such as `Aug 26 11:05 PM`, bounded input context, model-facing token counts when they can be derived safely, and `X-OpenAI-Session` when supplied by the client. Known browser subagent sessions also include `subagent: <agent_id>`. Ordinary tool output is not persisted (`src/server/audit-log.ts`).
+
+Subagent classification is best-effort and process-local. The first child tool call may finish before CDP exposes the matching ChatGPT tool-call message, so that first entry may contain only `session`. Once the child session is correlated to an agent, later calls from that session include the known `subagent` value (`src/server/http-server.ts`, `src/server/audit-log.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
 
 ## Retention Rules
 

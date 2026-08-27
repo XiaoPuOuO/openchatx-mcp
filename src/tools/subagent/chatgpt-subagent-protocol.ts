@@ -8,6 +8,7 @@ export interface ChatGptTurnCompletion {
 }
 
 interface NormalizedMessage {
+  id?: string
   role?: string
   status?: string
   endTurn?: boolean | null
@@ -28,7 +29,8 @@ export class ChatGptTurnTracker {
   constructor(
     private readonly prompt: string,
     private readonly onActivity?: (activity: ChatGptSubagentActivity) => void,
-    private readonly onConversationId?: (conversationId: string) => void
+    private readonly onConversationId?: (conversationId: string) => void,
+    private readonly onToolCall?: (messageId: string, recipient: string, text: string) => void
   ) {}
 
   ingestFrame(payloadData: string): ChatGptTurnCompletion | undefined {
@@ -85,6 +87,7 @@ export class ChatGptTurnTracker {
         this.assistant = { ...message }
         this.lastDeltaPath = undefined
         this.lastDeltaOperation = undefined
+        if (message.id && message.recipient && message.recipient !== "all") this.onToolCall?.(message.id, message.recipient, message.text)
       }
 
       this.applyDelta(record)
@@ -160,6 +163,7 @@ function normalizeMessage(record: Record<string, unknown>): NormalizedMessage | 
   const author = asRecord(message.author)
   if (!author) return undefined
   return {
+    id: stringValue(message.id),
     role: stringValue(author.role),
     status: stringValue(message.status),
     endTurn: typeof message.end_turn === "boolean" || message.end_turn === null ? (message.end_turn as boolean | null) : undefined,

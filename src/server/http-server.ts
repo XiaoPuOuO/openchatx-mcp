@@ -46,8 +46,8 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const port = options.port ?? MCP_CONFIG.port
   const shells = options.shellManager ?? createShellSessionManager()
   const peekaboo = options.peekaboo ?? new PeekabooClient({ localOnly: true })
-  const chatGptSubagents = options.chatGptSubagents ?? createChatGptSubagentService()
   const auditLogger = options.auditLogger
+  const chatGptSubagents = options.chatGptSubagents ?? createChatGptSubagentService()
   const authStore = options.authStore
   const webPageOpener = options.webPageOpener ?? new WebPageOpener()
   const inFlightRequests = new Set<InFlightMcpRequest>()
@@ -60,7 +60,12 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   })
 
   const handleMcpPost = async (req: Request, res: Response): Promise<void> => {
-    const auditCalls = auditLogger?.startToolCalls(req.body) ?? []
+    const sessionId = requestSessionId(req)
+    const toolName = firstToolCallName(req.body)
+    const subagentId = sessionId
+      ? chatGptSubagents.agentIdForSession?.(sessionId) ?? (toolName ? chatGptSubagents.observeSessionToolCall?.(sessionId, toolName) : undefined)
+      : undefined
+    const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId, subagentId }) ?? []
     let responseBody = Buffer.alloc(0)
     let responseBytes = 0
     let responseBodyTruncated = false
@@ -100,6 +105,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
       peekaboo,
       webPageOpener,
       toolOutputStructured: options.toolOutputStructured,
+      sessionId,
     })
     const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -245,8 +251,23 @@ function containsToolCall(payload: unknown): boolean {
   })
 }
 
+function firstToolCallName(payload: unknown): string | undefined {
+  const requests = Array.isArray(payload) ? payload : [payload]
+  for (const value of requests) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue
+    const request = value as { method?: unknown; params?: { name?: unknown } }
+    if (request.method === "tools/call" && typeof request.params?.name === "string" && request.params.name.length > 0) return request.params.name
+  }
+  return undefined
+}
+
 function isTrustedRemoteRequest(req: Request): boolean {
   return req.get("x-shellby-remote") === "1"
+}
+
+function requestSessionId(req: Request): string | undefined {
+  const value = req.get("x-openai-session")?.trim()
+  return value || undefined
 }
 
 function remoteAuthError(res: Response, error: unknown): void {

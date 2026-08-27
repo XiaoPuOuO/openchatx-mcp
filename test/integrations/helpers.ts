@@ -9,15 +9,16 @@ export function startMcpHttpServer(options: StartMcpServerOptions = {}) {
   return startMcpHttpServerRaw({ toolOutputStructured: "always", ...options })
 }
 
-export async function connectClient(url: string, name: string, openAiSubject?: string, trustedRemote = false) {
+export async function connectClient(url: string, name: string, openAiSubject?: string, trustedRemote = false, openAiSession?: string) {
   const client = new Client({ name, version: "1.0.0" })
   const transport = new StreamableHTTPClientTransport(new URL(url), {
     requestInit:
-      openAiSubject || trustedRemote
+      openAiSubject || trustedRemote || openAiSession
         ? {
             headers: {
               ...(openAiSubject ? { "x-openai-subject": openAiSubject } : {}),
               ...(trustedRemote ? { "x-shellby-remote": "1" } : {}),
+              ...(openAiSession ? { "x-openai-session": openAiSession } : {}),
             },
           }
         : undefined,
