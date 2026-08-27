@@ -72,6 +72,17 @@ test("HTTP SSE tracker reconstructs the same final assistant response", () => {
   assert.deepEqual(tracker.ingestSse(sse), { text: "HTTP exact", conversationId: "conversation-http", turnId: undefined })
 })
 
+test("CDP tracker tolerates ChatGPT prompt whitespace normalization", () => {
+  const tracker = new ChatGptTurnTracker("Optimize familiarity. \n\nGive your preferred syntax.")
+  const topic = "conversation-turn-turn-normalized"
+
+  tracker.ingestFrame(turnFrame(topic, message("user", "Optimize familiarity.\u00a0\n Give your preferred syntax.")))
+  tracker.ingestFrame(turnFrame(topic, message("assistant", "done", { endTurn: true })))
+  const result = tracker.ingestFrame(turnFrame(topic, 'data: {"type":"message_stream_complete","conversation_id":"conversation-normalized"}\n\n'))
+
+  assert.deepEqual(result, { text: "done", conversationId: "conversation-normalized", turnId: "turn-normalized" })
+})
+
 test("CDP tracker does not complete a tool-call assistant message", () => {
   const tracker = new ChatGptTurnTracker("review")
   const topic = "conversation-turn-turn-2"

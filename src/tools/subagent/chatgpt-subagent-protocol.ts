@@ -71,11 +71,11 @@ export class ChatGptTurnTracker {
 
       const value = asRecord(record.v)
       const message = value ? normalizeMessage(value) : undefined
-      if (message?.role === "user" && message.text.trim() === this.prompt.trim()) this.bind(sourceId, turnId)
+      if (message?.role === "user" && promptsMatch(message.text, this.prompt)) this.bind(sourceId, turnId)
 
       const inputMessage = asRecord(record.input_message)
       const input = inputMessage ? normalizeMessage({ message: inputMessage }) : undefined
-      if (input?.role === "user" && input.text.trim() === this.prompt.trim()) this.bind(sourceId, turnId)
+      if (input?.role === "user" && promptsMatch(input.text, this.prompt)) this.bind(sourceId, turnId)
 
       if (this.sourceId !== sourceId) continue
       this.captureConversationId(record)
@@ -144,6 +144,14 @@ export class ChatGptTurnTracker {
     if (!this.assistant.text) return undefined
     return { text: this.assistant.text, conversationId: this.conversationId, turnId: this.sourceTurnId }
   }
+}
+
+function promptsMatch(observed: string, submitted: string): boolean {
+  return normalizePrompt(observed) === normalizePrompt(submitted)
+}
+
+function normalizePrompt(text: string): string {
+  return text.normalize("NFKC").replace(/\s+/g, " ").trim()
 }
 
 function normalizeMessage(record: Record<string, unknown>): NormalizedMessage | undefined {
