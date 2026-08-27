@@ -93,6 +93,29 @@ test("puts audit heading before entry details with time last", async (t) => {
   assert.equal(await readFile(file, "utf8"), "--- # shell_list - 0ms - 1 in - Aug 18 6:25 PM\nargs: {}\n\n")
 })
 
+test("aliases audit sessions in first-seen order without logging raw ids", async (t) => {
+  const file = await auditFile(t)
+  const logger = new McpAuditLogger(
+    file,
+    () => new Date(2026, 7, 18, 18, 30, 0),
+    () => 0
+  )
+  const request = { method: "tools/call", params: { name: "shell_list", arguments: {} } }
+
+  const [first] = logger.startToolCalls(request, { sessionId: "raw-session-a" })
+  const [second] = logger.startToolCalls(request, { sessionId: "raw-session-b", parentSessionId: "raw-session-a" })
+  assert.ok(first)
+  assert.ok(second)
+
+  second.finish({ httpStatus: 200, state: "finished" })
+  first.finish({ httpStatus: 200, state: "finished" })
+
+  const log = await readFile(file, "utf8")
+  assert.match(log, /session: "agent-2"\nparent_session: "agent-1"/)
+  assert.match(log, /session: "agent-1"/)
+  assert.doesNotMatch(log, /raw-session-a|raw-session-b/)
+})
+
 test("marks explicit structured and max_output_tokens tool arguments in the heading", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(

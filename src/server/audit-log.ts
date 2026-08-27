@@ -35,6 +35,8 @@ interface ToolResponseSummary {
 }
 
 export class McpAuditLogger {
+  private readonly sessionAliases = new Map<string, string>()
+
   constructor(
     private readonly filePath: string,
     private readonly now: () => Date = () => new Date(),
@@ -58,6 +60,7 @@ export class McpAuditLogger {
       const parsed = parseToolCall(request)
       if (!parsed) return []
 
+      const auditContext = this.aliasAuditContext(context)
       const startedAt = this.clock()
       const startedTime = this.now()
       const inputTokens = countTokens(JSON.stringify(parsed.arguments ?? {}))
@@ -86,13 +89,28 @@ export class McpAuditLogger {
                 toolFailed: toolResponse.failed || shellExitFailed,
                 failureMessage: toolResponse.failureMessage,
                 responseSummary: toolResponse,
-                context,
+                context: auditContext,
               })
             )
           },
         },
       ]
     })
+  }
+
+  private aliasAuditContext(context: McpAuditContext): McpAuditContext {
+    return {
+      sessionId: context.sessionId ? this.sessionAlias(context.sessionId) : undefined,
+      parentSessionId: context.parentSessionId ? this.sessionAlias(context.parentSessionId) : undefined,
+    }
+  }
+
+  private sessionAlias(sessionId: string): string {
+    const known = this.sessionAliases.get(sessionId)
+    if (known) return known
+    const alias = `agent-${this.sessionAliases.size + 1}`
+    this.sessionAliases.set(sessionId, alias)
+    return alias
   }
 
   private append(entry: string): void {

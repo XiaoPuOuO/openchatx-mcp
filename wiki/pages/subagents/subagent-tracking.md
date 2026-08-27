@@ -29,11 +29,13 @@ The first goal is directly supported by request metadata and is useful on its ow
 
 Live ChatGPT MCP traffic carries `X-OpenAI-Session` on the HTTP request and `openai/session` in MCP metadata. Across sampled conversations, the value changes with the ChatGPT conversation while `X-OpenAI-Subject` remains stable for the user. Treat the session as opaque conversation-scoped operational context, not authorization state (`wiki/raw/openai-mcp-identity-observation-2026-08-09.md`, `src/server/http-server.ts`).
 
-This is enough to answer the basic traceability question: which conversation called this tool? Audit entries can record:
+This is enough to answer the basic traceability question: which conversation called this tool? Runtime state keeps the full opaque session value, while audit output assigns each distinct session a short first-seen alias for readability:
 
 ```yaml
-session: "<X-OpenAI-Session>"
+session: "agent-1"
 ```
+
+The alias is presentation-only. `agent-1`, `agent-2`, and later values map to raw `X-OpenAI-Session` strings inside the logger for its lifetime; raw session IDs are still used for lineage correlation and detached NOTICE routing.
 
 The same session can scope detached `agent_finished` NOTICE delivery so a completion launched from conversation A is not drained by unrelated conversation B. The launch request already knows A directly; no child-session inference is required for that delivery behavior (`src/server/mcp-server.ts`, `src/tools/subagent/subagent-tools.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
 
