@@ -208,7 +208,8 @@ function formatArguments(toolName: string, value: unknown, toolFailed: boolean, 
     const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
     const cwd = typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
     const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
-    const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`, `input: ${inputShape}`]
+    const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`]
+    if (inputShape === "both" || inputShape === "neither") fields.push(`input: ${inputShape}`)
     if (cwd) fields.push(cwd.slice(1))
     if (message) fields.push(message.slice(1))
     if (hasCommand) fields.push(`command: |-\n${indentBlock(truncate(command, MAX_SHELL_COMMAND_CHARS))}`)
