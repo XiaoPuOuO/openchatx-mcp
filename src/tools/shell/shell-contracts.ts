@@ -48,6 +48,9 @@ export const shellRunInputSchema = z
   .refine((input) => (input.command === undefined) !== (input.commands === undefined), {
     message: "Provide exactly one of command or commands.",
   })
+  .meta({
+    oneOf: [{ required: ["command"] }, { required: ["commands"] }],
+  })
 
 export type ShellRunInput = z.infer<typeof shellRunInputSchema>
 
