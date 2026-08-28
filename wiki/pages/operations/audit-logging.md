@@ -29,7 +29,7 @@ Session aliases identify only the conversation that made the MCP request. The au
 - Ordinary tool arguments are capped at 600 characters.
 - Successful `apply_patch` calls retain cwd and patch size, not patch text.
 - Failed `apply_patch` calls may retain the bounded failure message and up to 32,000 patch characters.
-- The first 8 KiB of a response body may be captured temporarily for token accounting and compact result extraction, then is discarded. The total response byte count is tracked without retaining the body. If the bounded capture overflows, `out` is omitted rather than guessed and the heading records `response_bytes` plus `audit_capture_truncated`.
+- The first 8 KiB of a response body may be captured temporarily for token accounting and compact result extraction, then is discarded. If the bounded capture overflows, `out` is omitted rather than guessed and the heading records `truncated`. Otherwise the marker is omitted.
 - Computer Use follows the same bounded response capture. Its small structured metadata is serialized before screenshot content so screenshot-heavy observations can still retain a compact whitelist such as snapshot ID, application/window identity, capture mode, and element counts from the bounded prefix. Screenshot bytes, inspection text/UI trees, and other raw Computer output are never persisted.
 
 The logger records serialized tool arguments as model-facing `in` tokens. When a complete bounded response is available, `out` counts the final projected text plus any structured result after compact/structured projection and completion-event injection, excluding image payloads. These are MCP I/O counts, not model-inference usage (`src/server/audit-log.ts`, `src/tokenizer.ts`, `test/mcp-audit-log.test.ts`).

@@ -19,7 +19,7 @@ interface JsonRpcToolCall {
 }
 
 export interface McpAuditCall {
-  finish(input: { httpStatus: number; state: "finished" | "closed"; responseBody?: string; responseBytes?: number; responseBodyTruncated?: boolean }): void
+  finish(input: { httpStatus: number; state: "finished" | "closed"; responseBody?: string; responseBodyTruncated?: boolean }): void
 }
 
 export interface McpAuditContext {
@@ -68,7 +68,7 @@ export class McpAuditLogger {
 
       return [
         {
-          finish: ({ httpStatus, state, responseBody, responseBytes, responseBodyTruncated }) => {
+          finish: ({ httpStatus, state, responseBody, responseBodyTruncated }) => {
             if (finished) return
             finished = true
             const toolResponse = parseToolResponse(responseBody, parsed.id)
@@ -84,7 +84,6 @@ export class McpAuditLogger {
                 state,
                 inputTokens,
                 outputTokens: toolResponse.modelOutput !== undefined ? countTokens(toolResponse.modelOutput) : undefined,
-                responseBytes,
                 responseBodyTruncated,
                 toolFailed: toolResponse.failed || shellExitFailed,
                 failureMessage: toolResponse.failureMessage,
@@ -142,7 +141,6 @@ function formatEntry(input: {
   state: "finished" | "closed"
   inputTokens: number
   outputTokens?: number
-  responseBytes?: number
   responseBodyTruncated?: boolean
   toolFailed: boolean
   failureMessage?: string
@@ -152,10 +150,7 @@ function formatEntry(input: {
   const abnormal = input.httpStatus >= 400 || input.state !== "finished" ? ` - HTTP ${input.httpStatus} ${input.state}` : ""
   const tokenCounts = ` - ${input.inputTokens} in${input.outputTokens !== undefined ? ` / ${input.outputTokens} out` : ""}`
   const invocationMarkers = formatInvocationMarkers(input.argumentsValue)
-  const responseMarker =
-    input.outputTokens === undefined && input.responseBytes
-      ? ` - response_bytes=${input.responseBytes}${input.responseBodyTruncated ? " - audit_capture_truncated" : ""}`
-      : ""
+  const responseMarker = input.responseBodyTruncated ? " - truncated" : ""
   const tag = auditTag(input)
   const tagPrefix = tag ? `${tag} ` : ""
   const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${invocationMarkers}${responseMarker}${abnormal} - ${formatAuditTime(input.time)}`

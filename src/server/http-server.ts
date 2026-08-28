@@ -63,11 +63,9 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     const sessionId = requestSessionId(req)
     const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId }) ?? []
     let responseBody = Buffer.alloc(0)
-    let responseBytes = 0
     let responseBodyTruncated = false
     if (auditCalls.length > 0) {
       trackResponse(res, (chunk) => {
-        responseBytes += chunk.byteLength
         if (responseBodyTruncated) return
         const remaining = MAX_AUDIT_RESPONSE_BODY_BYTES - responseBody.byteLength
         if (chunk.byteLength > remaining) {
@@ -86,7 +84,6 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
         auditCall.finish({
           httpStatus: res.statusCode,
           state,
-          responseBytes,
           responseBodyTruncated,
           ...(responseBody.length > 0 ? { responseBody: responseBody.toString("utf8") } : {}),
         })

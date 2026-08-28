@@ -295,13 +295,15 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
   childNonzero.finish({
     httpStatus: 200,
     state: "finished",
-    responseBytes: 9_000,
     responseBodyTruncated: true,
     responseBody: '{"result":{"isError":false,"structuredContent":{"status":"completed","exit_code":1,"cwd":"/workspace","output":"' + "x".repeat(2_000),
   })
 
   const finalLog = await readFile(file, "utf8")
-  assert.match(finalLog, /--- # ! shell_run - 0ms - \d+ in - response_bytes=9000 - audit_capture_truncated - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"\ninput: commands\ncommands: \|-\n {2}\[\n {4}\{\n {6}"command": "false"\n {4}\}\n {2}\]\nresult: status="completed" exit_code=1 cwd="\/workspace"/)
+  assert.match(
+    finalLog,
+    /--- # ! shell_run - 0ms - \d+ in - truncated - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"\ninput: commands\ncommands: \|-\n {2}\[\n {4}\{\n {6}"command": "false"\n {4}\}\n {2}\]\nresult: status="completed" exit_code=1 cwd="\/workspace"/
+  )
 })
 
 test("caps large ordinary tool arguments", async (t) => {
@@ -383,7 +385,6 @@ test("logs compact computer metadata without retaining screenshot or inspection 
   call.finish({
     httpStatus: 200,
     state: "finished",
-    responseBytes: 1_250_000,
     responseBody: JSON.stringify({
       result: {
         content: [{ type: "text", text: "Observed Finder — Downloads." }],
@@ -405,18 +406,22 @@ test("logs compact computer metadata without retaining screenshot or inspection 
   assert.doesNotMatch(log, /Observed Finder/)
 })
 
-test("records response size when the bounded audit capture overflows", async (t) => {
+test("marks the audit entry when the bounded response capture overflows", async (t) => {
   const file = await auditFile(t)
-  const logger = new McpAuditLogger(file, () => new Date(2026, 7, 26, 23, 5, 0), () => 0)
+  const logger = new McpAuditLogger(
+    file,
+    () => new Date(2026, 7, 26, 23, 5, 0),
+    () => 0
+  )
   const [call] = logger.startToolCalls({ method: "tools/call", params: { name: "computer_observe", arguments: {} } })
   assert.ok(call)
   const responsePrefix =
     '{"result":{"structuredContent":{"snapshot_id":"snapshot-large","application_name":"Finder","window_title":"Downloads","capture_mode":"window","element_count":21,"interactable_count":8},"content":[{"type":"image","data":"' +
     "x".repeat(2_000)
-  call.finish({ httpStatus: 200, state: "finished", responseBytes: 900_000, responseBodyTruncated: true, responseBody: responsePrefix })
+  call.finish({ httpStatus: 200, state: "finished", responseBodyTruncated: true, responseBody: responsePrefix })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /response_bytes=900000 - audit_capture_truncated - Aug 26 11:05 PM/)
+  assert.match(log, / - truncated - Aug 26 11:05 PM/)
   assert.match(log, /result: snapshot_id="snapshot-large" app="Finder" window="Downloads" capture_mode="window" elements=21 interactable=8/)
 })
 
