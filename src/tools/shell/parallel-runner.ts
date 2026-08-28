@@ -99,38 +99,6 @@ export class ParallelCommandAbortedError extends Error {
   }
 }
 
-export function parseParallelCommandBatch(value: string): ParallelCommandSpec[] | null {
-  const normalized = value.replaceAll("\r\n", "\n").trimStart()
-  const lines = normalized.split("\n")
-  if (!normalized.startsWith("*** Run")) {
-    const directiveIndex = lines.findIndex((line) => parseRunMarker(line) !== null)
-    if (directiveIndex >= 0) {
-      throw new Error(`Parallel syntax must start with '*** Run:'. Found a parallel directive on line ${directiveIndex + 1}.`)
-    }
-    return null
-  }
-
-  const commands: ParallelCommandSpec[] = []
-  let index = 0
-  while (index < lines.length) {
-    const marker = parseRunMarker(lines[index]!)
-    if (!marker) {
-      throw new Error(`Expected '*** Run:' or '*** Run: <directory>' on line ${index + 1}.`)
-    }
-    index += 1
-
-    const bodyStart = index
-    while (index < lines.length && !isRunDirective(lines[index]!)) index += 1
-    const command = lines.slice(bodyStart, index).join("\n")
-    if (command.trim().length === 0) {
-      throw new Error(`Run ${commands.length + 1} has no command.`)
-    }
-    commands.push({ command, path: marker.path })
-  }
-
-  return commands
-}
-
 export function executeParallelCommand(input: ExecuteParallelCommandInput): Promise<ParallelCommandExecutionResult> {
   if (input.signal.aborted) {
     return Promise.resolve({ status: "reset", exitCode: null, output: "", droppedOutputBytes: 0 })
@@ -216,17 +184,6 @@ export function executeParallelCommand(input: ExecuteParallelCommandInput): Prom
     }, input.timeoutMs)
     timeoutTimer.unref()
   })
-}
-
-function parseRunMarker(line: string): { path: string } | null {
-  if (line === "*** Run:") return { path: "." }
-  if (!line.startsWith("*** Run: ")) return null
-  const path = line.slice("*** Run: ".length).trim()
-  return { path: path || "." }
-}
-
-function isRunDirective(line: string): boolean {
-  return line.startsWith("*** Run")
 }
 
 function createBoundedOutput(maxBytes: number) {

@@ -142,9 +142,12 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
 }
 
 export function shellRunFileEditNotices(toolName: string, input: Record<string, unknown> | undefined): string[] {
-  const command = input?.command
-  if (toolName !== "shell_run" || typeof command !== "string") return []
-  return OBVIOUS_SHELL_FILE_EDIT_PATTERNS.some((pattern) => pattern.test(command)) ? [SHELL_FILE_EDIT_NOTICE] : []
+  if (toolName !== "shell_run" || !input) return []
+  const commands = [
+    ...(typeof input.command === "string" ? [input.command] : []),
+    ...(Array.isArray(input.commands) ? input.commands.flatMap((entry) => (isRecord(entry) && typeof entry.command === "string" ? [entry.command] : [])) : []),
+  ]
+  return commands.some((command) => OBVIOUS_SHELL_FILE_EDIT_PATTERNS.some((pattern) => pattern.test(command))) ? [SHELL_FILE_EDIT_NOTICE] : []
 }
 
 function compactApplyPatchResult(result: unknown): unknown {

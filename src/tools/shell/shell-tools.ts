@@ -30,7 +30,7 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
     "shell_run",
     {
       title: "Run a local shell command",
-      description: `Run zsh in a persistent macOS shell. Reuse shell_id to keep cwd or environment. For independent commands that can run in parallel, use multiple *** Run: blocks. Use *** Run: <directory> to change cwd for that command. Relative directories resolve from cwd; absolute paths are allowed. New shells start in ${workspaceDescription}.\n- Use the apply_patch tool over shell_run for file changes.`,
+      description: `Run zsh in a persistent macOS shell. Reuse shell_id to keep cwd or environment. Use command for one zsh command, or commands for independent commands that should run in parallel. Each parallel command may set cwd; otherwise it inherits the shell_run cwd. Relative directories resolve from cwd; absolute paths are allowed. New shells start in ${workspaceDescription}.\n- Use the apply_patch tool over shell_run for file changes.`,
       inputSchema: shellRunInputSchema,
       outputSchema: shellRunOutputSchema,
       annotations: {

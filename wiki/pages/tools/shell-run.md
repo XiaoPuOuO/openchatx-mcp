@@ -18,8 +18,9 @@ Inputs:
 
 - `shell_id`: persistent shell name. Reuse to keep cwd + exported env. Default: `default`.
 - `request_id`: unique operation name inside that shell. Same ID + same command = retry/reuse. Same ID + changed command = conflict.
-- `cwd`: optional cwd change. Omit to keep current cwd.
-- `command`: exact zsh.
+- `cwd`: optional cwd change. Omit to keep cwd.
+- `command`: exact zsh for one command. Mutually exclusive with `commands`.
+- `commands`: independent commands to run in parallel. Each item has `command` and optional `cwd`.
 - `wait_ms`: how long this call waits. Default 3000 ms, max 10 s. Returning does not stop the command.
 - `max_output_tokens`: usually omit. Default 1024, max 16384. Controls one response chunk, not total retained output.
 
@@ -33,22 +34,16 @@ Normal commands have no hard runtime limit.
 
 Use one call for independent commands:
 
-```text
-*** Run:
-npm test
-
-*** Run: ./api
-npm run check
-
-*** Run: /tmp
-pwd
+```json
+{
+  "commands": [{ "command": "npm test" }, { "command": "npm run check", "cwd": "./api" }, { "command": "pwd", "cwd": "/tmp" }]
+}
 ```
 
 Rules:
 
-- Each `*** Run:` starts one batch command.
 - Batch commands run concurrently.
-- Bare `*** Run:` inherits batch cwd.
+- A command without `cwd` inherits batch cwd.
 - Relative directory override resolves from batch cwd.
 - Absolute directory override is allowed.
 - Batch inherits cwd + exported env from the persistent shell.

@@ -76,14 +76,19 @@ export interface ToolSnapshot {
   }>
 }
 
-export async function callUntilComplete(client: Client, requestId: string, command: string, shellId?: string): Promise<ToolSnapshot> {
+export async function callUntilComplete(
+  client: Client,
+  requestId: string,
+  command: string | Array<{ command: string; cwd?: string }>,
+  shellId?: string
+): Promise<ToolSnapshot> {
   let snapshot = snapshotFromResult(
     await client.callTool({
       name: "shell_run",
       arguments: {
         ...(shellId ? { shell_id: shellId } : {}),
         request_id: requestId,
-        command,
+        ...(typeof command === "string" ? { command } : { commands: command }),
         wait_ms: 1_000,
       },
     })

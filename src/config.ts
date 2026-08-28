@@ -83,7 +83,7 @@ export function buildMcpInstructions(workspacePath: string): string {
   return [
     `# Operating rules\n\nAt the start of each coding conversation, read ${codingInstructions} completely using \`shell_run\`. DO NOT read it again.\n**Default permanent workspace:** ${workspace}`,
 
-    "## Work efficiently\n\n- For independent commands that can run in parallel, you may use multiple *** Run: blocks in one shell_run call. Use different shell IDs when you need independent persistent state.\n- Do NOT repurpose `$HOME`, `$home`, or `$CODEX_HOME`.",
+    "## Work efficiently\n\n- For independent commands that can run in parallel, use shell_run's commands array. Each item accepts command and optional cwd. Use different shell IDs when you need independent persistent state.\n- Do NOT repurpose `$HOME`, `$home`, or `$CODEX_HOME`.",
 
     "## Edit files\n\nUse `apply_patch` for local file changes, including creating, editing, deleting, moving, and renaming files. Do not create or edit files with `cat` or other shell write tricks. Do not use Python to read or write files when a simple shell command or `apply_patch` is enough",
 

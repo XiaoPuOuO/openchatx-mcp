@@ -23,13 +23,10 @@ test("runs parallel command batches from one root with relative paths and retain
     shell,
     "parallel-root",
     [
-      "*** Run: .",
-      `printf 'root:%s:%s' "$PWD" "$MCP_PARALLEL_RETAINED"`,
-      "*** Run: ./packages/api",
-      `printf 'api:%s:%s' "$PWD" "$MCP_PARALLEL_RETAINED"`,
-      "*** Run: ../../shared",
-      `printf 'shared:%s:%s' "$PWD" "$MCP_PARALLEL_RETAINED"`,
-    ].join("\n"),
+      { command: `printf 'root:%s:%s' "$PWD" "$MCP_PARALLEL_RETAINED"` },
+      { command: `printf 'api:%s:%s' "$PWD" "$MCP_PARALLEL_RETAINED"`, cwd: "./packages/api" },
+      { command: `printf 'shared:%s:%s' "$PWD" "$MCP_PARALLEL_RETAINED"`, cwd: "../../shared" },
+    ],
     { cwd: "workspace/repo" }
   )
 
@@ -60,12 +57,12 @@ test("runs at most four parallel children and queues the rest", { timeout: 10_00
   const shell = createShellSession()
   t.after(() => shell.close())
 
-  const command = Array.from({ length: 6 }, (_, index) => ["*** Run: .", `while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done; printf ${index + 1}`])
-    .flat()
-    .join("\n")
+  const commands = Array.from({ length: 6 }, (_, index) => ({
+    command: `while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done; printf ${index + 1}`,
+  }))
   const first = await shell.runCommand({
     request_id: "parallel-limit",
-    command,
+    commands,
     wait_ms: 50,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
@@ -90,12 +87,10 @@ test("keeps batch concurrency isolated per shell", { timeout: 10_000 }, async (t
   const secondShell = createShellSession()
   t.after(() => Promise.all([firstShell.close(), secondShell.close()]))
 
-  const command = Array.from({ length: 4 }, () => ["*** Run: .", `while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done`])
-    .flat()
-    .join("\n")
+  const commands = Array.from({ length: 4 }, () => ({ command: `while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done` }))
   const [first, second] = await Promise.all([
-    firstShell.runCommand({ request_id: "parallel-isolated-first", command, wait_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
-    secondShell.runCommand({ request_id: "parallel-isolated-second", command, wait_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
+    firstShell.runCommand({ request_id: "parallel-isolated-first", commands, wait_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
+    secondShell.runCommand({ request_id: "parallel-isolated-second", commands, wait_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
   ])
 
   assert.equal(first.commands?.filter((run) => run.status === "running").length, 4)
@@ -109,7 +104,7 @@ test("keeps parallel siblings running when one command exits nonzero", { timeout
   const shell = createShellSession()
   t.after(() => shell.close())
 
-  const batch = await runToCompletion(shell, "parallel-nonzero", ["*** Run: .", "false", "*** Run: ./", "printf survived"].join("\n"))
+  const batch = await runToCompletion(shell, "parallel-nonzero", [{ command: "false" }, { command: "printf survived", cwd: "./" }])
 
   assert.equal(batch.snapshot.status, "completed")
   assert.equal(batch.snapshot.exit_code, 1)
@@ -129,7 +124,7 @@ test("times out a hung parallel child without blocking its siblings", { timeout:
   })
   t.after(() => shell.close())
 
-  const batch = await runToCompletion(shell, "parallel-timeout", ["*** Run: .", "sleep 5", "*** Run: ./", "printf fast"].join("\n"))
+  const batch = await runToCompletion(shell, "parallel-timeout", [{ command: "sleep 5" }, { command: "printf fast", cwd: "./" }])
 
   assert.equal(batch.snapshot.status, "completed")
   assert.equal(batch.snapshot.exit_code, 1)
@@ -151,7 +146,7 @@ test("labels permanently dropped parallel output", { timeout: 10_000 }, async (t
   })
   t.after(() => shell.close())
 
-  const batch = await runToCompletion(shell, "parallel-output-cap", ["*** Run: .", "printf '🙂éAB'"].join("\n"), { maxOutputTokens: 64 })
+  const batch = await runToCompletion(shell, "parallel-output-cap", [{ command: "printf '🙂éAB'" }], { maxOutputTokens: 64 })
 
   assert.equal(batch.snapshot.dropped_output_bytes, 1)
   assert.match(batch.output, /\[run 1 path="\." exit=0 dropped_bytes=1\]\n🙂éA/)
@@ -161,52 +156,47 @@ test("inherits the parallel cwd when a run directory is omitted and accepts over
   const shell = createShellSession({ cwd: "/tmp" })
   t.after(() => shell.close())
 
-  const inheritedShellCwd = await runToCompletion(shell, "parallel-inherited-shell-cwd", ["*** Run:", `printf '%s' "$PWD"`].join("\n"))
+  const inheritedShellCwd = await runToCompletion(shell, "parallel-inherited-shell-cwd", [{ command: `printf '%s' "$PWD"` }])
   assert.match(inheritedShellCwd.output, new RegExp(`${escapeRegExp(await realpath("/tmp"))}\\n$`))
   assert.equal(inheritedShellCwd.snapshot.commands?.[0]?.path, ".")
   assert.equal(inheritedShellCwd.snapshot.commands?.[0]?.command, `printf '%s' "$PWD"`)
 
-  const inheritedExplicitCwd = await runToCompletion(shell, "parallel-inherited-explicit-cwd", ["*** Run:", `printf '%s' "$PWD"`].join("\n"), {
+  const inheritedExplicitCwd = await runToCompletion(shell, "parallel-inherited-explicit-cwd", [{ command: `printf '%s' "$PWD"` }], {
     cwd: process.cwd(),
   })
   assert.match(inheritedExplicitCwd.output, new RegExp(`${escapeRegExp(await realpath(process.cwd()))}\\n$`))
   assert.equal(inheritedExplicitCwd.snapshot.commands?.[0]?.path, ".")
 
-  const absolute = await runToCompletion(shell, "parallel-absolute", ["*** Run: /tmp", `printf '%s' "$PWD"`].join("\n"))
+  const absolute = await runToCompletion(shell, "parallel-absolute", [{ command: `printf '%s' "$PWD"`, cwd: "/tmp" }])
   assert.match(absolute.output, new RegExp(`${escapeRegExp(await realpath("/tmp"))}\\n$`))
   assert.equal(absolute.snapshot.commands?.[0]?.path, "/tmp")
 
   await assert.rejects(
     shell.runCommand({
-      request_id: "parallel-missing-directory",
-      command: "*** Run",
+      request_id: "parallel-missing-command",
       wait_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
-    }),
-    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /Expected '\*\*\* Run:'/.test(error.message)
+    } as never),
+    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /exactly one of command or commands/.test(error.message)
   )
   await assert.rejects(
     shell.runCommand({
-      request_id: "parallel-malformed-later-directory",
-      command: ["*** Run: .", "printf first", "*** Run:./wiki", "printf should-not-run"].join("\n"),
+      request_id: "parallel-conflicting-command-inputs",
+      command: "pwd",
+      commands: [{ command: "printf should-not-run" }],
       wait_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
-    }),
-    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /Expected '\*\*\* Run:'/.test(error.message)
-  )
-  await assert.rejects(
-    shell.runCommand({
-      request_id: "parallel-marker-after-command",
-      command: ["pwd", "*** Run:", "printf should-not-run"].join("\n"),
-      wait_ms: 0,
-      max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
-    }),
-    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /Parallel syntax must start with '\*\*\* Run:'/.test(error.message)
+    } as never),
+    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /exactly one of command or commands/.test(error.message)
   )
   const mixed = await runToCompletion(
     shell,
     "parallel-mixed-directories",
-    ["*** Run:", `printf 'root:%s' "$PWD"`, "*** Run: .", `printf 'same:%s' "$PWD"`, "*** Run: /tmp", `printf 'tmp:%s' "$PWD"`].join("\n"),
+    [
+      { command: `printf 'root:%s' "$PWD"` },
+      { command: `printf 'same:%s' "$PWD"`, cwd: "." },
+      { command: `printf 'tmp:%s' "$PWD"`, cwd: "/tmp" },
+    ],
     { cwd: "/tmp" }
   )
   assert.deepEqual(
@@ -214,15 +204,18 @@ test("inherits the parallel cwd when a run directory is omitted and accepts over
     [".", ".", "/tmp"]
   )
 
-  const preview = await runToCompletion(shell, "parallel-command-preview", ["*** Run:", "", "printf command-preview-is-longer-than-limit"].join("\n"))
+  const preview = await runToCompletion(shell, "parallel-command-preview", [{ command: "\nprintf command-preview-is-longer-than-limit" }])
   assert.equal(preview.snapshot.commands?.[0]?.command, "printf command-prev…")
 })
 
-test("accepts leading whitespace before a parallel batch", { timeout: 10_000 }, async (t) => {
+test("accepts arbitrary multiline zsh in parallel commands", { timeout: 10_000 }, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
-  const batch = await runToCompletion(shell, "parallel-leading-whitespace", ["", "  *** Run: .", "printf first", "*** Run: ./", "printf second"].join("\n"))
+  const batch = await runToCompletion(shell, "parallel-multiline", [
+    { command: "printf 'first\\n'\nprintf second" },
+    { command: "cat <<'EOF'\n---\n*** Run:\nEOF" },
+  ])
 
   assert.equal(batch.snapshot.status, "completed")
   assert.equal(batch.snapshot.exit_code, 0)
@@ -232,6 +225,8 @@ test("accepts leading whitespace before a parallel batch", { timeout: 10_000 }, 
   )
   assert.match(batch.output, /first/)
   assert.match(batch.output, /second/)
+  assert.match(batch.output, /---/)
+  assert.match(batch.output, /\*\*\* Run:/)
 })
 
 test("reset kills running parallel children and retains the batch as reset", { timeout: 10_000 }, async (t) => {
@@ -243,7 +238,7 @@ test("reset kills running parallel children and retains the batch as reset", { t
   const running = await shell.runCommand({
     request_id: "parallel-reset",
     cwd: directory,
-    command: ["*** Run: .", `printf '%s' "$$" > ${quote(pidFile)}; while :; do sleep 1; done`].join("\n"),
+    commands: [{ command: `printf '%s' "$$" > ${quote(pidFile)}; while :; do sleep 1; done` }],
     wait_ms: 25,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
@@ -273,7 +268,7 @@ test("does not let background descendants escape a completed parallel run", { ti
   const batch = await runToCompletion(
     shell,
     "parallel-background",
-    ["*** Run: .", `(trap '' TERM; while :; do sleep 1; done) & printf '%s' "$!" > ${quote(pidFile)}`].join("\n"),
+    [{ command: `(trap '' TERM; while :; do sleep 1; done) & printf '%s' "$!" > ${quote(pidFile)}` }],
     { cwd: directory }
   )
   assert.equal(batch.snapshot.commands?.[0]?.status, "completed")

@@ -25,26 +25,29 @@ const maxOutputTokensInput = z
   .default(MCP_CONFIG.shell.defaultOutputTokens)
   .describe("Usually omit. Increase only when you need more output in one response; continue retained output with shell_poll.")
 
-export const shellRunInputSchema = z.object({
-  shell_id: shellIdInput,
-  request_id: requestIdInput.describe(
-    "Short command or step label, unique within this shell_id, such as scan-routes-1. Reuse only to retry the exact same command."
-  ),
-  cwd: z.string().min(1).optional().describe("Omit to keep the current cwd. Parallel *** Run: commands inherit current cwd."),
-  command: z
-    .string()
-    .min(1)
-    .describe(
-      "Exact zsh command or multiline script. To run independent commands in parallel, prefix each command with *** Run:.\n\nExample:\n *** Run:\nnpm test\n*** Run: ./api\nnpm run check."
-    ),
-  wait_ms: z
-    .int()
-    .min(0)
-    .max(MCP_CONFIG.shell.maxWaitMs)
-    .default(MCP_CONFIG.shell.defaultWaitMs)
-    .describe("Max wait time before returning. Running commands continue; use shell_poll."),
-  max_output_tokens: maxOutputTokensInput,
+const shellBatchCommandInputSchema = z.object({
+  command: z.string().min(1).describe("Exact zsh command or multiline script."),
+  cwd: z.string().min(1).optional().describe("Omit to inherit the shell_run cwd."),
 })
+
+export const shellRunInputSchema = z
+  .object({
+    shell_id: shellIdInput,
+    request_id: requestIdInput.describe("Unique within this shell_id, such as scan-routes-1. Reuse only to retry the exact same command."),
+    cwd: z.string().min(1).optional().describe("Omit to keep the cwd. Parallel commands inherit this cwd."),
+    command: z.string().min(1).optional().describe("Exact zsh command or multiline script. Omit when using commands."),
+    commands: z.array(shellBatchCommandInputSchema).min(1).optional().describe("Independent zsh commands to run in parallel. Each command may override cwd."),
+    wait_ms: z
+      .int()
+      .min(0)
+      .max(MCP_CONFIG.shell.maxWaitMs)
+      .default(MCP_CONFIG.shell.defaultWaitMs)
+      .describe("Max wait time before returning. Running commands continue; use shell_poll."),
+    max_output_tokens: maxOutputTokensInput,
+  })
+  .refine((input) => (input.command === undefined) !== (input.commands === undefined), {
+    message: "Provide exactly one of command or commands.",
+  })
 
 export type ShellRunInput = z.infer<typeof shellRunInputSchema>
 

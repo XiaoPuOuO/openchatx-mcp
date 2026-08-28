@@ -13,7 +13,6 @@ import {
   type ParallelCommandStatus,
   createParallelCommandScheduler,
   executeParallelCommand,
-  parseParallelCommandBatch,
 } from "./parallel-runner.js"
 import { createShellProcess, type ShellProcessCommandResult, type ShellProcessContext, type ShellRecoverableState } from "./shell-process.js"
 import { createTranscriptBuffer, type TranscriptBuffer } from "./transcript.js"
@@ -167,9 +166,14 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
   }
 
   async function runCommand(input: RunCommandInput): Promise<ShellSnapshot> {
+    if ((input.command === undefined) === (input.commands === undefined)) {
+      throw new ShellSessionError("invalid_command", "Provide exactly one of command or commands.")
+    }
+    if (input.commands?.length === 0) throw new ShellSessionError("invalid_command", "commands must contain at least one command.")
+
     const maxOutputTokens = input.max_output_tokens
-    const commandHash = hashCommand(input.command, input.cwd)
-    const parallelCommands = parseParallelCommand(input.command)
+    const commandHash = hashCommand(input)
+    const parallelCommands = input.commands?.map(({ command, cwd }) => ({ command, path: cwd ?? "." })) ?? null
 
     await start()
     const existing = records.get(input.request_id)
@@ -210,6 +214,8 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
         maxOutputTokens,
       })
     }
+
+    if (input.command === undefined) throw new ShellSessionError("invalid_command", "Provide exactly one of command or commands.")
 
     const record: CommandRecord = {
       requestId: input.request_id,
@@ -556,14 +562,6 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
   }
 }
 
-function parseParallelCommand(command: string): ParallelCommandSpec[] | null {
-  try {
-    return parseParallelCommandBatch(command)
-  } catch (error) {
-    throw new ShellSessionError("invalid_command", errorMessage(error))
-  }
-}
-
 function isParallelTerminal(status: ParallelCommandStatus): boolean {
   return status !== "queued" && status !== "running"
 }
@@ -586,9 +584,9 @@ function formatParallelRunOutput(run: ParallelRunRecord, output: string): string
   return `[run ${run.run} path=${JSON.stringify(run.path)} ${result}${dropped}]\n${body}`
 }
 
-function hashCommand(command: string, cwd?: string): string {
+function hashCommand(input: Pick<RunCommandInput, "command" | "commands" | "cwd">): string {
   return createHash("sha256")
-    .update(JSON.stringify([cwd ?? null, command]))
+    .update(JSON.stringify([input.cwd ?? null, input.command ?? null, input.commands ?? null]))
     .digest("hex")
 }
 

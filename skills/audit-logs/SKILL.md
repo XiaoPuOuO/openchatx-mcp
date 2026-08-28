@@ -29,7 +29,7 @@ Tool calls may include `session: "agent-N"`. The audit logger assigns each disti
 
 ## Tool Bodies
 
-- `shell_run`: shell/request ID, optional cwd, command
+- `shell_run`: shell/request ID, optional cwd, and either one command or a parallel commands array
 - `shell_poll`: shell/request ID, cursor
 - `apply_patch`: cwd + patch size; patch body retained only on failure
 - other tools: serialized `args`

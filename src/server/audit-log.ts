@@ -204,13 +204,21 @@ function formatArguments(toolName: string, value: unknown, toolFailed: boolean, 
   }
 
   if (toolName === "shell_run" && argumentsRecord) {
+    const hasCommand = Object.hasOwn(argumentsRecord, "command")
+    const hasCommands = Object.hasOwn(argumentsRecord, "commands")
+    const inputShape = hasCommand ? (hasCommands ? "both" : "command") : hasCommands ? "commands" : "neither"
     const command = typeof argumentsRecord.command === "string" ? argumentsRecord.command : ""
+    const commands = Array.isArray(argumentsRecord.commands) ? argumentsRecord.commands : null
     const shellId = typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
     const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
-    const commandText = truncate(command, MAX_SHELL_COMMAND_CHARS)
     const cwd = typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
     const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
-    return `shell: ${yamlString(`${shellId}/${requestId}`)}${cwd}${message}\ncommand: |-\n${indentBlock(commandText)}`
+    const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`, `input: ${inputShape}`]
+    if (cwd) fields.push(cwd.slice(1))
+    if (message) fields.push(message.slice(1))
+    if (hasCommand) fields.push(`command: |-\n${indentBlock(truncate(command, MAX_SHELL_COMMAND_CHARS))}`)
+    if (hasCommands) fields.push(`commands: |-\n${indentBlock(truncate(JSON.stringify(commands ?? argumentsRecord.commands, null, 2), MAX_SHELL_COMMAND_CHARS))}`)
+    return fields.join("\n")
   }
 
   if (toolName === "shell_poll" && argumentsRecord) {

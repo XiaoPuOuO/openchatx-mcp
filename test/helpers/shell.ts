@@ -4,13 +4,13 @@ import type { ShellSession, ShellSnapshot } from "../../src/tools/shell/session.
 export async function runToCompletion(
   shell: ShellSession,
   requestId: string,
-  command: string,
+  command: string | Array<{ command: string; cwd?: string }>,
   options: { cwd?: string; maxOutputTokens?: number } = {}
 ): Promise<{ output: string; snapshot: ShellSnapshot }> {
   const maxOutputTokens = options.maxOutputTokens ?? MCP_CONFIG.shell.defaultOutputTokens
   const first = await shell.runCommand({
     request_id: requestId,
-    command,
+    ...(typeof command === "string" ? { command } : { commands: command }),
     cwd: options.cwd,
     wait_ms: 1_000,
     max_output_tokens: maxOutputTokens,

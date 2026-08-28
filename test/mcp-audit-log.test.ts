@@ -39,7 +39,7 @@ test("writes one compact YAML document for a shell command", async (t) => {
   assert.equal(characterCount("🙂a"), 2)
   assert.equal(
     await readFile(file, "utf8"),
-    ["--- # shell_run - 275ms - 23 in - Aug 7 8:58 PM", 'shell: "api-audit/scan-1"', "command: |-", "  rg -n foo src", "", ""].join("\n")
+    ["--- # shell_run - 275ms - 23 in - Aug 7 8:58 PM", 'shell: "api-audit/scan-1"', "input: command", "command: |-", "  rg -n foo src", "", ""].join("\n")
   )
 })
 
@@ -264,25 +264,6 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
     () => new Date(2026, 7, 11, 22, 50, 0),
     () => 100
   )
-  const [run] = logger.startToolCalls({
-    method: "tools/call",
-    params: {
-      name: "shell_run",
-      arguments: { shell_id: "parallel", request_id: "bad-batch", command: "*** Run\npwd" },
-    },
-  })
-  assert.ok(run)
-  run.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBody: `event: message\ndata: ${JSON.stringify({
-      result: {
-        isError: true,
-        content: [{ type: "text", text: "invalid_command: Expected '*** Run:' or '*** Run: <directory>' on line 1." }],
-      },
-    })}\n\n`,
-  })
-
   const [poll] = logger.startToolCalls({
     method: "tools/call",
     params: { name: "shell_poll", arguments: { shell_id: "parallel", request_id: "missing", cursor: 0 } },
@@ -300,8 +281,6 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
   })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /--- # ! shell_run - .* - Aug 11 10:50 PM/)
-  assert.match(log, /message: "invalid_command: Expected '\*\*\* Run:' or '\*\*\* Run: <directory>' on line 1\."/)
   assert.match(log, /--- # ! shell_poll - .* - Aug 11 10:50 PM/)
   assert.match(log, /shell: "parallel\/missing"\ncursor: 0\nmessage: "unknown_request: No retained command for request_id missing\."/)
 
@@ -309,7 +288,7 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
     method: "tools/call",
     params: {
       name: "shell_run",
-      arguments: { shell_id: "parallel", request_id: "child-nonzero", command: "*** Run: .\nfalse" },
+      arguments: { shell_id: "parallel", request_id: "child-nonzero", commands: [{ command: "false" }] },
     },
   })
   assert.ok(childNonzero)
@@ -322,7 +301,7 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
   })
 
   const finalLog = await readFile(file, "utf8")
-  assert.match(finalLog, /--- # ! shell_run - 0ms - \d+ in - response_bytes=9000 - audit_capture_truncated - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"\ncommand: \|-\n {2}\*\*\* Run: \.\n {2}false\nresult: status="completed" exit_code=1 cwd="\/workspace"/)
+  assert.match(finalLog, /--- # ! shell_run - 0ms - \d+ in - response_bytes=9000 - audit_capture_truncated - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"\ninput: commands\ncommands: \|-\n {2}\[\n {4}\{\n {6}"command": "false"\n {4}\}\n {2}\]\nresult: status="completed" exit_code=1 cwd="\/workspace"/)
 })
 
 test("caps large ordinary tool arguments", async (t) => {
