@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import type { ToolOutputStructuredMode } from "../config.js"
+import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
 const SCHEMA_KEY_ORDER = [
@@ -88,15 +89,6 @@ const TOOL_ANNOTATION_DEFAULTS: Record<string, unknown> = {
   openWorldHint: true,
 }
 
-const SHELL_FILE_EDIT_NOTICE = "NOTICE: Use the `apply_patch` MCP tool over `shell_run` for file changes."
-const OBVIOUS_SHELL_FILE_EDIT_PATTERNS = [
-  /\bcat\b[^\n]*(?:>>?)\s*[^&|>]/,
-  /\btee\b(?:\s+-[A-Za-z]+)*\s+[^|;&\n]+/,
-  /\bsed\b[^\n]*\s-i(?:\s|['".]|$)/,
-  /\.(?:write_text|write_bytes)\s*\(/,
-  /\bopen\s*\([^)]*,\s*["'][wax](?:\+)?["']/,
-] as const
-
 interface StandardSchemaJsonSource {
   jsonSchema?: {
     input: (options: unknown) => unknown
@@ -134,20 +126,11 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
 
       const result = await callback(...args)
       const projected = !nativeContent && !structuredRequested ? (name === "apply_patch" ? compactApplyPatchResult(result) : compactToolResult(result)) : result
-      const events = [...shellRunFileEditNotices(name, input), ...(options.drainPendingEvents?.() ?? [])]
+      const events = [...(name === "shell_run" ? shellRunFileEditNotices(input) : []), ...(options.drainPendingEvents?.() ?? [])]
       return appendToolEvents(projected, events)
     }
     return registerTool(name, config, wrapped)
   }) as typeof server.registerTool
-}
-
-export function shellRunFileEditNotices(toolName: string, input: Record<string, unknown> | undefined): string[] {
-  if (toolName !== "shell_run" || !input) return []
-  const commands = [
-    ...(typeof input.command === "string" ? [input.command] : []),
-    ...(Array.isArray(input.commands) ? input.commands.flatMap((entry) => (isRecord(entry) && typeof entry.command === "string" ? [entry.command] : [])) : []),
-  ]
-  return commands.some((command) => OBVIOUS_SHELL_FILE_EDIT_PATTERNS.some((pattern) => pattern.test(command))) ? [SHELL_FILE_EDIT_NOTICE] : []
 }
 
 function compactApplyPatchResult(result: unknown): unknown {

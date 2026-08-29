@@ -5,12 +5,7 @@ import { MCP_CONFIG } from "../../config.js"
 export const DEFAULT_SHELL_ID = "default"
 
 const requestIdInput = z.string().min(3).max(128)
-const shellIdInput = z
-  .string()
-  .min(3)
-  .max(64)
-  .default(DEFAULT_SHELL_ID)
-  .describe("Unique persistent shell label such as api-audit. Reuse for sequential commands that should share cwd or environment.")
+const shellIdInput = z.string().min(3).max(64).default(DEFAULT_SHELL_ID)
 
 const closableShellIdInput = z
   .string()
@@ -18,12 +13,7 @@ const closableShellIdInput = z
   .max(64)
   .describe(`Named shell to close. \`${DEFAULT_SHELL_ID}\` shell is protected and cannot be closed; use shell_reset instead.`)
 
-const maxOutputTokensInput = z
-  .int()
-  .min(1)
-  .max(MCP_CONFIG.shell.maxOutputTokens)
-  .default(MCP_CONFIG.shell.defaultOutputTokens)
-  .describe("Usually omit. Increase only when you need more output in one response; continue retained output with shell_poll.")
+const maxOutputTokensInput = z.int().min(1).max(MCP_CONFIG.shell.maxOutputTokens).default(MCP_CONFIG.shell.defaultOutputTokens)
 
 const shellBatchCommandInputSchema = z.object({
   command: z.string().min(1).describe("Exact zsh command or multiline script."),
@@ -32,10 +22,10 @@ const shellBatchCommandInputSchema = z.object({
 
 export const shellRunInputSchema = z
   .object({
-    shell_id: shellIdInput,
-    request_id: requestIdInput.describe("Unique within this shell_id, such as scan-routes-1. Reuse only to retry the exact same command."),
-    cwd: z.string().min(1).optional().describe("Omit to keep the cwd. Parallel commands inherit this cwd."),
-    command: z.string().min(1).optional().describe("Exact zsh command or multiline script. Omit when using commands."),
+    shell_id: shellIdInput.describe("Unique persistent shell label such as api-audit. Reuse for command(s) that should share cwd or environment."),
+    request_id: requestIdInput.describe("Unique within this shell_id, such as scan-routes-1."),
+    cwd: z.string().min(1).optional().describe("Omit to keep the cwd. Parallel `commands` inherit this cwd."),
+    command: z.string().min(1).optional().describe("Exact zsh command or multiline script."),
     commands: z.array(shellBatchCommandInputSchema).min(1).optional().describe("Independent zsh commands to run in parallel. Each command may override cwd."),
     wait_ms: z
       .int()
@@ -43,7 +33,9 @@ export const shellRunInputSchema = z
       .max(MCP_CONFIG.shell.maxWaitMs)
       .default(MCP_CONFIG.shell.defaultWaitMs)
       .describe("Max wait time before returning. Running commands continue; use shell_poll."),
-    max_output_tokens: maxOutputTokensInput,
+    max_output_tokens: maxOutputTokensInput.describe(
+      "Usually omit. Increase only when you need more output in one response; continue retained output with shell_poll."
+    ),
   })
   .refine((input) => (input.command === undefined) !== (input.commands === undefined), {
     message: "Provide exactly one of command or commands.",
@@ -64,7 +56,9 @@ export const shellPollInputSchema = z.object({
     .max(MCP_CONFIG.shell.maxPollWaitMs)
     .default(MCP_CONFIG.shell.defaultPollWaitMs)
     .describe("Max wait time for more output before returning."),
-  max_output_tokens: maxOutputTokensInput,
+  max_output_tokens: maxOutputTokensInput.describe(
+    "Usually omit. Increase only when you need more output in one response; continue retained output with shell_poll."
+  ),
 })
 
 export type ShellPollInput = z.infer<typeof shellPollInputSchema>

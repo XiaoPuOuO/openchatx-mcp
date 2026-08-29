@@ -16,12 +16,9 @@ import {
   type ShellPollOutput,
   type ShellRunOutput,
 } from "./shell-contracts.js"
+import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
 import { ShellSessionError, type ShellSnapshot } from "./session.js"
 import type { ShellSessionManager } from "./session-manager.js"
-
-const APPLY_PATCH_TOOL_GUIDANCE =
-  "`apply_patch` is a separate MCP tool and cannot be used through `shell_run`. For local file changes, including creating, updating, deleting, moving, or renaming files, use the `apply_patch` MCP tool directly."
-const APPLY_PATCH_COMMAND_NOT_FOUND_LINE = /(^|\n)[^\n]*command not found:\s*apply_patch[^\n]*(?=\n|$)/gi
 
 export function registerShellExecutionTools(server: McpServer, shells: ShellSessionManager, workspace: string): void {
   const workspaceDescription = JSON.stringify(workspace)
@@ -29,8 +26,8 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_run",
     {
-      title: "Run a local shell command",
-      description: `Run zsh in a persistent macOS shell. Reuse shell_id to keep cwd or environment. Use command for one zsh command, or commands for independent commands that should run in parallel. Each parallel command may set cwd; otherwise it inherits the shell_run cwd. Relative directories resolve from cwd; absolute paths are allowed. New shells start in ${workspaceDescription}.\n- Use the apply_patch tool over shell_run for file changes.`,
+      title: "Run shell commands",
+      description: `Run arbitrary zsh commands in a persistent shell. New shells start in ${workspaceDescription}.\n- Use the apply_patch tool for file changes.`,
       inputSchema: shellRunInputSchema,
       outputSchema: shellRunOutputSchema,
       annotations: {
@@ -55,9 +52,9 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_poll",
     {
-      title: "Poll local shell output",
+      title: "Poll shell output",
       description:
-        "Continue a shell_run that is still running or has retained output. Reuse the same shell_id and request_id and pass the previous next_cursor. Repeat while status is running, or while next_cursor is present and more output is needed.",
+        "Continue a prior shell_run that returned status=running, or read additional output when next_cursor is present. Continue polling while status is running; after completion, follow next_cursor only if more output is needed.",
       inputSchema: shellPollInputSchema,
       outputSchema: shellPollOutputSchema,
       annotations: {
@@ -84,7 +81,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_reset",
     {
-      title: "Reset the local shell",
+      title: "Reset the shell",
       description:
         "Attempt to terminate the persistent shell process group, discard its working directory and environment state, and start a clean shell. Use this to recover from a stuck foreground command. Process-group cleanup is best effort if signaling is denied.",
       inputSchema: shellResetInputSchema,
@@ -114,7 +111,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_list",
     {
-      title: "List local shells",
+      title: "List active shells",
       description: "List currently open persistent shells, their activity state, idle duration, and whether they may be closed.",
       outputSchema: shellListOutputSchema,
       annotations: {
@@ -146,7 +143,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_close",
     {
-      title: "Close a local shell",
+      title: "Close a shell",
       description: `Terminate a named shell, discard its state and retained records, and immediately free its slot. The ${DEFAULT_SHELL_ID} shell is protected; use shell_reset if it freezes.`,
       inputSchema: shellCloseInputSchema,
       outputSchema: shellCloseOutputSchema,
@@ -237,11 +234,6 @@ function compactShellSnapshot(snapshot: ShellSnapshot, shellId: string): ShellRu
   if (snapshot.dropped_output_bytes > 0) compact.dropped_output_bytes = snapshot.dropped_output_bytes
   if (snapshot.commands) compact.commands = compactBatchCommands(snapshot.commands)
   return compact
-}
-
-function withApplyPatchToolHint(output: string): string {
-  const replaced = output.replace(APPLY_PATCH_COMMAND_NOT_FOUND_LINE, (_, prefix: string) => `${prefix}${APPLY_PATCH_TOOL_GUIDANCE}`)
-  return replaced === `${APPLY_PATCH_TOOL_GUIDANCE}\n` ? APPLY_PATCH_TOOL_GUIDANCE : replaced
 }
 
 function toolError(error: unknown) {

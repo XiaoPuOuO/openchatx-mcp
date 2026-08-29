@@ -5,7 +5,12 @@ import { fileURLToPath } from "node:url"
 
 const bundledPeekabooExecutable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
 const peekabooExecutable = process.env.MCP_PEEKABOO_BIN?.trim() || bundledPeekabooExecutable
-
+/**
+ * ToolOutputStructuredMode is a enum that describes the structured mode of the tool output.
+ * - always: the tool output is always structured. Includes output schemas.
+ * - optional: the caller can request full structured tool output with a tool-call argument. Public output schemas remain omitted.
+ * - never: the tool output is never structured. Output schemas are omitted.
+ */
 export type ToolOutputStructuredMode = "always" | "optional" | "never"
 
 export const MCP_CONFIG = {

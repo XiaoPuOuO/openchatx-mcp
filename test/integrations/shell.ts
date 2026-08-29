@@ -24,10 +24,11 @@ test("redirects missing apply_patch commands to the native tool in normal and ba
   const batch = await callUntilComplete(
     connected.client,
     "missing-apply-patch-batch",
-    [{ command: "PATH=/nonexistent apply_patch" }, { command: "printf batch-ok" }]
+    [{ command: "PATH=/nonexistent apply_patch" }, { command: "PATH=/nonexistent apply_patch" }, { command: "printf batch-ok" }]
   )
   assert.doesNotMatch(batch.output, /command not found: apply_patch/)
   assert.ok(batch.output.includes(APPLY_PATCH_TOOL_GUIDANCE))
+  assert.equal(batch.output.split(APPLY_PATCH_TOOL_GUIDANCE).length - 1, 1)
   assert.match(batch.output, /batch-ok/)
 })
 
