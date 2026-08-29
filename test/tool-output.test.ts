@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import { extractConversationMessages } from "../src/tools/subagent/chatgpt-subagent-protocol.js"
-import { compactToolResult, renderStructuredContent } from "../src/server/tool-output.js"
+import { compactToolResult, formatOutputBlock, renderStructuredContent } from "../src/server/tool-output.js"
 import { countTokens } from "../src/tokenizer.js"
 
 test("renders compact scalar metadata and multiline strings without losing values", () => {
@@ -24,6 +24,10 @@ test("renders compact scalar metadata and multiline strings without losing value
 
 test("does not treat changed or failed as block strings by default", () => {
   assert.equal(renderStructuredContent({ changed: "one", failed: "two" }), "changed=one failed=two")
+})
+
+test("formats top-level output blocks with a shared boundary", () => {
+  assert.equal(formatOutputBlock(["turn_id=test_turn_1", "status=completed"], "## Result\n\nDone."), "---- turn_id=test_turn_1 status=completed ----\n\n## Result\n\nDone.")
 })
 
 test("quotes strings that would otherwise be indistinguishable from non-string scalars", () => {
@@ -76,7 +80,7 @@ test("falls back to minified JSON for unusual nested arrays", () => {
 })
 
 test("compact result preserves existing content and removes structuredContent", () => {
-  const compact = compactToolResult({
+  const compact = compactToolResult("shell_run", {
     structuredContent: { status: "completed", output: "hello" },
     content: [{ type: "text", text: "Command finished." }],
   }) as { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }
@@ -92,10 +96,10 @@ test("subagent formatter preserves fenced Markdown from the frozen real ChatGPT 
     .at(-1)
   assert.ok(assistant)
 
-  const rendered = renderStructuredContent({
-    turns: [{ turn_id: "fixture_turn_1", status: "completed", response: assistant.text }],
-  })
+  const rendered = compactText("subagent_result", { turns: [{ turn_id: "fixture_turn_1", status: "completed", response: assistant.text }] })
 
+  assert.ok(rendered.startsWith("---- turn_id=fixture_turn_1 status=completed ----"))
+  assert.doesNotMatch(rendered, /response:/)
   assert.ok(rendered.includes("## Live Fixture"))
   assert.ok(rendered.includes("```md"))
   assert.ok(rendered.includes("```ts"))
@@ -173,7 +177,7 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
       ],
     },
     expected:
-      'turns:\n\n- turn_id=reviewer_turn_1 status=completed\n\n  response:\n    ## Review\n\n    Architecture looks good.\n\n- turn_id=tester_turn_1 status=running activity="Using tools" activity_age_ms=2750',
+      '---- turn_id=reviewer_turn_1 status=completed ----\n\n## Review\n\nArchitecture looks good.\n\n---- turn_id=tester_turn_1 status=running activity="Using tools" activity_age_ms=2750 ----',
   },
   {
     tool: "fetch_website",
@@ -202,6 +206,11 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
 
 for (const { tool, structuredContent, expected } of toolFamilyCases) {
   test(`renders the ${tool} compact result shape`, () => {
-    assert.equal(renderStructuredContent(structuredContent), expected)
+    assert.equal(compactText(tool, structuredContent), expected)
   })
+}
+
+function compactText(tool: string, structuredContent: unknown): string {
+  const compact = compactToolResult(tool, { structuredContent }) as { content?: Array<{ type: string; text?: string }> }
+  return compact.content?.find((item) => item.type === "text")?.text ?? ""
 }

@@ -33,6 +33,17 @@ Pass one to three returned `turn_id` values. Results are retrieved concurrently 
 
 Activity remains one of `Working`, `Searching the web`, `Using tools`, or `Generating response`.
 
+Compact results separate returned turns with top-level metadata headers and place completed responses directly beneath them:
+
+```text
+---- turn_id=reviewer_turn_1 status=completed ----
+
+## Review
+...
+
+---- turn_id=tester_turn_1 status=running activity="Using tools" activity_age_ms=2750 ----
+```
+
 ## Lifetime and Failures
 
 Turn records and prior `turn_id` results are process-local. Conversation URL and turn count are persisted best-effort in `~/.shellby/subagents.sqlite`, so reusing an `agent_id` after restart restores the saved conversation when that mapping exists. `npm run reset-agents` intentionally clears persisted agent mappings (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).

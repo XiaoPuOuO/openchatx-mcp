@@ -125,34 +125,12 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
       }
 
       const result = await callback(...args)
-      const projected = !nativeContent && !structuredRequested ? (name === "apply_patch" ? compactApplyPatchResult(result) : compactToolResult(result)) : result
+      const projected = !nativeContent && !structuredRequested ? compactToolResult(name, result) : result
       const events = [...(name === "shell_run" ? shellRunFileEditNotices(input) : []), ...(options.drainPendingEvents?.() ?? [])]
       return appendToolEvents(projected, events)
     }
     return registerTool(name, config, wrapped)
   }) as typeof server.registerTool
-}
-
-function compactApplyPatchResult(result: unknown): unknown {
-  if (!isRecord(result) || !isRecord(result.structuredContent)) return compactToolResult(result)
-
-  const structured = result.structuredContent
-  const inline: string[] = []
-  const sections: string[] = []
-
-  if (typeof structured.status === "string") inline.push(`status=${structured.status}`)
-  if (typeof structured.exit_code === "number" || structured.exit_code === null) inline.push(`exit_code=${String(structured.exit_code)}`)
-  if (structured.output_dropped === true) inline.push("output_dropped=true")
-  if (typeof structured.changed === "string" && structured.changed) sections.push(`changed:\n${structured.changed}`)
-  if (typeof structured.failed === "string" && structured.failed) sections.push(`failed:\n${structured.failed}`)
-  if (typeof structured.output === "string" && structured.output) sections.push(`output:\n\n${structured.output}`)
-
-  const compact: Record<string, unknown> = { ...result }
-  delete compact.structuredContent
-  const rendered = [inline.join(" "), ...sections].filter(Boolean).join("\n\n")
-  if (!rendered) return compact
-  compact.content = [...(Array.isArray(compact.content) ? compact.content : []), { type: "text", text: rendered }]
-  return compact
 }
 
 function addStructuredInput(schema: unknown): unknown {

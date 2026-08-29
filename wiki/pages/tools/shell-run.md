@@ -61,7 +61,7 @@ commands:
 - run=2 command="npm run check" path=./api status=completed exit_code=1
 ```
 
-- `run` matches `[run N ...]` output labels.
+- `run` matches the `run=N` grouped-output header.
 - `command` = first non-empty command line, normalized, max 20 characters including `…`.
 - `path` appears only for a cwd override.
 - Status: `queued`, `running`, `completed`, `timed_out`, `failed`, or `reset`.
@@ -82,7 +82,8 @@ output:
 Batch output is grouped and labeled:
 
 ```text
-[run 2 path="./api" exit=1]
+---- run=2 path="./api" exit=1 ----
+
 ...
 ```
 

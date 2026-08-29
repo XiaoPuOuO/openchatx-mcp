@@ -1,14 +1,19 @@
 const SHORT_STRING_MAX = 120
 const MAX_INLINE_LINE = 240
 
-export function compactToolResult(result: unknown): unknown {
+export function compactToolResult(toolName: string, result: unknown): unknown {
   if (!isRecord(result) || result.structuredContent === undefined) return result
-  const rendered = renderStructuredContent(result.structuredContent)
+  const rendered = renderToolStructuredContent(toolName, result.structuredContent)
   const compact = { ...result }
   delete compact.structuredContent
   if (!rendered) return compact
   compact.content = appendTextContent(compact.content, rendered)
   return compact
+}
+
+export function formatOutputBlock(metadata: readonly string[], body?: string): string {
+  const header = `---- ${metadata.filter(Boolean).join(" ")} ----`
+  return body ? `${header}\n\n${body}` : header
 }
 
 export function appendToolEvents(result: unknown, events: readonly string[]): unknown {
@@ -29,6 +34,48 @@ export function renderStructuredContent(value: unknown): string {
   if (isRecord(value)) return renderRecord(value, 0)
   if (Array.isArray(value)) return renderArray(value, 0)
   return `result=${formatScalar(value)}`
+}
+
+function renderToolStructuredContent(toolName: string, value: unknown): string {
+  if (toolName === "apply_patch") return renderApplyPatchResult(value)
+  if (toolName === "subagent_result") return renderSubagentResult(value)
+  return renderStructuredContent(value)
+}
+
+function renderApplyPatchResult(value: unknown): string {
+  if (!isRecord(value)) return renderStructuredContent(value)
+
+  const inline: string[] = []
+  const sections: string[] = []
+  if (typeof value.status === "string") inline.push(`status=${value.status}`)
+  if (typeof value.exit_code === "number" || value.exit_code === null) inline.push(`exit_code=${String(value.exit_code)}`)
+  if (value.output_dropped === true) inline.push("output_dropped=true")
+  if (typeof value.changed === "string" && value.changed) sections.push(`changed:\n${value.changed}`)
+  if (typeof value.failed === "string" && value.failed) sections.push(`failed:\n${value.failed}`)
+  if (typeof value.output === "string" && value.output) sections.push(`output:\n\n${value.output}`)
+
+  return [inline.join(" "), ...sections].filter(Boolean).join("\n\n") || renderStructuredContent(value)
+}
+
+function renderSubagentResult(value: unknown): string {
+  if (!isRecord(value) || Object.keys(value).some((key) => key !== "turns") || !Array.isArray(value.turns) || !value.turns.every(isRecord)) {
+    return renderStructuredContent(value)
+  }
+  if (value.turns.length === 0) return renderStructuredContent(value)
+
+  return value.turns
+    .map((turn) => {
+      const metadata: string[] = []
+      for (const key of ["turn_id", "status", "activity", "activity_age_ms"] as const) {
+        const item = turn[key]
+        if (item !== undefined && isInlineScalar(item)) metadata.push(`${key}=${formatScalar(item)}`)
+      }
+      if (metadata.length === 0) return renderRecordListItem(turn, 0)
+
+      const bodies = [typeof turn.response === "string" && turn.response ? turn.response : "", typeof turn.error === "string" && turn.error ? turn.error : ""].filter(Boolean)
+      return formatOutputBlock(metadata, bodies.join("\n\n"))
+    })
+    .join("\n\n")
 }
 
 /**

@@ -3,6 +3,7 @@ import { statSync } from "node:fs"
 import { isAbsolute, resolve } from "node:path"
 
 import { MCP_CONFIG } from "../../config.js"
+import { formatOutputBlock } from "../../server/tool-output.js"
 import { positiveInteger, utf8Chunk } from "../../utils.js"
 import { type ShellCommandStatus, type ShellPollInput, type ShellResetInput, type ShellResetOutput, type ShellRunInput } from "./shell-contracts.js"
 import {
@@ -579,9 +580,10 @@ function batchCommandPreview(command: string): string {
 
 function formatParallelRunOutput(run: ParallelRunRecord, output: string): string {
   const result = run.status === "completed" ? `exit=${run.exitCode ?? "n/a"}` : `status=${run.status}`
-  const dropped = run.droppedOutputBytes > 0 ? ` dropped_bytes=${run.droppedOutputBytes}` : ""
-  const body = output.length === 0 ? "" : `${output}${output.endsWith("\n") ? "" : "\n"}`
-  return `[run ${run.run} path=${JSON.stringify(run.path)} ${result}${dropped}]\n${body}`
+  const metadata = [`run=${run.run}`, `path=${JSON.stringify(run.path)}`, result]
+  if (run.droppedOutputBytes > 0) metadata.push(`dropped_bytes=${run.droppedOutputBytes}`)
+  const block = formatOutputBlock(metadata, output)
+  return block.endsWith("\n") ? block : `${block}\n`
 }
 
 function hashCommand(input: Pick<RunCommandInput, "command" | "commands" | "cwd">): string {

@@ -40,9 +40,9 @@ test("runs parallel command batches from one root with relative paths and retain
       { run: 3, path: "../../shared", status: "completed", exit_code: 0 },
     ]
   )
-  assert.match(batch.output, /\[run 1 path="\." exit=0\]/)
-  assert.match(batch.output, /\[run 2 path="\.\/packages\/api" exit=0\]/)
-  assert.match(batch.output, /\[run 3 path="\.\.\/\.\.\/shared" exit=0\]/)
+  assert.match(batch.output, /---- run=1 path="\." exit=0 ----/)
+  assert.match(batch.output, /---- run=2 path="\.\/packages\/api" exit=0 ----/)
+  assert.match(batch.output, /---- run=3 path="\.\.\/\.\.\/shared" exit=0 ----/)
   assert.match(batch.output, new RegExp(`root:${escapeRegExp(repoDirectory)}:present`))
   assert.match(batch.output, /api:.*\/packages\/api:present/)
   assert.match(batch.output, /shared:.*\/shared:present/)
@@ -135,8 +135,8 @@ test("times out a hung parallel child without blocking its siblings", { timeout:
       { status: "completed", exit_code: 0 },
     ]
   )
-  assert.match(batch.output, /\[run 1 path="\." status=timed_out\]/)
-  assert.match(batch.output, /\[run 2 path="\.\/" exit=0\]\nfast/)
+  assert.match(batch.output, /---- run=1 path="\." status=timed_out ----/)
+  assert.match(batch.output, /---- run=2 path="\.\/" exit=0 ----\n\nfast/)
   assert.match(batch.output, /fast/)
 })
 
@@ -149,7 +149,7 @@ test("labels permanently dropped parallel output", { timeout: 10_000 }, async (t
   const batch = await runToCompletion(shell, "parallel-output-cap", [{ command: "printf '🙂éAB'" }], { maxOutputTokens: 64 })
 
   assert.equal(batch.snapshot.dropped_output_bytes, 1)
-  assert.match(batch.output, /\[run 1 path="\." exit=0 dropped_bytes=1\]\n🙂éA/)
+  assert.match(batch.output, /---- run=1 path="\." exit=0 dropped_bytes=1 ----\n\n🙂éA/)
 })
 
 test("inherits the parallel cwd when a run directory is omitted and accepts overrides", { timeout: 10_000 }, async (t) => {
@@ -255,7 +255,7 @@ test("reset kills running parallel children and retains the batch as reset", { t
   })
   assert.equal(old.status, "reset")
   assert.equal(old.commands?.[0]?.status, "reset")
-  assert.match(old.output, /\[run 1 path="\." status=reset\]/)
+  assert.match(old.output, /---- run=1 path="\." status=reset ----/)
   assert.equal(await waitForProcessExit(pid), true)
 })
 
