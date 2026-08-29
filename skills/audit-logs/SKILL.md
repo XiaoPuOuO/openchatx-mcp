@@ -16,14 +16,13 @@ Source of truth for format:
 ## Header
 
 ```text
---- # [!|~] TOOL - DURATIONms - N in [/ N out] [- structured] [- max_output_tokens=N] [- truncated] [- HTTP ...] - Mon D h:mm AM/PM
+--- # [!|~] TOOL - DURATIONms - N in [/ N out] [- structured] [- max_output_tokens=N] [- HTTP ...] - Mon D h:mm AM/PM
 ```
 
 - `!` = tool/HTTP/connection failure
 - `~` = call took at least 5 seconds
 - `in` = tokens from full serialized arguments before log truncation
-- `out` = model-facing output tokens when captured
-- `truncated` = bounded response capture overflowed; omitted otherwise
+- `out` = model-facing text/structured output tokens; native image payloads are excluded
 - final time = local call start time
 
 Tool calls may include `session: "agent-N"`. The audit logger assigns each distinct `X-OpenAI-Session` a stable first-seen alias such as `agent-1`, `agent-2`, and so on for the logger lifetime. Raw session IDs are not written to the log.
@@ -44,7 +43,7 @@ Tool calls may include `session: "agent-N"`. The audit logger assigns each disti
 
 ## Caveats
 
-- Missing `out` does not mean zero output.
+- Missing `out` means there was no token-countable model-facing text or structured output.
 - Shell nonzero exit produces `!` when the bounded result exposes the exit code.
 - Successful tool output bodies are not stored.
 - Entries are written when calls complete, so file order is not guaranteed invocation order.

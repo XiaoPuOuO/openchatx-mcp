@@ -13,8 +13,6 @@ import { PeekabooClient } from "../tools/computer/peekaboo.js"
 import { createShellSessionManager, type ShellSessionManager } from "../tools/shell/session-manager.js"
 import { WebPageOpener } from "../tools/web/web-open.js"
 
-const MAX_AUDIT_RESPONSE_BODY_BYTES = 8 * 1024
-
 interface InFlightMcpRequest {
   server: ReturnType<typeof createMcpServer>
   transport: NodeStreamableHTTPServerTransport
@@ -61,33 +59,12 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
 
   const handleMcpPost = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
-    const auditCalls = auditLogger?.startToolCalls(req.body, { sessionId }) ?? []
-    let responseBody = Buffer.alloc(0)
-    let responseBodyTruncated = false
-    if (auditCalls.length > 0) {
-      trackResponse(res, (chunk) => {
-        if (responseBodyTruncated) return
-        const remaining = MAX_AUDIT_RESPONSE_BODY_BYTES - responseBody.byteLength
-        if (chunk.byteLength > remaining) {
-          if (remaining > 0) responseBody = Buffer.concat([responseBody, chunk.subarray(0, remaining)])
-          responseBodyTruncated = true
-          return
-        }
-        responseBody = Buffer.concat([responseBody, chunk])
-      })
-    }
+    const auditRequest = auditLogger?.startRequest(req.body, { sessionId })
     let auditFinished = false
     const finishAudit = (state: "finished" | "closed") => {
       if (auditFinished) return
       auditFinished = true
-      for (const auditCall of auditCalls) {
-        auditCall.finish({
-          httpStatus: res.statusCode,
-          state,
-          responseBodyTruncated,
-          ...(responseBody.length > 0 ? { responseBody: responseBody.toString("utf8") } : {}),
-        })
-      }
+      auditRequest?.finishTransport({ httpStatus: res.statusCode, state })
     }
     res.once("finish", () => finishAudit("finished"))
     res.once("close", () => finishAudit("closed"))
@@ -99,6 +76,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
       webPageOpener,
       toolOutputStructured: options.toolOutputStructured,
       notificationSessionId: sessionId,
+      auditRequest,
     })
     const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -206,33 +184,6 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
       }
     },
   }
-}
-
-function trackResponse(res: Response, addChunk: (chunk: Buffer) => void): void {
-  const originalWrite = res.write.bind(res) as (...args: unknown[]) => boolean
-  const originalEnd = res.end.bind(res) as (...args: unknown[]) => Response
-
-  res.write = ((...args: unknown[]) => {
-    const chunk = responseChunk(args[0], args[1])
-    if (chunk) addChunk(chunk)
-    return originalWrite(...args)
-  }) as typeof res.write
-
-  res.end = ((...args: unknown[]) => {
-    const chunk = responseChunk(args[0], args[1])
-    if (chunk) addChunk(chunk)
-    return originalEnd(...args)
-  }) as typeof res.end
-}
-
-function responseChunk(chunk: unknown, encoding: unknown): Buffer | undefined {
-  if (typeof chunk === "string") {
-    const normalizedEncoding = typeof encoding === "string" && Buffer.isEncoding(encoding) ? (encoding as BufferEncoding) : "utf8"
-    return Buffer.from(chunk, normalizedEncoding)
-  }
-  if (Buffer.isBuffer(chunk)) return chunk
-  if (chunk instanceof Uint8Array) return Buffer.from(chunk)
-  return undefined
 }
 
 function containsToolCall(payload: unknown): boolean {

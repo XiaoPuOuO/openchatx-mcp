@@ -61,20 +61,14 @@ test("logs shell output token count", async (t) => {
   assert.ok(call)
   const output = "hello world"
   const structuredContent = { status: "completed", exit_code: 0, cwd: "/workspace", output }
-  const responseBody = JSON.stringify({
-    result: {
-      structuredContent,
-    },
-  })
   call.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBody,
+    toolResult: { structuredContent },
+    modelResult: { content: [{ type: "text", text: output }] },
   })
 
   const log = await readFile(file, "utf8")
   const inputTokens = countTokens(JSON.stringify({ shell_id: "default", request_id: "tokens", command: "printf 'hello world'" }))
-  const outputTokens = countTokens(JSON.stringify(structuredContent))
+  const outputTokens = countTokens(output)
   assert.match(log, new RegExp(`--- # shell_run - 0ms - ${inputTokens} in / ${outputTokens} out - Aug 13 7:13 PM`))
   assert.match(log, /result: status="completed" exit_code=0 cwd="\/workspace"/)
 })
@@ -143,7 +137,7 @@ test("marks explicit structured and max_output_tokens tool arguments in the head
   assert.match(log, /^--- # shell_run - 0ms - \d+ in - structured - max_output_tokens=4096 - Aug 14 8:11 AM$/m)
 })
 
-test("matches batched tool responses by JSON-RPC id", async (t) => {
+test("audits batched tool calls independently", async (t) => {
   const file = await auditFile(t)
 
   const logger = new McpAuditLogger(
@@ -159,11 +153,8 @@ test("matches batched tool responses by JSON-RPC id", async (t) => {
 
   const firstOutput = "first"
   const secondOutput = "second output has several more tokens"
-  const responseBody = JSON.stringify([
-    { jsonrpc: "2.0", id: 2, result: { isError: true, content: [{ type: "text", text: secondOutput }] } },
-    { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: firstOutput }] } },
-  ])
-  for (const call of calls) call.finish({ httpStatus: 200, state: "finished", responseBody })
+  calls[0]?.finish({ toolResult: { content: [{ type: "text", text: firstOutput }] } })
+  calls[1]?.finish({ toolResult: { isError: true, content: [{ type: "text", text: secondOutput }] } })
 
   const log = await readFile(file, "utf8")
   assert.match(log, new RegExp(`shell_list - 0ms - ${countTokens(JSON.stringify({ first: true }))} in / ${countTokens(firstOutput)} out - Aug 14 12:30 AM`))
@@ -207,7 +198,7 @@ test("logs apply_patch bodies only when the tool fails", async (t) => {
   })
   assert.ok(call)
   clock = 2_051
-  call.finish({ httpStatus: 200, state: "finished", responseBody: '{"result":{"isError":false}}' })
+  call.finish({ toolResult: { isError: false } })
 
   let log = await readFile(file, "utf8")
   assert.equal(log, `--- # apply_patch - 51ms - 33 in - Aug 7 9:12 PM\ncwd: "/workspace/project"\npatch_chars: ${characterCount(patch)}\n\n`)
@@ -220,14 +211,10 @@ test("logs apply_patch bodies only when the tool fails", async (t) => {
   assert.ok(failedCall)
   clock = 2_100
   failedCall.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBody: `event: message\ndata: ${JSON.stringify({
-      result: {
-        isError: true,
-        structuredContent: { status: "failed", exit_code: 1, output: "Invalid patch hunk on line 4\nUnexpected @@" },
-      },
-    })}\n\n`,
+    toolResult: {
+      isError: true,
+      structuredContent: { status: "failed", exit_code: 1, output: "Invalid patch hunk on line 4\nUnexpected @@" },
+    },
   })
 
   log = await readFile(file, "utf8")
@@ -242,14 +229,10 @@ test("logs apply_patch bodies only when the tool fails", async (t) => {
   })
   assert.ok(thrownFailure)
   thrownFailure.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBody: JSON.stringify({
-      result: {
-        isError: true,
-        content: [{ type: "text", text: "apply_patch_failed: apply_patch request was aborted." }],
-      },
-    }),
+    toolResult: {
+      isError: true,
+      content: [{ type: "text", text: "apply_patch_failed: apply_patch request was aborted." }],
+    },
   })
 
   log = await readFile(file, "utf8")
@@ -270,14 +253,10 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
   })
   assert.ok(poll)
   poll.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBody: `event: message\ndata: ${JSON.stringify({
-      result: {
-        isError: true,
-        content: [{ type: "text", text: "unknown_request: No retained command for request_id missing." }],
-      },
-    })}\n\n`,
+    toolResult: {
+      isError: true,
+      content: [{ type: "text", text: "unknown_request: No retained command for request_id missing." }],
+    },
   })
 
   const log = await readFile(file, "utf8")
@@ -292,18 +271,21 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
     },
   })
   assert.ok(childNonzero)
+  const childOutput = "x".repeat(2_000)
   childNonzero.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBodyTruncated: true,
-    responseBody: '{"result":{"isError":false,"structuredContent":{"status":"completed","exit_code":1,"cwd":"/workspace","output":"' + "x".repeat(2_000),
+    toolResult: {
+      isError: false,
+      structuredContent: { status: "completed", exit_code: 1, cwd: "/workspace", output: childOutput },
+    },
+    modelResult: { content: [{ type: "text", text: childOutput }] },
   })
 
   const finalLog = await readFile(file, "utf8")
   assert.match(
     finalLog,
-    /--- # ! shell_run - 0ms - \d+ in - truncated - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"\ncommands: \|-\n {2}\[\n {4}\{\n {6}"command": "false"\n {4}\}\n {2}\]\nresult: status="completed" exit_code=1 cwd="\/workspace"/
+    new RegExp(`--- # ! shell_run - 0ms - \\d+ in / ${countTokens(childOutput)} out - Aug 11 10:50 PM\\nshell: "parallel\\/child-nonzero"`)
   )
+  assert.match(finalLog, /result: status="completed" exit_code=1 cwd="\/workspace"/)
 })
 
 test("caps large ordinary tool arguments", async (t) => {
@@ -360,14 +342,34 @@ test("uses Better Comments tags for slow and failed calls", async (t) => {
   assert.doesNotMatch(log, /--- # \?/)
 })
 
-test("logs tools/list as one timestamped line and ignores other non-tool MCP requests", async (t) => {
+test("records tools/list as one timestamped line and ignores other non-tool MCP requests", async (t) => {
   const file = await auditFile(t)
 
   const timestamp = new Date(2026, 7, 7, 22, 30, 0)
   const logger = new McpAuditLogger(file, () => timestamp)
-  assert.deepEqual(logger.startToolCalls({ jsonrpc: "2.0", id: 1, method: "tools/list" }), [])
-  assert.deepEqual(logger.startToolCalls({ jsonrpc: "2.0", id: 2, method: "initialize" }), [])
+  logger.startRequest({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+  logger.startRequest({ jsonrpc: "2.0", id: 2, method: "initialize" })
   assert.equal(await readFile(file, "utf8"), "--- # tools/list - Aug 7 10:30 PM\n")
+})
+
+test("logs tool calls rejected before handler execution without buffering the response", async (t) => {
+  const file = await auditFile(t)
+  const logger = new McpAuditLogger(
+    file,
+    () => new Date(2026, 7, 28, 21, 0, 0),
+    () => 0
+  )
+  const request = logger.startRequest(
+    { method: "tools/call", params: { name: "shell_run", arguments: { request_id: "x", cwd: "", command: "pwd" } } },
+    { sessionId: "validation-session" }
+  )
+
+  request.finishTransport({ httpStatus: 200, state: "finished" })
+
+  const log = await readFile(file, "utf8")
+  assert.match(log, /--- # ! shell_run - 0ms - \d+ in - Aug 28 9:00 PM/)
+  assert.match(log, /message: "tool_rejected: Tool call was rejected before execution, likely during validation or dispatch\."/)
+  assert.match(log, /session: "agent-1"/)
 })
 
 test("logs compact computer metadata without retaining screenshot or inspection contents", async (t) => {
@@ -382,22 +384,20 @@ test("logs compact computer metadata without retaining screenshot or inspection 
     params: { name: "computer_observe", arguments: { window_id: 42, annotate: false } },
   })
   assert.ok(call)
+  const toolResult = {
+    content: [{ type: "text", text: "Observed Finder — Downloads." }],
+    structuredContent: {
+      snapshot_id: "snapshot-42",
+      application_name: "Finder",
+      window_title: "Downloads",
+      capture_mode: "window",
+      element_count: 18,
+      interactable_count: 7,
+    },
+  }
   call.finish({
-    httpStatus: 200,
-    state: "finished",
-    responseBody: JSON.stringify({
-      result: {
-        content: [{ type: "text", text: "Observed Finder — Downloads." }],
-        structuredContent: {
-          snapshot_id: "snapshot-42",
-          application_name: "Finder",
-          window_title: "Downloads",
-          capture_mode: "window",
-          element_count: 18,
-          interactable_count: 7,
-        },
-      },
-    }),
+    toolResult,
+    modelResult: toolResult,
   })
 
   const log = await readFile(file, "utf8")
@@ -406,7 +406,7 @@ test("logs compact computer metadata without retaining screenshot or inspection 
   assert.doesNotMatch(log, /Observed Finder/)
 })
 
-test("marks the audit entry when the bounded response capture overflows", async (t) => {
+test("counts large model-facing results without an audit byte cap", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -415,13 +415,24 @@ test("marks the audit entry when the bounded response capture overflows", async 
   )
   const [call] = logger.startToolCalls({ method: "tools/call", params: { name: "computer_observe", arguments: {} } })
   assert.ok(call)
-  const responsePrefix =
-    '{"result":{"structuredContent":{"snapshot_id":"snapshot-large","application_name":"Finder","window_title":"Downloads","capture_mode":"window","element_count":21,"interactable_count":8},"content":[{"type":"image","data":"' +
-    "x".repeat(2_000)
-  call.finish({ httpStatus: 200, state: "finished", responseBodyTruncated: true, responseBody: responsePrefix })
+  const text = "x".repeat(20_000)
+  const toolResult = {
+    structuredContent: {
+      snapshot_id: "snapshot-large",
+      application_name: "Finder",
+      window_title: "Downloads",
+      capture_mode: "window",
+      element_count: 21,
+      interactable_count: 8,
+    },
+    content: [{ type: "text", text }],
+  }
+  call.finish({ toolResult, modelResult: toolResult })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, / - truncated - Aug 26 11:05 PM/)
+  const expectedOutputTokens = countTokens(`${text}\n${JSON.stringify(toolResult.structuredContent)}`)
+  assert.match(log, new RegExp(`computer_observe - 0ms - \\d+ in / ${expectedOutputTokens} out - Aug 26 11:05 PM`))
+  assert.doesNotMatch(log, / - truncated - /)
   assert.match(log, /result: snapshot_id="snapshot-large" app="Finder" window="Downloads" capture_mode="window" elements=21 interactable=8/)
 })
 

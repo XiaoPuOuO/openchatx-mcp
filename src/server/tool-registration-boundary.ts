@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import type { ToolOutputStructuredMode } from "../config.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
+import type { McpAuditRequest } from "./audit-log.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
 const SCHEMA_KEY_ORDER = [
@@ -80,6 +81,7 @@ interface ToolRegistrationConfig {
 export interface ToolRegistrationBoundaryOptions {
   toolOutputStructured: ToolOutputStructuredMode
   drainPendingEvents?: () => string[]
+  auditRequest?: McpAuditRequest
 }
 
 const TOOL_ANNOTATION_DEFAULTS: Record<string, unknown> = {
@@ -117,6 +119,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
     if (typeof callback !== "function") return registerTool(name, config, callback)
     const wrapped = async (...args: unknown[]) => {
       const input = isRecord(args[0]) ? args[0] : undefined
+      const auditCall = options.auditRequest?.claimTool(name, input ?? {})
       const structuredRequested = options.toolOutputStructured === "always" || (options.toolOutputStructured === "optional" && input?.structured === true)
       if (input && "structured" in input) {
         const toolInput = { ...input }
@@ -124,10 +127,17 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
         args[0] = toolInput
       }
 
-      const result = await callback(...args)
-      const projected = !nativeContent && !structuredRequested ? compactToolResult(name, result) : result
-      const events = [...(name === "shell_run" ? shellRunFileEditNotices(input) : []), ...(options.drainPendingEvents?.() ?? [])]
-      return appendToolEvents(projected, events)
+      try {
+        const result = await callback(...args)
+        const projected = !nativeContent && !structuredRequested ? compactToolResult(name, result) : result
+        const events = [...(name === "shell_run" ? shellRunFileEditNotices(input) : []), ...(options.drainPendingEvents?.() ?? [])]
+        const finalResult = appendToolEvents(projected, events)
+        auditCall?.finish({ toolResult: result, modelResult: finalResult })
+        return finalResult
+      } catch (error) {
+        auditCall?.finish({ error })
+        throw error
+      }
     }
     return registerTool(name, config, wrapped)
   }) as typeof server.registerTool

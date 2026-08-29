@@ -53,9 +53,17 @@ export const MCP_CONFIG = {
   toolOutputStructured: "never" as ToolOutputStructuredMode,
   shell: {
     path: process.env.MCP_SHELL ?? "/bin/zsh",
-    transcriptChars: 1024 * 1024, // 1MB
-    commandTranscriptBytes: 256 * 1024, // 256KB
+    // Rolling shell-wide stdout/stderr retention used by cursor-based shell_poll.
+    // This is a server-memory/history bound, not a model-output limit.
+    transcriptChars: 1024 * 1024,
+    // Maximum stdout/stderr retained for any one command before additional output
+    // is permanently dropped. This prevents a noisy command from consuming the
+    // entire shell transcript. Parallel child commands use this limit too.
+    commandTranscriptBytes: 256 * 1024,
+    // Token ceiling for text returned to the model in one shell_run/shell_poll call.
+    // Additional retained output can be retrieved with shell_poll and next_cursor.
     defaultOutputTokens: 1_024,
+    // Largest model-output token budget a caller may explicitly request per call.
     maxOutputTokens: 16_384,
     defaultWaitMs: 3_000,
     maxWaitMs: 10_000,
