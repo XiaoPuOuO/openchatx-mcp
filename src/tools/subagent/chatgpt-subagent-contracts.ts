@@ -1,14 +1,3 @@
-export interface ChatGptSubagentOptions {
-  cdpEndpoint?: string
-  connectTimeoutMs?: number
-  chatGptUrl?: string
-  maxConcurrentAgents?: number
-  minInterTurnDelayMs?: number
-  interactionDelayMs?: number
-  timeoutMs?: number
-  persistAgents?: boolean
-}
-
 export interface ChatGptSubagentRequest {
   prompt: string
   agentId: string
