@@ -12,7 +12,7 @@ Shellby MCP is a local macOS agent harness that gives ChatGPT Web stateful, high
 
 - Prefer simplicity over complexity.
 - Tests should adapt to the architecture. Do not turn production architecture into a dependency-injection framework solely to make tests easier.
-- Model facing tool descriptions and descriptions work together, a lot can be inferred from from the schema that does not need to be explicitly described.
+- Model facing tool descriptions and descriptions work together, a lot can be inferred from from the schema that does not need to be explicitly described. Tools descriptions do tell tell agents how the tool works, but only how to use it.
 - Prefer functional typescript over class-based when it improves readability and maintainability.
 - Follow the Agile principle of adapting to new information: keep major software design decisions changeable as the build progresses.
 - For larger problems, use problem decomposition: dividing a complex problem into smaller, independently completable outcomes.

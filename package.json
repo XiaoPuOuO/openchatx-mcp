@@ -34,7 +34,7 @@
     "reset-agents": "node scripts/reset-agents.mjs",
     "test": "tsx --test test/*.test.ts",
     "test:live:subagent": "RUN_LIVE_SUBAGENT_TESTS=1 tsx --test test/live/subagent-live.test.ts",
-    "type-check": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor:apply-patch": "scripts/build-apply-patch.sh",
     "vendor:peekaboo": "scripts/build-peekaboo.sh",
     "lint": "eslint src test",

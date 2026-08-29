@@ -32,22 +32,23 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
     "clone_self",
     {
       title: "Clone yourself from a ChatGPT conversation",
-      description:
-        "Fork a ChatGPT conversation into an independent copy of yourself with equivalent reasoning capability. The clone inherits the source through its latest forkable turn, then continues independently with the supplied prompt. Returns a detached turn_id.",
+      description: "Create an independent copy of yourself with equivalent reasoning capability. Returns a detached turn_id.",
       inputSchema: z.object({
-        conversation_url: z.url().describe("URL of the ChatGPT conversation to fork. The URL is treated as an opaque source location."),
+        // TODO: Consider making this optional by persisting X-OpenAI-Session -> conversation URL after the first call,
+        // so later clones from the same ChatGPT conversation can reuse the remembered source automatically.
+        conversation_url: z.url().describe("User provided conversation URL to clone. Ask the user for it if not provided."),
         clone_id: z
           .string()
           .min(1)
           .max(64)
           .refine((value) => value.trim().length > 0, "clone_id cannot be only whitespace.")
           .transform((value) => value.trim())
-          .describe("Unique identifier for the new clone. Use a different clone_id for each independent clone."),
+          .describe("Descriptive identifier for the new clone such as review-agent-1."),
         prompt: z
           .string()
           .refine((value) => value.trim().length > 0, "prompt cannot be only whitespace.")
           .transform((value) => value.trim())
-          .describe("First instruction to send after the conversation is forked."),
+          .describe("First instruction to send after the clone is created."),
       }),
       outputSchema: cloneSelfResultSchema,
       annotations: {
@@ -162,7 +163,7 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
           .min(0)
           .max(MCP_CONFIG.chatGpt.maxPollWaitMs)
           .default(MCP_CONFIG.chatGpt.defaultPollWaitMs)
-          .describe("How long to wait for clone completion. Use 0 only for an immediate status check."),
+          .describe("How long to wait for agent completion. Use 0 only for immediate check. Agent turns average about 3 minute and may run up to 30 minutes."),
       }),
       outputSchema: z.object({ turns: z.array(cloneResultSchema) }),
       annotations: {

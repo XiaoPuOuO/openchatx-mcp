@@ -194,7 +194,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       if (!agent) {
         const persisted = store?.get(request.cloneId)
         if (!persisted || persisted.kind !== "clone") {
-          throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Unknown clone: ${request.cloneId}`)
+          throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Unknown agent: ${request.cloneId}`)
         }
         agent = {
           agentId: request.cloneId,
@@ -224,7 +224,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   async function submitAgentTurn(agent: BrowserAgentState, submittedPrompt: string): Promise<string> {
     const operation = activeOperations.get(agent.agentId)
-    if (!operation) throw new ChatGptSubagentError("AGENT_BUSY", `ChatGPT subagent ${agent.agentId} has no active operation.`)
+    if (!operation) throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agent.agentId} has no active operation.`)
     const signal = operation.signal
     let observation: AssistantResponseObservation | undefined
     try {
@@ -286,7 +286,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   async function pollSubagent(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult> {
     const turn = turns.get(turnId)
-    if (!turn) throw new ChatGptSubagentError("UNKNOWN_TURN", `Unknown ChatGPT subagent turn: ${turnId}`)
+    if (!turn) throw new ChatGptSubagentError("UNKNOWN_TURN", `Unknown agent turn: ${turnId}`)
     if (turn.status === "running" && waitMs > 0) {
       let timer: NodeJS.Timeout | undefined
       await waitForPromise(Promise.race([turn.settled, new Promise<void>((resolve) => (timer = setTimeout(resolve, waitMs)))]), signal).finally(() => {
@@ -314,7 +314,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     if (page && isExpectedAgentPage(page, agent)) return page
     const targetUrl = agent.conversationUrl ?? (agent.turnCount === 0 ? (agent.memory ? CHATGPT_START_URL : TEMPORARY_CHAT_URL) : undefined)
     if (!targetUrl) {
-      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${agent.agentId} lost its page before its conversation URL was saved.`)
+      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${agent.agentId} lost its page before its conversation URL was saved.`)
     }
 
     const created = !page
@@ -381,11 +381,11 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   async function recoverSubmittedTurn(turn: BrowserTurnState): Promise<boolean> {
     const agent = agents.get(turn.agentId)
-    if (!agent) throw new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${turn.agentId} no longer exists.`)
+    if (!agent) throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`)
     const conversationUrl = agent.conversationUrl
     const conversationId = conversationUrl ? extractConversationId(conversationUrl) : undefined
     if (!conversationUrl || !conversationId) {
-      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${agent.agentId} has no saved conversation to recover.`)
+      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${agent.agentId} has no saved conversation to recover.`)
     }
 
     const oldPage = agent.page
@@ -431,19 +431,19 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   async function beginAgentOperation(agentId: string, callContext: ChatGptSubagentCallContext): Promise<void> {
     assertNotRateLimited()
-    if (activeOperations.has(agentId)) throw new ChatGptSubagentError("AGENT_BUSY", `ChatGPT subagent ${agentId} already has an active turn.`)
+    if (activeOperations.has(agentId)) throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} already has an active turn.`)
     const agent = agents.get(agentId)
     if (agent?.status === "uncertain") {
       throw new ChatGptSubagentError(
         "AGENT_BUSY",
-        `ChatGPT subagent ${agentId} has uncertain upstream state after recovery could not confirm completion. Use a new agent_id.`
+        `Agent ${agentId} has uncertain upstream state after recovery could not confirm completion. Use a new agent ID.`
       )
     }
     if (agent && agent.status !== "idle") {
-      throw new ChatGptSubagentError("AGENT_BUSY", `ChatGPT subagent ${agentId} is still ${agent.status}.`)
+      throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} is still ${agent.status}.`)
     }
     if (activeOperations.size >= MAX_CONCURRENT_AGENTS) {
-      throw new ChatGptSubagentError("SUBAGENT_CAPACITY_REACHED", `ChatGPT subagent generation capacity is ${MAX_CONCURRENT_AGENTS}.`)
+      throw new ChatGptSubagentError("SUBAGENT_CAPACITY_REACHED", `Agent capacity is ${MAX_CONCURRENT_AGENTS}.`)
     }
     const operation: ActiveAgentOperation = { ...callContext }
     activeOperations.set(agentId, operation)
@@ -500,7 +500,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     if (turn.status !== "running") return
     const agent = agents.get(turn.agentId)
     if (!agent) {
-      failTurn(turn, new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${turn.agentId} no longer exists.`))
+      failTurn(turn, new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`))
       return
     }
     const now = Date.now()
@@ -547,7 +547,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   function assertAgentPage(page: Page, agent: BrowserAgentState): void {
     if (isExpectedAgentPage(page, agent)) return
-    throw new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${agent.agentId} no longer owns a usable ChatGPT page.`)
+    throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${agent.agentId} no longer owns a usable ChatGPT page.`)
   }
 
   function isExpectedAgentPage(page: Page, agent: BrowserAgentState): boolean {
@@ -618,7 +618,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         if (now - activeTurn.lastActivityAt >= AGENT_IDLE_TTL_MS) {
           await failOrRecoverSubmittedTurn(
             activeTurn,
-            new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "ChatGPT subagent turn expired after 30 minutes without observable progress.")
+            new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn expired after 30 minutes without observable progress.")
           )
         }
         continue

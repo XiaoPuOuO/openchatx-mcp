@@ -31,7 +31,7 @@ const subagentRequestSchema = z.object({
     .boolean()
     .default(true)
     .describe(
-      "Whether a new subagent can use memory from outside its current conversation. Set false for an isolated agent with no prior memory. Best for isolated reviews. Applied only when this agent_id is first created."
+      "Allow access to memory outside this agent conversation. Turn history for the same agent_id is always preserved. Only used when first creating the agent."
     ),
 })
 
@@ -141,7 +141,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
           .min(0)
           .max(MCP_CONFIG.chatGpt.maxPollWaitMs)
           .default(MCP_CONFIG.chatGpt.defaultPollWaitMs)
-          .describe("How long to wait for agent completion. Use 0 only for immediate check. Agent turns average about 1 minute and may run up to 30 minutes."),
+          .describe("How long to wait for agent completion. Use 0 only for immediate check. Agent turns average about 3 minute and may run up to 30 minutes."),
       }),
       outputSchema: z.object({
         turns: z.array(subagentResultSchema),
