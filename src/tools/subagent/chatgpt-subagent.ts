@@ -98,27 +98,12 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   const cleanupTimer = setInterval(() => void cleanupIdleAgents(), CLEANUP_INTERVAL_MS)
   cleanupTimer.unref()
 
-  async function connectSubagents(signal?: AbortSignal): Promise<void> {
-    throwIfAborted(signal)
-    if (browser?.isConnected() && context) return
-    connectPromise ??= connectOnce().finally(() => {
-      connectPromise = undefined
-    })
-    await waitForPromise(connectPromise, signal)
-  }
-
   async function askSubagent(request: ChatGptSubagentRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
-    const { signal } = callContext
-    assertNotRateLimited()
-    beginAgentOperation(request.agentId, callContext)
+    await beginAgentOperation(request.agentId, callContext)
     let agent: BrowserAgentState | undefined
     let operationTransferred = false
 
     try {
-      await connectSubagents(signal)
-      if (rateLimitedUntil > 0) await clearExpiredRateLimit(signal)
-      else await detectRateLimit()
-
       agent = agents.get(request.agentId)
       if (!agent) {
         const memory = request.memory
@@ -154,18 +139,13 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   async function cloneSelf(request: ChatGptCloneSelfRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
     const { signal } = callContext
-    assertNotRateLimited()
-    beginAgentOperation(request.cloneId, callContext)
+    await beginAgentOperation(request.cloneId, callContext)
     let sourcePage: Page | undefined
     let branchPage: Page | undefined
     let agent: BrowserAgentState | undefined
     let operationTransferred = false
 
     try {
-      await connectSubagents(signal)
-      if (rateLimitedUntil > 0) await clearExpiredRateLimit(signal)
-      else await detectRateLimit()
-
       if (!isChatGptUrl(request.sourceConversationUrl)) {
         throw new ChatGptSubagentError("AGENT_TARGET_LOST", "clone_self requires a chatgpt.com conversation URL.")
       }
@@ -205,17 +185,11 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   }
 
   async function cloneRun(request: ChatGptCloneRunRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
-    const { signal } = callContext
-    assertNotRateLimited()
-    beginAgentOperation(request.cloneId, callContext)
+    await beginAgentOperation(request.cloneId, callContext)
     let agent: BrowserAgentState | undefined
     let operationTransferred = false
 
     try {
-      await connectSubagents(signal)
-      if (rateLimitedUntil > 0) await clearExpiredRateLimit(signal)
-      else await detectRateLimit()
-
       agent = agents.get(request.cloneId)
       if (!agent) {
         const persisted = store?.get(request.cloneId)
@@ -455,7 +429,8 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     await connectedBrowser?.close().catch(() => undefined)
   }
 
-  function beginAgentOperation(agentId: string, callContext: ChatGptSubagentCallContext): void {
+  async function beginAgentOperation(agentId: string, callContext: ChatGptSubagentCallContext): Promise<void> {
+    assertNotRateLimited()
     if (activeOperations.has(agentId)) throw new ChatGptSubagentError("AGENT_BUSY", `ChatGPT subagent ${agentId} already has an active turn.`)
     const agent = agents.get(agentId)
     if (agent?.status === "uncertain") {
@@ -470,20 +445,55 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     if (activeOperations.size >= MAX_CONCURRENT_AGENTS) {
       throw new ChatGptSubagentError("SUBAGENT_CAPACITY_REACHED", `ChatGPT subagent generation capacity is ${MAX_CONCURRENT_AGENTS}.`)
     }
-    activeOperations.set(agentId, { ...callContext })
-  }
+    const operation: ActiveAgentOperation = { ...callContext }
+    activeOperations.set(agentId, operation)
 
-  async function clearExpiredRateLimit(signal?: AbortSignal): Promise<void> {
-    if (rateLimitedUntil === 0 || Date.now() < rateLimitedUntil) return
-    for (const page of context?.pages() ?? []) {
-      if (!isChatGptUrl(page.url())) continue
-      const modal = page.locator(RATE_LIMIT_SELECTOR).first()
-      if (!(await modal.isVisible().catch(() => false))) continue
-      const button = modal.getByRole("button", { name: /got it|okay|ok|close/i }).first()
-      await button.click().catch(() => page.keyboard.press("Escape"))
-      await delay(RATE_LIMIT_DISMISS_SETTLE_MS, signal)
+    try {
+      const { signal } = callContext
+      throwIfAborted(signal)
+      if (!(browser?.isConnected() && context)) {
+        connectPromise ??= (async () => {
+          try {
+            const { chromium } = await import("playwright-core")
+            browser = await chromium.connectOverCDP(MCP_CONFIG.chatGpt.cdpEndpoint, { timeout: CONNECT_TIMEOUT_MS })
+          } catch (error) {
+            throw new ChatGptSubagentError(
+              "BROWSER_UNAVAILABLE",
+              [
+                "ChatGPT agent browser is unavailable.",
+                `Expected an already-running debuggable Chrome instance at ${MCP_CONFIG.chatGpt.cdpEndpoint}.`,
+                "This module is attach-only and will not launch Chrome or choose a Chrome profile.",
+              ].join(" "),
+              { cause: error }
+            )
+          }
+          const [browserContext] = browser.contexts()
+          if (!browserContext) throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "Connected Chrome instance did not expose a browser context.")
+          context = browserContext
+        })().finally(() => {
+          connectPromise = undefined
+        })
+        await waitForPromise(connectPromise, signal)
+      }
+
+      if (rateLimitedUntil > 0) {
+        if (Date.now() < rateLimitedUntil) return
+        for (const page of context?.pages() ?? []) {
+          if (!isChatGptUrl(page.url())) continue
+          const modal = page.locator(RATE_LIMIT_SELECTOR).first()
+          if (!(await modal.isVisible().catch(() => false))) continue
+          const button = modal.getByRole("button", { name: /got it|okay|ok|close/i }).first()
+          await button.click().catch(() => page.keyboard.press("Escape"))
+          await delay(RATE_LIMIT_DISMISS_SETTLE_MS, signal)
+        }
+        rateLimitedUntil = 0
+        return
+      }
+      await detectRateLimit()
+    } catch (error) {
+      if (activeOperations.get(agentId) === operation) activeOperations.delete(agentId)
+      throw error
     }
-    rateLimitedUntil = 0
   }
 
   function completeTurn(turn: BrowserTurnState, response: string): void {
@@ -528,26 +538,6 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     turn.observation = undefined
     if (activeOperations.get(turn.agentId)?.turnId === turn.turnId) activeOperations.delete(turn.agentId)
     turn.settle()
-  }
-
-  async function connectOnce(): Promise<void> {
-    try {
-      const { chromium } = await import("playwright-core")
-      browser = await chromium.connectOverCDP(MCP_CONFIG.chatGpt.cdpEndpoint, { timeout: CONNECT_TIMEOUT_MS })
-    } catch (error) {
-      throw new ChatGptSubagentError(
-        "BROWSER_UNAVAILABLE",
-        [
-          "ChatGPT agent browser is unavailable.",
-          `Expected an already-running debuggable Chrome instance at ${MCP_CONFIG.chatGpt.cdpEndpoint}.`,
-          "This module is attach-only and will not launch Chrome or choose a Chrome profile.",
-        ].join(" "),
-        { cause: error }
-      )
-    }
-    const [browserContext] = browser.contexts()
-    if (!browserContext) throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "Connected Chrome instance did not expose a browser context.")
-    context = browserContext
   }
 
   async function createManagedPage(): Promise<Page> {
