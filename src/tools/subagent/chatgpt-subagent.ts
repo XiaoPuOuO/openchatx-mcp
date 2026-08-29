@@ -197,7 +197,7 @@ export async function askSubagent(
     await detectRateLimit(state)
     await submitComposer(page, composer, signal)
 
-    if (agent.status === "idle") agent.status = "Generating response"
+    if (agent.status === "idle") agent.status = "Working"
     agent.lastUsedAt = Date.now()
     agent.turnCount += 1
     persistAgent(state, agent)

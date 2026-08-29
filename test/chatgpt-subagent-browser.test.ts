@@ -58,6 +58,7 @@ test("CDP tracker binds only the submitted prompt and reconstructs exact final M
   assert.deepEqual(conversationIds, ["conversation-1"])
   assert.ok(activities.includes("Searching the web"))
   assert.ok(activities.includes("Generating response"))
+  assert.equal(activities.filter((activity) => activity === "Working").length, 1)
 })
 
 test("HTTP SSE tracker reconstructs the same final assistant response", () => {

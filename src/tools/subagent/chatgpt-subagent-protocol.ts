@@ -79,7 +79,7 @@ export class ChatGptTurnTracker {
 
       if (this.sourceId !== sourceId) continue
       this.captureConversationId(record)
-      this.onActivity?.(message ? classifyActivity(message) : "Working")
+      if (message) this.onActivity?.(classifyActivity(message))
 
       if (message?.role === "assistant") {
         this.assistant = { ...message }
