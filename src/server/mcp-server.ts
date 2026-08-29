@@ -34,7 +34,7 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
   })
   installToolRegistrationBoundary(server, {
     toolOutputStructured: options.toolOutputStructured ?? MCP_CONFIG.toolOutputStructured,
-    drainPendingEvents: () => options.chatGptSubagents.drainEvents?.(options.notificationSessionId) ?? [],
+    drainPendingEvents: () => options.chatGptSubagents.drainEvents(options.notificationSessionId),
     auditRequest: options.auditRequest,
   })
 

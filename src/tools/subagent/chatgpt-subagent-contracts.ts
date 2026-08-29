@@ -1,41 +1,42 @@
+import { z } from "zod"
+
+export const chatGptSubagentStatusSchema = z.enum(["running", "completed", "failed"])
+export const chatGptSubagentActivitySchema = z.enum(["Working", "Searching the web", "Using tools", "Generating response"])
+
+export type ChatGptSubagentStatus = z.infer<typeof chatGptSubagentStatusSchema>
+export type ChatGptSubagentActivity = z.infer<typeof chatGptSubagentActivitySchema>
+
 export interface ChatGptSubagentRequest {
   prompt: string
   agentId: string
   oververbosity: number
-  memory?: boolean
-  notificationSessionId?: string
+  memory: boolean
 }
 
 export interface ChatGptCloneSelfRequest {
   sourceConversationUrl: string
   cloneId: string
   prompt: string
-  notificationSessionId?: string
 }
 
 export interface ChatGptCloneRunRequest {
   cloneId: string
   prompt: string
+}
+
+export interface ChatGptSubagentCallContext {
+  signal?: AbortSignal
   notificationSessionId?: string
 }
 
-export interface ChatGptSubagentStartResult {
-  agentId: string
-  turnId: string
-  status: "running"
-}
-
 export interface ChatGptSubagentPollResult {
-  turnId: string
-  status: "running" | "completed" | "failed"
+  status: ChatGptSubagentStatus
   activity?: ChatGptSubagentActivity
   activityAgeMs?: number
   response?: string
   errorCode?: string
   errorMessage?: string
 }
-
-export type ChatGptSubagentActivity = "Working" | "Searching the web" | "Using tools" | "Generating response"
 
 export type ChatGptSubagentErrorCode =
   | "BROWSER_UNAVAILABLE"
@@ -61,10 +62,10 @@ export class ChatGptSubagentError extends Error {
 }
 
 export interface ChatGptSubagentService {
-  ask(request: ChatGptSubagentRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
-  cloneSelf?(request: ChatGptCloneSelfRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
-  cloneRun?(request: ChatGptCloneRunRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
+  ask(request: ChatGptSubagentRequest, context: ChatGptSubagentCallContext): Promise<string>
+  cloneSelf(request: ChatGptCloneSelfRequest, context: ChatGptSubagentCallContext): Promise<string>
+  cloneRun(request: ChatGptCloneRunRequest, context: ChatGptSubagentCallContext): Promise<string>
   poll(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult>
-  drainEvents?(sessionId?: string): string[]
+  drainEvents(sessionId?: string): string[]
   dispose(): Promise<void>
 }

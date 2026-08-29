@@ -3,6 +3,14 @@ import type { Browser, BrowserContext, Locator, Page } from "playwright-core"
 import { ChatGptSubagentError } from "./chatgpt-subagent-contracts.js"
 
 const BACKGROUND_PAGE_BIND_TIMEOUT_MS = 5_000
+const CHATGPT_OPERATION_TIMEOUT_MS = 120_000
+const COMPOSER_SELECTORS = [
+  "#prompt-textarea",
+  '[data-testid="prompt-textarea"]',
+  '[contenteditable="true"][aria-label*="Chat with ChatGPT" i]',
+  '[contenteditable="true"][aria-label*="Ask ChatGPT" i]',
+  'textarea[placeholder*="Ask ChatGPT" i]:not(.wcDTda_fallbackTextarea)',
+] as const
 
 const LATEST_FORKABLE_TURN_SELECTOR = 'section[data-testid^="conversation-turn-"]:has([data-message-author-role="assistant"])'
 
@@ -30,62 +38,55 @@ export async function createBackgroundPage(browser: Browser, context: BrowserCon
   }
 }
 
-export async function findComposer(page: Page, timeoutMs: number, signal?: AbortSignal): Promise<Locator> {
-  const selectors = [
-    "#prompt-textarea",
-    '[data-testid="prompt-textarea"]',
-    '[contenteditable="true"][aria-label*="Chat with ChatGPT" i]',
-    '[contenteditable="true"][aria-label*="Ask ChatGPT" i]',
-    'textarea[placeholder*="Ask ChatGPT" i]:not(.wcDTda_fallbackTextarea)',
-  ]
-  const deadline = Date.now() + timeoutMs
+export async function findComposer(page: Page, signal?: AbortSignal): Promise<Locator> {
+  const deadline = Date.now() + CHATGPT_OPERATION_TIMEOUT_MS
   while (Date.now() < deadline) {
     throwIfAborted(signal)
-    for (const selector of selectors) {
+    for (const selector of COMPOSER_SELECTORS) {
       const locator = page.locator(selector).first()
       if ((await locator.count()) > 0 && (await locator.isVisible().catch(() => false))) return locator
     }
     await delay(200, signal)
   }
-  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `Could not find the ChatGPT composer within ${timeoutMs} ms.`)
+  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `Could not find the ChatGPT composer within ${CHATGPT_OPERATION_TIMEOUT_MS} ms.`)
 }
 
-export async function forkLatestConversationTurn(page: Page, timeoutMs: number, signal?: AbortSignal): Promise<Page> {
+export async function forkLatestConversationTurn(page: Page, signal?: AbortSignal): Promise<Page> {
   throwIfAborted(signal)
   const sourceUrl = page.url()
   const context = page.context()
   const latestForkableTurn = page.locator(LATEST_FORKABLE_TURN_SELECTOR).last()
-  await waitForVisibleLocator(latestForkableTurn, timeoutMs, signal, "latest forkable assistant turn")
+  await waitForVisibleLocator(latestForkableTurn, CHATGPT_OPERATION_TIMEOUT_MS, signal, "latest forkable assistant turn")
   await latestForkableTurn.scrollIntoViewIfNeeded()
   await latestForkableTurn.hover()
 
   const moreActions = latestForkableTurn.locator('button[aria-label="More actions"]').last()
-  await waitForVisibleLocator(moreActions, timeoutMs, signal, 'latest forkable assistant turn "More actions" button')
+  await waitForVisibleLocator(moreActions, CHATGPT_OPERATION_TIMEOUT_MS, signal, 'latest forkable assistant turn "More actions" button')
   await retryAfterDismissingBlockingOverlay(page, () => moreActions.click(), signal)
 
   const openNewBranch = page.getByRole("menuitem", { name: "Open new branch", exact: true }).last()
-  await waitForVisibleLocator(openNewBranch, timeoutMs, signal, '"Open new branch" menu item')
+  await waitForVisibleLocator(openNewBranch, CHATGPT_OPERATION_TIMEOUT_MS, signal, '"Open new branch" menu item')
   await openNewBranch.focus()
   await openNewBranch.press("ArrowRight")
 
   const branchInNewChat = page.getByRole("menuitem", { name: "Branch in new Chat", exact: true }).last()
-  await waitForVisibleLocator(branchInNewChat, timeoutMs, signal, '"Branch in new Chat" menu item')
+  await waitForVisibleLocator(branchInNewChat, CHATGPT_OPERATION_TIMEOUT_MS, signal, '"Branch in new Chat" menu item')
   const knownPages = new Set(context.pages())
   await branchInNewChat.click()
 
-  const deadline = Date.now() + timeoutMs
+  const deadline = Date.now() + CHATGPT_OPERATION_TIMEOUT_MS
   while (Date.now() < deadline) {
     throwIfAborted(signal)
     const createdPage = context.pages().find((candidate) => !knownPages.has(candidate) && !candidate.isClosed())
     const branchPage = createdPage ?? (page.url() !== sourceUrl ? page : undefined)
     if (branchPage && isChatGptUrl(branchPage.url())) {
-      await findComposer(branchPage, Math.max(1, deadline - Date.now()), signal)
+      await findComposerBefore(branchPage, deadline, signal)
       return branchPage
     }
     await delay(200, signal)
   }
 
-  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `ChatGPT did not open a new branch within ${timeoutMs} ms.`)
+  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `ChatGPT did not open a new branch within ${CHATGPT_OPERATION_TIMEOUT_MS} ms.`)
 }
 
 export async function assertAuthenticated(page: Page): Promise<void> {
@@ -104,35 +105,22 @@ export async function assertAuthenticated(page: Page): Promise<void> {
   }
 }
 
-export function assertManagedChatGptPage(page: Page, agentId: string, conversationUrl?: string): void {
-  if (isExpectedConversationPage(page, conversationUrl)) return
-  throw new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${agentId} no longer owns a usable ChatGPT page.`)
-}
-
-export function isExpectedConversationPage(page: Page, conversationUrl?: string): boolean {
-  if (page.isClosed() || !isChatGptUrl(page.url())) return false
-  const currentConversationId = extractConversationId(page.url())
-  const expectedConversationId = conversationUrl ? extractConversationId(conversationUrl) : undefined
-  return expectedConversationId ? currentConversationId === expectedConversationId : currentConversationId === undefined
-}
-
-export async function navigateAndCaptureConversationPayload(
-  page: Page,
-  conversationUrl: string,
-  conversationId: string,
-  timeoutMs: number,
-  signal?: AbortSignal
-): Promise<unknown | undefined> {
+export async function navigateAndCaptureConversationPayload(page: Page, conversationUrl: string): Promise<unknown | undefined> {
+  const conversationId = extractConversationId(conversationUrl)
+  if (!conversationId) return undefined
   const responsePromise = page
     .waitForResponse((response) => isConversationPayloadUrl(response.url(), conversationId) && response.status() === 200, {
-      timeout: Math.min(timeoutMs, 10_000),
+      timeout: 10_000,
     })
     .then((response) => response.json())
     .catch(() => undefined)
 
-  await waitForPromise(page.goto(conversationUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs }), signal)
-  throwIfAborted(signal)
-  return waitForPromise(responsePromise, signal)
+  await navigateChatGptPage(page, conversationUrl)
+  return responsePromise
+}
+
+export async function navigateChatGptPage(page: Page, url: string, signal?: AbortSignal): Promise<void> {
+  await waitForPromise(page.goto(url, { waitUntil: "domcontentloaded", timeout: CHATGPT_OPERATION_TIMEOUT_MS }), signal)
 }
 
 export async function enterPrompt(page: Page, composer: Locator, prompt: string, signal?: AbortSignal): Promise<void> {
@@ -232,6 +220,18 @@ async function waitForVisibleLocator(locator: Locator, timeoutMs: number, signal
     await delay(100, signal)
   }
   throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `Could not find ${description} within ${timeoutMs} ms.`)
+}
+
+async function findComposerBefore(page: Page, deadline: number, signal?: AbortSignal): Promise<Locator> {
+  while (Date.now() < deadline) {
+    throwIfAborted(signal)
+    for (const selector of COMPOSER_SELECTORS) {
+      const locator = page.locator(selector).first()
+      if ((await locator.count()) > 0 && (await locator.isVisible().catch(() => false))) return locator
+    }
+    await delay(200, signal)
+  }
+  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", "Could not find the ChatGPT composer before the branch operation timed out.")
 }
 
 export function isChatGptUrl(value: string): boolean {

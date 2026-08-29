@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite"
 export interface PersistedSubagent {
   conversationUrl: string
   turnCount: number
-  kind?: "subagent" | "clone"
+  kind: "subagent" | "clone"
 }
 
 export interface SubagentStore {
@@ -63,7 +63,7 @@ export function createSubagentStore(path = subagentDatabasePath()): SubagentStor
       },
       set(agentId, value) {
         try {
-          set.run(agentId, value.conversationUrl, value.turnCount, value.kind ?? "subagent")
+          set.run(agentId, value.conversationUrl, value.turnCount, value.kind)
         } catch {
           // Persistence is best effort. Runtime behavior should continue normally.
         }

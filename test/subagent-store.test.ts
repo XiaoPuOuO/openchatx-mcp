@@ -12,12 +12,12 @@ test("persists subagent conversation state across store reopen", () => {
   try {
     const first = createSubagentStore(path)
     assert.ok(first)
-    first.set("reviewer", { conversationUrl: "https://chatgpt.com/c/example", turnCount: 4 })
+    first.set("reviewer", { conversationUrl: "https://chatgpt.com/c/example", turnCount: 4, kind: "subagent" })
     first.close()
 
     const second = createSubagentStore(path)
     assert.ok(second)
-    assert.deepEqual(second.get("reviewer"), { conversationUrl: "https://chatgpt.com/c/example", turnCount: 4 })
+    assert.deepEqual(second.get("reviewer"), { conversationUrl: "https://chatgpt.com/c/example", turnCount: 4, kind: "subagent" })
     second.close()
   } finally {
     rmSync(directory, { recursive: true, force: true })

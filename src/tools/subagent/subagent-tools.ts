@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
-import { ChatGptSubagentError, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
+import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
 
 const SUBAGENT_RUN_DELAYS_MS = [0, 5_000, 7_000] as const
 
@@ -44,11 +44,8 @@ const subagentRunResultSchema = z.object({
 
 const subagentResultSchema = z.object({
   turn_id: z.string(),
-  status: z.enum(["running", "completed", "failed"]),
-  activity: z
-    .enum(["Working", "Searching the web", "Using tools", "Generating response"])
-    .optional()
-    .describe("Current coarse activity while status is running."),
+  status: chatGptSubagentStatusSchema,
+  activity: chatGptSubagentActivitySchema.optional().describe("Current coarse activity while status is running."),
   activity_age_ms: z.int().nonnegative().optional().describe("Time since the last observable subagent progress while status is running."),
   response: z.string().optional(),
   error: z.string().optional(),
@@ -96,20 +93,19 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
         }
 
         try {
-          const result = await chatGptSubagents.ask(
+          const turnId = await chatGptSubagents.ask(
             {
               agentId: agent.agent_id,
               prompt: agent.prompt,
               oververbosity: agent.oververbosity,
               memory: agent.memory,
-              notificationSessionId,
             },
-            ctx.mcpReq.signal
+            { signal: ctx.mcpReq.signal, notificationSessionId }
           )
           turns.push({
-            agent_id: result.agentId,
-            turn_id: result.turnId,
-            status: result.status,
+            agent_id: agent.agent_id,
+            turn_id: turnId,
+            status: "running",
           })
         } catch (error) {
           turns.push(runFailure(agent.agent_id, error))
@@ -164,7 +160,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
           try {
             const result = await chatGptSubagents.poll(turnId, wait_ms, ctx.mcpReq.signal)
             return {
-              turn_id: result.turnId,
+              turn_id: turnId,
               status: result.status,
               activity: result.activity,
               activity_age_ms: result.activityAgeMs,

@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
-import { ChatGptSubagentError, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
+import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
 
 const cloneSelfResultSchema = z.object({
   clone_id: z.string(),
@@ -20,8 +20,8 @@ const cloneRunResultSchema = z.object({
 
 const cloneResultSchema = z.object({
   turn_id: z.string(),
-  status: z.enum(["running", "completed", "failed"]),
-  activity: z.enum(["Working", "Searching the web", "Using tools", "Generating response"]).optional(),
+  status: chatGptSubagentStatusSchema,
+  activity: chatGptSubagentActivitySchema.optional(),
   activity_age_ms: z.int().nonnegative().optional(),
   response: z.string().optional(),
   error: z.string().optional(),
@@ -35,10 +35,7 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
       description:
         "Fork a ChatGPT conversation into an independent copy of yourself with equivalent reasoning capability. The clone inherits the source through its latest forkable turn, then continues independently with the supplied prompt. Returns a detached turn_id.",
       inputSchema: z.object({
-        conversation_url: z
-          .string()
-          .url()
-          .describe("URL of the ChatGPT conversation to fork. The URL is treated as an opaque source location."),
+        conversation_url: z.url().describe("URL of the ChatGPT conversation to fork. The URL is treated as an opaque source location."),
         clone_id: z
           .string()
           .min(1)
@@ -63,23 +60,19 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
     },
     async ({ conversation_url, clone_id, prompt }, ctx) => {
       try {
-        if (!chatGptAgents.cloneSelf) {
-          throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "This ChatGPT agent service does not support clone_self.")
-        }
-        const result = await chatGptAgents.cloneSelf(
+        const turnId = await chatGptAgents.cloneSelf(
           {
             sourceConversationUrl: conversation_url,
             cloneId: clone_id,
             prompt,
-            notificationSessionId,
           },
-          ctx.mcpReq.signal
+          { signal: ctx.mcpReq.signal, notificationSessionId }
         )
         return {
           structuredContent: {
-            clone_id: result.agentId,
-            turn_id: result.turnId,
-            status: result.status,
+            clone_id,
+            turn_id: turnId,
+            status: "running",
           },
           content: [],
         }
@@ -126,18 +119,12 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
     },
     async ({ clone_id, prompt }, ctx) => {
       try {
-        if (!chatGptAgents.cloneRun) {
-          throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "This ChatGPT agent service does not support clone_run.")
-        }
-        const result = await chatGptAgents.cloneRun(
-          { cloneId: clone_id, prompt, notificationSessionId },
-          ctx.mcpReq.signal
-        )
+        const turnId = await chatGptAgents.cloneRun({ cloneId: clone_id, prompt }, { signal: ctx.mcpReq.signal, notificationSessionId })
         return {
           structuredContent: {
-            clone_id: result.agentId,
-            turn_id: result.turnId,
-            status: result.status,
+            clone_id,
+            turn_id: turnId,
+            status: "running",
           },
           content: [],
         }
@@ -192,13 +179,12 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
           try {
             const result = await chatGptAgents.poll(turnId, wait_ms, ctx.mcpReq.signal)
             return {
-              turn_id: result.turnId,
+              turn_id: turnId,
               status: result.status,
               activity: result.activity,
               activity_age_ms: result.activityAgeMs,
               response: result.response,
-              error:
-                result.status === "failed" ? `${result.errorCode ?? "clone_failed"}: ${result.errorMessage ?? "ChatGPT clone turn failed."}` : undefined,
+              error: result.status === "failed" ? `${result.errorCode ?? "clone_failed"}: ${result.errorMessage ?? "ChatGPT clone turn failed."}` : undefined,
             }
           } catch (error) {
             return {
@@ -219,7 +205,5 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
 }
 
 function cloneErrorText(error: unknown): string {
-  return error instanceof ChatGptSubagentError
-    ? `${error.code}: ${error.message}`
-    : `clone_failed: ${error instanceof Error ? error.message : String(error)}`
+  return error instanceof ChatGptSubagentError ? `${error.code}: ${error.message}` : `clone_failed: ${error instanceof Error ? error.message : String(error)}`
 }

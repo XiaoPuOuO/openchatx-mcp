@@ -10,6 +10,12 @@ test("delivers a completed subagent event on the next MCP response exactly once"
     async ask() {
       throw new Error("unused")
     },
+    async cloneSelf() {
+      throw new Error("unused")
+    },
+    async cloneRun() {
+      throw new Error("unused")
+    },
     async poll() {
       throw new Error("unused")
     },
@@ -51,15 +57,21 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
   let maxActivePolls = 0
 
   const chatGptSubagents: ChatGptSubagentService = {
-    async ask({ agentId, prompt, notificationSessionId }) {
+    async ask({ agentId, prompt }, context) {
       if (agentId === "unavailable-agent") throw new Error("browser unavailable")
-      starts.push({ agentId, at: Date.now(), notificationSessionId })
+      starts.push({ agentId, at: Date.now(), notificationSessionId: context.notificationSessionId })
       const history = histories.get(agentId) ?? []
       history.push(prompt)
       histories.set(agentId, history)
       const turnId = `turn-${agentId}-${history.length}`
       completed.set(turnId, `${agentId}:${history.length}:${prompt}`)
-      return { agentId, turnId, status: "running" }
+      return turnId
+    },
+    async cloneSelf() {
+      throw new Error("unused")
+    },
+    async cloneRun() {
+      throw new Error("unused")
     },
     async poll(turnId) {
       activePolls += 1
@@ -80,6 +92,9 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
       } finally {
         activePolls -= 1
       }
+    },
+    drainEvents() {
+      return []
     },
     async dispose() {},
   }

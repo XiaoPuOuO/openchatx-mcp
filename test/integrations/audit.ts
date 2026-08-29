@@ -13,10 +13,19 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   const auditPath = join(root, "agent-commands.yaml")
   const chatGptSubagents: ChatGptSubagentService = {
     async ask({ agentId }) {
-      return { agentId, turnId: `turn-${agentId}`, status: "running" }
+      return `turn-${agentId}`
+    },
+    async cloneSelf() {
+      throw new Error("unused")
+    },
+    async cloneRun() {
+      throw new Error("unused")
     },
     async poll(turnId) {
       return { turnId, status: "completed", response: "done" }
+    },
+    drainEvents() {
+      return []
     },
     async dispose() {},
   }
