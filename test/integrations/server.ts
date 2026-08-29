@@ -24,7 +24,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "shell_close",
       "subagent_run",
       "subagent_result",
-      "fetch_website",
+      "fetch_url",
       "skill_list",
       "skill_load",
       "image_view",
@@ -44,13 +44,13 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
 
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
-  const fetchWebsite = tools.tools.find((tool) => tool.name === "fetch_website")
+  const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
   const subagentResult = tools.tools.find((tool) => tool.name === "subagent_result")
-  assert.ok(shellRun && shellPoll && fetchWebsite && subagentResult)
+  assert.ok(shellRun && shellPoll && fetchUrl && subagentResult)
 
   const runWait = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
   const pollWait = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
-  const webProperties = fetchWebsite.inputSchema.properties as Record<string, Record<string, unknown>>
+  const webProperties = fetchUrl.inputSchema.properties as Record<string, Record<string, unknown>>
   const webTokens = webProperties.max_output_tokens
   const webCompact = webProperties.compact
   const webFormat = webProperties.format
@@ -63,6 +63,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.equal(webTokens?.maximum, MCP_CONFIG.web.maxOutputTokens)
   assert.equal(webCompact?.default, false)
   assert.deepEqual(webFormat?.enum, ["markdown", "html"])
+  assert.ok(fetchUrl.outputSchema)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
 })

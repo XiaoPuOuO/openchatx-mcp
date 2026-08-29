@@ -2,6 +2,9 @@ import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import test from "node:test"
 
+import sharp from "sharp"
+
+import { WebOpenError } from "../../src/tools/web/web-open.js"
 import { WebPageOpener } from "../../src/tools/web/web-open.js"
 import { connectClient, startMcpHttpServer } from "./helpers.js"
 
@@ -23,11 +26,11 @@ test("renders a real localhost page through the default web stack", { timeout: 6
 
   const running = await startMcpHttpServer({ port: 0 })
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "fetch-website-real-render-client")
+  const connected = await connectClient(running.url, "fetch-url-real-render-client")
   t.after(() => connected.client.close())
 
   const result = await connected.client.callTool({
-    name: "fetch_website",
+    name: "fetch_url",
     arguments: {
       url: `http://127.0.0.1:${address.port}/`,
       format: "markdown",
@@ -132,9 +135,9 @@ test("continues one cached website across MCP client sessions", { timeout: 20_00
   const running = await startMcpHttpServer({ port: 0, webPageOpener })
   t.after(() => running.close())
 
-  const first = await connectClient(running.url, "fetch-website-client-1")
+  const first = await connectClient(running.url, "fetch-url-client-1")
   const firstResult = await first.client.callTool({
-    name: "fetch_website",
+    name: "fetch_url",
     arguments: {
       url: "https://example.com/start",
       format: "html",
@@ -148,10 +151,10 @@ test("continues one cached website across MCP client sessions", { timeout: 20_00
   assert.ok(firstContent.next_cursor)
   await first.client.close()
 
-  const second = await connectClient(running.url, "fetch-website-client-2")
+  const second = await connectClient(running.url, "fetch-url-client-2")
   t.after(() => second.client.close())
   const secondResult = await second.client.callTool({
-    name: "fetch_website",
+    name: "fetch_url",
     arguments: {
       url: "https://example.com/start",
       format: "html",
@@ -265,3 +268,277 @@ test("compact only removes explicit token-heavy markup", { timeout: 60_000 }, as
   assert.match(compactMarkdown.content, /\| Service\s+\| Warranty\s+\|/)
   assert.doesNotMatch(compactMarkdown.content, /Site Navigation|Site Footer|ARIA hidden detail|Hidden detail|Inline hidden detail/)
 })
+
+test("extracts PDF text and decodes common text resources", { timeout: 60_000 }, async (t) => {
+  const pdf = createTextPdf("PDF extraction works")
+  const pageServer = createServer((request, response) => {
+    if (request.url === "/guide.pdf") {
+      response.writeHead(200, { "content-type": "application/pdf", "content-length": pdf.length })
+      response.end(pdf)
+      return
+    }
+    if (request.url === "/broken.json") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" })
+      response.end('{"broken":')
+      return
+    }
+    if (request.url === "/looks-like-pdf.txt") {
+      response.writeHead(200, { "content-type": "text/plain; charset=utf-8" })
+      response.end("plain text containing %PDF- inside the first kilobyte")
+      return
+    }
+    response.writeHead(200, { "content-type": "application/json; charset=utf-8" })
+    response.end('{"ok":true,"source":"fetch_url","id":9007199254740993}')
+  })
+  await new Promise<void>((resolve, reject) => {
+    pageServer.once("error", reject)
+    pageServer.listen(0, "127.0.0.1", resolve)
+  })
+  t.after(async () => {
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+  })
+
+  const address = pageServer.address()
+  assert.ok(address && typeof address !== "string")
+  const opener = new WebPageOpener()
+
+  const json = await opener.open({
+    url: `http://127.0.0.1:${address.port}/data.json`,
+    format: "markdown",
+    compact: false,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+  assert.equal(json.kind, "text")
+  assert.equal(json.content_type, "application/json; charset=utf-8")
+  assert.equal(json.content, '{"ok":true,"source":"fetch_url","id":9007199254740993}')
+
+  const malformedJson = await opener.open({
+    url: `http://127.0.0.1:${address.port}/broken.json`,
+    format: "markdown",
+    compact: false,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+  assert.equal(malformedJson.content, '{"broken":')
+
+  const textContainingPdfMagic = await opener.open({
+    url: `http://127.0.0.1:${address.port}/looks-like-pdf.txt`,
+    format: "markdown",
+    compact: false,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+  assert.equal(textContainingPdfMagic.content, "plain text containing %PDF- inside the first kilobyte")
+
+  const extractedPdf = await opener.open({
+    url: `http://127.0.0.1:${address.port}/guide.pdf`,
+    format: "markdown",
+    compact: false,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+  assert.equal(extractedPdf.kind, "text")
+  assert.equal(extractedPdf.content_type, "application/pdf")
+  assert.match(extractedPdf.content, /^## Page 1/m)
+  assert.match(extractedPdf.content, /PDF extraction works/)
+})
+
+test("returns direct image URLs as native MCP image content", { timeout: 60_000 }, async (t) => {
+  const image = await sharp({
+    create: { width: 32, height: 16, channels: 3, background: { r: 20, g: 40, b: 60 } },
+  })
+    .png()
+    .toBuffer()
+  const pageServer = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "image/png", "content-length": image.length })
+    response.end(image)
+  })
+  await new Promise<void>((resolve, reject) => {
+    pageServer.once("error", reject)
+    pageServer.listen(0, "127.0.0.1", resolve)
+  })
+  t.after(async () => {
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+  })
+
+  const address = pageServer.address()
+  assert.ok(address && typeof address !== "string")
+  const running = await startMcpHttpServer({ port: 0 })
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "fetch-url-image-client")
+  t.after(() => connected.client.close())
+
+  const result = await connected.client.callTool({
+    name: "fetch_url",
+    arguments: { url: `http://127.0.0.1:${address.port}/pixel.png` },
+  })
+  assert.equal(result.isError, undefined)
+  const imageBlock = result.content.find((item) => item.type === "image")
+  assert.ok(imageBlock && imageBlock.type === "image")
+  assert.equal(imageBlock.mimeType, "image/jpeg")
+  assert.ok(imageBlock.data.length > 0)
+  assert.deepEqual(result.structuredContent, {
+    url: `http://127.0.0.1:${address.port}/pixel.png`,
+    title: "pixel.png",
+    status: 200,
+    content_type: "image/png",
+    content: "",
+  })
+})
+
+test("preserves browser-discovered cookies across redirected resources without refetching the final URL", { timeout: 60_000 }, async (t) => {
+  let secretRequests = 0
+  const pageServer = createServer((request, response) => {
+    if (request.url === "/download") {
+      response.writeHead(302, { location: "/secret.txt", "set-cookie": "fetch_token=allowed; Path=/; HttpOnly" })
+      response.end()
+      return
+    }
+    secretRequests += 1
+    if (!request.headers.cookie?.includes("fetch_token=allowed")) {
+      response.writeHead(401, { "content-type": "text/plain" })
+      response.end("missing browser session")
+      return
+    }
+    response.writeHead(200, { "content-type": "text/plain; charset=utf-8" })
+    response.end("authenticated redirected resource")
+  })
+  await new Promise<void>((resolve, reject) => {
+    pageServer.once("error", reject)
+    pageServer.listen(0, "127.0.0.1", resolve)
+  })
+  t.after(async () => {
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+  })
+
+  const address = pageServer.address()
+  assert.ok(address && typeof address !== "string")
+  const opener = new WebPageOpener()
+  const result = await opener.open({
+    url: `http://127.0.0.1:${address.port}/download`,
+    format: "markdown",
+    compact: false,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+
+  assert.equal(result.status, 200)
+  assert.equal(result.url, `http://127.0.0.1:${address.port}/secret.txt`)
+  assert.equal(result.content, "authenticated redirected resource")
+  assert.equal(secretRequests, 1)
+})
+
+test("sniffs headerless HTML, PDF, image, and text responses", { timeout: 60_000 }, async (t) => {
+  const pdf = createTextPdf("Headerless PDF")
+  const image = await sharp({
+    create: { width: 24, height: 12, channels: 3, background: { r: 10, g: 20, b: 30 } },
+  })
+    .png()
+    .toBuffer()
+  const pageServer = createServer((request, response) => {
+    response.statusCode = 200
+    if (request.url === "/page") response.end("<!doctype html><html><head><title>Headerless HTML</title></head><body><h1>Rendered headerless HTML</h1></body></html>")
+    else if (request.url === "/doc") response.end(pdf)
+    else if (request.url === "/image") response.end(image)
+    else response.end("headerless plain text")
+  })
+  await new Promise<void>((resolve, reject) => {
+    pageServer.once("error", reject)
+    pageServer.listen(0, "127.0.0.1", resolve)
+  })
+  t.after(async () => {
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+  })
+
+  const address = pageServer.address()
+  assert.ok(address && typeof address !== "string")
+  const opener = new WebPageOpener()
+  const base = `http://127.0.0.1:${address.port}`
+
+  const html = await opener.open({ url: `${base}/page`, format: "markdown", compact: true, maxOutputTokens: opener.maximumOutputTokens })
+  assert.equal(html.title, "Headerless HTML")
+  assert.match(html.content, /Rendered headerless HTML/)
+
+  const extractedPdf = await opener.open({ url: `${base}/doc`, format: "markdown", compact: false, maxOutputTokens: opener.maximumOutputTokens })
+  assert.match(extractedPdf.content, /Headerless PDF/)
+
+  const fetchedImage = await opener.open({ url: `${base}/image`, format: "markdown", compact: false, maxOutputTokens: opener.maximumOutputTokens })
+  assert.equal(fetchedImage.kind, "image")
+  assert.equal(fetchedImage.image?.width, 24)
+  assert.equal(fetchedImage.image?.height, 12)
+
+  const text = await opener.open({ url: `${base}/text`, format: "markdown", compact: false, maxOutputTokens: opener.maximumOutputTokens })
+  assert.equal(text.content, "headerless plain text")
+})
+
+test("rejects unsupported and oversized binary resources explicitly", { timeout: 60_000 }, async (t) => {
+  const pageServer = createServer((request, response) => {
+    if (request.url === "/chunked-large.bin") {
+      response.writeHead(200, { "content-type": "application/octet-stream" })
+      response.write(Buffer.alloc(40, 1))
+      response.end(Buffer.alloc(40, 1))
+      return
+    }
+    const body = request.url === "/large.bin" ? Buffer.alloc(128, 1) : Buffer.from([0, 1, 2, 3])
+    response.writeHead(200, { "content-type": "application/octet-stream", "content-length": body.length })
+    response.end(body)
+  })
+  await new Promise<void>((resolve, reject) => {
+    pageServer.once("error", reject)
+    pageServer.listen(0, "127.0.0.1", resolve)
+  })
+  t.after(async () => {
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+  })
+
+  const address = pageServer.address()
+  assert.ok(address && typeof address !== "string")
+  const opener = new WebPageOpener({ resourceByteLimit: 64 })
+
+  await assert.rejects(
+    opener.open({
+      url: `http://127.0.0.1:${address.port}/blob.bin`,
+      format: "markdown",
+      compact: false,
+      maxOutputTokens: opener.maximumOutputTokens,
+    }),
+    (error: unknown) => error instanceof WebOpenError && error.code === "unsupported_content_type"
+  )
+  await assert.rejects(
+    opener.open({
+      url: `http://127.0.0.1:${address.port}/large.bin`,
+      format: "markdown",
+      compact: false,
+      maxOutputTokens: opener.maximumOutputTokens,
+    }),
+    (error: unknown) => error instanceof WebOpenError && error.code === "resource_too_large"
+  )
+  await assert.rejects(
+    opener.open({
+      url: `http://127.0.0.1:${address.port}/chunked-large.bin`,
+      format: "markdown",
+      compact: false,
+      maxOutputTokens: opener.maximumOutputTokens,
+    }),
+    (error: unknown) => error instanceof WebOpenError && error.code === "resource_too_large"
+  )
+})
+
+function createTextPdf(text: string): Buffer {
+  const escaped = text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)")
+  const stream = `BT /F1 18 Tf 72 720 Td (${escaped}) Tj ET`
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    `5 0 obj\n<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream\nendobj\n`,
+  ]
+  let pdf = "%PDF-1.4\n"
+  const offsets: number[] = []
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf, "latin1"))
+    pdf += object
+  }
+  const xrefOffset = Buffer.byteLength(pdf, "latin1")
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  pdf += offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
+  return Buffer.from(pdf, "latin1")
+}

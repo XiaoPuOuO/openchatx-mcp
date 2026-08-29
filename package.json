@@ -54,6 +54,7 @@
     "pm2": "7.0.3",
     "sharp": "^0.35.3",
     "tiktoken": "^1.0.22",
+    "unpdf": "1.8.1",
     "zod": "4.4.3"
   },
   "devDependencies": {

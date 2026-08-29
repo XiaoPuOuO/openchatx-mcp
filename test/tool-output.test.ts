@@ -89,6 +89,23 @@ test("compact result preserves existing content and removes structuredContent", 
   assert.deepEqual(compact.content, [{ type: "text", text: "Command finished.\n\nstatus=completed output=hello" }])
 })
 
+test("compact fetch_url image results preserve native image content while rendering metadata", () => {
+  const result = compactToolResult("fetch_url", {
+    structuredContent: {
+      url: "https://example.com/pixel.png",
+      title: "pixel.png",
+      status: 200,
+      content_type: "image/png",
+      content: "",
+    },
+    content: [{ type: "image", data: "abc", mimeType: "image/jpeg" }],
+  }) as { structuredContent?: unknown; content?: Array<{ type: string; text?: string; data?: string }> }
+
+  assert.equal(result.structuredContent, undefined)
+  assert.equal(result.content?.some((item) => item.type === "image" && item.data === "abc"), true)
+  assert.match(result.content?.find((item) => item.type === "text")?.text ?? "", /url=https:\/\/example.com\/pixel.png.*status=200.*content_type=image\/png/)
+})
+
 test("subagent formatter preserves fenced Markdown from the frozen real ChatGPT fixture", async () => {
   const payload = JSON.parse(await readFile(new URL("./fixtures/chatgpt-live-fixture/conversation.json", import.meta.url), "utf8")) as unknown
   const assistant = extractConversationMessages(payload)
@@ -180,7 +197,7 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
       '---- turn_id=reviewer_turn_1 status=completed ----\n\n## Review\n\nArchitecture looks good.\n\n---- turn_id=tester_turn_1 status=running activity="Using tools" activity_age_ms=2750 ----',
   },
   {
-    tool: "fetch_website",
+    tool: "fetch_url",
     structuredContent: {
       url: "https://example.com/docs",
       title: "Example Page",

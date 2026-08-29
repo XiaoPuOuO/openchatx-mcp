@@ -40,7 +40,7 @@ Run the cheapest focused test first, then the broader commands when the change w
 
 As verified on 2026-08-26, published tool definitions cost about 5,800 `o200k_base` tokens in `always` mode, 4,552 in `optional` mode, and 4,346 in the production `never` mode.
 
-`npm run schemas` starts the MCP on an ephemeral localhost port, connects with the real MCP client, calls `tools/list`, and prints the returned tool definitions as formatted JSON. Pass tool names after `--` to filter the output, for example `npm run schemas -- shell_run fetch_website` (`scripts/tool-schemas.ts`, `src/server/http-server.ts`).
+`npm run schemas` starts the MCP on an ephemeral localhost port, connects with the real MCP client, calls `tools/list`, and prints the returned tool definitions as formatted JSON. Pass tool names after `--` to filter the output, for example `npm run schemas -- shell_run fetch_url` (`scripts/tool-schemas.ts`, `src/server/http-server.ts`).
 
 ## Test Architecture
 

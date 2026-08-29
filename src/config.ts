@@ -47,6 +47,7 @@ export const MCP_CONFIG = {
     defaultOutputTokens: 8_192,
     maxOutputTokens: 32_768,
     documentByteLimit: 2 * 1024 * 1024,
+    resourceByteLimit: 16 * 1024 * 1024,
     documentTtlMs: 10 * 60 * 1_000,
     documentLimit: 20,
   },
