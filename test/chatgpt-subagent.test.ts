@@ -17,6 +17,7 @@ import {
   endAgentOperation,
   ensureAgentPage,
   pollSubagent,
+  waitForTurnResponse,
   type BrowserAgentState,
   type BrowserTurnState,
   type ChatGptSubagentRuntimeState,
@@ -94,6 +95,7 @@ test("new agents start from configured project URL", async () => {
   }
   installBackgroundPage(runtime, page)
   const agent = await createAgent(runtime, "project-agent")
+  assert.equal(agent.memory, true)
   assert.equal(agent.page, page)
   assert.deepEqual(navigations, ["https://chatgpt.com/g/g-p-example/project"])
 })
@@ -119,7 +121,86 @@ test("memoryless agents start in temporary chat without retaining a conversation
 
   const agent = await createAgent(runtime, "memoryless-agent", undefined, false)
 
+  assert.equal(agent.memory, false)
   assert.equal(agent.page, page)
+  assert.equal(agent.conversationUrl, undefined)
+  assert.deepEqual(navigations, ["https://chatgpt.com/?temporary-chat=true"])
+})
+
+test("memoryless completion does not bind or persist a conversation and turn two reuses temporary chat", async () => {
+  const runtime = createRuntime({ chatGptUrl: "https://chatgpt.com/g/g-p-example/project" })
+  let persisted = 0
+  runtime.store = {
+    get: () => ({ conversationUrl: "https://chatgpt.com/c/stale", turnCount: 9 }),
+    set: () => {
+      persisted += 1
+    },
+    clear: () => undefined,
+    close: () => undefined,
+  }
+  let navigated = false
+  const page = {
+    isClosed: () => false,
+    url: () => "https://chatgpt.com/?temporary-chat=true",
+    goto: async () => {
+      navigated = true
+    },
+  }
+  const agent: BrowserAgentState = {
+    agentId: "memoryless-complete",
+    memory: false,
+    status: "Generating response",
+    page: page as never,
+    lastUsedAt: Date.now(),
+    turnCount: 1,
+  }
+  const turn = createRunningTurn(agent.agentId, Date.now())
+  turn.observation = {
+    response: Promise.resolve({ text: "temporary answer", conversationId: "temporary-conversation" }),
+    dispose: async () => undefined,
+  }
+  runtime.agents.set(agent.agentId, agent)
+  runtime.turns.set(turn.turnId, turn)
+  runtime.activeOperations.set(agent.agentId, turn.turnId)
+
+  await waitForTurnResponse(runtime, turn, agent)
+
+  assert.equal(turn.status, "completed")
+  assert.equal(turn.response, "temporary answer")
+  assert.equal(agent.conversationUrl, undefined)
+  assert.equal(persisted, 0)
+  assert.equal(await ensureAgentPage(runtime, agent), page)
+  assert.equal(navigated, false)
+})
+
+test("memoryless creation ignores an existing persisted conversation mapping", async () => {
+  const runtime = createRuntime({ chatGptUrl: "https://chatgpt.com/g/g-p-example/project" })
+  runtime.store = {
+    get: () => ({ conversationUrl: "https://chatgpt.com/c/stale", turnCount: 9 }),
+    set: () => undefined,
+    clear: () => undefined,
+    close: () => undefined,
+  }
+  let currentUrl = "about:blank"
+  const navigations: string[] = []
+  const page = {
+    isClosed: () => false,
+    url: () => currentUrl,
+    setViewportSize: async () => undefined,
+    goto: async (url: string) => {
+      currentUrl = url
+      navigations.push(url)
+    },
+    close: async () => undefined,
+    locator: (selector: string) => ({
+      first: () => ({ count: async () => (selector === "#prompt-textarea" ? 1 : 0), isVisible: async () => selector === "#prompt-textarea" }),
+    }),
+  }
+  installBackgroundPage(runtime, page)
+
+  const agent = await createAgent(runtime, "stale-memoryless", undefined, false)
+
+  assert.equal(agent.turnCount, 0)
   assert.equal(agent.conversationUrl, undefined)
   assert.deepEqual(navigations, ["https://chatgpt.com/?temporary-chat=true"])
 })
@@ -198,7 +279,7 @@ test("same agent keeps one page across multiple turns and captures conversation 
     },
     close: async () => closeHandler?.(),
   }
-  const agent: BrowserAgentState = { agentId: "multi", status: "idle", page: page as never, lastUsedAt: Date.now(), turnCount: 0 }
+  const agent: BrowserAgentState = { agentId: "multi", memory: true, status: "idle", page: page as never, lastUsedAt: Date.now(), turnCount: 0 }
   runtime.browser = { isConnected: () => true, close: async () => undefined } as never
   runtime.context = { pages: () => [page] } as never
   runtime.agents.set(agent.agentId, agent)
@@ -249,6 +330,7 @@ test("wrong conversation URL is restored on the same managed page before submiss
   }
   const agent: BrowserAgentState = {
     agentId: "restore-same-page",
+    memory: true,
     status: "idle",
     page: page as never,
     conversationUrl: "https://chatgpt.com/c/correct",
@@ -272,6 +354,7 @@ test("idle cleanup closes only the page and a later turn restores the saved conv
   }
   const agent: BrowserAgentState = {
     agentId: "idle",
+    memory: true,
     status: "idle",
     page: oldPage as never,
     conversationUrl: "https://chatgpt.com/c/saved",
@@ -313,7 +396,7 @@ test("30 minutes without progress fails an unbound turn and releases capacity", 
   const runtime = createRuntime()
   const now = 30 * 60_000 + 10
   const page = { isClosed: () => false, url: () => "https://chatgpt.com/" }
-  const agent: BrowserAgentState = { agentId: "stalled", status: "Generating response", page: page as never, lastUsedAt: 1, turnCount: 1 }
+  const agent: BrowserAgentState = { agentId: "stalled", memory: true, status: "Generating response", page: page as never, lastUsedAt: 1, turnCount: 1 }
   const turn = createRunningTurn(agent.agentId, 1)
   runtime.agents.set(agent.agentId, agent)
   runtime.turns.set(turn.turnId, turn)
@@ -338,6 +421,7 @@ test("30-minute cutoff performs one recovery and settles from saved conversation
   }
   const agent: BrowserAgentState = {
     agentId: "recover",
+    memory: true,
     status: "Generating response",
     page: oldPage as never,
     conversationUrl: "https://chatgpt.com/c/recovery",
@@ -404,6 +488,7 @@ test("one-shot recovery fails immediately when history has no final answer", asy
   const oldPage = { isClosed: () => false, url: () => "https://chatgpt.com/c/missing", close: async () => undefined }
   const agent: BrowserAgentState = {
     agentId: "recover-missing",
+    memory: true,
     status: "Generating response",
     page: oldPage as never,
     conversationUrl: "https://chatgpt.com/c/missing",
@@ -453,7 +538,7 @@ test("one-shot recovery fails immediately when history has no final answer", asy
 
 test("running poll activity comes from agent lifecycle state", async () => {
   const runtime = createRuntime()
-  const agent: BrowserAgentState = { agentId: "progress", status: "Searching the web", lastUsedAt: Date.now(), turnCount: 1 }
+  const agent: BrowserAgentState = { agentId: "progress", memory: true, status: "Searching the web", lastUsedAt: Date.now(), turnCount: 1 }
   const turn = createRunningTurn(agent.agentId, Date.now())
   runtime.agents.set(agent.agentId, agent)
   runtime.turns.set(turn.turnId, turn)

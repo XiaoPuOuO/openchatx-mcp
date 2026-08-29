@@ -50,6 +50,7 @@ export type BrowserAgentStatus = "idle" | "uncertain" | ChatGptSubagentActivity
 
 export interface BrowserAgentState {
   agentId: string
+  memory: boolean
   status: BrowserAgentStatus
   page?: Page
   conversationUrl?: string
@@ -237,16 +238,16 @@ export async function createAgent(
   signal?: AbortSignal,
   memory = true
 ): Promise<BrowserAgentState> {
-  const persisted = state.store?.get(agentId)
+  const persisted = memory ? state.store?.get(agentId) : undefined
   const agent: BrowserAgentState = {
     agentId,
+    memory,
     status: "idle",
     lastUsedAt: Date.now(),
     turnCount: persisted?.turnCount ?? 0,
-    conversationUrl: persisted?.conversationUrl ?? (memory ? undefined : TEMPORARY_CHAT_URL),
+    conversationUrl: persisted?.conversationUrl,
   }
   await ensureAgentPage(state, agent, signal)
-  if (!persisted && !memory) agent.conversationUrl = undefined
   state.agents.set(agentId, agent)
   return agent
 }
@@ -256,7 +257,7 @@ export async function ensureAgentPage(state: ChatGptSubagentRuntimeState, agent:
   const page = agent.page && !agent.page.isClosed() ? agent.page : undefined
   if (agent.turnCount > 0) captureConversationUrlFromPage(agent)
   if (page && isExpectedConversationPage(page, agent.conversationUrl)) return page
-  const targetUrl = agent.conversationUrl ?? (agent.turnCount === 0 ? state.chatGptUrl : undefined)
+  const targetUrl = agent.conversationUrl ?? (agent.turnCount === 0 ? (agent.memory ? state.chatGptUrl : TEMPORARY_CHAT_URL) : undefined)
   if (!targetUrl) {
     throw new ChatGptSubagentError("AGENT_TARGET_LOST", `ChatGPT subagent ${agent.agentId} lost its page before its conversation URL was saved.`)
   }
@@ -482,6 +483,7 @@ async function createManagedPage(state: ChatGptSubagentRuntimeState): Promise<Pa
 }
 
 function bindConversation(state: ChatGptSubagentRuntimeState, agent: BrowserAgentState, conversationId: string, startUrl: string): void {
+  if (!agent.memory) return
   const pageUrl = agent.page && !agent.page.isClosed() ? agent.page.url() : undefined
   if (pageUrl && extractConversationId(pageUrl) === conversationId) agent.conversationUrl = pageUrl
   else if (extractConversationId(agent.conversationUrl ?? "") !== conversationId) {
@@ -491,13 +493,13 @@ function bindConversation(state: ChatGptSubagentRuntimeState, agent: BrowserAgen
 }
 
 function captureConversationUrlFromPage(agent: BrowserAgentState): void {
-  if (agent.conversationUrl || !agent.page || agent.page.isClosed()) return
+  if (!agent.memory || agent.conversationUrl || !agent.page || agent.page.isClosed()) return
   const pageUrl = agent.page.url()
   if (extractConversationId(pageUrl)) agent.conversationUrl = pageUrl
 }
 
 function persistAgent(state: ChatGptSubagentRuntimeState, agent: BrowserAgentState): void {
-  if (!agent.conversationUrl) return
+  if (!agent.memory || !agent.conversationUrl) return
   state.store?.set(agent.agentId, { conversationUrl: agent.conversationUrl, turnCount: agent.turnCount })
 }
 
