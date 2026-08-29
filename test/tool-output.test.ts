@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import { extractConversationMessages } from "../src/tools/subagent/chatgpt-subagent-protocol.js"
-import { compactToolResult, formatOutputBlock, renderStructuredContent } from "../src/server/tool-output.js"
+import { appendToolEvents, compactToolResult, formatOutputBlock, renderStructuredContent } from "../src/server/tool-output.js"
 import { countTokens } from "../src/tokenizer.js"
 
 test("renders compact scalar metadata and multiline strings without losing values", () => {
@@ -28,6 +28,18 @@ test("does not treat changed or failed as block strings by default", () => {
 
 test("formats top-level output blocks with a shared boundary", () => {
   assert.equal(formatOutputBlock(["turn_id=test_turn_1", "status=completed"], "## Result\n\nDone."), "---- turn_id=test_turn_1 status=completed ----\n\n## Result\n\nDone.")
+})
+
+test("formats global tool events as notices", () => {
+  const result = appendToolEvents(
+    { content: [{ type: "text", text: "Done." }] },
+    ["Use the `apply_patch` MCP tool over `shell_run` for file changes.", "agent_finished agent_id=reviewer turn_id=reviewer_turn_1"]
+  ) as { content: Array<{ type: string; text: string }> }
+
+  assert.equal(
+    result.content[0]?.text,
+    "Done.\n\n**Notice:** Use the `apply_patch` MCP tool over `shell_run` for file changes.\n**Notice:** agent_finished agent_id=reviewer turn_id=reviewer_turn_1"
+  )
 })
 
 test("quotes strings that would otherwise be indistinguishable from non-string scalars", () => {

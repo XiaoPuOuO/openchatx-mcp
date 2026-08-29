@@ -101,7 +101,7 @@ test("omits default and irrelevant read-only annotations while preserving extens
 })
 
 test("emits apply_patch notice for obvious shell file edits", () => {
-  const notice = "NOTICE: Use the `apply_patch` MCP tool over `shell_run` for file changes."
+  const notice = "Use the `apply_patch` MCP tool over `shell_run` for file changes."
   const commands = [
     "cat > notes.txt <<'EOF'\nhello\nEOF",
     "echo hello >> notes.txt",

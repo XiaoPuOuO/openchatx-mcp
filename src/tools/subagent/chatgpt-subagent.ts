@@ -424,7 +424,7 @@ function completeTurn(state: ChatGptSubagentRuntimeState, turn: BrowserTurnState
   settleTurn(state, turn, agent)
   const sessionKey = turn.notificationSessionId ?? ""
   const events = state.pendingEvents.get(sessionKey) ?? []
-  events.push(`agent_finished:${turn.agentId}:${turn.turnId}`)
+  events.push(`agent_finished agent_id=${turn.agentId} turn_id=${turn.turnId}`)
   state.pendingEvents.set(sessionKey, events)
 }
 

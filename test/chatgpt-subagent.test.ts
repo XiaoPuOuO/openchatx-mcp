@@ -289,7 +289,7 @@ test("same agent keeps one page across multiple turns and captures conversation 
   assert.equal(firstResult.response, "answer-1")
   assert.equal(agent.status, "idle")
   assert.equal(agent.conversationUrl, "https://chatgpt.com/c/conversation-1")
-  assert.deepEqual(runtime.pendingEvents.get("session-1"), ["agent_finished:multi:multi_turn_1"])
+  assert.deepEqual(runtime.pendingEvents.get("session-1"), ["agent_finished agent_id=multi turn_id=multi_turn_1"])
   assert.equal(runtime.pendingEvents.has(""), false)
   assert.match(inserted, /Respond terse like smart caveman/)
 

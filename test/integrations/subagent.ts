@@ -5,7 +5,7 @@ import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-su
 import { connectClient, startMcpHttpServer } from "./helpers.js"
 
 test("delivers a completed subagent event on the next MCP response exactly once", { timeout: 10_000 }, async (t) => {
-  const events = new Map([["launch-session", ["agent_finished:reviewer:reviewer_turn_1"]]])
+  const events = new Map([["launch-session", ["agent_finished agent_id=reviewer turn_id=reviewer_turn_1"]]])
   const chatGptSubagents: ChatGptSubagentService = {
     async ask() {
       throw new Error("unused")
@@ -35,7 +35,7 @@ test("delivers a completed subagent event on the next MCP response exactly once"
   const first = await connected.client.callTool({ name: "shell_list", arguments: {} })
   const firstText = first.content.find((item) => item.type === "text")
   assert.ok(firstText?.type === "text")
-  assert.match(firstText.text, /agent_finished.*reviewer.*reviewer_turn_1/)
+  assert.match(firstText.text, /\*\*Notice:\*\* agent_finished agent_id=reviewer turn_id=reviewer_turn_1/)
 
   const second = await connected.client.callTool({ name: "shell_list", arguments: {} })
   const secondText = second.content.find((item) => item.type === "text")
