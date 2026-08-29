@@ -9,6 +9,7 @@ import { registerImageTools } from "../tools/image/image-tools.js"
 import { registerShellExecutionTools, registerShellManagementTools } from "../tools/shell/shell-tools.js"
 import type { ShellSessionManager } from "../tools/shell/session-manager.js"
 import { registerSkillTools } from "../tools/skills.js"
+import { registerCloneTools } from "../tools/subagent/clone-tools.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
 import { registerSubagentTools } from "../tools/subagent/subagent-tools.js"
 import { WebPageOpener } from "../tools/web/web-open.js"
@@ -42,6 +43,7 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
   // registerIosShellTool(server)
   registerApplyPatchTool(server, options.applyPatchExecutable)
   registerShellManagementTools(server, shells)
+  registerCloneTools(server, options.chatGptSubagents, options.notificationSessionId)
   registerSubagentTools(server, options.chatGptSubagents, options.notificationSessionId)
   registerWebTool(server, options.webPageOpener)
   registerSkillTools(server, workspace)

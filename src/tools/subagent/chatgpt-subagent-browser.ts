@@ -4,6 +4,8 @@ import { ChatGptSubagentError } from "./chatgpt-subagent-contracts.js"
 
 const BACKGROUND_PAGE_BIND_TIMEOUT_MS = 5_000
 
+const LATEST_FORKABLE_TURN_SELECTOR = 'section[data-testid^="conversation-turn-"]:has([data-message-author-role="assistant"])'
+
 export async function createBackgroundPage(browser: Browser, context: BrowserContext): Promise<Page> {
   const knownPages = new Set(context.pages())
   const session = await browser.newBrowserCDPSession()
@@ -46,6 +48,44 @@ export async function findComposer(page: Page, timeoutMs: number, signal?: Abort
     await delay(200, signal)
   }
   throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `Could not find the ChatGPT composer within ${timeoutMs} ms.`)
+}
+
+export async function forkLatestConversationTurn(page: Page, timeoutMs: number, signal?: AbortSignal): Promise<Page> {
+  throwIfAborted(signal)
+  const sourceUrl = page.url()
+  const context = page.context()
+  const latestForkableTurn = page.locator(LATEST_FORKABLE_TURN_SELECTOR).last()
+  await waitForVisibleLocator(latestForkableTurn, timeoutMs, signal, "latest forkable assistant turn")
+  await latestForkableTurn.scrollIntoViewIfNeeded()
+  await latestForkableTurn.hover()
+
+  const moreActions = latestForkableTurn.locator('button[aria-label="More actions"]').last()
+  await waitForVisibleLocator(moreActions, timeoutMs, signal, 'latest forkable assistant turn "More actions" button')
+  await retryAfterDismissingBlockingOverlay(page, () => moreActions.click(), signal)
+
+  const openNewBranch = page.getByRole("menuitem", { name: "Open new branch", exact: true }).last()
+  await waitForVisibleLocator(openNewBranch, timeoutMs, signal, '"Open new branch" menu item')
+  await openNewBranch.focus()
+  await openNewBranch.press("ArrowRight")
+
+  const branchInNewChat = page.getByRole("menuitem", { name: "Branch in new Chat", exact: true }).last()
+  await waitForVisibleLocator(branchInNewChat, timeoutMs, signal, '"Branch in new Chat" menu item')
+  const knownPages = new Set(context.pages())
+  await branchInNewChat.click()
+
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    throwIfAborted(signal)
+    const createdPage = context.pages().find((candidate) => !knownPages.has(candidate) && !candidate.isClosed())
+    const branchPage = createdPage ?? (page.url() !== sourceUrl ? page : undefined)
+    if (branchPage && isChatGptUrl(branchPage.url())) {
+      await findComposer(branchPage, Math.max(1, deadline - Date.now()), signal)
+      return branchPage
+    }
+    await delay(200, signal)
+  }
+
+  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `ChatGPT did not open a new branch within ${timeoutMs} ms.`)
 }
 
 export async function assertAuthenticated(page: Page): Promise<void> {
@@ -182,6 +222,16 @@ async function retryAfterDismissingBlockingOverlay<T>(page: Page, action: () => 
     if (!(await dismissBlockingChatGptOverlay(page, signal))) throw error
     return action()
   }
+}
+
+async function waitForVisibleLocator(locator: Locator, timeoutMs: number, signal: AbortSignal | undefined, description: string): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    throwIfAborted(signal)
+    if ((await locator.count()) > 0 && (await locator.isVisible().catch(() => false))) return
+    await delay(100, signal)
+  }
+  throw new ChatGptSubagentError("CHATGPT_UI_CHANGED", `Could not find ${description} within ${timeoutMs} ms.`)
 }
 
 export function isChatGptUrl(value: string): boolean {

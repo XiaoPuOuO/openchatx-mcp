@@ -1,7 +1,6 @@
 import type { Browser, BrowserContext, Page } from "playwright-core"
 
 import { MCP_CONFIG } from "../../config.js"
-import { nonNegativeInteger, positiveInteger } from "../../utils.js"
 import {
   assertAuthenticated,
   assertManagedChatGptPage,
@@ -11,6 +10,7 @@ import {
   enterPrompt,
   extractConversationId,
   findComposer,
+  forkLatestConversationTurn,
   isChatGptUrl,
   isExpectedConversationPage,
   navigateAndCaptureConversationPayload,
@@ -23,6 +23,8 @@ import { extractConversationMessages, findLatestAssistantAfterPrompt } from "./c
 import { createSubagentStore, type SubagentStore } from "./subagent-store.js"
 import {
   ChatGptSubagentError,
+  type ChatGptCloneRunRequest,
+  type ChatGptCloneSelfRequest,
   type ChatGptSubagentActivity,
   type ChatGptSubagentOptions,
   type ChatGptSubagentPollResult,
@@ -37,6 +39,7 @@ const MAX_CONCURRENT_AGENTS = 3
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60_000
 const RATE_LIMIT_SELECTOR = '[data-testid="modal-conversation-history-rate-limit"]'
 const RATE_LIMIT_DISMISS_SETTLE_MS = 250
+const CLONE_INITIAL_SETTLE_MS = 5_000
 const RATE_LIMIT_ERROR_MESSAGE =
   "ChatGPT temporarily rate limited conversation access. New subagent turns are blocked during a 15-minute cooldown. Existing turns remain available through subagent_result. Do not retry automatically."
 const SUBMISSION_GRACE_MS = 500
@@ -50,6 +53,7 @@ export type BrowserAgentStatus = "idle" | "uncertain" | ChatGptSubagentActivity
 
 export interface BrowserAgentState {
   agentId: string
+  kind?: "subagent" | "clone"
   memory: boolean
   status: BrowserAgentStatus
   page?: Page
@@ -70,6 +74,7 @@ export interface BrowserTurnState {
   errorCode?: string
   errorMessage?: string
   prompt: string
+  bindConversationFromObserver?: boolean
   observation?: AssistantResponseObservation
   settled: Promise<void>
   settle: () => void
@@ -98,6 +103,7 @@ export interface ChatGptSubagentRuntimeState {
 
 export interface ChatGptSubagentRuntimeService extends ChatGptSubagentService {
   connect(signal?: AbortSignal): Promise<void>
+  cloneSelf(request: ChatGptCloneSelfRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
   drainEvents(sessionId?: string): string[]
 }
 
@@ -106,9 +112,9 @@ export function createChatGptSubagentRuntimeState(options: ChatGptSubagentOption
     cdpEndpoint: options.cdpEndpoint ?? MCP_CONFIG.chatGpt.cdpEndpoint,
     connectTimeoutMs: options.connectTimeoutMs ?? 3_000,
     chatGptUrl: options.chatGptUrl ?? MCP_CONFIG.chatGpt.projectUrl ?? "https://chatgpt.com/",
-    maxConcurrentAgents: Math.min(positiveInteger(options.maxConcurrentAgents, MAX_CONCURRENT_AGENTS), MAX_CONCURRENT_AGENTS),
-    minInterTurnDelayMs: nonNegativeInteger(options.minInterTurnDelayMs, 1_500),
-    interactionDelayMs: nonNegativeInteger(options.interactionDelayMs, 300),
+    maxConcurrentAgents: Math.min((options.maxConcurrentAgents, MAX_CONCURRENT_AGENTS), MAX_CONCURRENT_AGENTS),
+    minInterTurnDelayMs: (options.minInterTurnDelayMs, 1_500),
+    interactionDelayMs: (options.interactionDelayMs, 300),
     timeoutMs: options.timeoutMs ?? 120_000,
     agents: new Map(),
     turns: new Map(),
@@ -127,6 +133,8 @@ export function createChatGptSubagentService(options: ChatGptSubagentOptions = {
   return {
     connect: (signal) => connectSubagents(state, signal),
     ask: (request, signal) => askSubagent(state, request, signal),
+    cloneSelf: (request, signal) => cloneSelf(state, request, signal),
+    cloneRun: (request, signal) => cloneRun(state, request, signal),
     poll: (turnId, waitMs, signal) => pollSubagent(state, turnId, waitMs, signal),
     drainEvents: (sessionId) => drainPendingEvents(state, sessionId),
     dispose: () => disposeSubagents(state),
@@ -150,7 +158,6 @@ export async function askSubagent(
   assertNotRateLimited(state)
   beginAgentOperation(state, request.agentId)
   let agent: BrowserAgentState | undefined
-  let observation: AssistantResponseObservation | undefined
   let operationTransferred = false
 
   try {
@@ -159,30 +166,150 @@ export async function askSubagent(
     else await detectRateLimit(state)
 
     agent = state.agents.get(request.agentId) ?? (await createAgent(state, request.agentId, signal, request.memory ?? true))
-    const activeAgent = agent
+    const submittedPrompt = agent.turnCount > 0 ? request.prompt : appendFirstTurnMode(request.prompt, request.oververbosity)
+    const result = await submitAgentTurn(state, agent, submittedPrompt, request.notificationSessionId, true, signal)
+    operationTransferred = true
+    return result
+  } catch (error) {
+    if (!operationTransferred && agent) agent.status = "idle"
+    throw error
+  } finally {
+    if (!operationTransferred) endAgentOperation(state, request.agentId)
+  }
+}
+
+export async function cloneSelf(
+  state: ChatGptSubagentRuntimeState,
+  request: ChatGptCloneSelfRequest,
+  signal?: AbortSignal
+): Promise<ChatGptSubagentStartResult> {
+  assertNotRateLimited(state)
+  beginAgentOperation(state, request.cloneId)
+  let sourcePage: Page | undefined
+  let branchPage: Page | undefined
+  let agent: BrowserAgentState | undefined
+  let operationTransferred = false
+
+  try {
+    await connectSubagents(state, signal)
+    if (state.rateLimitedUntil > 0) await clearExpiredRateLimit(state, signal)
+    else await detectRateLimit(state)
+
+    if (!isChatGptUrl(request.sourceConversationUrl)) {
+      throw new ChatGptSubagentError("AGENT_TARGET_LOST", "clone_self requires a chatgpt.com conversation URL.")
+    }
+    if (state.agents.has(request.cloneId) || state.store?.get(request.cloneId)) {
+      throw new ChatGptSubagentError("AGENT_BUSY", `Clone ${request.cloneId} already exists.`)
+    }
+
+    sourcePage = await createManagedPage(state)
+    await waitForPromise(sourcePage.goto(request.sourceConversationUrl, { waitUntil: "domcontentloaded", timeout: state.timeoutMs }), signal)
+    await assertAuthenticated(sourcePage)
+    branchPage = await forkLatestConversationTurn(sourcePage, state.timeoutMs, signal)
+    if (branchPage !== sourcePage && !sourcePage.isClosed()) await sourcePage.close().catch(() => undefined)
+    sourcePage = undefined
+    await branchPage.setViewportSize(MANAGED_VIEWPORT)
+
+    agent = {
+      agentId: request.cloneId,
+      kind: "clone",
+      memory: true,
+      status: "idle",
+      page: branchPage,
+      lastUsedAt: Date.now(),
+      turnCount: 0,
+    }
+    state.agents.set(agent.agentId, agent)
+
+    await delay(CLONE_INITIAL_SETTLE_MS, signal)
+    const result = await submitAgentTurn(state, agent, request.prompt, request.notificationSessionId, false, signal)
+    operationTransferred = true
+    return result
+  } catch (error) {
+    if (agent) state.agents.delete(agent.agentId)
+    if (branchPage && !branchPage.isClosed()) await branchPage.close().catch(() => undefined)
+    if (sourcePage && !sourcePage.isClosed()) await sourcePage.close().catch(() => undefined)
+    throw error
+  } finally {
+    if (!operationTransferred) endAgentOperation(state, request.cloneId)
+  }
+}
+
+export async function cloneRun(state: ChatGptSubagentRuntimeState, request: ChatGptCloneRunRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult> {
+  assertNotRateLimited(state)
+  beginAgentOperation(state, request.cloneId)
+  let agent: BrowserAgentState | undefined
+  let operationTransferred = false
+
+  try {
+    await connectSubagents(state, signal)
+    if (state.rateLimitedUntil > 0) await clearExpiredRateLimit(state, signal)
+    else await detectRateLimit(state)
+
+    agent = state.agents.get(request.cloneId)
+    if (!agent) {
+      const persisted = state.store?.get(request.cloneId)
+      if (!persisted || persisted.kind !== "clone") {
+        throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Unknown clone: ${request.cloneId}`)
+      }
+      agent = {
+        agentId: request.cloneId,
+        kind: "clone",
+        memory: true,
+        status: "idle",
+        lastUsedAt: Date.now(),
+        turnCount: persisted.turnCount,
+        conversationUrl: persisted.conversationUrl,
+      }
+      await ensureAgentPage(state, agent, signal)
+      state.agents.set(agent.agentId, agent)
+    } else if (agent.kind !== "clone") {
+      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `${request.cloneId} is not a clone.`)
+    }
+
+    const result = await submitAgentTurn(state, agent, request.prompt, request.notificationSessionId, false, signal)
+    operationTransferred = true
+    return result
+  } catch (error) {
+    if (!operationTransferred && agent) agent.status = "idle"
+    throw error
+  } finally {
+    if (!operationTransferred) endAgentOperation(state, request.cloneId)
+  }
+}
+
+async function submitAgentTurn(
+  state: ChatGptSubagentRuntimeState,
+  agent: BrowserAgentState,
+  submittedPrompt: string,
+  notificationSessionId: string | undefined,
+  bindConversationFromObserver: boolean,
+  signal?: AbortSignal
+): Promise<ChatGptSubagentStartResult> {
+  let observation: AssistantResponseObservation | undefined
+  try {
     await waitForInterTurn(state, agent, signal)
     const page = await ensureAgentPage(state, agent, signal)
-
-    const submittedPrompt = agent.turnCount > 0 ? request.prompt : appendFirstTurnMode(request.prompt, request.oververbosity)
     const turnId = `${agent.agentId}_turn_${agent.turnCount + 1}`
     const settlement = createTurnSettlement()
     const turn: BrowserTurnState = {
       turnId,
       agentId: agent.agentId,
-      notificationSessionId: request.notificationSessionId,
+      notificationSessionId,
       status: "running",
       recoveryAttempted: false,
       lastActivityAt: Date.now(),
       prompt: submittedPrompt,
+      bindConversationFromObserver,
       settled: settlement.promise,
       settle: settlement.resolve,
     }
 
     observation = await observeAssistantResponse(page, {
       prompt: submittedPrompt,
-      onConversationId: (conversationId) => bindConversation(state, activeAgent, conversationId, state.chatGptUrl),
+      onConversationId: bindConversationFromObserver ? (conversationId) => bindConversation(state, agent, conversationId, state.chatGptUrl) : undefined,
       onActivity: (activity) => {
-        activeAgent.status = activity
+        agent.status = activity
         turn.lastActivityAt = Date.now()
       },
     })
@@ -206,16 +333,12 @@ export async function askSubagent(
     state.turns.set(turnId, turn)
     state.activeOperations.set(agent.agentId, turnId)
     observation = undefined
-    operationTransferred = true
 
     void waitForTurnResponse(state, turn, agent)
     return { agentId: agent.agentId, turnId, status: "running" }
   } catch (error) {
     await observation?.dispose().catch(() => undefined)
-    if (!operationTransferred && agent) agent.status = "idle"
     throw error
-  } finally {
-    if (!operationTransferred) endAgentOperation(state, request.agentId)
   }
 }
 
@@ -232,15 +355,11 @@ export async function pollSubagent(
   return turnResult(state, turn)
 }
 
-export async function createAgent(
-  state: ChatGptSubagentRuntimeState,
-  agentId: string,
-  signal?: AbortSignal,
-  memory = true
-): Promise<BrowserAgentState> {
+export async function createAgent(state: ChatGptSubagentRuntimeState, agentId: string, signal?: AbortSignal, memory = true): Promise<BrowserAgentState> {
   const persisted = memory ? state.store?.get(agentId) : undefined
   const agent: BrowserAgentState = {
     agentId,
+    kind: persisted?.kind ?? "subagent",
     memory,
     status: "idle",
     lastUsedAt: Date.now(),
@@ -284,7 +403,7 @@ export async function waitForTurnResponse(state: ChatGptSubagentRuntimeState, tu
   try {
     const result = await observation.response
     if (state.disposed || turn.status !== "running" || turn.observation !== observation) return
-    if (result.conversationId) bindConversation(state, agent, result.conversationId, state.chatGptUrl)
+    if (turn.bindConversationFromObserver !== false && result.conversationId) bindConversation(state, agent, result.conversationId, state.chatGptUrl)
     completeTurn(state, turn, agent, result.text)
   } catch (error) {
     if (state.disposed || turn.status !== "running" || turn.observation !== observation) return
@@ -500,7 +619,7 @@ function captureConversationUrlFromPage(agent: BrowserAgentState): void {
 
 function persistAgent(state: ChatGptSubagentRuntimeState, agent: BrowserAgentState): void {
   if (!agent.memory || !agent.conversationUrl) return
-  state.store?.set(agent.agentId, { conversationUrl: agent.conversationUrl, turnCount: agent.turnCount })
+  state.store?.set(agent.agentId, { conversationUrl: agent.conversationUrl, turnCount: agent.turnCount, kind: agent.kind ?? "subagent" })
 }
 
 export function conversationUrlForStart(startUrl: string, conversationId: string): string {

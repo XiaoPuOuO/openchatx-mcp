@@ -17,6 +17,19 @@ export interface ChatGptSubagentRequest {
   notificationSessionId?: string
 }
 
+export interface ChatGptCloneSelfRequest {
+  sourceConversationUrl: string
+  cloneId: string
+  prompt: string
+  notificationSessionId?: string
+}
+
+export interface ChatGptCloneRunRequest {
+  cloneId: string
+  prompt: string
+  notificationSessionId?: string
+}
+
 export interface ChatGptSubagentStartResult {
   agentId: string
   turnId: string
@@ -60,6 +73,8 @@ export class ChatGptSubagentError extends Error {
 
 export interface ChatGptSubagentService {
   ask(request: ChatGptSubagentRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
+  cloneSelf?(request: ChatGptCloneSelfRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
+  cloneRun?(request: ChatGptCloneRunRequest, signal?: AbortSignal): Promise<ChatGptSubagentStartResult>
   poll(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult>
   drainEvents?(sessionId?: string): string[]
   dispose(): Promise<void>

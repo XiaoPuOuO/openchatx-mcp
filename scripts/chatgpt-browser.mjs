@@ -67,6 +67,8 @@ const child = spawn(
     ...(chromeProfileDirectory ? [`--profile-directory=${chromeProfileDirectory}`] : []),
     `--user-agent=${mobileUserAgent}`,
     `--window-size=${mobileWindowSize}`,
+    "--force-dark-mode", // Enables dark mode for Chrome UI
+    "--enable-features=WebUIDarkMode", // Enables WebUI dark mode flag
     "--disable-extensions",
     "--disable-sync",
     "--disable-component-update",
