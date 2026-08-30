@@ -20,7 +20,7 @@ This page maps the compile boundary, focused validation commands, test responsib
 - MCP uses the modular TypeScript SDK v2 packages: `@modelcontextprotocol/server`, `@modelcontextprotocol/node`, `@modelcontextprotocol/express`, and the integration-test-only client surface from `@modelcontextprotocol/client` (`package.json`).
 - TypeScript is pinned to `6.0.3` because the current `typescript-eslint` release supports TypeScript `<6.1`; ESLint uses the recommended JavaScript and TypeScript rule sets (`package.json`, `eslint.config.js`).
 - Prettier `3.9.6` owns formatting; `eslint-config-prettier` disables ESLint rules that would conflict with formatting. `.prettierrc` uses no semicolons, double quotes, ES5 trailing commas, two-space indentation, and a 160-column print width (`package.json`, `eslint.config.js`, `.prettierrc`).
-- `tsconfig.json` is the shared type-check configuration for both `src/**/*.ts` and `test/**/*.ts`; it emits declarations and source maps when emission is enabled, targets ES2022, and enables strict typing plus unchecked-index protection.
+- `tsconfig.json` is the shared type checking configuration for both `src/**/*.ts` and `test/**/*.ts`; it emits declarations and source maps when emission is enabled, targets ES2022, and enables strict typing plus unchecked-index protection.
 - `tsconfig.build.json` extends the shared config but includes only `src/**/*.ts`, so production builds emit `dist/index.js` and the source tree without compiling tests into `dist/` (`tsconfig.json`, `tsconfig.build.json`, `package.json`).
 - `tsconfig.json` explicitly includes Node types for the MCP v2 server declarations (`tsconfig.json`).
 
@@ -30,7 +30,7 @@ This page maps the compile boundary, focused validation commands, test responsib
 | ---------------------------- | -------------------------------------------------------------------------------------------------- |
 | `npm test`                   | Run `test/*.test.ts` through `tsx`                                                                 |
 | `npm run test:live:subagent` | Manually exercise one real browser-backed subagent conversation across two turns; excluded from CI |
-| `npm run type-check`         | Check source and tests without emitting                                                            |
+| `npm run typecheck`          | Check source and tests without emitting                                                            |
 | `npm run lint`               | Lint `src/` and `test/` with ESLint                                                                |
 | `npm run format`             | Format source, tests, and project config with Prettier                                             |
 | `npm run build`              | Emit production JavaScript to `dist/`                                                              |
@@ -55,11 +55,11 @@ As verified on 2026-08-26, published tool definitions cost about 5,800 `o200k_ba
 
 Tests use temporary directories and real local child shells; `test/helpers/temp.ts` centralizes disposable-directory cleanup. Process-group tests are POSIX-specific (`test/shell-session.test.ts`, `test/shell-parallel.test.ts`).
 
-`npm ci` is the reproducible clean-install path. As verified on 2026-08-14, lint, type-check, tests, and build succeed on the supported macOS runtime, and `npm audit --omit=dev` reports no production dependency vulnerabilities (`package-lock.json`, `package.json`).
+`npm ci` is the reproducible clean-install path. As verified on 2026-08-14, lint, type checking, tests, and build succeed on the supported macOS runtime, and `npm audit --omit=dev` reports no production dependency vulnerabilities (`package-lock.json`, `package.json`).
 
 ## Continuous Integration
 
-GitHub Actions runs the same release validation sequence on both `macos-15` arm64 and `macos-15-intel` x64 runners for pushes to `main` and pull requests: clean install, lint, type-check, tests, and production build. The suite verifies the vendored Universal 2 `apply_patch` executable and both vendored Peekaboo binaries, including a real Peekaboo CLI version invocation. The real-browser compatibility test is deliberately excluded because CI has no authenticated ChatGPT session; `test:live:subagent` consumes a real generated conversation (`.github/workflows/ci.yml`, `package.json`, `test/apply-patch-vendor.test.ts`, `test/peekaboo-vendor.test.ts`, `test/live/`).
+GitHub Actions runs the same release validation sequence on both `macos-15` arm64 and `macos-15-intel` x64 runners for pushes to `main` and pull requests: clean install, lint, type checking, tests, and production build. The suite verifies the vendored Universal 2 `apply_patch` executable and both vendored Peekaboo binaries, including a real Peekaboo CLI version invocation. The real-browser compatibility test is deliberately excluded because CI has no authenticated ChatGPT session; `test:live:subagent` consumes a real generated conversation (`.github/workflows/ci.yml`, `package.json`, `test/apply-patch-vendor.test.ts`, `test/peekaboo-vendor.test.ts`, `test/live/`).
 
 ## Gaps
 

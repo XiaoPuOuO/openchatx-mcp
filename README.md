@@ -226,7 +226,7 @@ See [SECURITY.md](SECURITY.md) for reporting and scope.
 ```bash
 npm run dev
 npm run lint
-npm run type-check
+npm run typecheck
 npm test
 npm run build
 ```

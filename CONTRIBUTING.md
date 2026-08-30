@@ -9,7 +9,7 @@ Shellby MCP currently targets macOS on Apple Silicon or Intel and Node.js 22.13.
 ```bash
 npm ci
 npm run lint
-npm run type-check
+npm run typecheck
 npm test
 npm run build
 ```
