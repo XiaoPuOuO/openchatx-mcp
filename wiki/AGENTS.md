@@ -14,6 +14,7 @@ Read `log.md` only when historical context or the reason behind past decisions m
 Routable pages use:
 
 `<descriptive-filename-slug>.md`:
+
 ```md
 ---
 summary: "Concise description of this page."
@@ -28,3 +29,7 @@ read_more:
 ```
 
 For maintenance, read [maintenance.md](maintenance.md).
+
+## Agent Rules
+
+- Never restart this mcp server, or pm2 process without explicit approval.
