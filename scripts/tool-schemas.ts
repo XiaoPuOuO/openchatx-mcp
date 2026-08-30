@@ -11,7 +11,7 @@ const shells = createShellSessionManager({
   createShell: () => createShellSession({ cwd: MCP_CONFIG.workspace }),
 })
 const running = await startMcpHttpServer({ host: "127.0.0.1", port: 0, shellManager: shells })
-const client = new Client({ name: "shellby-mcp-schema-viewer", version: "1.0.0" })
+const client = new Client({ name: "shellby-mcp-schema-viewer", version: MCP_CONFIG.server.version }, { versionNegotiation: { mode: "auto" } })
 const transport = new StreamableHTTPClientTransport(new URL(running.url))
 
 try {

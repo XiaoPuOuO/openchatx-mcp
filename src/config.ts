@@ -3,6 +3,10 @@ import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+const packageMetadata = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+const packageVersion = typeof packageMetadata.version === "string" ? packageMetadata.version : undefined
+if (!packageVersion) throw new Error("package.json is missing a valid version.")
+
 const bundledPeekabooExecutable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
 const peekabooExecutable = process.env.MCP_PEEKABOO_BIN?.trim() || bundledPeekabooExecutable
 /**
@@ -16,7 +20,7 @@ export type ToolOutputStructuredMode = "always" | "optional" | "never"
 export const MCP_CONFIG = {
   server: {
     name: "shellby-mcp",
-    version: "0.1.0",
+    version: packageVersion,
     icons: [
       {
         src: `data:image/png;base64,${readFileSync(new URL("../docs/assets/icon-80_square-compressed.png", import.meta.url)).toString("base64")}`,

@@ -10,7 +10,22 @@ export function startMcpHttpServer(options: StartMcpServerOptions = {}) {
 }
 
 export async function connectClient(url: string, name: string, openAiSubject?: string, trustedRemote = false, openAiSession?: string) {
-  const client = new Client({ name, version: "1.0.0" })
+  return connectClientWithMode(url, name, "auto", openAiSubject, trustedRemote, openAiSession)
+}
+
+export async function connectLegacyClient(url: string, name: string) {
+  return connectClientWithMode(url, name, "legacy")
+}
+
+async function connectClientWithMode(
+  url: string,
+  name: string,
+  mode: "auto" | "legacy",
+  openAiSubject?: string,
+  trustedRemote = false,
+  openAiSession?: string
+) {
+  const client = new Client({ name, version: "1.0.0" }, { versionNegotiation: { mode } })
   const transport = new StreamableHTTPClientTransport(new URL(url), {
     requestInit:
       openAiSubject || trustedRemote || openAiSession

@@ -1,6 +1,8 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { createServer, type Server as HttpServer } from "node:http"
 import { createMcpExpressApp } from "@modelcontextprotocol/express"
-import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node"
+import { toNodeHandler } from "@modelcontextprotocol/node"
+import { createMcpHandler } from "@modelcontextprotocol/server"
 import type { Request, Response } from "express"
 
 import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/auth.js"
@@ -8,15 +10,13 @@ import { MCP_CONFIG, type ToolOutputStructuredMode } from "../config.js"
 import { createChatGptSubagentService } from "../tools/subagent/chatgpt-subagent.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
 import { createMcpServer } from "./mcp-server.js"
-import { McpAuditLogger } from "./audit-log.js"
+import { McpAuditLogger, type McpAuditRequest } from "./audit-log.js"
 import { PeekabooClient } from "../tools/computer/peekaboo.js"
 import { createShellSessionManager, type ShellSessionManager } from "../tools/shell/session-manager.js"
 import { WebPageOpener } from "../tools/web/web-open.js"
 
-interface InFlightMcpRequest {
-  server: ReturnType<typeof createMcpServer>
-  transport: NodeStreamableHTTPServerTransport
-  close: () => Promise<void>
+interface RequestRuntimeContext {
+  auditRequest?: McpAuditRequest
 }
 
 export interface RunningMcpServer {
@@ -48,16 +48,36 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const chatGptSubagents = options.chatGptSubagents ?? createChatGptSubagentService()
   const authStore = options.authStore
   const webPageOpener = options.webPageOpener ?? new WebPageOpener()
-  const inFlightRequests = new Set<InFlightMcpRequest>()
+  const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
   const mcpRoute = /^\/mcp$/
+
+  const mcpHandler = createMcpHandler(
+    ({ requestInfo }) => {
+      const requestContext = requestRuntime.getStore()
+      return createMcpServer(shells, {
+        chatGptSubagents,
+        applyPatchExecutable: options.applyPatchExecutable,
+        peekaboo,
+        webPageOpener,
+        toolOutputStructured: options.toolOutputStructured,
+        notificationSessionId: webRequestSessionId(requestInfo),
+        auditRequest: requestContext?.auditRequest,
+      })
+    },
+    {
+      legacy: "stateless",
+      onerror: reportMcpError,
+    }
+  )
+  const nodeMcpHandler = toNodeHandler(mcpHandler, { onerror: reportMcpError })
 
   app.get("/healthz", (_req, res) => {
     res.json({ ok: true })
   })
 
-  const handleMcpPost = async (req: Request, res: Response): Promise<void> => {
+  const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
     const auditRequest = auditLogger?.startRequest(req.body, { sessionId })
     let auditFinished = false
@@ -69,68 +89,11 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     res.once("finish", () => finishAudit("finished"))
     res.once("close", () => finishAudit("closed"))
 
-    const mcpServer = createMcpServer(shells, {
-      chatGptSubagents,
-      applyPatchExecutable: options.applyPatchExecutable,
-      peekaboo,
-      webPageOpener,
-      toolOutputStructured: options.toolOutputStructured,
-      notificationSessionId: sessionId,
-      auditRequest,
-    })
-    const transport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    })
-
-    let connected = false
-    let closePromise: Promise<void> | undefined
-    const request: InFlightMcpRequest = {
-      server: mcpServer,
-      transport,
-      close: () => {
-        closePromise ??= (async () => {
-          try {
-            if (connected) await mcpServer.close()
-            else await transport.close()
-          } finally {
-            inFlightRequests.delete(request)
-          }
-        })()
-        return closePromise
-      },
-    }
-    inFlightRequests.add(request)
-
-    const closeRequest = () => {
-      void request.close().catch((error: unknown) => {
-        console.error("Could not close MCP request:", error)
-      })
-    }
-    res.once("finish", closeRequest)
-    res.once("close", closeRequest)
-
-    try {
-      await mcpServer.connect(transport)
-      connected = true
-      await transport.handleRequest(req, res, req.body)
-    } catch (error) {
-      console.error("MCP request failed:", error)
-      if (!res.headersSent) {
-        jsonRpcError(res, 500, -32603, "Internal MCP server error.")
-      } else if (!res.writableEnded) {
-        res.end()
-      }
-    } finally {
-      if (res.writableEnded || res.destroyed) {
-        await request.close().catch((error: unknown) => {
-          console.error("Could not close MCP request:", error)
-        })
-      }
-    }
+    await requestRuntime.run({ auditRequest }, () => nodeMcpHandler(req, res, req.body))
   }
 
-  app.post(mcpRoute, async (req: Request, res: Response) => {
-    if (authStore && isTrustedRemoteRequest(req) && containsToolCall(req.body)) {
+  app.all(mcpRoute, async (req: Request, res: Response) => {
+    if (req.method === "POST" && authStore && isTrustedRemoteRequest(req) && containsToolCall(req.body)) {
       try {
         await authStore.authorizeToolCall(req.get("x-openai-subject"))
       } catch (error) {
@@ -138,15 +101,8 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
         return
       }
     }
-    await handleMcpPost(req, res)
+    await handleMcpRequest(req, res)
   })
-
-  const methodNotAllowed = (_req: Request, res: Response) => {
-    res.setHeader("Allow", "POST")
-    jsonRpcError(res, 405, -32000, "Method not allowed.")
-  }
-  app.get(mcpRoute, methodNotAllowed)
-  app.delete(mcpRoute, methodNotAllowed)
 
   const httpServer = createServer(app)
   let boundPort: number
@@ -161,8 +117,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     boundPort = address.port
   } catch (error) {
     const httpClose = closeHttpServerIfListening(httpServer)
-    await Promise.allSettled([...inFlightRequests].map((request) => request.close()))
-    await Promise.allSettled([httpClose, shells.close(), peekaboo.close(), chatGptSubagents.dispose()])
+    await Promise.allSettled([mcpHandler.close(), httpClose, shells.close(), peekaboo.close(), chatGptSubagents.dispose()])
     throw error
   }
 
@@ -177,8 +132,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
 
       const httpClose = closeHttpServerIfListening(httpServer)
       try {
-        await Promise.allSettled([...inFlightRequests].map((request) => request.close()))
-        await httpClose
+        await Promise.allSettled([mcpHandler.close(), httpClose])
       } finally {
         await Promise.allSettled([shells.close(), peekaboo.close(), chatGptSubagents.dispose()])
       }
@@ -202,6 +156,15 @@ function isTrustedRemoteRequest(req: Request): boolean {
 function requestSessionId(req: Request): string | undefined {
   const value = req.get("x-openai-session")?.trim()
   return value || undefined
+}
+
+function webRequestSessionId(req: globalThis.Request | undefined): string | undefined {
+  const value = req?.headers.get("x-openai-session")?.trim()
+  return value || undefined
+}
+
+function reportMcpError(error: Error): void {
+  console.error("MCP handler error:", error)
 }
 
 function remoteAuthError(res: Response, error: unknown): void {

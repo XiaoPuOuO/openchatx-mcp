@@ -18,7 +18,7 @@ This page maps the process-level components and follows one request from the HTT
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | Static MCP config     | Define server identity, shared tool metadata, runtime defaults, and global instructions                                                         | `src/config.ts`                          |
 | Process entry         | Consume static configuration, prepare workspace state, compose dependencies, handle shutdown                                                    | `src/index.ts`                           |
-| HTTP boundary         | Bind localhost, apply MCP Express HTTP guards, expose health and MCP routes, own request transports                                             | `src/server/http-server.ts`              |
+| HTTP boundary         | Bind localhost, apply MCP Express HTTP guards, expose health/MCP routes, and adapt the v2 per-request MCP handler to Node                       | `src/server/http-server.ts`              |
 | Remote authentication | Persist the bound ChatGPT subject outside the repo                                                                                              | `src/auth/auth.ts`                       |
 | MCP audit log         | Record timestamped `tools/list` requests plus completed `tools/call` metadata without affecting dispatch                                       | `src/server/audit-log.ts`                |
 | MCP composition       | Publish shared instructions and register capability tool modules                                                                                | `src/server/mcp-server.ts`               |
@@ -39,7 +39,7 @@ This page maps the process-level components and follows one request from the HTT
 ## Request Lifecycle
 
 1. `src/index.ts` parses configuration, prepares durable/process-level state, and composes shared runtime services (`src/index.ts`, `src/config.ts`).
-2. `src/server/http-server.ts` accepts an MCP request, applies the transport/ownership boundary, and creates a short-lived MCP server/transport around shared process services. See [HTTP Transport](./http-transport.md).
+2. `src/server/http-server.ts` accepts an MCP request, applies the HTTP/ownership boundary, and routes it through `createMcpHandler`. The handler selects modern `2026-07-28` or stateless legacy serving and obtains a short-lived MCP server from the shared factory. See [HTTP Transport](./http-transport.md).
 3. `src/server/mcp-server.ts` registers the model-facing tools; the selected capability module under `src/tools/` owns its schema, handler, result, and domain errors.
 4. Stateful capabilities retain only their intended boundary: named shells and webpage documents are process-local; Computer Use capture targets are process-local; subagent turn state is process-local while conversation URL + turn count persist best-effort in `~/.shellby/subagents.sqlite`. Dedicated pages document those lifecycles.
 

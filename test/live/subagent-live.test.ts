@@ -76,7 +76,10 @@ test(
       })
       t.after(() => running.close().catch(() => undefined))
 
-      const client = new Client({ name: "live-subagent-integration-test", version: "1.0.0" })
+      const client = new Client(
+        { name: "live-subagent-integration-test", version: "1.0.0" },
+        { versionNegotiation: { mode: "auto" } }
+      )
       t.after(() => client.close().catch(() => undefined))
       await client.connect(new StreamableHTTPClientTransport(new URL(running.url)))
 

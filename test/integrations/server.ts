@@ -4,13 +4,17 @@ import test from "node:test"
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
 import { MCP_CONFIG } from "../../src/config.js"
-import { callUntilComplete, connectClient, postWithHost, startMcpHttpServer } from "./helpers.js"
+import { callUntilComplete, connectClient, connectLegacyClient, postWithHost, startMcpHttpServer } from "./helpers.js"
 
 test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer({ port: 0 })
   t.after(() => running.close())
   const connected = await connectClient(running.url, "tool-surface-client")
   t.after(() => connected.client.close())
+
+  assert.equal(connected.client.getProtocolEra(), "modern")
+  assert.equal(connected.client.getNegotiatedProtocolVersion(), "2026-07-28")
+  assert.ok(connected.client.getDiscoverResult())
 
   const tools = await connected.client.listTools()
   assert.deepEqual(
@@ -69,6 +73,17 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(fetchUrl.outputSchema)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
+})
+
+test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, async (t) => {
+  const running = await startMcpHttpServer({ port: 0 })
+  t.after(() => running.close())
+  const connected = await connectLegacyClient(running.url, "legacy-compatibility-client")
+  t.after(() => connected.client.close())
+
+  assert.equal(connected.client.getProtocolEra(), "legacy")
+  assert.equal(connected.client.getNegotiatedProtocolVersion(), "2025-11-25")
+  assert.ok((await connected.client.listTools()).tools.length > 0)
 })
 
 test("supports structured output modes through the public MCP surface", { timeout: 20_000 }, async () => {
