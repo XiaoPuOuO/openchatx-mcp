@@ -42,7 +42,6 @@
     "format": "prettier --write src test scripts package.json tsconfig.json tsconfig.build.json eslint.config.js ecosystem.config.cjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/express": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
@@ -59,8 +58,9 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.2.0",
+    "@types/node": "22.13.17",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "10.1.8",
     "prettier": "^3.9.6",
@@ -79,5 +79,9 @@
   "cpu": [
     "arm64",
     "x64"
-  ]
+  ],
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  }
 }
