@@ -32,6 +32,7 @@ import {
 } from "./chatgpt-subagent-contracts.js"
 
 const AGENT_IDLE_TTL_MS = 30 * 60_000
+const STALE_TURN_RECOVERY_MS = 3 * 60_000
 const CLEANUP_INTERVAL_MS = 60_000
 const MAX_CONCURRENT_AGENTS = 3
 const CONNECT_TIMEOUT_MS = 3_000
@@ -389,6 +390,20 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     }
 
     const oldPage = agent.page
+    if (oldPage && !oldPage.isClosed() && extractConversationId(oldPage.url()) === conversationId) {
+      const payload = await oldPage
+        .evaluate(async (id) => {
+          const response = await fetch(`/backend-api/conversations/${encodeURIComponent(id)}`)
+          return response.ok ? response.json() : undefined
+        }, conversationId)
+        .catch(() => undefined)
+      const answer = findLatestAssistantAfterPrompt(extractConversationMessages(payload), turn.prompt, agent.turnCount)
+      if (answer) {
+        completeTurn(turn, answer.text)
+        return true
+      }
+    }
+
     const page = await createManagedPage()
     try {
       const payload = await navigateAndCaptureConversationPayload(page, conversationUrl)
@@ -615,7 +630,12 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       const activeTurn = activeOperation?.turnId ? turns.get(activeOperation.turnId) : undefined
 
       if (activeTurn?.status === "running") {
-        if (now - activeTurn.lastActivityAt >= AGENT_IDLE_TTL_MS) {
+        if (agent.memory && !activeTurn.recoveryAttempted && now - activeTurn.lastActivityAt >= STALE_TURN_RECOVERY_MS) {
+          await failOrRecoverSubmittedTurn(
+            activeTurn,
+            new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn had no observable activity for 3 minutes.")
+          )
+        } else if (now - activeTurn.lastActivityAt >= AGENT_IDLE_TTL_MS) {
           await failOrRecoverSubmittedTurn(
             activeTurn,
             new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn expired after 30 minutes without observable progress.")
