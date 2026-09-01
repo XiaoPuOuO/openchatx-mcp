@@ -66,7 +66,10 @@ function renderSubagentResult(value: unknown): string {
       }
       if (metadata.length === 0) return renderRecordListItem(turn, 0)
 
-      const bodies = [typeof turn.response === "string" && turn.response ? turn.response : "", typeof turn.error === "string" && turn.error ? turn.error : ""].filter(Boolean)
+      const bodies = [
+        typeof turn.response === "string" && turn.response ? turn.response : "",
+        typeof turn.error === "string" && turn.error ? turn.error : "",
+      ].filter(Boolean)
       return formatOutputBlock(metadata, bodies.join("\n\n"))
     })
     .join("\n\n")

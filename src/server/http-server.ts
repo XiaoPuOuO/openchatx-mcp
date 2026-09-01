@@ -7,6 +7,7 @@ import type { Request, Response } from "express"
 
 import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/auth.js"
 import { MCP_CONFIG, type ToolOutputStructuredMode } from "../config.js"
+import { createReviewPromptTracker } from "../tools/review/review-tool.js"
 import { createChatGptSubagentService } from "../tools/subagent/chatgpt-subagent.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
 import { createMcpServer } from "./mcp-server.js"
@@ -37,6 +38,8 @@ export interface StartMcpServerOptions {
   applyPatchExecutable?: string
   webPageOpener?: WebPageOpener
   toolOutputStructured?: ToolOutputStructuredMode
+  reviewPromptThreshold?: number
+  reviewFilePath?: string
 }
 
 export async function startMcpHttpServer(options: StartMcpServerOptions = {}): Promise<RunningMcpServer> {
@@ -49,6 +52,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const authStore = options.authStore
   const webPageOpener = options.webPageOpener ?? new WebPageOpener()
   const startedSessions = new Set<string>()
+  const reviewPromptTracker = createReviewPromptTracker(options.reviewPromptThreshold)
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
@@ -66,6 +70,8 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
         toolOutputStructured: options.toolOutputStructured,
         sessionId,
         startedSessions,
+        reviewPromptTracker,
+        reviewFilePath: options.reviewFilePath,
         auditRequest: requestContext?.auditRequest,
       })
     },

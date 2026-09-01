@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import type { ToolOutputStructuredMode } from "../config.js"
+import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import type { McpAuditRequest } from "./audit-log.js"
@@ -84,6 +85,7 @@ export interface ToolRegistrationBoundaryOptions {
   drainPendingEvents?: () => string[]
   sessionId?: string
   startedSessions?: Set<string>
+  reviewPromptTracker?: ReviewPromptTracker
   auditRequest?: McpAuditRequest
 }
 
@@ -142,7 +144,11 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
           options.startedSessions.add(options.sessionId)
         }
         const projected = !nativeContent && !structuredRequested ? compactToolResult(name, result) : result
-        const events = [...(name === "shell_run" ? shellRunFileEditNotices(input) : []), ...(options.drainPendingEvents?.() ?? [])]
+        const events = [
+          ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
+          ...(options.drainPendingEvents?.() ?? []),
+          ...(options.reviewPromptTracker?.recordToolCall(options.sessionId) ?? []),
+        ]
         const finalResult = appendToolEvents(projected, events)
         auditCall?.finish({ toolResult: result, modelResult: finalResult })
         return finalResult

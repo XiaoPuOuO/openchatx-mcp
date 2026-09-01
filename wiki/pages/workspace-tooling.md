@@ -25,7 +25,7 @@ Reusable agent workflows live under `<workspace>/skills/<name>/SKILL.md`. `skill
 
 The maintainer workspace catalog is intentionally not enumerated here because it is dynamic and can change without a Shellby rebuild. Directory symlinks are supported, so selected shared skills can stay single-sourced while still appearing under `<workspace>/skills` (`src/tools/skills.ts`, `test/skills.test.ts`).
 
-Skill names accept only alphanumeric-leading names containing letters, numbers, dots, underscores, and hyphens, preventing path traversal while still allowing a named workspace entry to be a symlink. `SKILL.md` is capped at 256 KiB; broken or oversized entries are omitted from `skill_list`, while direct `skill_load` calls return explicit errors (`src/tools/skills.ts`).
+Skill names may begin with an alphanumeric character or underscore and may otherwise contain letters, numbers, dots, underscores, and hyphens. A leading underscore can be used for workspace-local skills such as `_web-search`. The restricted character set prevents path traversal while still allowing a named workspace entry to be a symlink. `SKILL.md` is capped at 256 KiB; broken or oversized entries are omitted from `skill_list`, while direct `skill_load` calls return explicit errors (`src/tools/skills.ts`, `test/skills.test.ts`).
 
 ## Skill Bootstrap Boundary
 

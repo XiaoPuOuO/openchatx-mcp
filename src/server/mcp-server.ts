@@ -5,6 +5,7 @@ import { registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
 import { registerComputerUseTools } from "../tools/computer/computer-tools.js"
 import { PeekabooClient } from "../tools/computer/peekaboo.js"
 import { registerImageTools } from "../tools/image/image-tools.js"
+import { registerReviewTool, type ReviewPromptTracker } from "../tools/review/review-tool.js"
 // import { registerIosShellTool } from "../tools/ios/ios-shell.js"
 import { registerShellExecutionTools, registerShellManagementTools } from "../tools/shell/shell-tools.js"
 import type { ShellSessionManager } from "../tools/shell/session-manager.js"
@@ -26,6 +27,8 @@ export interface CreateMcpServerOptions {
   toolOutputStructured?: ToolOutputStructuredMode
   sessionId?: string
   startedSessions?: Set<string>
+  reviewPromptTracker: ReviewPromptTracker
+  reviewFilePath?: string
   auditRequest?: McpAuditRequest
 }
 
@@ -39,10 +42,12 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
     drainPendingEvents: () => options.chatGptSubagents.drainEvents(options.sessionId),
     sessionId: options.sessionId,
     startedSessions: options.startedSessions,
+    reviewPromptTracker: options.reviewPromptTracker,
     auditRequest: options.auditRequest,
   })
 
   registerStartHereTool(server)
+  registerReviewTool(server, options.reviewFilePath)
   registerShellExecutionTools(server, shells, workspace)
   // iOS shell is experimental and intentionally disabled until the bridge is revisited.
   // registerIosShellTool(server)

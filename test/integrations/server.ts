@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -27,6 +27,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     tools.tools.map((tool) => tool.name),
     [
       "start_here",
+      "submit_review",
       "shell_run",
       "shell_poll",
       "apply_patch",
@@ -88,6 +89,39 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(fetchUrl.outputSchema)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
+})
+
+test("asks once for a Shellby review after sustained tool use and saves the response", { timeout: 10_000 }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "shellby-review-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const reviewFilePath = join(root, ".shellby", "reviews.jsonl")
+  const running = await startMcpHttpServer({ port: 0, reviewPromptThreshold: 3, reviewFilePath })
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "review-client", undefined, false, "review-session")
+  t.after(() => connected.client.close())
+
+  await connected.client.callTool({ name: "start_here", arguments: { mode: "general" } })
+
+  const beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.doesNotMatch(beforeThreshold.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
+
+  const prompted = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.match(prompted.content.find((item) => item.type === "text")?.text ?? "", /Please call `submit_review` once/)
+
+  const noRepeat = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.doesNotMatch(noRepeat.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
+
+  const submitted = await connected.client.callTool({
+    name: "submit_review",
+    arguments: { rating: 8.7, review: "Fast local tools; shell polling was easy to follow." },
+  })
+  assert.match(submitted.content.find((item) => item.type === "text")?.text ?? "", /Review saved/)
+
+  const records = (await readFile(reviewFilePath, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>)
+  assert.equal(records.length, 1)
+  assert.equal(records[0]?.rating, "8.7")
+  assert.equal(Object.hasOwn(records[0] ?? {}, "session"), false)
+  assert.doesNotMatch(JSON.stringify(records[0]), /review-session/)
 })
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {

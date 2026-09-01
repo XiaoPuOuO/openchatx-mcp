@@ -37,6 +37,23 @@ test("lists workspace skills from frontmatter and loads the complete SKILL.md", 
   })
 })
 
+test("lists and loads workspace-local skills with a leading underscore", async (t) => {
+  const workspace = await tempDir(t, "mcp-skills-local-")
+  const skillDirectory = join(workspace, "skills", "_web-search")
+  await mkdir(skillDirectory, { recursive: true })
+  const content = "---\nname: _web-search\ndescription: Local web search workflow.\n---\n\n# Web Search\n"
+  await writeFile(join(skillDirectory, "SKILL.md"), content)
+
+  const catalog = new SkillCatalog(join(workspace, "skills"))
+
+  assert.deepEqual(await catalog.list(), [{ name: "_web-search", description: "Local web search workflow." }])
+  assert.deepEqual(await catalog.read("_web-search"), {
+    name: "_web-search",
+    path: join(skillDirectory, "SKILL.md"),
+    content,
+  })
+})
+
 test("returns an empty catalog when the workspace has no skills directory", async (t) => {
   const workspace = await tempDir(t, "mcp-skills-empty-")
 
