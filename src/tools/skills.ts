@@ -7,7 +7,7 @@ import { MCP_CONFIG } from "../config.js"
 
 export const MAX_SKILL_BYTES = 256 * 1024
 
-const SKILL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+const SKILL_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
 
 export interface SkillSummary {
   name: string
