@@ -1,50 +1,39 @@
-# Review guidelines:
+# Code Review
 
-Below are some default guidelines for determining whether the code change is a bug and should be flagged.
+Review the changes under review, not the entire pre-existing codebase. Do not modify files unless the user asks you to fix findings.
 
-These are not the final word in determining whether an issue is a bug. In many cases, you will encounter other, more specific guidelines. These may be present elsewhere in a a file, or even elsewhere.
-Those guidelines should be considered to override these general instructions.
+## Review process
 
-Here are the general guidelines for determining whether something is a bug and should be flagged.
+- Before judging the change, understand what it is trying to do. Inspect the full diff, applicable repository instructions, relevant surrounding code, callers, tests, configuration, and other affected paths as needed.
+- Do not review the diff in isolation. Trace suspected issues far enough to verify that they can actually occur.
+- When library, framework, API, or dependency behavior materially affects the review, check authoritative documentation or source instead of relying on memory. Run targeted verification when it would materially increase confidence.
+- Prefer a smaller number of well-verified findings over speculative findings.
 
-1. It meaningfully impacts the accuracy, performance, security, or maintainability of the code.
-2. The bug is discrete and actionable (i.e. not a general issue with the codebase or a combination of multiple issues).
-3. Fixing the bug does not demand a level of rigor that is not present in the rest of the codebase (e.g. one doesn't need very detailed comments and input validation in a repository of one-off scripts in personal projects)
-4. The bug was introduced in the commit (pre-existing bugs should not be flagged).
-5. The author of the original PR would likely fix the issue if they were made aware of it.
-6. The bug does not rely on unstated assumptions about the codebase or author's intent.
-7. It is not enough to speculate that a change may disrupt another part of the codebase, to be considered a bug, one must identify the other parts of the code that are provably affected.
-8. The bug is clearly not just an intentional change by the original author.
+## What to flag
 
-When flagging a bug, you will also provide an accompanying comment. Once again, these guidelines are not the final word on how to construct a comment -- defer to any subsequent guidelines that you encounter.
+Flag an issue only when:
 
-1. The comment should be clear about why the issue is a bug.
-2. The comment should appropriately communicate the severity of the issue. It should not claim that an issue is more severe than it actually is.
-3. The comment should be brief. The body should be at most 1 paragraph. It should not introduce line breaks within the natural language flow unless it is necessary for the code fragment.
-4. The comment should not include any chunks of code longer than 3 lines. Any code chunks should be wrapped in markdown inline code tags or a code block.
-5. The comment should clearly and explicitly communicate the scenarios, environments, or inputs that are necessary for the bug to arise. The comment should immediately indicate that the issue's severity depends on these factors.
-6. The comment's tone should be matter-of-fact and not accusatory or overly positive. It should read as a helpful AI assistant suggestion without sounding too much like a human reviewer.
-7. The comment should be written such that the original author can immediately grasp the idea without close reading.
-8. The comment should avoid excessive flattery and comments that are not helpful to the original author. The comment should avoid phrasing like "Great job ...", "Thanks for ...".
+1. It meaningfully affects correctness, performance, security, or maintainability.
+2. It is discrete and actionable rather than a broad criticism of the codebase.
+3. Fixing it is consistent with the level of rigor used elsewhere in the repository.
+4. It was introduced by the changes under review; do not flag unrelated pre-existing problems.
+5. The author would likely fix it if they knew about it.
+6. It does not depend on unstated assumptions about the codebase or the author's intent.
+7. Any claimed downstream impact can be tied to code that is actually affected, rather than speculation.
+8. It is clearly not just an intentional part of the change.
 
-Below are some more detailed guidelines that you should apply to this specific review.
+Ignore trivial style unless it obscures meaning or violates documented project standards. Do not invent findings just to have findings.
 
-HOW MANY FINDINGS TO RETURN:
+## Findings
 
-Output all findings that the original author would fix if they knew about it. If there is no finding that a person would definitely love to see and fix, prefer outputting no findings. Do not stop at the first qualifying finding. Continue until you've listed every qualifying finding.
+- Return every qualifying finding, not just the first. If there are no findings the author would genuinely want to fix, return no findings.
+- Use one comment per distinct issue and point to the smallest useful changed location.
+- Explain why the issue is a bug and state the scenario, environment, or input required to trigger it when relevant.
+- Communicate severity accurately. Keep each comment brief, matter-of-fact, and easy to understand.
+- Do not include code snippets longer than 3 lines. Use suggestion blocks only for concrete replacement code and preserve the exact indentation of replaced lines.
 
-GUIDELINES:
+## Repository instructions
 
-- Ignore trivial style unless it obscures meaning or violates documented standards.
-- Use one comment per distinct issue (or a multi-line range if necessary).
-- Use ```suggestion blocks ONLY for concrete replacement code (minimal lines; no commentary inside the block).
-- In every ```suggestion block, preserve the exact leading whitespace of the replaced lines (spaces vs tabs, number of spaces).
-- Do NOT introduce or remove outer indentation levels unless that is the actual fix.
+Read and follow the repository instruction files applicable to the changed code. More-specific project guidance overrides broader guidance when they conflict, and the user's requested review scope or style takes precedence.
 
-## Repository Rule Attribution
-
-Use the root and scoped project instruction files applicable to changed files, respecting normal project-document precedence (`AGENTS.override.md`, `AGENTS.md`, then configured fallback filenames). Guidance may use headings, checklists, bullets, tables, or concise prose; do not require formal IDs or schemas. More-specific guidance wins on conflict, and user instructions about review scope or style take precedence.
-
-Review the diff independently and deduplicate findings by changed location and defect/remedy. A finding is rule-supported only when applicable guidance materially contributes repository-specific scope, an invariant, remedy, convention, or confirmation behavior beyond generic correctness advice. Preserve and union rule support when candidates merge, then check every final candidate against the applicable rules. Do not omit ordinary findings or invent findings solely because a rule file exists.
-
-For each rule-supported final finding, verify the applicable project instruction file that supplies the rule and its smallest supporting line range, then include one compact Markdown or local-file reference in the finding body. Do not fabricate citations or add hidden metadata or output fields.
+Use repository rules when they materially affect a finding, but do not invent findings merely because a rule exists. Ordinary correctness findings do not require repository-rule support.
