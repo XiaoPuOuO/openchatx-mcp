@@ -184,18 +184,18 @@ test("inherits the parallel cwd when a run directory is omitted and accepts over
   t.after(() => shell.close())
 
   const inheritedShellCwd = await runToCompletion(shell, "parallel-inherited-shell-cwd", [{ command: `printf '%s' "$PWD"` }])
-  assert.match(inheritedShellCwd.output, new RegExp(`${escapeRegExp(await realpath("/tmp"))}\\n$`))
+  assert.match(inheritedShellCwd.output, new RegExp(`${escapeRegExp(await realpath("/tmp"))}\\n\\n$`))
   assert.equal(inheritedShellCwd.snapshot.commands?.[0]?.path, ".")
   assert.equal(inheritedShellCwd.snapshot.commands?.[0]?.command, `printf '%s' "$PWD"`)
 
   const inheritedExplicitCwd = await runToCompletion(shell, "parallel-inherited-explicit-cwd", [{ command: `printf '%s' "$PWD"` }], {
     cwd: process.cwd(),
   })
-  assert.match(inheritedExplicitCwd.output, new RegExp(`${escapeRegExp(await realpath(process.cwd()))}\\n$`))
+  assert.match(inheritedExplicitCwd.output, new RegExp(`${escapeRegExp(await realpath(process.cwd()))}\\n\\n$`))
   assert.equal(inheritedExplicitCwd.snapshot.commands?.[0]?.path, ".")
 
   const absolute = await runToCompletion(shell, "parallel-absolute", [{ command: `printf '%s' "$PWD"`, cwd: "/tmp" }])
-  assert.match(absolute.output, new RegExp(`${escapeRegExp(await realpath("/tmp"))}\\n$`))
+  assert.match(absolute.output, new RegExp(`${escapeRegExp(await realpath("/tmp"))}\\n\\n$`))
   assert.equal(absolute.snapshot.commands?.[0]?.path, "/tmp")
 
   await assert.rejects(
@@ -254,6 +254,15 @@ test("accepts arbitrary multiline zsh in parallel commands", { timeout: 10_000 }
   assert.match(batch.output, /second/)
   assert.match(batch.output, /---/)
   assert.match(batch.output, /\*\*\* Run:/)
+})
+
+test("separates parallel run blocks when command output has no trailing newline", { timeout: 10_000 }, async (t) => {
+  const shell = createShellSession()
+  t.after(() => shell.close())
+
+  const batch = await runToCompletion(shell, "parallel-output-boundary", [{ command: "printf first" }, { command: "printf second" }])
+
+  assert.match(batch.output, /first\n\n---- run=2 path="\." exit=0 ----\n\nsecond/)
 })
 
 test("reset kills running parallel children and retains the batch as reset", { timeout: 10_000 }, async (t) => {

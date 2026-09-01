@@ -579,7 +579,7 @@ function formatParallelRunOutput(run: ParallelRunRecord, output: string): string
   const metadata = [`run=${run.run}`, `path=${JSON.stringify(run.path)}`, result]
   if (run.droppedOutputBytes > 0) metadata.push(`dropped_bytes=${run.droppedOutputBytes}`)
   const block = formatOutputBlock(metadata, output)
-  return block.endsWith("\n") ? block : `${block}\n`
+  return `${block}\n\n`
 }
 
 function hashCommand(input: Pick<RunCommandInput, "command" | "commands" | "cwd">): string {

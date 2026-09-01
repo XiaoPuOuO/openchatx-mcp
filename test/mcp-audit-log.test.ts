@@ -286,6 +286,23 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
     new RegExp(`--- # ! shell_run - 0ms - \\d+ in / ${countTokens(childOutput)} out - Aug 11 10:50 PM\\nshell: "parallel\\/child-nonzero"`)
   )
   assert.match(finalLog, /result: status="completed" exit_code=1 cwd="\/workspace"/)
+
+  const [pollCompletedNonzero] = logger.startToolCalls({
+    method: "tools/call",
+    params: { name: "shell_poll", arguments: { shell_id: "parallel", request_id: "child-nonzero", cursor: 0 } },
+  })
+  assert.ok(pollCompletedNonzero)
+  pollCompletedNonzero.finish({
+    toolResult: {
+      isError: false,
+      structuredContent: { status: "completed", exit_code: 1, output: "failed test output" },
+    },
+  })
+
+  const completedPollLog = await readFile(file, "utf8")
+  assert.match(completedPollLog, /--- # shell_poll - 0ms - \d+ in \/ \d+ out - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"/)
+  assert.doesNotMatch(completedPollLog, /--- # ! shell_poll - 0ms - \d+ in \/ \d+ out - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"/)
+  assert.match(completedPollLog, /result: status="completed" exit_code=1/)
 })
 
 test("caps large ordinary tool arguments", async (t) => {

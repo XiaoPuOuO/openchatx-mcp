@@ -127,7 +127,7 @@ export class McpAuditLogger {
         finished = true
         const toolResponse = summarizeToolResult(input.toolResult, input.modelResult ?? input.toolResult, input.error)
         const exitCode = toolResponse.structuredContent?.exit_code
-        const shellExitFailed = (toolName === "shell_run" || toolName === "shell_poll") && typeof exitCode === "number" && exitCode !== 0
+        const shellExitFailed = toolName === "shell_run" && typeof exitCode === "number" && exitCode !== 0
         this.append(
           formatEntry({
             time: startedTime,
