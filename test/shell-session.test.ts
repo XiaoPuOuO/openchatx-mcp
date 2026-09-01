@@ -382,30 +382,29 @@ test("rejects poll cursors before the requested command", { timeout: 10_000 }, a
   )
 })
 
-test("wakes a foreground long-poll when delayed output arrives", { timeout: 10_000 }, async (t) => {
+test("coalesces foreground output while a command is still running", { timeout: 10_000 }, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
   const running = await shell.runCommand({
-    request_id: "delayed-foreground",
-    command: "sleep 0.1; printf awakened",
+    request_id: "coalesced-foreground",
+    command: "sleep 0.05; printf first; sleep 0.15; printf second",
     wait_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
 
+  await new Promise((resolve) => setTimeout(resolve, 100))
   const startedAt = Date.now()
-  const awakened = await shell.pollCommand({
-    request_id: "delayed-foreground",
+  const completed = await shell.pollCommand({
+    request_id: "coalesced-foreground",
     cursor: running.next_cursor,
-    wait_ms: 3_000,
+    wait_ms: 1_000,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
-  assert.ok(Date.now() - startedAt < 1_500, "poll should wake before its timeout")
-
-  const completed = await pollToCompletion(shell, awakened)
-  assert.equal(completed.output, "awakened")
-  assert.equal(completed.snapshot.status, "completed")
+  assert.ok(Date.now() - startedAt >= 50, "poll should not return immediately just because unread output exists")
+  assert.equal(completed.status, "completed")
+  assert.equal(completed.output, "firstsecond")
 })
 
 test("handles multiline commands, quotes, and redirected background output", { timeout: 10_000 }, async (t) => {

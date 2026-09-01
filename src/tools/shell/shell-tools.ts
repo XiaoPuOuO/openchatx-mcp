@@ -54,7 +54,7 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
     {
       title: "Poll shell output",
       description:
-        "Continue a prior shell_run that returned status=running, or read additional output when next_cursor is present. Continue polling while status is running; after completion, follow next_cursor only if more output is needed.",
+        "Long-poll a prior shell_run for additional output or completion. While the command is running, shell_poll coalesces output until it completes, the wait expires, or the response budget fills. If status remains running, poll again with next_cursor; avoid rapid repeated polls.",
       inputSchema: shellPollInputSchema,
       outputSchema: shellPollOutputSchema,
       annotations: {

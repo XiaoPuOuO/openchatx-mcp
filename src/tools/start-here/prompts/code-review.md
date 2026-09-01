@@ -16,7 +16,7 @@ Flag an issue only when:
 1. It meaningfully affects correctness, performance, security, or maintainability.
 2. It is discrete and actionable rather than a broad criticism of the codebase.
 3. Fixing it is consistent with the level of rigor used elsewhere in the repository.
-4. It was introduced by the changes under review; do not flag unrelated pre-existing problems.
+4. It was introduced, exposed, or made newly reachable by the changes under review.; do not flag unrelated pre-existing problems.
 5. The author would likely fix it if they knew about it.
 6. It does not depend on unstated assumptions about the codebase or the author's intent.
 7. Any claimed downstream impact can be tied to code that is actually affected, rather than speculation.

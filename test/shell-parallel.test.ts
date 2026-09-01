@@ -80,6 +80,33 @@ test("runs at most four parallel children and queues the rest", { timeout: 10_00
   )
 })
 
+test("coalesces completed parallel runs while the batch is still running", { timeout: 10_000 }, async (t) => {
+  const shell = createShellSession()
+  t.after(() => shell.close())
+
+  const running = await shell.runCommand({
+    request_id: "parallel-coalesced-poll",
+    commands: [{ command: "sleep 0.05; printf first" }, { command: "sleep 0.2; printf second" }],
+    wait_ms: 0,
+    max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
+  })
+  assert.equal(running.status, "running")
+
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  const startedAt = Date.now()
+  const completed = await shell.pollCommand({
+    request_id: "parallel-coalesced-poll",
+    cursor: running.next_cursor,
+    wait_ms: 1_000,
+    max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
+  })
+
+  assert.ok(Date.now() - startedAt >= 50, "poll should not return immediately when only one parallel run has finished")
+  assert.equal(completed.status, "completed")
+  assert.match(completed.output, /first/)
+  assert.match(completed.output, /second/)
+})
+
 test("keeps batch concurrency isolated per shell", { timeout: 10_000 }, async (t) => {
   const directory = await tempDir(t, "shell-mcp-parallel-per-shell-")
   const releaseFile = join(directory, "release")

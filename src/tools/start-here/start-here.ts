@@ -28,7 +28,7 @@ export function registerStartHereTool(server: McpServer): void {
     {
       title: "Start here",
       description:
-        "Required first call in a new ChatGPT conversation. Loads the selected Deep Work mode plus shared instructions and unlocks the other Shellby tools.",
+        "Required first call in a new ChatGPT conversation. Loads the selected Deep Work Mode instructions and unlocks the other Shellby tools. Call this once at the start of a conversation.",
       inputSchema: z.object({
         mode: z.enum(modes as [string, ...string[]]).describe("Select the Deep Work mode that best matches the task."),
       }),

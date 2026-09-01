@@ -258,9 +258,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     if (parallelRecord) {
       const maxOutputTokens = input.max_output_tokens
       if (parallelRecord.status === "running") {
-        const version = updates.version
-        const initialRead = parallelRecord.transcript.read(input.cursor, maxOutputTokens, parallelRecord.endCursor ?? undefined)
-        if (initialRead.output.length === 0 && !initialRead.cursorExpired) await updates.wait(version, input.wait_ms, input.signal)
+        await waitForParallelResult(parallelRecord, input.cursor, maxOutputTokens, input.wait_ms, input.signal)
       }
       return parallelSnapshot(parallelRecord, input.cursor, maxOutputTokens)
     }
@@ -270,9 +268,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 
     const maxOutputTokens = input.max_output_tokens
     if (record.status === "running") {
-      const version = updates.version
-      const initialRead = transcript.read(input.cursor, maxOutputTokens, record.endCursor ?? undefined)
-      if (initialRead.output.length === 0 && !initialRead.cursorExpired) await updates.wait(version, input.wait_ms, input.signal)
+      await waitForCommandResult(record, input.cursor, maxOutputTokens, input.wait_ms, input.signal)
     }
     return snapshot(record, input.cursor, maxOutputTokens)
   }

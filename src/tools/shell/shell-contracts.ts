@@ -55,7 +55,7 @@ export const shellPollInputSchema = z.object({
     .min(0)
     .max(MCP_CONFIG.shell.maxPollWaitMs)
     .default(MCP_CONFIG.shell.defaultPollWaitMs)
-    .describe("Max wait time for more output before returning."),
+    .describe("Max long-poll wait for completion or enough output to fill the response budget."),
   max_output_tokens: maxOutputTokensInput.describe(
     "Usually omit. Increase only when you need more output in one response; continue retained output with shell_poll."
   ),

@@ -106,7 +106,7 @@ Pass:
 - same `request_id`
 - previous `next_cursor` as `cursor`
 
-Repeat with each returned `next_cursor`. `wait_ms` controls how long the poll waits; it does not stop the command. Batch polls return the same per-command `commands` summary.
+Repeat with each returned `next_cursor` while status remains `running`. `shell_poll` long-polls: while work is still running it coalesces available output until the command completes, `wait_ms` expires, or the response token budget fills. `wait_ms` does not stop the command. Batch polls use the same behavior and return the same per-command `commands` summary.
 
 Poll `wait_ms`: default 2000 ms, max 270 s (4.5 minutes).
 

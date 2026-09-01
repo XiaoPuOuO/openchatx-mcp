@@ -19,7 +19,7 @@ export function registerApplyPatchTool(server: McpServer, executable = DEFAULT_A
     {
       title: "Apply patch",
       description:
-        "Use `apply_patch` to create, update, delete, move, or rename files. A patch may contain multiple file operations and multiple update hunks. Use `@@ <context>` to scope an update to a class, function, section, or other unique line when needed.",
+        "Shellby's first-class tool for local file modifications. Use `apply_patch` to create, update, delete, move, or rename files. A patch may contain multiple file operations and multiple update hunks. Use `@@ <context>` to scope an update to a class, function, section, or other unique line when needed.",
       inputSchema: z.object({
         patch: z
           .string()
