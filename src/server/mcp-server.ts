@@ -8,6 +8,7 @@ import { registerImageTools } from "../tools/image/image-tools.js"
 // import { registerIosShellTool } from "../tools/ios/ios-shell.js"
 import { registerShellExecutionTools, registerShellManagementTools } from "../tools/shell/shell-tools.js"
 import type { ShellSessionManager } from "../tools/shell/session-manager.js"
+import { registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerSkillTools } from "../tools/skills.js"
 import { registerCloneTools } from "../tools/subagent/clone-tools.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
@@ -23,7 +24,8 @@ export interface CreateMcpServerOptions {
   webPageOpener: WebPageOpener
   applyPatchExecutable?: string
   toolOutputStructured?: ToolOutputStructuredMode
-  notificationSessionId?: string
+  sessionId?: string
+  startedSessions?: Set<string>
   auditRequest?: McpAuditRequest
 }
 
@@ -34,17 +36,20 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
   })
   installToolRegistrationBoundary(server, {
     toolOutputStructured: options.toolOutputStructured ?? MCP_CONFIG.toolOutputStructured,
-    drainPendingEvents: () => options.chatGptSubagents.drainEvents(options.notificationSessionId),
+    drainPendingEvents: () => options.chatGptSubagents.drainEvents(options.sessionId),
+    sessionId: options.sessionId,
+    startedSessions: options.startedSessions,
     auditRequest: options.auditRequest,
   })
 
+  registerStartHereTool(server)
   registerShellExecutionTools(server, shells, workspace)
   // iOS shell is experimental and intentionally disabled until the bridge is revisited.
   // registerIosShellTool(server)
   registerApplyPatchTool(server, options.applyPatchExecutable)
   registerShellManagementTools(server, shells)
-  registerCloneTools(server, options.chatGptSubagents, options.notificationSessionId)
-  registerSubagentTools(server, options.chatGptSubagents, options.notificationSessionId)
+  registerCloneTools(server, options.chatGptSubagents, options.sessionId)
+  registerSubagentTools(server, options.chatGptSubagents, options.sessionId)
   registerWebTool(server, options.webPageOpener)
   registerSkillTools(server, workspace)
   registerImageTools(server, workspace)

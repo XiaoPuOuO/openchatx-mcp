@@ -48,6 +48,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const chatGptSubagents = options.chatGptSubagents ?? createChatGptSubagentService()
   const authStore = options.authStore
   const webPageOpener = options.webPageOpener ?? new WebPageOpener()
+  const startedSessions = new Set<string>()
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
@@ -56,13 +57,15 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const mcpHandler = createMcpHandler(
     ({ requestInfo }) => {
       const requestContext = requestRuntime.getStore()
+      const sessionId = webRequestSessionId(requestInfo)
       return createMcpServer(shells, {
         chatGptSubagents,
         applyPatchExecutable: options.applyPatchExecutable,
         peekaboo,
         webPageOpener,
         toolOutputStructured: options.toolOutputStructured,
-        notificationSessionId: webRequestSessionId(requestInfo),
+        sessionId,
+        startedSessions,
         auditRequest: requestContext?.auditRequest,
       })
     },

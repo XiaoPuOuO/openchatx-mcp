@@ -1,9 +1,15 @@
 import assert from "node:assert/strict"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import test from "node:test"
 
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
 import { MCP_CONFIG } from "../../src/config.js"
+import { discoverPromptModes, readStartPrompt } from "../../src/tools/start-here/start-here.js"
+import { createShellSession } from "../../src/tools/shell/session.js"
+import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
 import { callUntilComplete, connectClient, connectLegacyClient, postWithHost, startMcpHttpServer } from "./helpers.js"
 
 test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) => {
@@ -20,6 +26,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
     [
+      "start_here",
       "shell_run",
       "shell_poll",
       "apply_patch",
@@ -49,6 +56,14 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     ]
   )
 
+  const startHere = tools.tools.find((tool) => tool.name === "start_here")
+  assert.ok(startHere)
+  assert.deepEqual((startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum, [
+    "code-review",
+    "coding",
+    "general",
+  ])
+
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
@@ -73,6 +88,117 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(fetchUrl.outputSchema)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
+})
+
+test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-"))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const running = await startMcpHttpServer({
+    port: 0,
+    shellManager: createShellSessionManager({ defaultShell: createShellSession({ cwd: workspace }) }),
+  })
+  t.after(() => running.close())
+
+  const first = await connectClient(running.url, "startup-first", undefined, false, "startup-session-a")
+  const second = await connectClient(running.url, "startup-second", undefined, false, "startup-session-b")
+  t.after(() => Promise.all([first.client.close(), second.client.close()]))
+
+  const blocked = await first.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(blocked.isError, true)
+  assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
+
+  const started = await first.client.callTool({ name: "start_here", arguments: { mode: "coding" } })
+  assert.equal(started.isError, undefined)
+  const instructions = started.content.find((item) => item.type === "text")?.text ?? ""
+  assert.match(instructions, /^# Engineering judgment/)
+  assert.match(instructions, /# Shared Deep Work/)
+
+  const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(allowed.isError, undefined)
+
+  const stillBlocked = await second.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(stillBlocked.isError, true)
+})
+
+test("prefers repo-local .shellby prompt overrides and falls back to bundled prompts", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "shellby-start-prompt-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+
+  const bundledPath = join(root, "src", "tools", "start-here", "prompts", "coding.md")
+  const overridePath = join(root, ".shellby", "prompts", "coding.md")
+  await mkdir(join(root, "src", "tools", "start-here", "prompts"), { recursive: true })
+  await mkdir(join(root, ".shellby", "prompts"), { recursive: true })
+  await writeFile(bundledPath, "bundled")
+  await writeFile(overridePath, "override")
+
+  assert.deepEqual(await readStartPrompt("coding", root), { path: overridePath, prompt: "override" })
+
+  await rm(overridePath)
+  assert.deepEqual(await readStartPrompt("coding", root), { path: bundledPath, prompt: "bundled" })
+})
+
+test("derives start_here modes from bundled and local prompt filename slugs", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "shellby-start-modes-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+
+  const bundledDirectory = join(root, "src", "tools", "start-here", "prompts")
+  const localDirectory = join(root, ".shellby", "prompts")
+  await mkdir(bundledDirectory, { recursive: true })
+  await mkdir(localDirectory, { recursive: true })
+  await Promise.all([
+    writeFile(join(bundledDirectory, "coding.md"), "coding"),
+    writeFile(join(bundledDirectory, "general.md"), "general"),
+    writeFile(join(bundledDirectory, "shared.md"), "shared"),
+    writeFile(join(localDirectory, "coding.md"), "override"),
+    writeFile(join(localDirectory, "deep-research.md"), "research"),
+  ])
+
+  assert.deepEqual(discoverPromptModes(root), ["coding", "deep-research", "general"])
+
+  await writeFile(join(localDirectory, "Not-A-Mode.md"), "invalid")
+  assert.throws(() => discoverPromptModes(root), /lowercase kebab-case/)
+})
+
+test("reads the selected prompt before shared instructions", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "shellby-start-prompt-order-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+
+  const bundledDirectory = join(root, "src", "tools", "start-here", "prompts")
+  await mkdir(bundledDirectory, { recursive: true })
+  await writeFile(join(bundledDirectory, "coding.md"), "# Coding\n")
+  await writeFile(join(bundledDirectory, "shared.md"), "# Shared\n")
+
+  const [selected, shared] = await Promise.all([readStartPrompt("coding", root), readStartPrompt("shared", root)])
+  assert.equal([selected.prompt.trim(), shared.prompt.trim()].join("\n\n"), "# Coding\n\n# Shared")
+})
+
+test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }, async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-missing-"))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const running = await startMcpHttpServer({
+    port: 0,
+    shellManager: createShellSessionManager({ defaultShell: createShellSession({ cwd: workspace }) }),
+  })
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "startup-failure", undefined, false, "startup-session-failure")
+  t.after(() => connected.client.close())
+
+  const failed = await connected.client.callTool({ name: "start_here", arguments: { mode: "invalid" } })
+  assert.equal(failed.isError, true)
+
+  const blocked = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(blocked.isError, true)
+  assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
+})
+
+test("does not require start_here when no ChatGPT session is provided", { timeout: 10_000 }, async (t) => {
+  const running = await startMcpHttpServer({ port: 0 })
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "startup-local-client")
+  t.after(() => connected.client.close())
+
+  const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(result.isError, undefined)
 })
 
 test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, async (t) => {

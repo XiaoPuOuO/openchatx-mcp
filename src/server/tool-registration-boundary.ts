@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import type { ToolOutputStructuredMode } from "../config.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
+import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import type { McpAuditRequest } from "./audit-log.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
@@ -81,6 +82,8 @@ interface ToolRegistrationConfig {
 export interface ToolRegistrationBoundaryOptions {
   toolOutputStructured: ToolOutputStructuredMode
   drainPendingEvents?: () => string[]
+  sessionId?: string
+  startedSessions?: Set<string>
   auditRequest?: McpAuditRequest
 }
 
@@ -128,7 +131,16 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
       }
 
       try {
+        if (options.sessionId && options.startedSessions && name !== START_HERE_TOOL_NAME && !options.startedSessions.has(options.sessionId)) {
+          const result = startupRequiredResult()
+          auditCall?.finish({ toolResult: result, modelResult: result })
+          return result
+        }
+
         const result = await callback(...args)
+        if (name === START_HERE_TOOL_NAME && options.sessionId && options.startedSessions && !isToolError(result)) {
+          options.startedSessions.add(options.sessionId)
+        }
         const projected = !nativeContent && !structuredRequested ? compactToolResult(name, result) : result
         const events = [...(name === "shell_run" ? shellRunFileEditNotices(input) : []), ...(options.drainPendingEvents?.() ?? [])]
         const finalResult = appendToolEvents(projected, events)
@@ -141,6 +153,17 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
     }
     return registerTool(name, config, wrapped)
   }) as typeof server.registerTool
+}
+
+function startupRequiredResult() {
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: "Shellby has not been initialized for this conversation. Call `start_here` first." }],
+  }
+}
+
+function isToolError(value: unknown): boolean {
+  return isRecord(value) && value.isError === true
 }
 
 function addStructuredInput(schema: unknown): unknown {

@@ -20,7 +20,6 @@
     "setup": "node --env-file-if-exists=.env scripts/setup.mjs",
     "setup:computer": "node --env-file-if-exists=.env scripts/peekaboo-permissions.mjs",
     "setup:chatgpt": "node --env-file-if-exists=.env scripts/chatgpt-browser.mjs --setup",
-    "chatgpt": "node --env-file-if-exists=.env scripts/chatgpt-browser.mjs",
     "start": "node --env-file-if-exists=.env scripts/start.mjs",
     "restart": "node --env-file-if-exists=.env scripts/start.mjs --restart",
     "stop": "pm2 stop ecosystem.config.cjs",

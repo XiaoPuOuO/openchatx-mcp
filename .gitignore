@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.shellby/
 .env*
 !.env.example
 /agent-commands.md

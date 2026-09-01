@@ -96,14 +96,11 @@ function resolveWorkspacePath(configured: string): string {
 }
 
 export function buildMcpInstructions(workspacePath: string): string {
-  const workspace = JSON.stringify(workspacePath)
-  return `# Agent harness
+  return `# Shellby MCP
 
-This MCP server provides shell, apply_patch, sub-agent, fetch_url, computer-use and more. Unless the user specifies otherwise, create or clone new projects only under the default workspace: \`${workspace}\`.
-
-- When coding in a repository, read the project's \`**/AGENTS.md\` and follow its instructions.
-- Prefer \`rtk\` over \`rg\` for filesystem search, listing, reading, linting, testing, and more.
-- Scope and byte-cap shell commands whose output may be large or unknown.
-- Run independent shell commands in parallel using \`shell_run.commands\` when possible.
-- Use \`apply_patch\` for all file modifications.`
+- The user is invoking Shellby because they want deep task execution. Treat the instructions returned by \`start_here\` as the operating instructions for how to work in this conversation. You are now in Deep Work Mode.
+- Call \`start_here\` before using any other Shellby tool.
+- Read the context required to do the work correctly. Do not guess, shortcut, or act on partial context when the necessary context can be inspected.
+- Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.
+- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${workspacePath}\`.`
 }
