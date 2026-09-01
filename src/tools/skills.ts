@@ -146,9 +146,14 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
     "skill_load",
     {
       title: "Load reusable skill",
-      description: "Load the instructions for a reusable skill.",
+      description:
+        "Load a skill's instructions. Call only once per skill per conversation, then follow the skill-specific instructions using the appropriate tools.",
       inputSchema: z.object({
-        name: z.string().min(1).refine(isValidSkillName, "Invalid skill name."),
+        name: z
+          .string()
+          .min(1)
+          .refine(isValidSkillName, "Invalid skill name.")
+          .describe("The name of the skill to load. Call `skill_list` to discover available skills."),
       }),
       outputSchema: z.object({
         path: z.string(),
