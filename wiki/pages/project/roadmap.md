@@ -1,7 +1,6 @@
 ---
 summary: "Uncommitted experiments and deferred architectural work that may be revisited when a concrete need justifies it."
 paths:
-  - experiments/mcp-2026-tasks-probe/
   - src/server/http-server.ts
 ---
 
@@ -13,10 +12,13 @@ This page records uncommitted experiments and deferred architectural work; none 
 
 ## Future experiments
 
+- [ ] Add a repo-local, gitignored `.shellby/` configuration area for user customization. Start with `.shellby/config.toml` as the public Shellby configuration surface and `.shellby/prompts/` for optional `start_here` prompt overrides. Migrate ordinary `.env` configuration into one shared TOML loader used by runtime and scripts, keep external-tool credentials such as ngrok auth in their native tooling, and retain code-owned defaults/validation in `src/config.ts`.
+
 - [ ] Broaden host portability beyond the current macOS release without weakening the local-agent model or adding platform abstractions before they are needed.
-- [ ] Revisit the `io.modelcontextprotocol/tasks` extension when a supported client makes it useful. Production `/mcp` now serves MCP `2026-07-28` through the v2 `createMcpHandler` entry while retaining the SDK's stateless 2025 compatibility leg. The earlier tasks probe remains preserved at `experiments/mcp-2026-tasks-probe/` as point-in-time compatibility evidence; it is not part of production serving.
-- [ ] Consider adding `CTRL_C` support to `shell_run` so an agent can interrupt a stuck foreground command without resetting the persistent shell and losing cwd/environment state. The current non-interactive shell has no terminal job-control foreground process group, so a safe implementation would need to signal only the process tree created by the active command rather than the shell's whole process group; true terminal-equivalent Ctrl+C semantics would require a larger PTY/job-control redesign.
-- [ ] Experiment with MCP resources as a deeper Shellby instruction surface. Expose a small set of Markdown guides through `resources/list` / `resources/read` or `prompts/list` / `prompts/read` for topics such as Computer Use, persistent shells, subagents, and troubleshooting, then observe whether ChatGPT autonomously discovers and reads the relevant resource when tool descriptions alone are insufficient. Do not move critical instructions out of existing MCP, tool, or workspace guidance until that behavior is demonstrated reliably.
+- [ ] Consider adding `CTRL_C` support to `shell_run` so an agent can interrupt a stuck foreground command without resetting the persistent shell and losing cwd/environment state.
+- [ ] Redesign `shell_run` to feel closer to ChatGPT's native `container.exec`: make the common one-shot call minimal and self-contained (`command`/argv, cwd, env, timeout), remove agent-managed bookkeeping such as a required `request_id` from simple executions, make `shell_id` optional and meaningful only when persistent cwd/environment state is wanted, and return a server-generated execution handle when a command outlives the initial response so `shell_poll` can continue that process independently of shell persistence. Preserve explicit persistent shells and parallel-command support as advanced capabilities rather than making every call pay their schema/state cost.
+- [x] Experiment with MCP resources as a deeper Shellby instruction surface. Expose a small set of Markdown guides through `resources/list` / `resources/read` or `prompts/list` / `prompts/read` for topics such as ... The experiment was complete, and chatGPT does not support `modelcontextprotocol/resources` yet.
+- [x] Revisit the `io.modelcontextprotocol/tasks` extension when a supported client makes it useful. Production `/mcp` now serves MCP `2026-07-28` through the v2 `createMcpHandler` entry while retaining the SDK's stateless 2025 compatibility leg. The task probe was complete, and chatGPT does not support `modelcontextprotocol/tasks` yet.
 
 ## Related
 
