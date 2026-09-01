@@ -27,6 +27,8 @@ Source of truth for format:
 
 Tool calls may include `session: "agent-N"`. The audit logger assigns each distinct `X-OpenAI-Session` a stable first-seen alias such as `agent-1`, `agent-2`, and so on for the logger lifetime. Raw session IDs are not written to the log.
 
+For ChatGPT sessions, `start_here` is normally the first successful Shellby tool call for that session.
+
 ## Tool Bodies
 
 - `shell_run`: shell/request ID, optional cwd, and either one command or a parallel commands array
