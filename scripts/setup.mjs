@@ -4,7 +4,7 @@ import { dirname, join } from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
-import { checkPublicRuntime } from "./preflight.mjs"
+import { checkPublicRuntime, checkRtkRuntime } from "./preflight.mjs"
 import { failure, intro, note, outro, spinner } from "./setup-ui.mjs"
 import { initializeShellbyConfig, initializeWorkspace } from "./workspace-setup.mjs"
 
@@ -35,6 +35,11 @@ const config = await initializeShellbyConfig()
 note("Configuration", `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
 
 const { MCP_CONFIG } = await import("../src/config.ts")
+const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
+if (rtkError) {
+  failure("Setup cannot continue", [rtkError])
+  process.exit(1)
+}
 
 const workspaceStep = spinner("Preparing agent workspace")
 const workspace = await initializeWorkspace(MCP_CONFIG.workspace)

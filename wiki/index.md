@@ -6,7 +6,6 @@
 - [Architecture Map](./pages/architecture-map.md) — Process-level architecture and request flow across Shellby's HTTP boundary, shared runtime services, and capability handlers.
 - [Computer Use](./pages/computer-use.md) — Focused Computer Use execution through Peekaboo, including snapshots, coordinates, background delivery, and cursor-host ownership.
 - [HTTP Transport](./pages/http-transport.md) — Local HTTP/MCP routing, ngrok trust boundary, remote owner binding, request lifetime, and shared process state.
-- [iOS Shell](./pages/ios-shell.md) — Deferred experimental iPhone shell bridge, its proven architecture, limitations, and conditions for revisiting it.
 - [MCP Tool Surface](./pages/mcp-tool-surface.md) — Published MCP tools and the shared registration, output, instruction, pagination, and capability boundaries shaping their contracts.
 - [Operations](./pages/operations/index.md) — Operational setup, validation, logging, and secret-handling knowledge for running and maintaining Shellby MCP.
 - [Persistent Shell Runtime](./pages/persistent-shell-runtime.md) — Persistent shell manager and session internals, including lifecycle, transcripts, concurrency, polling, and recovery.

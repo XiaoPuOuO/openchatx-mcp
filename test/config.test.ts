@@ -17,6 +17,7 @@ test("loads and validates Shellby TOML config", async (t) => {
       "",
       "[shell]",
       'path = "/bin/zsh"',
+      "rtk = false",
       "",
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1:9222"',
@@ -40,7 +41,7 @@ test("loads and validates Shellby TOML config", async (t) => {
 
   assert.deepEqual(loadPublicConfig(path), {
     workspace: "~/Work",
-    shell: { path: "/bin/zsh" },
+    shell: { path: "/bin/zsh", rtk: false },
     chatgpt: { cdp_endpoint: "http://127.0.0.1:9222", project_url: "https://chatgpt.com/" },
     mcp: { tool_output: "structured" },
     tools: {
@@ -91,6 +92,7 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
       'workspace = "~/Work"',
       "[shell]",
       'path = "/bin/zsh"',
+      "rtk = true",
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1"',
       'project_url = "https://chatgpt.com/"',
@@ -116,6 +118,7 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
       'workspace = "~/Work"',
       "[shell]",
       'path = "/bin/zsh"',
+      "rtk = true",
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1:9222"',
       'project_url = "https://chatgpt.com/"',

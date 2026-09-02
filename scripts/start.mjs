@@ -4,11 +4,13 @@ import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
 import { MCP_CONFIG } from "../src/config.ts"
-import { checkPublicRuntime, printPreflightErrors } from "./preflight.mjs"
+import { checkPublicRuntime, checkRtkRuntime, printPreflightErrors } from "./preflight.mjs"
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const restarting = process.argv.includes("--restart")
 const { errors, pm2Path } = await checkPublicRuntime()
+const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
+if (rtkError) errors.push(rtkError)
 
 if (errors.length > 0) {
   printPreflightErrors(errors)

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -26,7 +27,12 @@ export type ToolOutputFormat = z.infer<typeof toolOutputFormatSchema>
 const publicConfigSchema = z
   .object({
     workspace: z.string().trim().min(1),
-    shell: z.object({ path: z.string().trim().min(1) }).strict(),
+    shell: z
+      .object({
+        path: z.string().trim().min(1),
+        rtk: z.boolean(),
+      })
+      .strict(),
     chatgpt: z
       .object({
         cdp_endpoint: cdpEndpoint,
@@ -73,6 +79,7 @@ export function loadPublicConfig(path = defaultConfigPath): ShellbyPublicConfig 
 }
 
 const publicConfig = loadPublicConfig()
+const rtkExecutable = resolvePathExecutable("rtk")
 
 export const MCP_CONFIG = {
   server: {
@@ -114,6 +121,8 @@ export const MCP_CONFIG = {
   },
   shell: {
     path: publicConfig.shell.path,
+    rtk: publicConfig.shell.rtk,
+    rtkExecutable,
     // Rolling shell-wide stdout/stderr retention used by cursor-based shell_poll.
     // This is a server-memory/history bound, not a model-output limit.
     transcriptChars: 1024 * 1024,
@@ -154,6 +163,13 @@ function resolveConfiguredPath(configured: string): string {
   if (configured === "~") return homedir()
   if (configured.startsWith("~/")) return join(homedir(), configured.slice(2))
   return resolve(repositoryRoot, configured)
+}
+
+function resolvePathExecutable(name: string): string | undefined {
+  const result = spawnSync("/usr/bin/which", [name], { encoding: "utf8" })
+  if (result.error || result.status !== 0) return undefined
+  const executable = result.stdout.trim()
+  return executable || undefined
 }
 
 export function buildMcpInstructions(workspacePath: string): string {

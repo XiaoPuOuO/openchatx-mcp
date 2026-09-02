@@ -12,6 +12,7 @@ const DEFAULT_PUBLIC_CONFIG = {
   workspace: "~/Desktop/agent-workspace",
   shell: {
     path: "/bin/zsh",
+    rtk: false,
   },
   chatgpt: {
     cdp_endpoint: "http://127.0.0.1:9222",

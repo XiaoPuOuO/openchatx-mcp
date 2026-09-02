@@ -50,6 +50,17 @@ export function isSupportedArchitecture(arch) {
   return arch === "arm64" || arch === "x64"
 }
 
+export function checkRtkRuntime(enabled, executable) {
+  if (!enabled) return undefined
+  if (!executable) return "RTK is enabled but not installed. Install it with `brew install rtk`, then restart Shellby."
+
+  const result = spawnSync(executable, ["rewrite", "--help"], { encoding: "utf8" })
+  if (result.error || result.status !== 0 || !result.stdout.includes("Rewrite a raw command to its RTK equivalent")) {
+    return `shell.rtk points to an incompatible \`rtk\` executable at ${executable}. Install RTK Token Killer with \`brew install rtk\`.`
+  }
+  return undefined
+}
+
 export function printPreflightErrors(errors) {
   console.error("Setup cannot continue:\n")
   for (const error of errors) console.error(`- ${error}`)

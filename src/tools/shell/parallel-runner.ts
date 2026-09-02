@@ -3,6 +3,7 @@ import { StringDecoder } from "node:string_decoder"
 
 import { utf8Chunk } from "../../utils.js"
 import type { ParallelCommandStatus } from "./shell-contracts.js"
+import { prepareShellCommand } from "./rtk.js"
 
 export type { ParallelCommandStatus } from "./shell-contracts.js"
 
@@ -144,7 +145,8 @@ export function executeParallelCommand(input: ExecuteParallelCommandInput): Prom
     }
 
     try {
-      child = spawn(input.shellPath, ["-c", input.command], {
+      const executionCommand = prepareShellCommand(input.command, input.cwd, input.env)
+      child = spawn(input.shellPath, ["-c", executionCommand], {
         cwd: input.cwd,
         env: input.env,
         detached: process.platform !== "win32",

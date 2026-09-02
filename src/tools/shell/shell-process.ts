@@ -5,6 +5,7 @@ import { isAbsolute } from "node:path"
 import { StringDecoder } from "node:string_decoder"
 
 import { MCP_CONFIG } from "../../config.js"
+import { prepareShellCommand } from "./rtk.js"
 
 type StopReason = "reset" | "close"
 
@@ -130,7 +131,8 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     activeCommand = operation
 
     try {
-      await writeToStdin(commandChild, buildCommandScript(command, token, commandCwd))
+      const executionCommand = prepareShellCommand(command, commandCwd ?? currentCwd, env)
+      await writeToStdin(commandChild, buildCommandScript(executionCommand, token, commandCwd))
     } catch (error) {
       if (activeCommand === operation) {
         activeCommand = null

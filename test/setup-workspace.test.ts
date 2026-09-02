@@ -44,7 +44,7 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   assert.equal(initial.configPath, join(root, ".shellby", "config.toml"))
   const scaffold = loadPublicConfig(initial.configPath)
   assert.equal(scaffold.workspace, "~/Desktop/agent-workspace")
-  assert.deepEqual(scaffold.shell, { path: "/bin/zsh" })
+  assert.deepEqual(scaffold.shell, { path: "/bin/zsh", rtk: false })
   assert.deepEqual(scaffold.chatgpt, {
     cdp_endpoint: "http://127.0.0.1:9222",
     project_url: "https://chatgpt.com/",
@@ -60,6 +60,7 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   assert.equal(migrated.workspace, "~/Custom")
   assert.equal(migrated.tools.computer, false)
   assert.equal(migrated.tools.shell, true)
+  assert.equal(migrated.shell.rtk, false)
   assert.equal(migrated.chatgpt.project_url, "https://chatgpt.com/")
   assert.equal(migrated.mcp.tool_output, "compact")
 
