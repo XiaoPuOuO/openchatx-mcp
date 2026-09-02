@@ -5,7 +5,7 @@ import type { ToolOutputStructuredMode } from "../config.js"
 import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
-import type { McpAuditRequest } from "./audit-log.js"
+import type { McpAuditRequest } from "./audit/audit-log.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
 const SCHEMA_KEY_ORDER = [

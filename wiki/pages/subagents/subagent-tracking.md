@@ -2,7 +2,7 @@
 summary: "Simple MCP caller session tracking, audit aliases, completion-event routing, and historical findings from the removed subagent-lineage experiment."
 paths:
   - src/server/http-server.ts
-  - src/server/audit-log.ts
+  - src/server/audit/
   - src/server/mcp-server.ts
   - src/tools/subagent/chatgpt-subagent.ts
   - src/tools/subagent/subagent-tools.ts
@@ -30,7 +30,7 @@ The HTTP boundary reads the raw `X-OpenAI-Session`. Runtime code keeps that raw 
 session: "agent-1"
 ```
 
-The next distinct caller becomes `agent-2`, then `agent-3`, and so on for the lifetime of that logger. After a successful `start_here`, later audit entries append the caller-provided task slug, for example `agent-1/audit-session-labels`. The alias is presentation-only; raw OpenAI session values are not written to the audit log (`src/server/http-server.ts`, `src/server/audit-log.ts`, `src/tools/start-here/start-here.ts`).
+The next distinct caller becomes `agent-2`, then `agent-3`, and so on for the lifetime of that logger. After a successful `start_here`, later audit entries append the caller-provided task slug, for example `agent-1/audit-session-labels`. The alias is presentation-only; raw OpenAI session values are not written to the audit log (`src/server/http-server.ts`, `src/server/audit/audit-log.ts`, `src/tools/start-here/start-here.ts`).
 
 ## Completion Events
 

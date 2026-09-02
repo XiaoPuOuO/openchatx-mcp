@@ -2,7 +2,7 @@
 summary: "Rules for authentication metadata, local state, provider credentials, audit data, and secret-sensitive repository documentation."
 paths:
   - src/auth/
-  - src/server/audit-log.ts
+  - src/server/audit/
   - src/tools/subagent/subagent-store.ts
   - .gitignore
 ---

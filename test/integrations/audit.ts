@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import { McpAuditLogger } from "../../src/server/audit-log.js"
+import { McpAuditLogger } from "../../src/server/audit/audit-log.js"
 import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
 import { connectClient, startMcpHttpServer } from "./helpers.js"
 
