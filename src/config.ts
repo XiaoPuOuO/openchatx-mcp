@@ -29,9 +29,6 @@ export const MCP_CONFIG = {
       },
     ],
   },
-  toolMeta: {
-    securitySchemes: [{ type: "noauth" }],
-  },
   host: "127.0.0.1",
   port: 3333,
   workspace: resolveWorkspacePath(process.env.MCP_CWD ?? "~/Desktop/agent-workspace"),

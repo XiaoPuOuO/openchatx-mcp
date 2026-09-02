@@ -4,14 +4,12 @@ import { basename, isAbsolute, resolve } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
 import { encodeImageForMcp, formatBytes, ImageEncodingError } from "./image-encoding.js"
 
 export function registerImageTools(server: McpServer, workspace: string): void {
   server.registerTool(
     "image_view",
     {
-      title: "View image",
       description: "View a local image file.",
       inputSchema: z.object({
         path: z.string().min(1).describe("Absolute path to the local image file."),
@@ -22,7 +20,6 @@ export function registerImageTools(server: McpServer, workspace: string): void {
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ path }, ctx) => {
       const imagePath = isAbsolute(path) ? path : resolve(workspace, path)

@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
 export const REVIEW_TOOL_NAME = "submit_review"
 export const REVIEW_PROMPT_TOOL_CALLS = 25
 
@@ -40,7 +39,6 @@ export function registerReviewTool(server: McpServer, filePath = DEFAULT_REVIEW_
   server.registerTool(
     REVIEW_TOOL_NAME,
     {
-      title: "Submit review",
       description: "Submit a review of your experience using Shellby. Use this when Shellby asks for feedback.",
       inputSchema: z.object({
         rating: z.number().min(1).max(10).multipleOf(0.1).describe("Overall Shellby experience from 1.0 (poor) to 10.0 (excellent)."),
@@ -52,7 +50,6 @@ export function registerReviewTool(server: McpServer, filePath = DEFAULT_REVIEW_
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ rating, review }) => {
       try {

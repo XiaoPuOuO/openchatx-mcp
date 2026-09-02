@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/server"
 import type { CallToolResult } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
 import { asRecord, booleanValue, finiteNumber as numberValue } from "../../utils.js"
 import { PeekabooClient, PeekabooError, type PeekabooObservation, type PeekabooResult, type PeekabooSnapshotTarget } from "./peekaboo.js"
 
@@ -27,7 +26,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_list",
     {
-      title: "List computer state",
       description: "List apps, windows, screens, or permission status.",
       inputSchema: listSchema,
       annotations: {
@@ -36,7 +34,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ kind, app, include_hidden, include_background }, ctx) => {
       let args: string[]
@@ -75,7 +72,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_observe",
     {
-      title: "Observe the computer",
       description: "Capture a screenshot and snapshot ID for an app, window, screen, or the frontmost window. Observe again after the UI changes.",
       inputSchema: observeSchema,
       annotations: {
@@ -84,7 +80,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ app, window_id, screen_index, annotate }, ctx) => {
       const args: string[] = []
@@ -109,7 +104,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_inspect",
     {
-      title: "Inspect accessible UI",
       description: "Inspect an observed snapshot for accessible elements. Use the returned snapshot_id with its element IDs.",
       inputSchema: z.object({
         snapshot_id: snapshotInput,
@@ -123,7 +117,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ snapshot_id, max_depth, max_elements, max_children }, ctx) => {
       try {
@@ -186,7 +179,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_click",
     {
-      title: "Click the computer",
       description: "Click an element, visible text, or coordinates from a snapshot.",
       inputSchema: clickSchema,
       annotations: {
@@ -195,7 +187,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       const args = ["click"]
@@ -266,7 +257,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_type",
     {
-      title: "Type on the computer",
       description: "Type text into an app, window, or snapshot.",
       inputSchema: typeSchema,
       annotations: {
@@ -275,7 +265,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       const args = ["type", "--text", input.press_return ? `${input.text}\n` : input.text]
@@ -311,7 +300,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_press",
     {
-      title: "Press computer keys",
       description: "Press keys sequentially. Use computer_hotkey for simultaneous shortcuts.",
       inputSchema: pressSchema,
       annotations: {
@@ -320,7 +308,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       const args = ["press", ...input.keys]
@@ -349,7 +336,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_hotkey",
     {
-      title: "Press a computer shortcut",
       description: "Press a keyboard shortcut. Use computer_press for sequential keys.",
       inputSchema: hotkeySchema,
       annotations: {
@@ -358,7 +344,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       const args = ["press", input.keys.join("+")]
@@ -419,7 +404,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_scroll",
     {
-      title: "Scroll the computer",
       description: "Scroll an element or screenshot coordinate in the background, or set foreground=true to use the physical pointer.",
       inputSchema: scrollSchema,
       annotations: {
@@ -428,7 +412,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       const args = ["scroll", "--direction", input.direction]
@@ -458,24 +441,20 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
     }
   )
 
-  const dragPoint = z.union([z.object({ element_id: z.string().min(1) }).strict(), z.object({ x: z.number(), y: z.number() }).strict()])
-  const dragDestination = z.union([dragPoint, z.object({ app: appInput }).strict()])
-  const dragSchema = z.object({
-    snapshot_id: snapshotInput,
-    from: dragPoint,
-    to: dragDestination,
-    duration_ms: z.number().int().min(50).max(10_000).optional(),
-    steps: z.number().int().min(2).max(96).optional(),
-    modifiers: z
-      .array(z.enum(["cmd", "shift", "option", "ctrl"]))
-      .max(4)
-      .optional(),
-  })
+  const dragPoint = z.object({ x: z.number(), y: z.number() }).strict()
+  const dragSchema = z
+    .object({
+      snapshot_id: snapshotInput,
+      from: dragPoint,
+      to: dragPoint,
+      duration_ms: z.number().int().min(50).max(10_000).optional(),
+      steps: z.number().int().min(2).max(96).optional(),
+    })
+    .strict()
 
   server.registerTool(
     "computer_drag",
     {
-      title: "Drag on the computer",
       description: "Drag between coordinates inside one exact observed window without moving the physical pointer.",
       inputSchema: dragSchema,
       annotations: {
@@ -484,7 +463,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       let target: PeekabooSnapshotTarget
@@ -499,16 +477,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         if (screenCapture || target.windowId === undefined) {
           throw new PeekabooError("EXACT_WINDOW_REQUIRED", "Background dragging requires an exact window observation.")
         }
-        if (!("x" in input.from) || !("x" in input.to)) {
-          throw new PeekabooError(
-            "BACKGROUND_DRAG_UNSUPPORTED",
-            "Background dragging currently requires coordinate-to-coordinate points inside one exact window."
-          )
-        }
-        if (input.modifiers?.length) {
-          throw new PeekabooError("BACKGROUND_DRAG_UNSUPPORTED", "Background dragging does not currently support modifier keys.")
-        }
-
         const args = [
           "drag",
           "--from",
@@ -554,7 +522,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_app",
     {
-      title: "Manage a computer app",
       description: "Launch, switch to, quit, relaunch, hide, or unhide an app.",
       inputSchema: appSchema,
       annotations: {
@@ -563,7 +530,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ action, app, open, force }, ctx) => {
       const args = appCommandArgs(action, app, open, force)
@@ -634,7 +600,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_window",
     {
-      title: "Manage a computer window",
       description: "Focus, close, minimize, restore, maximize, move, resize, or set window bounds.",
       inputSchema: windowSchema,
       annotations: {
@@ -643,7 +608,6 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       const subcommand = input.action === "set_bounds" ? "set-bounds" : input.action

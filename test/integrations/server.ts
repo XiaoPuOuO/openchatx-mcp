@@ -23,6 +23,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(connected.client.getDiscoverResult())
 
   const tools = await connected.client.listTools()
+  for (const tool of tools.tools) {
+    assert.equal(tool.title, undefined)
+    assert.equal((tool as unknown as Record<string, unknown>)._meta, undefined)
+  }
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
     [
@@ -69,7 +73,8 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
   const subagentResult = tools.tools.find((tool) => tool.name === "subagent_result")
-  assert.ok(shellRun && shellPoll && fetchUrl && subagentResult)
+  const computerDrag = tools.tools.find((tool) => tool.name === "computer_drag")
+  assert.ok(shellRun && shellPoll && fetchUrl && subagentResult && computerDrag)
 
   const runWait = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
   const pollWait = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
@@ -89,6 +94,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(fetchUrl.outputSchema)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
+  const dragProperties = computerDrag.inputSchema.properties as Record<string, Record<string, unknown>>
+  assert.equal("modifiers" in dragProperties, false)
+  assert.equal(dragProperties.from?.anyOf, undefined)
+  assert.equal(dragProperties.to?.anyOf, undefined)
 })
 
 test("asks once for a Shellby review after sustained tool use and saves the response", { timeout: 10_000 }, async (t) => {

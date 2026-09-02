@@ -177,7 +177,7 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
     },
   })
   assert.equal(unsupportedDrag.isError, true)
-  assert.match(unsupportedDrag.content[0]?.type === "text" ? unsupportedDrag.content[0].text : "", /does not currently support modifier keys/)
+  assert.match(unsupportedDrag.content[0]?.type === "text" ? unsupportedDrag.content[0].text : "", /modifiers|unrecognized|invalid/i)
 
   const typed = await connected.client.callTool({
     name: "computer_type",

@@ -55,7 +55,6 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
   server.registerTool(
     "subagent_run",
     {
-      title: "Run ChatGPT subagent tasks",
       description:
         "Submit tasks to subagents and continue working. Reuse an agent_id to continue the same subagent conversation. Use the returned turn_id with `subagent_result` to retrieve that specific turn.",
       inputSchema: z.object({
@@ -74,7 +73,6 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
         idempotentHint: false,
         openWorldHint: true,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ agents }, ctx) => {
       const turns: Array<z.infer<typeof subagentRunResultSchema>> = []
@@ -122,7 +120,6 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
   server.registerTool(
     "subagent_result",
     {
-      title: "Get subagent turn status or results",
       description: "Turn IDs returned by subagent_run. Each identifies one specific submitted turn.",
       inputSchema: z.object({
         turn_ids: z
@@ -152,7 +149,6 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
         idempotentHint: true,
         openWorldHint: true,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ turn_ids, wait_ms }, ctx) => {
       const results = await Promise.all(

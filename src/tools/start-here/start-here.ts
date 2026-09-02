@@ -6,8 +6,6 @@ import { dirname, join, resolve } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
-
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -27,7 +25,6 @@ export function registerStartHereTool(server: McpServer): void {
   server.registerTool(
     START_HERE_TOOL_NAME,
     {
-      title: "Start here",
       description:
         "Required first call in a new ChatGPT conversation. Loads the selected Deep Work Mode instructions and unlocks the other Shellby tools. Call this once at the start of a conversation.",
       inputSchema: z.object({
@@ -45,7 +42,6 @@ export function registerStartHereTool(server: McpServer): void {
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ mode }) => {
       const [selected, shared] = await Promise.all([readStartPrompt(mode), readStartPrompt(SHARED_PROMPT_NAME)])

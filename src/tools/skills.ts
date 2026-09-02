@@ -3,8 +3,6 @@ import { join } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../config.js"
-
 export const MAX_SKILL_BYTES = 256 * 1024
 
 const SKILL_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
@@ -110,7 +108,6 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
   server.registerTool(
     "skill_list",
     {
-      title: "List reusable skills",
       description: "List available reusable skills.",
       inputSchema: z.object({}),
       outputSchema: z.object({
@@ -127,7 +124,6 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (_input, ctx) => {
       try {
@@ -145,7 +141,6 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
   server.registerTool(
     "skill_load",
     {
-      title: "Load reusable skill",
       description:
         "Load a skill's instructions. Call only once per skill per conversation, then follow the skill-specific instructions using the appropriate tools.",
       inputSchema: z.object({
@@ -165,7 +160,6 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ name }, ctx) => {
       try {

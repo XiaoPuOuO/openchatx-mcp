@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server"
 
-import { MCP_CONFIG } from "../../config.js"
 import {
   DEFAULT_SHELL_ID,
   shellCloseInputSchema,
@@ -26,7 +25,6 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_run",
     {
-      title: "Run shell commands",
       description: `Run arbitrary zsh commands in a persistent shell. New shells start in ${workspaceDescription}.\n- Use the apply_patch tool for file changes.`,
       inputSchema: shellRunInputSchema,
       outputSchema: shellRunOutputSchema,
@@ -36,7 +34,6 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
         idempotentHint: false,
         openWorldHint: true,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       try {
@@ -52,7 +49,6 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_poll",
     {
-      title: "Poll shell output",
       description:
         "Long-poll a prior shell_run for additional output or completion. While the command is running, shell_poll coalesces output until it completes, the wait expires, or the response budget fills. If status remains running, poll again with next_cursor; avoid rapid repeated polls.",
       inputSchema: shellPollInputSchema,
@@ -63,7 +59,6 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input, ctx) => {
       try {
@@ -81,7 +76,6 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_reset",
     {
-      title: "Reset the shell",
       description:
         "Attempt to terminate the persistent shell process group, discard its working directory and environment state, and start a clean shell. Use this to recover from a stuck foreground command. Process-group cleanup is best effort if signaling is denied.",
       inputSchema: shellResetInputSchema,
@@ -92,7 +86,6 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async (input) => {
       try {
@@ -111,7 +104,6 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_list",
     {
-      title: "List active shells",
       description: "List currently open persistent shells, their activity state, idle duration, and whether they may be closed.",
       outputSchema: shellListOutputSchema,
       annotations: {
@@ -120,7 +112,6 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async () => {
       try {
@@ -143,7 +134,6 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_close",
     {
-      title: "Close a shell",
       description: `Terminate a named shell, discard its state and retained records, and immediately free its slot. The ${DEFAULT_SHELL_ID} shell is protected; use shell_reset if it freezes.`,
       inputSchema: shellCloseInputSchema,
       outputSchema: shellCloseOutputSchema,
@@ -153,7 +143,6 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ shell_id }) => {
       try {

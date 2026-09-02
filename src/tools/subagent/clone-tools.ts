@@ -31,7 +31,6 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
   server.registerTool(
     "clone_self",
     {
-      title: "Clone yourself from a ChatGPT conversation",
       description: "Create an independent copy of yourself with equivalent reasoning capability. Returns a detached turn_id.",
       inputSchema: z.object({
         // TODO: Consider making this optional by persisting X-OpenAI-Session -> conversation URL after the first call,
@@ -57,7 +56,6 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
         idempotentHint: false,
         openWorldHint: true,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ conversation_url, clone_id, prompt }, ctx) => {
       try {
@@ -93,7 +91,6 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
   server.registerTool(
     "clone_run",
     {
-      title: "Run another turn in an existing clone",
       description:
         "Send another instruction to an existing clone. Reuse the clone_id returned by clone_self to preserve that clone's independent conversation context. Returns a detached turn_id for clone_result.",
       inputSchema: z.object({
@@ -116,7 +113,6 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
         idempotentHint: false,
         openWorldHint: true,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ clone_id, prompt }, ctx) => {
       try {
@@ -145,7 +141,6 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
   server.registerTool(
     "clone_result",
     {
-      title: "Get clone turn status or results",
       description: "Get the status or result of turns returned by clone_self or clone_run. Multiple turn_ids can be retrieved concurrently.",
       inputSchema: z.object({
         turn_ids: z
@@ -172,7 +167,6 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
         idempotentHint: true,
         openWorldHint: true,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ turn_ids, wait_ms }, ctx) => {
       const turns = await Promise.all(

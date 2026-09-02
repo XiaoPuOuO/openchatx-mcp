@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
 import { tokenPrefix } from "../../tokenizer.js"
 
 const FAILURE_OUTPUT_TOKENS = 1_024
@@ -17,7 +16,6 @@ export function registerApplyPatchTool(server: McpServer, executable = DEFAULT_A
   server.registerTool(
     "apply_patch",
     {
-      title: "Apply patch",
       description:
         "Shellby's first-class tool for local file modifications. Use `apply_patch` to create, update, delete, move, or rename files. A patch may contain multiple file operations and multiple update hunks. Use `@@ <context>` to scope an update to a class, function, section, or other unique line when needed.",
       inputSchema: z.object({
@@ -45,7 +43,6 @@ export function registerApplyPatchTool(server: McpServer, executable = DEFAULT_A
         idempotentHint: false,
         openWorldHint: false,
       },
-      _meta: MCP_CONFIG.toolMeta,
     },
     async ({ patch, cwd }, ctx) => {
       try {
