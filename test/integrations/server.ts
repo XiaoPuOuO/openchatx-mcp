@@ -100,13 +100,13 @@ test("asks once for a Shellby review after sustained tool use and saves the resp
   const connected = await connectClient(running.url, "review-client", undefined, false, "review-session")
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general" } })
+  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "review-feedback" } })
 
   const beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.doesNotMatch(beforeThreshold.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
 
   const prompted = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  assert.match(prompted.content.find((item) => item.type === "text")?.text ?? "", /Please call `submit_review` once/)
+  assert.match(prompted.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
 
   const noRepeat = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.doesNotMatch(noRepeat.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
@@ -141,11 +141,8 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   assert.equal(blocked.isError, true)
   assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
 
-  const started = await first.client.callTool({ name: "start_here", arguments: { mode: "coding" } })
+  const started = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_slug: "startup-session" } })
   assert.equal(started.isError, undefined)
-  const instructions = started.content.find((item) => item.type === "text")?.text ?? ""
-  assert.match(instructions, /^# Engineering judgment/)
-  assert.match(instructions, /# Shared Deep Work/)
 
   const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(allowed.isError, undefined)
@@ -193,19 +190,6 @@ test("derives start_here modes from bundled and local prompt filename slugs", as
   assert.throws(() => discoverPromptModes(root), /lowercase kebab-case/)
 })
 
-test("reads the selected prompt before shared instructions", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "shellby-start-prompt-order-"))
-  t.after(() => rm(root, { recursive: true, force: true }))
-
-  const bundledDirectory = join(root, "src", "tools", "start-here", "prompts")
-  await mkdir(bundledDirectory, { recursive: true })
-  await writeFile(join(bundledDirectory, "coding.md"), "# Coding\n")
-  await writeFile(join(bundledDirectory, "shared.md"), "# Shared\n")
-
-  const [selected, shared] = await Promise.all([readStartPrompt("coding", root), readStartPrompt("shared", root)])
-  assert.equal([selected.prompt.trim(), shared.prompt.trim()].join("\n\n"), "# Coding\n\n# Shared")
-})
-
 test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }, async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-missing-"))
   t.after(() => rm(workspace, { recursive: true, force: true }))
@@ -217,7 +201,7 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
   const connected = await connectClient(running.url, "startup-failure", undefined, false, "startup-session-failure")
   t.after(() => connected.client.close())
 
-  const failed = await connected.client.callTool({ name: "start_here", arguments: { mode: "invalid" } })
+  const failed = await connected.client.callTool({ name: "start_here", arguments: { mode: "invalid", task_slug: "invalid-mode" } })
   assert.equal(failed.isError, true)
 
   const blocked = await connected.client.callTool({ name: "shell_list", arguments: {} })

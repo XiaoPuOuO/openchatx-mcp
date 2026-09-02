@@ -11,6 +11,7 @@ import { MCP_CONFIG } from "../../config.js"
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const TASK_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 type PromptSource = {
   path: string
@@ -31,6 +32,12 @@ export function registerStartHereTool(server: McpServer): void {
         "Required first call in a new ChatGPT conversation. Loads the selected Deep Work Mode instructions and unlocks the other Shellby tools. Call this once at the start of a conversation.",
       inputSchema: z.object({
         mode: z.enum(modes as [string, ...string[]]).describe("Select the Deep Work mode that best matches the task."),
+        task_slug: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(TASK_SLUG_PATTERN, "task_slug must be lowercase kebab-case.")
+          .describe("Short lowercase kebab-case label for the work, such as audit-session-labels."),
       }),
       annotations: {
         readOnlyHint: true,

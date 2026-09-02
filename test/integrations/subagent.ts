@@ -30,7 +30,7 @@ test("delivers a completed subagent event on the next MCP response exactly once"
   t.after(() => running.close())
   const other = await connectClient(running.url, "other-subagent-event-client", undefined, false, "other-session")
   t.after(() => other.client.close())
-  await other.client.callTool({ name: "start_here", arguments: { mode: "general" } })
+  await other.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "other-subagent-session" } })
   const unrelated = await other.client.callTool({ name: "shell_list", arguments: {} })
   const unrelatedText = unrelated.content.find((item) => item.type === "text")
   assert.ok(unrelatedText?.type === "text")
@@ -38,7 +38,7 @@ test("delivers a completed subagent event on the next MCP response exactly once"
 
   const connected = await connectClient(running.url, "subagent-event-client", undefined, false, "launch-session")
   t.after(() => connected.client.close())
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general" } })
+  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "subagent-events" } })
   events.set("launch-session", ["agent_finished agent_id=reviewer turn_id=reviewer_turn_1"])
 
   const first = await connected.client.callTool({ name: "shell_list", arguments: {} })
@@ -106,7 +106,7 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
   t.after(() => running.close())
 
   const first = await connectClient(running.url, "subagent-client-1", undefined, false, "launch-session-1")
-  await first.client.callTool({ name: "start_here", arguments: { mode: "general" } })
+  await first.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "subagent-state" } })
   const started = await first.client.callTool({
     name: "subagent_run",
     arguments: {

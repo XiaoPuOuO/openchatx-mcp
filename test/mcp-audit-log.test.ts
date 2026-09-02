@@ -110,6 +110,31 @@ test("aliases audit sessions in first-seen order without logging raw ids", async
   assert.doesNotMatch(log, /raw-session-a|raw-session-b/)
 })
 
+test("adds the successful start_here task slug to later audit session aliases", async (t) => {
+  const file = await auditFile(t)
+  const logger = new McpAuditLogger(
+    file,
+    () => new Date(2026, 8, 1, 18, 0, 0),
+    () => 0
+  )
+  const context = { sessionId: "raw-session-a" }
+  const [startHere] = logger.startToolCalls(
+    { method: "tools/call", params: { name: "start_here", arguments: { mode: "coding", task_slug: "audit-session-labels" } } },
+    context
+  )
+  assert.ok(startHere)
+  startHere.finish({ toolResult: { content: [{ type: "text", text: "instructions" }] } })
+
+  const [shellList] = logger.startToolCalls({ method: "tools/call", params: { name: "shell_list", arguments: {} } }, context)
+  assert.ok(shellList)
+  shellList.finish({ toolResult: { structuredContent: { shells: [], count: 1, limit: 8, idle_timeout_ms: 300_000 } } })
+
+  const log = await readFile(file, "utf8")
+  assert.match(log, /--- # start_here[\s\S]*?session: "agent-1"[\s\S]*?task_slug.*audit-session-labels/)
+  assert.match(log, /--- # shell_list[\s\S]*?session: "agent-1\/audit-session-labels"/)
+  assert.doesNotMatch(log, /raw-session-a/)
+})
+
 test("marks explicit structured and max_output_tokens tool arguments in the heading", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(

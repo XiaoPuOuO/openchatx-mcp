@@ -46,6 +46,7 @@ interface ToolResponseSummary {
 export class McpAuditLogger {
   // Session IDS are NOT private, aliases are using to make it human readable
   private readonly sessionAliases = new Map<string, string>()
+  private readonly sessionTaskSlugs = new Map<string, string>()
 
   constructor(
     private readonly filePath: string,
@@ -128,14 +129,16 @@ export class McpAuditLogger {
         const toolResponse = summarizeToolResult(input.toolResult, input.modelResult ?? input.toolResult, input.error)
         const exitCode = toolResponse.structuredContent?.exit_code
         const shellExitFailed = toolName === "shell_run" && typeof exitCode === "number" && exitCode !== 0
+        const httpStatus = input.httpStatus ?? 200
+        const state = input.state ?? "finished"
         this.append(
           formatEntry({
             time: startedTime,
             toolName,
             argumentsValue,
             durationMs: Math.max(0, this.clock() - startedAt),
-            httpStatus: input.httpStatus ?? 200,
-            state: input.state ?? "finished",
+            httpStatus,
+            state,
             inputTokens,
             outputTokens: toolResponse.modelOutput !== undefined ? countTokens(toolResponse.modelOutput) : undefined,
             toolFailed: toolResponse.failed || shellExitFailed,
@@ -144,6 +147,10 @@ export class McpAuditLogger {
             context: auditContext,
           })
         )
+        if (toolName === "start_here" && !toolResponse.failed && httpStatus < 400 && state === "finished" && context.sessionId) {
+          const argumentsRecord = asRecord(argumentsValue)
+          if (typeof argumentsRecord?.task_slug === "string") this.sessionTaskSlugs.set(context.sessionId, argumentsRecord.task_slug)
+        }
       },
     }
   }
@@ -156,10 +163,10 @@ export class McpAuditLogger {
 
   private sessionAlias(sessionId: string): string {
     const known = this.sessionAliases.get(sessionId)
-    if (known) return known
-    const alias = `agent-${this.sessionAliases.size + 1}`
-    this.sessionAliases.set(sessionId, alias)
-    return alias
+    const alias = known ?? `agent-${this.sessionAliases.size + 1}`
+    if (!known) this.sessionAliases.set(sessionId, alias)
+    const taskSlug = this.sessionTaskSlugs.get(sessionId)
+    return taskSlug ? `${alias}/${taskSlug}` : alias
   }
 
   private append(entry: string): void {
