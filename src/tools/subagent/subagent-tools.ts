@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
-import { getAgentIdentity } from "../../server/agent-context.js"
 import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
 
 const SUBAGENT_RUN_DELAYS_MS = [0, 5_000, 7_000] as const
@@ -99,7 +98,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
               oververbosity: agent.oververbosity,
               memory: agent.memory,
             },
-            { signal: ctx.mcpReq.signal, notificationSessionId: getAgentIdentity()?.sessionId }
+            { signal: ctx.mcpReq.signal }
           )
           turns.push({
             agent_id: agent.agent_id,

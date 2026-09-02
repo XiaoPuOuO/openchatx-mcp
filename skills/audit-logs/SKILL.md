@@ -26,7 +26,7 @@ Source of truth for format:
 - `out` = model-facing text/structured output tokens; native image payloads are excluded
 - final time = local call start time
 
-Tool calls may include `session: "agent-N"` or, after a successful `start_here`, `session: "agent-N/task-slug"`. The audit logger assigns each distinct `X-OpenAI-Session` a stable first-seen alias such as `agent-1`, `agent-2`, and so on for the logger lifetime. A successful `start_here` stores that session's caller-provided `task_slug`; later entries append it to the alias, for example `agent-1/audit-session-labels`. The `start_here` entry itself keeps the plain `agent-N` alias. Raw session IDs are not written to the log.
+Tool calls may include `session: "agent-N"` or, after a successful `start_here`, `session: "agent-N/task-slug"`. Shellby's shared agent context assigns each distinct `X-OpenAI-Session` a stable process-local identity such as `agent-1`, `agent-2`, and so on. A successful `start_here` adds that caller's `task_slug`; later audit entries append it to the agent label, for example `agent-1/audit-session-labels`. The `start_here` entry itself keeps the plain `agent-N` label. Raw session IDs are not written to the log.
 
 For ChatGPT sessions, `start_here` is normally the first successful Shellby tool call for that session.
 

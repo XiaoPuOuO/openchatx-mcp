@@ -32,7 +32,7 @@ This is separate from pre-submit restoration: a closed idle page or mismatched c
 
 ## Detached Result Lifecycle
 
-`subagent_run` returns after one successful submission. The observer completes the local turn asynchronously and queues exactly one `agent_finished agent_id=<agent_id> turn_id=<turn_id>` event under the launching caller's `X-OpenAI-Session`. A different ChatGPT conversation cannot drain that notice. This session value is used only as the notification destination, not as subagent identity or lineage (`src/server/http-server.ts`, `src/server/mcp-server.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
+`subagent_run` returns after one successful submission. The submitted turn captures the launching caller's shared `AgentIdentity`; the observer or recovery path later queues exactly one `agent_finished agent_id=<agent_id> turn_id=<turn_id>` event for that captured parent. A different ChatGPT conversation cannot drain that notice because event draining uses the current request's `AgentIdentity`. No separate notification-session identifier is carried through the subagent API (`src/server/agent-context.ts`, `src/server/mcp-server.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
 
 `subagent_result(wait_ms)` only waits on the turn's local settlement promise. It never contacts ChatGPT, refreshes the browser, or performs reconciliation.
 

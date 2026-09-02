@@ -33,7 +33,7 @@ export function formatAuditEntry(input: {
   const tagPrefix = tag ? `${tag} ` : ""
   const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${abnormal} - ${formatAuditTime(input.time)}`
   const details = [
-    formatAuditSession(input.agentLabel),
+    formatAgentLabel(input.agentLabel),
     formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage),
     formatResponseSummary(input.toolName, input.responseSummary),
   ]
@@ -84,7 +84,7 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function formatAuditSession(agentLabel: string | undefined): string {
+function formatAgentLabel(agentLabel: string | undefined): string {
   return agentLabel ? `session: ${yamlString(agentLabel)}` : ""
 }
 

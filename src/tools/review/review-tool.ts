@@ -13,26 +13,20 @@ export const REVIEW_PROMPT_TOOL_CALLS = 25
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 const DEFAULT_REVIEW_FILE = join(repositoryRoot, ".shellby", "reviews.jsonl")
 
-export interface ReviewPromptTracker {
-  recordToolCall(): string[]
-}
+export type ReviewPromptTracker = () => string[]
 
 export function createReviewPromptTracker(): ReviewPromptTracker {
   const toolCalls = new Map<AgentIdentity, number>()
-  const promptedAgents = new Set<AgentIdentity>()
 
-  return {
-    recordToolCall() {
-      const agent = getAgentIdentity()
-      if (!agent) return []
-      const count = (toolCalls.get(agent) ?? 0) + 1
-      toolCalls.set(agent, count)
-      if (count < REVIEW_PROMPT_TOOL_CALLS || promptedAgents.has(agent)) return []
-      promptedAgents.add(agent)
-      return [
-        `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and a note about your Shellby MCP experience, to help improve Shellby.`,
-      ]
-    },
+  return () => {
+    const agent = getAgentIdentity()
+    if (!agent) return []
+    const count = (toolCalls.get(agent) ?? 0) + 1
+    toolCalls.set(agent, count)
+    if (count !== REVIEW_PROMPT_TOOL_CALLS) return []
+    return [
+      `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and a note about your Shellby MCP experience, to help improve Shellby.`,
+    ]
   }
 }
 

@@ -1,6 +1,7 @@
 ---
-summary: "Simple MCP caller session tracking, audit aliases, completion-event routing, and historical findings from the removed subagent-lineage experiment."
+summary: "Simple MCP caller identity tracking, audit labels, completion-event routing, and historical findings from the removed subagent-lineage experiment."
 paths:
+  - src/server/agent-context.ts
   - src/server/http-server.ts
   - src/server/audit/
   - src/server/mcp-server.ts
@@ -16,25 +17,25 @@ read_more:
 
 ## Current Model
 
-Shellby tracks only the ChatGPT conversation that made each MCP request:
+Shellby tracks only the ChatGPT conversation that made each MCP request. The HTTP boundary passes `X-OpenAI-Session` into the process-local agent context, which owns the canonical identity for that caller:
 
 ```text
-X-OpenAI-Session = caller session
+X-OpenAI-Session -> { sessionId, agent, taskSlug }
 ```
 
 No attempt is made to classify a caller as a browser subagent or infer relationships between sessions. `agent_id` remains the reusable browser-conversation key for `subagent_run`; it is unrelated to MCP caller identity.
 
-The HTTP boundary reads the raw `X-OpenAI-Session`. Runtime code keeps that raw value only where needed. The audit logger assigns each distinct raw value a short first-seen alias:
+Each distinct session receives a short first-seen `agent-N` identity from `agent-context.ts`:
 
 ```yaml
 session: "agent-1"
 ```
 
-The next distinct caller becomes `agent-2`, then `agent-3`, and so on for the lifetime of that logger. After a successful `start_here`, later audit entries append the caller-provided task slug, for example `agent-1/audit-session-labels`. The alias is presentation-only; raw OpenAI session values are not written to the audit log (`src/server/http-server.ts`, `src/server/audit/audit-log.ts`, `src/tools/start-here/start-here.ts`).
+The next distinct caller becomes `agent-2`, then `agent-3`, and so on for the process lifetime. After a successful `start_here`, its caller-provided task slug becomes part of the same identity. Audit entries format that as `agent-1/audit-session-labels`; reviews and other runtime features consume the same identity (`src/server/agent-context.ts`, `src/server/http-server.ts`, `src/server/audit/audit-log.ts`, `src/tools/start-here/start-here.ts`).
 
 ## Completion Events
 
-`subagent_run` passes the launching request's session into the detached turn only as its notification destination. When that turn completes, `agent_finished` is queued for that same session and drained on a later MCP response from that session. This is direct launch-session routing, not relationship inference (`src/server/mcp-server.ts`, `src/tools/subagent/subagent-tools.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
+Each submitted subagent or clone turn captures the launching request's `AgentIdentity`. When that detached turn completes, including through recovery work driven by the service cleanup timer, `agent_finished` is queued against that captured identity. A later MCP response drains events for its current `AgentIdentity`. This preserves direct parent notification without carrying a separate notification session ID through the subagent API (`src/server/agent-context.ts`, `src/server/mcp-server.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
 
 ## Removed Lineage Experiment
 
@@ -63,7 +64,7 @@ Those observations prove ChatGPT has deterministic call/result linkage inside th
 Keep session tracking boring:
 
 ```text
-one MCP caller session -> one audit alias
+one MCP caller session -> one AgentIdentity
 ```
 
 Audit output answers which conversation called Shellby. It does not claim how that conversation relates to any other conversation.

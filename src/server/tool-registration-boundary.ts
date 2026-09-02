@@ -132,7 +132,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
         const events = [
           ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
           ...(options.drainPendingEvents?.() ?? []),
-          ...(options.reviewPromptTracker?.recordToolCall() ?? []),
+          ...(options.reviewPromptTracker?.() ?? []),
         ]
         const finalResult = appendToolEvents(projected, events)
         auditCall?.finish({ toolResult: result, modelResult: finalResult })

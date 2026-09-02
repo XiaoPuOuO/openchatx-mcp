@@ -1,6 +1,7 @@
 import type { Browser, BrowserContext, Page } from "playwright-core"
 
 import { MCP_CONFIG } from "../../config.js"
+import { getAgentIdentity, type AgentIdentity } from "../../server/agent-context.js"
 import {
   assertAuthenticated,
   createBackgroundPage,
@@ -68,6 +69,7 @@ interface BrowserAgentState {
 interface BrowserTurnState {
   turnId: string
   agentId: string
+  parentAgent?: AgentIdentity
   status: "running" | "completed" | "failed"
   recoveryAttempted: boolean
   lastActivityAt: number
@@ -89,7 +91,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   const agents = new Map<string, BrowserAgentState>()
   const turns = new Map<string, BrowserTurnState>()
   const activeOperations = new Map<string, ActiveAgentOperation>()
-  const pendingEvents = new Map<string, string[]>()
+  const pendingEvents = new Map<AgentIdentity | undefined, string[]>()
   let rateLimitedUntil = 0
   let browser: Browser | undefined
   let context: BrowserContext | undefined
@@ -239,6 +241,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       const turn: BrowserTurnState = {
         turnId,
         agentId: agent.agentId,
+        parentAgent: getAgentIdentity(),
         status: "running",
         recoveryAttempted: false,
         lastActivityAt: Date.now(),
@@ -526,17 +529,16 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     agent.status = "idle"
     turn.status = "completed"
     turn.response = response
-    const sessionKey = activeOperations.get(turn.agentId)?.notificationSessionId ?? ""
     settleTurn(turn)
-    const events = pendingEvents.get(sessionKey) ?? []
+    const events = pendingEvents.get(turn.parentAgent) ?? []
     events.push(`agent_finished agent_id=${turn.agentId} turn_id=${turn.turnId}`)
-    pendingEvents.set(sessionKey, events)
+    pendingEvents.set(turn.parentAgent, events)
   }
 
-  function drainPendingEvents(sessionId?: string): string[] {
-    const key = sessionId ?? ""
-    const events = pendingEvents.get(key) ?? []
-    pendingEvents.delete(key)
+  function drainPendingEvents(): string[] {
+    const agent = getAgentIdentity()
+    const events = pendingEvents.get(agent) ?? []
+    pendingEvents.delete(agent)
     return events
   }
 

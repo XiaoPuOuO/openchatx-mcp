@@ -26,7 +26,6 @@ export interface ChatGptCloneRunRequest {
 
 export interface ChatGptSubagentCallContext {
   signal?: AbortSignal
-  notificationSessionId?: string
 }
 
 export interface ChatGptSubagentPollResult {
@@ -66,6 +65,6 @@ export interface ChatGptSubagentService {
   cloneSelf(request: ChatGptCloneSelfRequest, context: ChatGptSubagentCallContext): Promise<string>
   cloneRun(request: ChatGptCloneRunRequest, context: ChatGptSubagentCallContext): Promise<string>
   poll(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult>
-  drainEvents(sessionId?: string): string[]
+  drainEvents(): string[]
   dispose(): Promise<void>
 }

@@ -16,7 +16,6 @@ import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-
 import { registerSubagentTools } from "../tools/subagent/subagent-tools.js"
 import { WebPageOpener } from "../tools/web/web-open.js"
 import { registerWebTool } from "../tools/web/web-tool.js"
-import { getAgentIdentity } from "./agent-context.js"
 import type { McpAuditRequest } from "./audit/audit-log.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
@@ -35,7 +34,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
     instructions: buildMcpInstructions(workspace),
   })
   installToolRegistrationBoundary(server, {
-    drainPendingEvents: options.chatGptSubagents ? () => options.chatGptSubagents!.drainEvents(getAgentIdentity()?.sessionId) : undefined,
+    drainPendingEvents: options.chatGptSubagents ? () => options.chatGptSubagents!.drainEvents() : undefined,
     reviewPromptTracker: options.reviewPromptTracker,
     auditRequest: options.auditRequest,
   })
