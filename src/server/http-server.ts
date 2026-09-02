@@ -9,6 +9,7 @@ import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/auth.js"
 import { MCP_CONFIG } from "../config.js"
 import { createReviewPromptTracker } from "../tools/review/review-tool.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
+import { runWithAgent } from "./agent-context.js"
 import { createMcpServer } from "./mcp-server.js"
 import { McpAuditLogger, type McpAuditRequest } from "./audit/audit-log.js"
 import type { PeekabooClient } from "../tools/computer/peekaboo.js"
@@ -38,7 +39,6 @@ export interface McpRuntimeServices {
 export async function startMcpHttpServer(services: McpRuntimeServices): Promise<RunningMcpServer> {
   const { host, port } = MCP_CONFIG
   const { shellManager, peekaboo, auditLogger, chatGptSubagents, authStore, webPageOpener } = services
-  const startedSessions = new Set<string>()
   const reviewPromptTracker = MCP_CONFIG.tools.review ? createReviewPromptTracker() : undefined
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -46,16 +46,13 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   const mcpRoute = /^\/mcp$/
 
   const mcpHandler = createMcpHandler(
-    ({ requestInfo }) => {
+    () => {
       const requestContext = requestRuntime.getStore()
-      const sessionId = webRequestSessionId(requestInfo)
       return createMcpServer({
         shellManager,
         chatGptSubagents,
         peekaboo,
         webPageOpener,
-        sessionId,
-        startedSessions,
         reviewPromptTracker,
         auditRequest: requestContext?.auditRequest,
       })
@@ -73,17 +70,19 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
 
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
-    const auditRequest = auditLogger?.startRequest(req.body, { sessionId })
-    let auditFinished = false
-    const finishAudit = (state: "finished" | "closed") => {
-      if (auditFinished) return
-      auditFinished = true
-      auditRequest?.finishTransport({ httpStatus: res.statusCode, state })
-    }
-    res.once("finish", () => finishAudit("finished"))
-    res.once("close", () => finishAudit("closed"))
+    await runWithAgent(sessionId, async () => {
+      const auditRequest = auditLogger?.startRequest(req.body)
+      let auditFinished = false
+      const finishAudit = (state: "finished" | "closed") => {
+        if (auditFinished) return
+        auditFinished = true
+        auditRequest?.finishTransport({ httpStatus: res.statusCode, state })
+      }
+      res.once("finish", () => finishAudit("finished"))
+      res.once("close", () => finishAudit("closed"))
 
-    await requestRuntime.run({ auditRequest }, () => nodeMcpHandler(req, res, req.body))
+      await requestRuntime.run({ auditRequest }, () => nodeMcpHandler(req, res, req.body))
+    })
   }
 
   app.all(mcpRoute, async (req: Request, res: Response) => {
@@ -142,11 +141,6 @@ function isTrustedRemoteRequest(req: Request): boolean {
 
 function requestSessionId(req: Request): string | undefined {
   const value = req.get("x-openai-session")?.trim()
-  return value || undefined
-}
-
-function webRequestSessionId(req: globalThis.Request | undefined): string | undefined {
-  const value = req?.headers.get("x-openai-session")?.trim()
   return value || undefined
 }
 

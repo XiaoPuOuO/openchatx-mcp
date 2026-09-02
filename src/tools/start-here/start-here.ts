@@ -6,6 +6,8 @@ import { dirname, join, resolve } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { setAgentTaskSlug } from "../../server/agent-context.js"
+
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -43,9 +45,10 @@ export function registerStartHereTool(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ mode }) => {
+    async ({ mode, task_slug }) => {
       const [selected, shared] = await Promise.all([readStartPrompt(mode), readStartPrompt(SHARED_PROMPT_NAME)])
       const instructions = [selected.prompt.trim(), shared.prompt.trim()].filter(Boolean).join("\n\n")
+      setAgentTaskSlug(task_slug)
       return {
         content: [{ type: "text", text: instructions }],
       }

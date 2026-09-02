@@ -25,16 +25,15 @@ export function formatAuditEntry(input: {
   toolFailed: boolean
   failureMessage?: string
   responseSummary: ToolResponseSummary
-  sessionId?: string
+  agentLabel?: string
 }): string {
   const abnormal = input.httpStatus >= 400 || input.state !== "finished" ? ` - HTTP ${input.httpStatus} ${input.state}` : ""
   const tokenCounts = ` - ${input.inputTokens} in${input.outputTokens !== undefined ? ` / ${input.outputTokens} out` : ""}`
-  const invocationMarkers = formatInvocationMarkers(input.argumentsValue)
   const tag = auditTag(input)
   const tagPrefix = tag ? `${tag} ` : ""
-  const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${invocationMarkers}${abnormal} - ${formatAuditTime(input.time)}`
+  const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${abnormal} - ${formatAuditTime(input.time)}`
   const details = [
-    formatAuditSession(input.sessionId),
+    formatAuditSession(input.agentLabel),
     formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage),
     formatResponseSummary(input.toolName, input.responseSummary),
   ]
@@ -85,19 +84,8 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function formatAuditSession(sessionId: string | undefined): string {
-  return sessionId ? `session: ${yamlString(sessionId)}` : ""
-}
-
-function formatInvocationMarkers(value: unknown): string {
-  const argumentsRecord = asRecord(value)
-  if (!argumentsRecord) return ""
-
-  const markers: string[] = []
-  if (typeof argumentsRecord.max_output_tokens === "number" && Number.isFinite(argumentsRecord.max_output_tokens)) {
-    markers.push(`max_output_tokens=${argumentsRecord.max_output_tokens}`)
-  }
-  return markers.length > 0 ? ` - ${markers.join(" - ")}` : ""
+function formatAuditSession(agentLabel: string | undefined): string {
+  return agentLabel ? `session: ${yamlString(agentLabel)}` : ""
 }
 
 function auditTag(input: { durationMs: number; httpStatus: number; state: "finished" | "closed"; toolFailed: boolean }): string {
@@ -142,6 +130,8 @@ function formatShellRunArguments(argumentsRecord: Record<string, unknown>, toolF
   const cwd = typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
   const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
   const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`]
+  pushExplicitNumberArgument(fields, argumentsRecord, "wait_ms")
+  pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
   if (inputShape === "both" || inputShape === "neither") fields.push(`input: ${inputShape}`)
   if (cwd) fields.push(cwd.slice(1))
   if (message) fields.push(message.slice(1))
@@ -155,7 +145,16 @@ function formatShellPollArguments(argumentsRecord: Record<string, unknown>, tool
   const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
   const cursor = typeof argumentsRecord.cursor === "number" ? argumentsRecord.cursor : 0
   const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
-  return `shell: ${yamlString(`${shellId}/${requestId}`)}\ncursor: ${cursor}${message}`
+  const fields = [`shell: ${yamlString(`${shellId}/${requestId}`)}`, `cursor: ${cursor}`]
+  pushExplicitNumberArgument(fields, argumentsRecord, "wait_ms")
+  pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
+  if (message) fields.push(message.slice(1))
+  return fields.join("\n")
+}
+
+function pushExplicitNumberArgument(fields: string[], argumentsRecord: Record<string, unknown>, key: string): void {
+  const value = argumentsRecord[key]
+  if (Object.hasOwn(argumentsRecord, key) && typeof value === "number" && Number.isFinite(value)) fields.push(`${key}: ${value}`)
 }
 
 function formatGenericArguments(value: unknown): string {

@@ -11,12 +11,13 @@ Do not load whole log into context. Parse it with Python, Node, Ruby, shell tool
 
 Source of truth for format:
 
-`src/server/audit-log.ts`
+`src/server/audit/audit-log.ts`
+`src/server/audit/audit-format.ts`
 
 ## Header
 
 ```text
---- # [!|~] TOOL - DURATIONms - N in [/ N out] [- structured] [- max_output_tokens=N] [- HTTP ...] - Mon D h:mm AM/PM
+--- # [!|~] TOOL - DURATIONms - N in [/ N out] [- HTTP ...] - Mon D h:mm AM/PM
 ```
 
 - `!` = tool/HTTP/connection failure
@@ -25,14 +26,14 @@ Source of truth for format:
 - `out` = model-facing text/structured output tokens; native image payloads are excluded
 - final time = local call start time
 
-Tool calls may include `session: "agent-N"`. The audit logger assigns each distinct `X-OpenAI-Session` a stable first-seen alias such as `agent-1`, `agent-2`, and so on for the logger lifetime. Raw session IDs are not written to the log.
+Tool calls may include `session: "agent-N"` or, after a successful `start_here`, `session: "agent-N/task-slug"`. The audit logger assigns each distinct `X-OpenAI-Session` a stable first-seen alias such as `agent-1`, `agent-2`, and so on for the logger lifetime. A successful `start_here` stores that session's caller-provided `task_slug`; later entries append it to the alias, for example `agent-1/audit-session-labels`. The `start_here` entry itself keeps the plain `agent-N` alias. Raw session IDs are not written to the log.
 
 For ChatGPT sessions, `start_here` is normally the first successful Shellby tool call for that session.
 
 ## Tool Bodies
 
-- `shell_run`: shell/request ID, optional cwd, and either one command or a parallel commands array
-- `shell_poll`: shell/request ID, cursor
+- `shell_run`: shell/request ID, explicitly supplied `wait_ms` / `max_output_tokens`, optional cwd, and either one command or a parallel commands array
+- `shell_poll`: shell/request ID, cursor, and explicitly supplied `wait_ms` / `max_output_tokens`
 - `apply_patch`: cwd + patch size; patch body retained only on failure
 - other tools: serialized `args`
 
@@ -49,4 +50,4 @@ For ChatGPT sessions, `start_here` is normally the first successful Shellby tool
 - Shell nonzero exit produces `!` when the bounded result exposes the exit code.
 - Successful tool output bodies are not stored.
 - Entries are written when calls complete, so file order is not guaranteed invocation order.
-- One file may contain multiple caller sessions; use `session` to group activity.
+- One file may contain multiple caller sessions. Group a conversation by its `agent-N` prefix because entries before successful `start_here` use `agent-N` while later entries may use `agent-N/task-slug`.

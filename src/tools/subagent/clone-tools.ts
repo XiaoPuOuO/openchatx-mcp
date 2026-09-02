@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { getAgentIdentity } from "../../server/agent-context.js"
 import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
 
 const cloneSelfResultSchema = z.object({
@@ -27,7 +28,7 @@ const cloneResultSchema = z.object({
   error: z.string().optional(),
 })
 
-export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSubagentService, notificationSessionId?: string): void {
+export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSubagentService): void {
   server.registerTool(
     "clone_self",
     {
@@ -65,7 +66,7 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
             cloneId: clone_id,
             prompt,
           },
-          { signal: ctx.mcpReq.signal, notificationSessionId }
+          { signal: ctx.mcpReq.signal, notificationSessionId: getAgentIdentity()?.sessionId }
         )
         return {
           structuredContent: {
@@ -116,7 +117,10 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
     },
     async ({ clone_id, prompt }, ctx) => {
       try {
-        const turnId = await chatGptAgents.cloneRun({ cloneId: clone_id, prompt }, { signal: ctx.mcpReq.signal, notificationSessionId })
+        const turnId = await chatGptAgents.cloneRun(
+          { cloneId: clone_id, prompt },
+          { signal: ctx.mcpReq.signal, notificationSessionId: getAgentIdentity()?.sessionId }
+        )
         return {
           structuredContent: {
             clone_id,

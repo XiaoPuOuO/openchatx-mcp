@@ -4,6 +4,7 @@ import { MCP_CONFIG } from "../config.js"
 import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
+import { getAgentIdentity } from "./agent-context.js"
 import type { McpAuditRequest } from "./audit/audit-log.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
@@ -81,8 +82,6 @@ interface ToolRegistrationConfig {
 
 export interface ToolRegistrationBoundaryOptions {
   drainPendingEvents?: () => string[]
-  sessionId?: string
-  startedSessions?: Set<string>
   reviewPromptTracker?: ReviewPromptTracker
   auditRequest?: McpAuditRequest
 }
@@ -121,21 +120,19 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
       const auditCall = options.auditRequest?.claimTool(name, input ?? {})
 
       try {
-        if (options.sessionId && options.startedSessions && name !== START_HERE_TOOL_NAME && !options.startedSessions.has(options.sessionId)) {
+        const agent = getAgentIdentity()
+        if (agent && name !== START_HERE_TOOL_NAME && !agent.taskSlug) {
           const result = startupRequiredResult()
           auditCall?.finish({ toolResult: result, modelResult: result })
           return result
         }
 
         const result = await callback(...args)
-        if (name === START_HERE_TOOL_NAME && options.sessionId && options.startedSessions && !isToolError(result)) {
-          options.startedSessions.add(options.sessionId)
-        }
         const projected = nativeContent || structuredOutput ? result : compactToolResult(name, result)
         const events = [
           ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
           ...(options.drainPendingEvents?.() ?? []),
-          ...(options.reviewPromptTracker?.recordToolCall(options.sessionId) ?? []),
+          ...(options.reviewPromptTracker?.recordToolCall() ?? []),
         ]
         const finalResult = appendToolEvents(projected, events)
         auditCall?.finish({ toolResult: result, modelResult: finalResult })
@@ -154,10 +151,6 @@ function startupRequiredResult() {
     isError: true,
     content: [{ type: "text" as const, text: "Shellby has not been initialized for this conversation. Call `start_here` first." }],
   }
-}
-
-function isToolError(value: unknown): boolean {
-  return isRecord(value) && value.isError === true
 }
 
 export function compactToolAnnotations(value: unknown): unknown {

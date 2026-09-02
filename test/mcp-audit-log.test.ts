@@ -3,6 +3,7 @@ import { chmod, readFile, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test, { type TestContext } from "node:test"
 
+import { getAgentIdentity, runWithAgent, setAgentTaskSlug } from "../src/server/agent-context.js"
 import { McpAuditLogger } from "../src/server/audit/audit-log.js"
 import { countTokens } from "../src/tokenizer.js"
 import { tempDir } from "./helpers/temp.js"
@@ -94,8 +95,10 @@ test("aliases audit sessions in first-seen order without logging raw ids", async
   )
   const request = { method: "tools/call", params: { name: "shell_list", arguments: {} } }
 
-  const [first] = claimAuditToolCalls(logger, request, { sessionId: "raw-session-a" })
-  const [second] = claimAuditToolCalls(logger, request, { sessionId: "raw-session-b" })
+  const firstContext = runWithAgent("raw-session-a", () => ({ identity: getAgentIdentity()!, call: claimAuditToolCalls(logger, request)[0]! }))
+  const secondContext = runWithAgent("raw-session-b", () => ({ identity: getAgentIdentity()!, call: claimAuditToolCalls(logger, request)[0]! }))
+  const first = firstContext.call
+  const second = secondContext.call
   assert.ok(first)
   assert.ok(second)
 
@@ -103,8 +106,8 @@ test("aliases audit sessions in first-seen order without logging raw ids", async
   first.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /session: "agent-2"/)
-  assert.match(log, /session: "agent-1"/)
+  assert.match(log, new RegExp(`session: "${secondContext.identity.agent}"`))
+  assert.match(log, new RegExp(`session: "${firstContext.identity.agent}"`))
   assert.doesNotMatch(log, /raw-session-a|raw-session-b/)
 })
 
@@ -115,26 +118,30 @@ test("adds the successful start_here task slug to later audit session aliases", 
     () => new Date(2026, 8, 1, 18, 0, 0),
     () => 0
   )
-  const context = { sessionId: "raw-session-a" }
-  const [startHere] = claimAuditToolCalls(
-    logger,
-    { method: "tools/call", params: { name: "start_here", arguments: { mode: "coding", task_slug: "audit-session-labels" } } },
-    context
-  )
-  assert.ok(startHere)
-  startHere.finish({ toolResult: { content: [{ type: "text", text: "instructions" }] } })
+  const agent = runWithAgent("raw-session-task-slug", () => {
+    const identity = getAgentIdentity()!
+    const [startHere] = claimAuditToolCalls(logger, {
+      method: "tools/call",
+      params: { name: "start_here", arguments: { mode: "coding", task_slug: "audit-session-labels" } },
+    })
+    assert.ok(startHere)
+    startHere.finish({ toolResult: { content: [{ type: "text", text: "instructions" }] } })
 
-  const [shellList] = claimAuditToolCalls(logger, { method: "tools/call", params: { name: "shell_list", arguments: {} } }, context)
-  assert.ok(shellList)
-  shellList.finish({ toolResult: { structuredContent: { shells: [], count: 1, limit: 8, idle_timeout_ms: 300_000 } } })
+    setAgentTaskSlug("audit-session-labels")
+    const [shellList] = claimAuditToolCalls(logger, { method: "tools/call", params: { name: "shell_list", arguments: {} } })
+    assert.ok(shellList)
+    shellList.finish({ toolResult: { structuredContent: { shells: [], count: 1, limit: 8, idle_timeout_ms: 300_000 } } })
+    assert.equal(getAgentIdentity()?.taskSlug, "audit-session-labels")
+    return identity.agent
+  })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /--- # start_here[\s\S]*?session: "agent-1"[\s\S]*?task_slug.*audit-session-labels/)
-  assert.match(log, /--- # shell_list[\s\S]*?session: "agent-1\/audit-session-labels"/)
-  assert.doesNotMatch(log, /raw-session-a/)
+  assert.match(log, new RegExp(`--- # start_here[\\s\\S]*?session: "${agent}"[\\s\\S]*?task_slug.*audit-session-labels`))
+  assert.match(log, new RegExp(`--- # shell_list[\\s\\S]*?session: "${agent}/audit-session-labels"`))
+  assert.doesNotMatch(log, /raw-session-task-slug/)
 })
 
-test("marks explicit max_output_tokens tool arguments in the heading", async (t) => {
+test("keeps shell-specific wait and output arguments in the tool body", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -149,6 +156,7 @@ test("marks explicit max_output_tokens tool arguments in the heading", async (t)
         shell_id: "default",
         request_id: "markers",
         command: "pwd",
+        wait_ms: 1_000,
         max_output_tokens: 4_096,
       },
     },
@@ -157,7 +165,27 @@ test("marks explicit max_output_tokens tool arguments in the heading", async (t)
   call.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /^--- # shell_run - 0ms - \d+ in - max_output_tokens=4096 - Aug 14 8:11 AM$/m)
+  assert.match(log, /^--- # shell_run - 0ms - \d+ in - Aug 14 8:11 AM$/m)
+  assert.match(log, /shell: "default\/markers"\nwait_ms: 1000\nmax_output_tokens: 4096\ncommand: \|-\n {2}pwd/)
+
+  const [poll] = claimAuditToolCalls(logger, {
+    method: "tools/call",
+    params: {
+      name: "shell_poll",
+      arguments: {
+        shell_id: "default",
+        request_id: "markers",
+        cursor: 42,
+        wait_ms: 5_000,
+        max_output_tokens: 8_192,
+      },
+    },
+  })
+  assert.ok(poll)
+  poll.finish({ httpStatus: 200, state: "finished" })
+
+  const finalLog = await readFile(file, "utf8")
+  assert.match(finalLog, /shell: "default\/markers"\ncursor: 42\nwait_ms: 5000\nmax_output_tokens: 8192/)
 })
 
 test("audits batched tool calls independently", async (t) => {
@@ -402,9 +430,8 @@ test("logs tool calls rejected before handler execution without buffering the re
     () => new Date(2026, 7, 28, 21, 0, 0),
     () => 0
   )
-  const request = logger.startRequest(
-    { method: "tools/call", params: { name: "shell_run", arguments: { request_id: "x", cwd: "", command: "pwd" } } },
-    { sessionId: "validation-session" }
+  const request = runWithAgent("validation-session", () =>
+    logger.startRequest({ method: "tools/call", params: { name: "shell_run", arguments: { request_id: "x", cwd: "", command: "pwd" } } })
   )
 
   request.finishTransport({ httpStatus: 200, state: "finished" })
@@ -412,7 +439,7 @@ test("logs tool calls rejected before handler execution without buffering the re
   const log = await readFile(file, "utf8")
   assert.match(log, /--- # ! shell_run - 0ms - \d+ in - Aug 28 9:00 PM/)
   assert.match(log, /message: "tool_rejected: Tool call was rejected before execution, likely during validation or dispatch\."/)
-  assert.match(log, /session: "agent-1"/)
+  assert.match(log, /session: "agent-\d+"/)
 })
 
 test("logs compact computer metadata without retaining screenshot or inspection contents", async (t) => {
@@ -483,8 +510,8 @@ async function auditFile(t: TestContext): Promise<string> {
   return join(await tempDir(t, "mcp-audit-log-"), "agent-commands.yaml")
 }
 
-function claimAuditToolCalls(logger: McpAuditLogger, payload: unknown, context: { sessionId?: string } = {}) {
-  const auditRequest = logger.startRequest(payload, context)
+function claimAuditToolCalls(logger: McpAuditLogger, payload: unknown) {
+  const auditRequest = logger.startRequest(payload)
   return (Array.isArray(payload) ? payload : [payload]).map((value) => {
     const params = (value as { params: { name: string; arguments?: unknown } }).params
     const call = auditRequest.claimTool(params.name, params.arguments)

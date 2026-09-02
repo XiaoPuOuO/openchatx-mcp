@@ -1,20 +1,13 @@
 import { appendFileSync, chmodSync, existsSync } from "node:fs"
 
 import { countTokens } from "../../tokenizer.js"
-import { asRecord } from "../../utils.js"
+import { getAgentIdentity } from "../agent-context.js"
 import { errorMessage, formatAuditEntry, formatAuditTime, summarizeToolResult } from "./audit-format.js"
 import { createAuditRequest, type McpAuditCall, type McpAuditRequest } from "./audit-request.js"
 
 export type { McpAuditRequest } from "./audit-request.js"
 
-interface McpAuditContext {
-  sessionId?: string
-}
-
 export class McpAuditLogger {
-  private readonly sessionAliases = new Map<string, string>()
-  private readonly sessionTaskSlugs = new Map<string, string>()
-
   constructor(
     private readonly filePath: string,
     private readonly now: () => Date = () => new Date(),
@@ -27,16 +20,17 @@ export class McpAuditLogger {
     }
   }
 
-  startRequest(payload: unknown, context: McpAuditContext = {}): McpAuditRequest {
+  startRequest(payload: unknown): McpAuditRequest {
     return createAuditRequest(
       payload,
-      (toolName, argumentsValue) => this.startToolCall(toolName, argumentsValue, context),
+      (toolName, argumentsValue) => this.startToolCall(toolName, argumentsValue),
       () => this.appendToolList()
     )
   }
 
-  private startToolCall(toolName: string, argumentsValue: unknown, context: McpAuditContext): McpAuditCall {
-    const sessionId = context.sessionId ? this.sessionAlias(context.sessionId) : undefined
+  private startToolCall(toolName: string, argumentsValue: unknown): McpAuditCall {
+    const identity = getAgentIdentity()
+    const agentLabel = identity ? (identity.taskSlug ? `${identity.agent}/${identity.taskSlug}` : identity.agent) : undefined
     const startedAt = this.clock()
     const startedTime = this.now()
     const inputTokens = countTokens(JSON.stringify(argumentsValue ?? {}))
@@ -66,24 +60,11 @@ export class McpAuditLogger {
             toolFailed: toolResponse.failed || shellExitFailed,
             failureMessage: toolResponse.failureMessage,
             responseSummary: toolResponse,
-            sessionId,
+            agentLabel,
           })
         )
-
-        if (toolName === "start_here" && !toolResponse.failed && httpStatus < 400 && state === "finished" && context.sessionId) {
-          const argumentsRecord = asRecord(argumentsValue)
-          if (typeof argumentsRecord?.task_slug === "string") this.sessionTaskSlugs.set(context.sessionId, argumentsRecord.task_slug)
-        }
       },
     }
-  }
-
-  private sessionAlias(sessionId: string): string {
-    const known = this.sessionAliases.get(sessionId)
-    const alias = known ?? `agent-${this.sessionAliases.size + 1}`
-    if (!known) this.sessionAliases.set(sessionId, alias)
-    const taskSlug = this.sessionTaskSlugs.get(sessionId)
-    return taskSlug ? `${alias}/${taskSlug}` : alias
   }
 
   private appendToolList(): void {
