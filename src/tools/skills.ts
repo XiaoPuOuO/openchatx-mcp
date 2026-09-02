@@ -3,9 +3,13 @@ import { join } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { getAgentIdentity, type AgentIdentity } from "../server/agent-context.js"
+
 export const MAX_SKILL_BYTES = 256 * 1024
 
 const SKILL_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
+const SKILL_LOAD_COOLDOWN_MS = 5_000
+const recentSkillLoads = new Map<AgentIdentity, Map<string, { startedAt: number; load: Promise<LoadedSkill> }>>()
 
 export interface SkillSummary {
   name: string
@@ -162,8 +166,33 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
       },
     },
     async ({ name }, ctx) => {
+      const agent = getAgentIdentity()
+      let agentLoads = agent ? recentSkillLoads.get(agent) : undefined
+      const recent = agentLoads?.get(name)
+      if (recent && Date.now() - recent.startedAt < SKILL_LOAD_COOLDOWN_MS) {
+        try {
+          await recent.load
+          return {
+            structuredContent: {
+              path: join(skills.root, name, "SKILL.md"),
+              instructions: `Skill ${JSON.stringify(name)} was loaded recently by this agent; reuse the previously returned instructions.`,
+            },
+            content: [],
+          }
+        } catch {
+          agentLoads?.delete(name)
+        }
+      }
+
+      const load = skills.read(name, ctx.mcpReq.signal)
+      const tracked = { startedAt: Date.now(), load }
+      if (agent) {
+        agentLoads ??= new Map()
+        recentSkillLoads.set(agent, agentLoads)
+        agentLoads.set(name, tracked)
+      }
       try {
-        const loaded = await skills.read(name, ctx.mcpReq.signal)
+        const loaded = await load
         return {
           structuredContent: {
             path: loaded.path,
@@ -172,6 +201,7 @@ export function registerSkillTools(server: McpServer, workspace: string): void {
           content: [],
         }
       } catch (error) {
+        if (agentLoads?.get(name) === tracked) agentLoads.delete(name)
         return skillToolError(error)
       }
     }

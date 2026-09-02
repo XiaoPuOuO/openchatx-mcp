@@ -76,7 +76,7 @@ Create or migrate the complete active config before running side-effecting setup
 npm run setup -- --config-only
 ```
 
-Review `.shellby/config.toml` with the human. Every Shellby-owned configurable value comes from this file. Edit values directly when the user wants a different workspace, shell, ChatGPT route, or enabled tool groups. External tools keep their own machine-level configuration; in particular, ngrok authentication stays in ngrok's normal user configuration.
+Review `.shellby/config.toml` with the human. Every Shellby-owned configurable value comes from this file. Edit values directly when the user wants a different workspace, shell, ChatGPT route, MCP tool-output format, or enabled tool groups. `shell.rtk` is optional; if the human enables it, RTK Token Killer must be installed and setup will validate the executable. External tools keep their own machine-level configuration; in particular, ngrok authentication stays in ngrok's normal user configuration.
 
 ## 5. Run non-PM2 setup
 
@@ -86,7 +86,7 @@ Run:
 npm run setup
 ```
 
-This prepares the workspace, builds Shellby, checks Computer Use status, and prepares the dedicated ChatGPT Chrome profile when Chrome is available.
+This prepares the workspace and builds Shellby. It checks Computer Use only when that tool group is enabled, and prepares/checks the dedicated ChatGPT Chrome profile only when clone or subagent tools are enabled.
 
 Important:
 
@@ -149,20 +149,20 @@ Ask the human to:
 1. Enable ChatGPT Developer Mode: https://developers.openai.com/api/docs/guides/developer-mode
 2. Create a new plugin using the printed `https://.../mcp` URL. Run `npm run print-url` to get the URL.
 
-- To add custom plugins in chatGPT developer mode must be enabled, and the user must be on the Desktop web, at this point after clicking Plugins they will see a + button on the page:
+- To add a custom plugin, ChatGPT Developer Mode must be enabled and the human must use the desktop web app. From the Plugins UI, use the add button:
   ![Screenshot of the add plugin menu](../../docs/assets/add-plugin-menu-screenshot.png)
-- Name the plugin something like "Shellby MCP" and add a description. like "Gives full access to my mac".
+- Name the plugin something like "Shellby MCP" and add a description such as "Gives full access to my Mac".
 - Enter the URL from `npm run print-url` in the URL field.
-- optionally add a logo and icon (it will appear nicely in the chat when using): ![Shellby MCP icon](../../docs/assets/icon-80_square-compressed.png)
+- Optionally add a logo/icon: ![Shellby MCP icon](../../docs/assets/icon-80_square-compressed.png)
 
-3. Select **no authentication** for the plugin.
+3. Select **No Auth** for the plugin.
 4. Enable or refresh the plugin so ChatGPT fetches Shellby's tool list.
 
 After they do this, verify locally that `agent-commands.yaml` received a new `tools/list` entry. Do not display unrelated audit-log contents because tool inputs may be sensitive.
 
 ## 9. Verify first trusted tool use
 
-Ask the human to make one simple Shellby tool call from ChatGPT web, such as listing the workspace or running `pwd` in a shell. The first trusted remote `tools/call` binds this installation to that ChatGPT user using their subject header.
+Ask the human to start a fresh ChatGPT conversation with Shellby enabled. The first Shellby call should be `start_here`; after it succeeds, make one simple follow-up call such as `shell_list` or running `pwd`. The first trusted remote `tools/call` binds this installation to that ChatGPT user using their subject header.
 
 Verify that the call reached Shellby from the audit log and that `~/.shellby/auth.json` now exists. Do not print the stored subject value.
 

@@ -170,6 +170,46 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   assert.equal(stillBlocked.isError, true)
 })
 
+test("suppresses rapid duplicate skill loads for the same agent", { timeout: 10_000 }, async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), "shellby-skill-cooldown-"))
+  const previousWorkspace = MCP_CONFIG.workspace
+  MCP_CONFIG.workspace = workspace
+  t.after(() => {
+    MCP_CONFIG.workspace = previousWorkspace
+    return rm(workspace, { recursive: true, force: true })
+  })
+
+  const skillDirectory = join(workspace, "skills", "cooldown-skill")
+  await mkdir(skillDirectory, { recursive: true })
+  await writeFile(
+    join(skillDirectory, "SKILL.md"),
+    "---\nname: cooldown-skill\ndescription: Cooldown test skill.\n---\n\n# Cooldown Skill\n\nFull instructions.\n"
+  )
+
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "skill-cooldown-client", undefined, false, "skill-cooldown-session")
+  t.after(() => connected.client.close())
+
+  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "skill-cooldown" } })
+
+  const simultaneous = await Promise.all([
+    connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
+    connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
+  ])
+  const simultaneousText = simultaneous.map(toolText)
+  assert.equal(simultaneousText.filter((text) => /Full instructions\./.test(text)).length, 1)
+  assert.equal(simultaneousText.filter((text) => /loaded recently by this agent/.test(text)).length, 1)
+
+  const duplicate = await connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } })
+  assert.match(toolText(duplicate), /loaded recently by this agent/)
+
+  const firstMissing = await connected.client.callTool({ name: "skill_load", arguments: { name: "missing-skill" } })
+  const retryMissing = await connected.client.callTool({ name: "skill_load", arguments: { name: "missing-skill" } })
+  assert.match(toolText(firstMissing), /unknown_skill/)
+  assert.match(toolText(retryMissing), /unknown_skill/)
+})
+
 test("prefers repo-local .shellby prompt overrides and falls back to bundled prompts", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-start-prompt-"))
   t.after(() => rm(root, { recursive: true, force: true }))

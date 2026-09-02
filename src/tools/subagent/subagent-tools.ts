@@ -6,7 +6,7 @@ import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentSta
 
 const SUBAGENT_RUN_DELAYS_MS = [0, 5_000, 7_000] as const
 
-const subagentRequestSchema = z.object({
+const subagentInputSchema = z.object({
   agent_id: z
     .string()
     .min(1)
@@ -31,7 +31,7 @@ const subagentRequestSchema = z.object({
     .boolean()
     .default(true)
     .describe(
-      "Allow access to memory outside this agent conversation. Turn history for the same agent_id is always preserved. Only used when first creating the agent."
+      "Allow access to memory outside this agent conversation. Turn history for the same agent_id is always preserved. Applied only when first creating the agent."
     ),
 })
 
@@ -59,7 +59,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
         "Submit tasks to subagents and continue working. Reuse an agent_id to continue the same subagent conversation. Use the returned turn_id with `subagent_result` to retrieve that specific turn.",
       inputSchema: z.object({
         agents: z
-          .array(subagentRequestSchema)
+          .array(subagentInputSchema)
           .min(1)
           .max(3)
           .refine((agents) => new Set(agents.map((agent) => agent.agent_id)).size === agents.length, "agent_id values must be unique within a batch."),

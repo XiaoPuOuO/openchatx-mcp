@@ -7,7 +7,11 @@ description: Understand and analyze Shellby's agent-commands.yaml audit log form
 
 Use this skill to analyze `agent-commands.yaml`.
 
-Do not load whole log into context. Parse it with Python, Node, Ruby, shell tools, whatever fits the question.
+Do not load the whole log into context. Inspect, filter, parse, aggregate, or sample it with Python, Node, Ruby, shell tools, or another approach that fits the audit question. Choose the investigation method from the evidence you need rather than forcing every audit through one fixed workflow.
+
+The `--- # ...` record header is stored as a YAML comment. Generic YAML parsers may discard the tool name, duration, token counts, status marker, and timestamp carried there. When that metadata matters, read the file as text or otherwise preserve and parse the header separately from the YAML body.
+
+Prefer reducing the log outside model context before reading detailed records. Useful reductions may include filtering by session, task slug, tool, status marker, time range, shell/request identity, arguments, or any other feature relevant to the question; grouping, counting, sorting, sequence analysis, and targeted record inspection are all valid. Bring only the evidence needed for the current audit into context.
 
 Source of truth for format:
 
