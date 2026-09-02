@@ -46,7 +46,7 @@ const RATE_LIMIT_ERROR_MESSAGE =
   "ChatGPT temporarily rate limited conversation access. New subagent turns are blocked during a 15-minute cooldown. Existing turns remain available through subagent_result. Do not retry automatically."
 const SUBMISSION_GRACE_MS = 500
 const TEMPORARY_CHAT_URL = "https://chatgpt.com/?temporary-chat=true"
-const CHATGPT_START_URL = MCP_CONFIG.chatGpt.projectUrl ?? "https://chatgpt.com/"
+const CHATGPT_START_URL = MCP_CONFIG.chatGpt.projectUrl
 
 const INJECTED_PROMPT =
   "Respond terse like smart caveman — drop articles, filler, pleasantries. Fragments OK. Technical terms exact. Code unchanged. Pattern: [thing] [action] [reason]. [next step].\n\nNot use `subagent` or `computer_*` tools."
@@ -631,10 +631,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
       if (activeTurn?.status === "running") {
         if (agent.memory && !activeTurn.recoveryAttempted && now - activeTurn.lastActivityAt >= STALE_TURN_RECOVERY_MS) {
-          await failOrRecoverSubmittedTurn(
-            activeTurn,
-            new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn had no observable activity for 3 minutes.")
-          )
+          await failOrRecoverSubmittedTurn(activeTurn, new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn had no observable activity for 3 minutes."))
         } else if (now - activeTurn.lastActivityAt >= AGENT_IDLE_TTL_MS) {
           await failOrRecoverSubmittedTurn(
             activeTurn,

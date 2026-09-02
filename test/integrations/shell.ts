@@ -6,13 +6,13 @@ import test from "node:test"
 
 import { createShellSession } from "../../src/tools/shell/session.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
-import { callUntilComplete, connectClient, snapshotFromResult, startMcpHttpServer } from "./helpers.js"
+import { callUntilComplete, connectClient, snapshotFromResult, startMcpHttpServer, toolText } from "./helpers.js"
 
 const APPLY_PATCH_TOOL_GUIDANCE =
   "`apply_patch` is a separate MCP tool and cannot be used through `shell_run`. For local file changes, including creating, updating, deleting, moving, or renaming files, use the `apply_patch` MCP tool directly."
 
 test("redirects missing apply_patch commands to the native tool in normal and batch output", { timeout: 20_000 }, async (t) => {
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "apply-patch-shell-hint-client")
   t.after(() => connected.client.close())
@@ -21,11 +21,11 @@ test("redirects missing apply_patch commands to the native tool in normal and ba
   assert.doesNotMatch(normal.output, /command not found: apply_patch/)
   assert.equal(normal.output, APPLY_PATCH_TOOL_GUIDANCE)
 
-  const batch = await callUntilComplete(
-    connected.client,
-    "missing-apply-patch-batch",
-    [{ command: "PATH=/nonexistent apply_patch" }, { command: "PATH=/nonexistent apply_patch" }, { command: "printf batch-ok" }]
-  )
+  const batch = await callUntilComplete(connected.client, "missing-apply-patch-batch", [
+    { command: "PATH=/nonexistent apply_patch" },
+    { command: "PATH=/nonexistent apply_patch" },
+    { command: "printf batch-ok" },
+  ])
   assert.doesNotMatch(batch.output, /command not found: apply_patch/)
   assert.ok(batch.output.includes(APPLY_PATCH_TOOL_GUIDANCE))
   assert.equal(batch.output.split(APPLY_PATCH_TOOL_GUIDANCE).length - 1, 1)
@@ -33,7 +33,7 @@ test("redirects missing apply_patch commands to the native tool in normal and ba
 })
 
 test("retains default shell state across MCP client sessions", { timeout: 20_000 }, async (t) => {
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
 
   const first = await connectClient(running.url, "shell-state-client-1")
@@ -52,7 +52,7 @@ test("retains default shell state across MCP client sessions", { timeout: 20_000
 test("isolates named shells and allows independent foreground work", { timeout: 20_000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "mcp-named-shells-"))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "named-shell-client")
   t.after(() => connected.client.close())
@@ -84,11 +84,12 @@ test("isolates named shells and allows independent foreground work", { timeout: 
   assert.equal((await callUntilComplete(connected.client, "alpha-slow", slowCommand, "alpha")).output, "alpha-done")
 
   const listed = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  const shellIds = (listed.structuredContent as { shells: Array<{ shell_id: string }> }).shells.map((shell) => shell.shell_id)
+  const shellIds = [...toolText(listed).matchAll(/^- shell_id=([^\s]+)/gm)].map((match) => match[1])
   assert.deepEqual(shellIds, ["default", "alpha", "beta"])
 
   const closed = await connected.client.callTool({ name: "shell_close", arguments: { shell_id: "alpha" } })
-  assert.deepEqual(closed.structuredContent, { shell_id: "alpha", closed: true })
+  assert.equal(closed.structuredContent, undefined)
+  assert.equal(toolText(closed), "shell_id=alpha closed=true")
 })
 
 test("maps an expired shell cursor to an MCP tool error", { timeout: 10_000 }, async (t) => {

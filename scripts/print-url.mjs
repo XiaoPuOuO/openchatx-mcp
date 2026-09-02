@@ -1,21 +1,11 @@
 const optional = process.argv.includes("--optional")
-const configuredDomain = process.env.NGROK_URL?.trim()
-
-const url = configuredDomain ? fromConfiguredDomain(configuredDomain) : await discoverNgrokUrl(optional ? 1 : 20)
+const url = await discoverNgrokUrl(optional ? 1 : 20)
 
 if (url) {
   console.log(`MCP URL: ${url}`)
 } else {
-  console.error("MCP URL unavailable. Start ngrok with `npm run tunnel` or set NGROK_URL.")
+  console.error("MCP URL unavailable. Start ngrok with `npm run tunnel`.")
   if (!optional) process.exitCode = 1
-}
-
-function fromConfiguredDomain(value) {
-  const domain = value
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .replace(/\/mcp$/, "")
-  return `https://${domain}/mcp`
 }
 
 async function discoverNgrokUrl(attempts) {

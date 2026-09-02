@@ -134,7 +134,7 @@ test("adds the successful start_here task slug to later audit session aliases", 
   assert.doesNotMatch(log, /raw-session-a/)
 })
 
-test("marks explicit structured and max_output_tokens tool arguments in the heading", async (t) => {
+test("marks explicit max_output_tokens tool arguments in the heading", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -149,7 +149,6 @@ test("marks explicit structured and max_output_tokens tool arguments in the head
         shell_id: "default",
         request_id: "markers",
         command: "pwd",
-        structured: true,
         max_output_tokens: 4_096,
       },
     },
@@ -158,7 +157,7 @@ test("marks explicit structured and max_output_tokens tool arguments in the head
   call.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /^--- # shell_run - 0ms - \d+ in - structured - max_output_tokens=4096 - Aug 14 8:11 AM$/m)
+  assert.match(log, /^--- # shell_run - 0ms - \d+ in - max_output_tokens=4096 - Aug 14 8:11 AM$/m)
 })
 
 test("audits batched tool calls independently", async (t) => {

@@ -28,7 +28,7 @@ export async function checkPublicRuntime() {
     errors.push("Local dependencies are missing. Run `npm ci` first.")
   }
 
-  const ngrokExecutable = process.env.NGROK_BIN?.trim() || "ngrok"
+  const ngrokExecutable = "ngrok"
   const ngrokVersion = spawnSync(ngrokExecutable, ["version"], { encoding: "utf8" })
   if (ngrokVersion.error?.code === "ENOENT") {
     errors.push("ngrok is not installed. Install it with `brew install --cask ngrok`.")
@@ -56,8 +56,6 @@ export function printPreflightErrors(errors) {
 }
 
 async function hasNgrokAuth(ngrokExecutable) {
-  if (process.env.NGROK_AUTHTOKEN?.trim()) return true
-
   const check = spawnSync(ngrokExecutable, ["config", "check"], { encoding: "utf8" })
   if (check.status !== 0) return false
 

@@ -68,13 +68,15 @@ ngrok config add-authtoken <their-token>
 
 Tell them to obtain the token from their own ngrok account if necessary (its free). Do not ask them to send the token to you. Continue only after they say authentication is complete, then rerun `npm run preflight`.
 
-## 4. Configure only necessary overrides
+## 4. Create and review the active Shellby config
 
-Shellby has usable defaults. Do not create `.env` merely because `.env.example` exists. env variables are for explicitly overriding defaults.
+Create or migrate the complete active config before running side-effecting setup:
 
-Read `.env.example` and current repository documentation before setting overrides. Create or edit `.env` only when the user's machine or desired installation requires a non-default value, such as a different workspace, Chrome path, Peekaboo binary, CDP endpoint, or fixed ngrok domain.
+```bash
+npm run setup -- --config-only
+```
 
-Never write secrets into `.env` when the corresponding tool already supports secure user-level configuration. In particular, prefer the human's normal ngrok configuration over `NGROK_AUTHTOKEN`.
+Review `.shellby/config.toml` with the human. Every Shellby-owned configurable value comes from this file. Edit values directly when the user wants a different workspace, shell, ChatGPT route, or enabled tool groups. External tools keep their own machine-level configuration; in particular, ngrok authentication stays in ngrok's normal user configuration.
 
 ## 5. Run non-PM2 setup
 

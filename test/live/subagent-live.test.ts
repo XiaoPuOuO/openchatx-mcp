@@ -5,7 +5,8 @@ import { join } from "node:path"
 import test from "node:test"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 
-import { startMcpHttpServer } from "../../src/server/http-server.js"
+import { MCP_CONFIG } from "../../src/config.js"
+import { startMcpHttpServer } from "../integrations/helpers.js"
 
 const LIVE_TEST_ENABLED = process.env.RUN_LIVE_SUBAGENT_TESTS === "1" && !process.env.CI
 const LIVE_AGENT_ID = "live-subagent-integration"
@@ -70,16 +71,21 @@ test(
     })
 
     try {
-      const running = await startMcpHttpServer({
-        port: 0,
-        toolOutputStructured: "optional",
+      Object.assign(MCP_CONFIG.tools, {
+        review: false,
+        shell: false,
+        applyPatch: false,
+        clones: false,
+        subagents: true,
+        web: false,
+        skills: false,
+        image: false,
+        computer: false,
       })
+      const running = await startMcpHttpServer()
       t.after(() => running.close().catch(() => undefined))
 
-      const client = new Client(
-        { name: "live-subagent-integration-test", version: "1.0.0" },
-        { versionNegotiation: { mode: "auto" } }
-      )
+      const client = new Client({ name: "live-subagent-integration-test", version: "1.0.0" }, { versionNegotiation: { mode: "auto" } })
       t.after(() => client.close().catch(() => undefined))
       await client.connect(new StreamableHTTPClientTransport(new URL(running.url)))
 
@@ -89,10 +95,9 @@ test(
         name: "subagent_run",
         arguments: {
           agents: [{ agent_id: LIVE_AGENT_ID, prompt: firstPrompt, oververbosity: 5 }],
-          structured: true,
         },
       })
-      const firstRunTurn = getRunTurn(firstRun.structuredContent)
+      const firstRunTurn = getRunTurn(toolText(firstRun.content))
       assert.equal(firstRunTurn.agent_id, LIVE_AGENT_ID)
       assert.equal(firstRunTurn.status, "running", firstRunTurn.error ?? "subagent_run did not start turn 1")
       assert.ok(firstRunTurn.turn_id)
@@ -117,10 +122,9 @@ test(
         name: "subagent_run",
         arguments: {
           agents: [{ agent_id: LIVE_AGENT_ID, prompt: secondPrompt, oververbosity: 5 }],
-          structured: true,
         },
       })
-      const secondRunTurn = getRunTurn(secondRun.structuredContent)
+      const secondRunTurn = getRunTurn(toolText(secondRun.content))
       assert.equal(secondRunTurn.agent_id, LIVE_AGENT_ID)
       assert.equal(secondRunTurn.status, "running", secondRunTurn.error ?? "subagent_run did not start turn 2")
       assert.ok(secondRunTurn.turn_id)
@@ -155,11 +159,17 @@ test(
   }
 )
 
-function getRunTurn(value: unknown): StructuredRunTurn {
-  const record = asRecord(value)
-  const turns = record?.turns
-  assert.ok(Array.isArray(turns) && turns.length === 1, "subagent_run must return exactly one live turn")
-  return turns[0] as StructuredRunTurn
+function getRunTurn(text: string): StructuredRunTurn {
+  const match = text.match(
+    /^- agent_id=("(?:\\.|[^"\\])*"|\S+)(?: turn_id=("(?:\\.|[^"\\])*"|\S+))? status=(running|failed)(?: error=("(?:\\.|[^"\\])*"|\S+))?$/m
+  )
+  assert.ok(match, "subagent_run must return exactly one live turn")
+  return {
+    agent_id: decodeCompactScalar(match[1]!),
+    ...(match[2] ? { turn_id: decodeCompactScalar(match[2]) } : {}),
+    status: match[3] as StructuredRunTurn["status"],
+    ...(match[4] ? { error: decodeCompactScalar(match[4]) } : {}),
+  }
 }
 
 async function waitForCompletedTurn(
@@ -178,15 +188,11 @@ async function waitForCompletedTurn(
       arguments: {
         turn_ids: [turnId],
         wait_ms: Math.min(POLL_WAIT_MS, Math.max(0, remaining)),
-        structured: true,
       },
     })
-    observedTexts.push(toolText(result.content))
-
-    const record = asRecord(result.structuredContent)
-    const turns = record?.turns
-    assert.ok(Array.isArray(turns) && turns.length === 1)
-    const turn = turns[0] as StructuredResultTurn
+    const text = toolText(result.content)
+    observedTexts.push(text)
+    const turn = parseResultTurn(text)
     onPoll?.({
       elapsed_ms: Date.now() - startedAt,
       status: turn.status,
@@ -226,7 +232,7 @@ function toolText(content: unknown): string {
   if (!Array.isArray(content)) return ""
   return content
     .map((item) => {
-      const record = asRecord(item)
+      const record = item !== null && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : undefined
       return record?.type === "text" && typeof record.text === "string" ? record.text : ""
     })
     .filter(Boolean)
@@ -239,6 +245,23 @@ async function writeLiveArtifact(artifact: Record<string, unknown>): Promise<voi
   await writeFile(new URL("subagent-live-last.json", directory), `${JSON.stringify(artifact, null, 2)}\n`, "utf8")
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+function parseResultTurn(text: string): StructuredResultTurn {
+  const match = text.match(
+    /^---- turn_id=("(?:\\.|[^"\\])*"|\S+) status=(running|completed|failed)(?: activity=("(?:\\.|[^"\\])*"|\S+))?(?: activity_age_ms=(\d+))? ----(?:\n\n([\s\S]*))?$/
+  )
+  assert.ok(match, "subagent_result must return exactly one live turn")
+  const status = match[2] as StructuredResultTurn["status"]
+  const body = match[5]
+  return {
+    turn_id: decodeCompactScalar(match[1]!),
+    status,
+    ...(match[3] ? { activity: decodeCompactScalar(match[3]) } : {}),
+    ...(match[4] ? { activity_age_ms: Number(match[4]) } : {}),
+    ...(status === "completed" && body ? { response: body } : {}),
+    ...(status === "failed" && body ? { error: body } : {}),
+  }
+}
+
+function decodeCompactScalar(value: string): string {
+  return value.startsWith('"') ? (JSON.parse(value) as string) : value
 }

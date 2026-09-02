@@ -3,9 +3,9 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
-
 const MAX_RESPONSE_BYTES = 1024 * 1024
+const DEFAULT_PORT = 8765
+const DEFAULT_TIMEOUT_MS = 5_000
 
 const iosShellResultSchema = z.object({
   stdout: z.string(),
@@ -14,32 +14,28 @@ const iosShellResultSchema = z.object({
 })
 
 export interface IosShellClientOptions {
-  host?: string
+  host: string
   port?: number
-  tokenFile?: string
+  tokenFile: string
   timeoutMs?: number
 }
 
 export type IosShellResult = z.infer<typeof iosShellResultSchema>
 
 export class IosShellClient {
-  readonly host?: string
+  readonly host: string
   readonly port: number
-  readonly tokenFile?: string
+  readonly tokenFile: string
   readonly timeoutMs: number
 
-  constructor(options: IosShellClientOptions = {}) {
-    this.host = options.host ?? MCP_CONFIG.ios.host
-    this.port = options.port ?? MCP_CONFIG.ios.port
-    this.tokenFile = options.tokenFile ?? MCP_CONFIG.ios.tokenFile
-    this.timeoutMs = options.timeoutMs ?? MCP_CONFIG.ios.timeoutMs
+  constructor(options: IosShellClientOptions) {
+    this.host = options.host
+    this.port = options.port ?? DEFAULT_PORT
+    this.tokenFile = options.tokenFile
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   }
 
   async execute(command: string, signal?: AbortSignal): Promise<IosShellResult> {
-    if (!this.host || !this.tokenFile) {
-      throw new Error("shell_iOS is not configured. Set MCP_IOS_HOST and MCP_IOS_TOKEN_FILE, then restart the MCP server.")
-    }
-
     const token = (await readFile(this.tokenFile, "utf8")).trim()
     if (!token) throw new Error(`shell_iOS token file is empty: ${this.tokenFile}`)
 
@@ -53,7 +49,7 @@ export class IosShellClient {
   }
 }
 
-export function registerIosShellTool(server: McpServer, client = new IosShellClient()): void {
+export function registerIosShellTool(server: McpServer, client: IosShellClient): void {
   server.registerTool(
     "shell_iOS",
     {

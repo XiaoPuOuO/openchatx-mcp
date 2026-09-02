@@ -6,15 +6,14 @@ import { createMcpHandler } from "@modelcontextprotocol/server"
 import type { Request, Response } from "express"
 
 import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/auth.js"
-import { MCP_CONFIG, type ToolOutputStructuredMode } from "../config.js"
+import { MCP_CONFIG } from "../config.js"
 import { createReviewPromptTracker } from "../tools/review/review-tool.js"
-import { createChatGptSubagentService } from "../tools/subagent/chatgpt-subagent.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
 import { createMcpServer } from "./mcp-server.js"
 import { McpAuditLogger, type McpAuditRequest } from "./audit/audit-log.js"
-import { PeekabooClient } from "../tools/computer/peekaboo.js"
-import { createShellSessionManager, type ShellSessionManager } from "../tools/shell/session-manager.js"
-import { WebPageOpener } from "../tools/web/web-open.js"
+import type { PeekabooClient } from "../tools/computer/peekaboo.js"
+import type { ShellSessionManager } from "../tools/shell/session-manager.js"
+import type { WebPageOpener } from "../tools/web/web-open.js"
 
 interface RequestRuntimeContext {
   auditRequest?: McpAuditRequest
@@ -27,32 +26,20 @@ export interface RunningMcpServer {
   close: () => Promise<void>
 }
 
-export interface StartMcpServerOptions {
-  host?: string
-  port?: number
+export interface McpRuntimeServices {
   shellManager?: ShellSessionManager
   peekaboo?: PeekabooClient
   chatGptSubagents?: ChatGptSubagentService
   auditLogger?: McpAuditLogger
   authStore?: ShellbyAuthStore
-  applyPatchExecutable?: string
   webPageOpener?: WebPageOpener
-  toolOutputStructured?: ToolOutputStructuredMode
-  reviewPromptThreshold?: number
-  reviewFilePath?: string
 }
 
-export async function startMcpHttpServer(options: StartMcpServerOptions = {}): Promise<RunningMcpServer> {
-  const host = options.host ?? MCP_CONFIG.host
-  const port = options.port ?? MCP_CONFIG.port
-  const shells = options.shellManager ?? createShellSessionManager()
-  const peekaboo = options.peekaboo ?? new PeekabooClient({ localOnly: true })
-  const auditLogger = options.auditLogger
-  const chatGptSubagents = options.chatGptSubagents ?? createChatGptSubagentService()
-  const authStore = options.authStore
-  const webPageOpener = options.webPageOpener ?? new WebPageOpener()
+export async function startMcpHttpServer(services: McpRuntimeServices): Promise<RunningMcpServer> {
+  const { host, port } = MCP_CONFIG
+  const { shellManager, peekaboo, auditLogger, chatGptSubagents, authStore, webPageOpener } = services
   const startedSessions = new Set<string>()
-  const reviewPromptTracker = createReviewPromptTracker(options.reviewPromptThreshold)
+  const reviewPromptTracker = MCP_CONFIG.tools.review ? createReviewPromptTracker() : undefined
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
@@ -62,16 +49,14 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     ({ requestInfo }) => {
       const requestContext = requestRuntime.getStore()
       const sessionId = webRequestSessionId(requestInfo)
-      return createMcpServer(shells, {
+      return createMcpServer({
+        shellManager,
         chatGptSubagents,
-        applyPatchExecutable: options.applyPatchExecutable,
         peekaboo,
         webPageOpener,
-        toolOutputStructured: options.toolOutputStructured,
         sessionId,
         startedSessions,
         reviewPromptTracker,
-        reviewFilePath: options.reviewFilePath,
         auditRequest: requestContext?.auditRequest,
       })
     },
@@ -116,7 +101,6 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
   const httpServer = createServer(app)
   let boundPort: number
   try {
-    await shells.startDefault()
     await listen(httpServer, port, host)
 
     const address = httpServer.address()
@@ -126,7 +110,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     boundPort = address.port
   } catch (error) {
     const httpClose = closeHttpServerIfListening(httpServer)
-    await Promise.allSettled([mcpHandler.close(), httpClose, shells.close(), peekaboo.close(), chatGptSubagents.dispose()])
+    await Promise.allSettled([mcpHandler.close(), httpClose])
     throw error
   }
 
@@ -138,13 +122,7 @@ export async function startMcpHttpServer(options: StartMcpServerOptions = {}): P
     close: async () => {
       if (closed) return
       closed = true
-
-      const httpClose = closeHttpServerIfListening(httpServer)
-      try {
-        await Promise.allSettled([mcpHandler.close(), httpClose])
-      } finally {
-        await Promise.allSettled([shells.close(), peekaboo.close(), chatGptSubagents.dispose()])
-      }
+      await Promise.allSettled([mcpHandler.close(), closeHttpServerIfListening(httpServer)])
     },
   }
 }

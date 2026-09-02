@@ -89,9 +89,9 @@ Do not repeat enum values, ranges, required status, defaults, or formats already
 
 ## Output Contracts
 
-Design the smallest stable result shape that lets ChatGPT decide what to do next, but do not assume the production client sees an `outputSchema`. Production uses `toolOutputStructured: "never"`, so the registration boundary strips ordinary public output schemas and renders ordinary typed results as compact Markdown. Computer Use and `image_view` keep their native MCP content blocks (`src/config.ts`, `src/server/tool-registration-boundary.ts`).
+Design the smallest stable result shape that lets ChatGPT decide what to do next, but do not assume the production client sees an `outputSchema`. The registration boundary strips ordinary public output schemas and renders ordinary typed results as compact Markdown. Computer Use and `image_view` keep their native MCP content blocks (`src/server/tool-registration-boundary.ts`).
 
-Keep tool descriptions focused on routing. Result-shape details belong in schemas when a structured mode exposes them, in compact output shaping, or in the wiki when callers need durable semantics.
+Keep tool descriptions focused on routing. Result-shape details belong in native MCP schemas/content where retained, in compact output shaping, or in the wiki when callers need durable semantics.
 
 ## Review Checklist
 

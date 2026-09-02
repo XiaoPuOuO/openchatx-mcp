@@ -219,11 +219,7 @@ test("inherits the parallel cwd when a run directory is omitted and accepts over
   const mixed = await runToCompletion(
     shell,
     "parallel-mixed-directories",
-    [
-      { command: `printf 'root:%s' "$PWD"` },
-      { command: `printf 'same:%s' "$PWD"`, cwd: "." },
-      { command: `printf 'tmp:%s' "$PWD"`, cwd: "/tmp" },
-    ],
+    [{ command: `printf 'root:%s' "$PWD"` }, { command: `printf 'same:%s' "$PWD"`, cwd: "." }, { command: `printf 'tmp:%s' "$PWD"`, cwd: "/tmp" }],
     { cwd: "/tmp" }
   )
   assert.deepEqual(
@@ -262,7 +258,8 @@ test("separates parallel run blocks when command output has no trailing newline"
 
   const batch = await runToCompletion(shell, "parallel-output-boundary", [{ command: "printf first" }, { command: "printf second" }])
 
-  assert.match(batch.output, /first\n\n---- run=2 path="\." exit=0 ----\n\nsecond/)
+  assert.match(batch.output, /---- run=1 path="\." exit=0 ----\n\nfirst(?:\n\n|$)/)
+  assert.match(batch.output, /---- run=2 path="\." exit=0 ----\n\nsecond(?:\n\n|$)/)
 })
 
 test("reset kills running parallel children and retains the batch as reset", { timeout: 10_000 }, async (t) => {

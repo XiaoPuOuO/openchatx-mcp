@@ -6,9 +6,18 @@ import { fileURLToPath } from "node:url"
 
 import { checkPublicRuntime } from "./preflight.mjs"
 import { failure, intro, note, outro, spinner } from "./setup-ui.mjs"
-import { initializeWorkspace } from "./workspace-setup.mjs"
+import { initializeShellbyConfig, initializeWorkspace } from "./workspace-setup.mjs"
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url))
+const configOnly = process.argv.includes("--config-only")
+
+if (configOnly) {
+  const config = await initializeShellbyConfig()
+  await import("../src/config.ts")
+  console.log(`${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
+  process.exit(0)
+}
+
 intro()
 
 const prerequisiteStep = spinner("Checking prerequisites")
@@ -22,30 +31,39 @@ prerequisiteStep.succeed("Prerequisites ready")
 
 await mkdir(join(homedir(), ".shellby"), { recursive: true })
 
+const config = await initializeShellbyConfig()
+note("Configuration", `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
+
+const { MCP_CONFIG } = await import("../src/config.ts")
+
 const workspaceStep = spinner("Preparing agent workspace")
-const workspace = await initializeWorkspace()
+const workspace = await initializeWorkspace(MCP_CONFIG.workspace)
 workspaceStep.succeed(workspace.created ? "Agent workspace created" : "Agent workspace ready")
 note("Workspace", workspace.agentsPath)
 
 await commandStep("Building Shellby MCP", "Build ready", "npm", ["run", "build"])
 
-const computer = await commandStep(
-  "Checking Computer Use",
-  "Computer Use checked",
-  process.execPath,
-  [join(scriptsDir, "peekaboo-permissions.mjs"), "--status", "--optional"],
-  { allowFailure: true }
-)
-note("Computer Use", combinedOutput(computer))
+if (MCP_CONFIG.tools.computer) {
+  const computer = await commandStep(
+    "Checking Computer Use",
+    "Computer Use checked",
+    process.execPath,
+    [join(scriptsDir, "peekaboo-permissions.mjs"), "--status", "--optional"],
+    { allowFailure: true }
+  )
+  note("Computer Use", combinedOutput(computer))
+}
 
-const browser = await commandStep(
-  "Preparing multi-agent Chrome",
-  "Multi-agent Chrome checked",
-  process.execPath,
-  [join(scriptsDir, "chatgpt-browser.mjs"), "--setup", "--optional"],
-  { allowFailure: true }
-)
-note("Multi-agent", combinedOutput(browser))
+if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
+  const browser = await commandStep(
+    "Preparing multi-agent Chrome",
+    "Multi-agent Chrome checked",
+    process.execPath,
+    ["--import", "tsx", join(scriptsDir, "chatgpt-browser.mjs"), "--setup", "--optional"],
+    { allowFailure: true }
+  )
+  note("Multi-agent", combinedOutput(browser))
+}
 
 outro(["Sign into ChatGPT if the dedicated Chrome window opened.", "Run `npm start` to launch Shellby MCP."])
 

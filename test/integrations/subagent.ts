@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
-import { connectClient, startMcpHttpServer } from "./helpers.js"
+import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("delivers a completed subagent event on the next MCP response exactly once", { timeout: 10_000 }, async (t) => {
   const events = new Map<string, string[]>()
@@ -26,7 +26,7 @@ test("delivers a completed subagent event on the next MCP response exactly once"
     },
     async dispose() {},
   }
-  const running = await startMcpHttpServer({ port: 0, chatGptSubagents, toolOutputStructured: "never" })
+  const running = await startMcpHttpServer({ chatGptSubagents })
   t.after(() => running.close())
   const other = await connectClient(running.url, "other-subagent-event-client", undefined, false, "other-session")
   t.after(() => other.client.close())
@@ -102,7 +102,7 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
     async dispose() {},
   }
 
-  const running = await startMcpHttpServer({ port: 0, chatGptSubagents })
+  const running = await startMcpHttpServer({ chatGptSubagents })
   t.after(() => running.close())
 
   const first = await connectClient(running.url, "subagent-client-1", undefined, false, "launch-session-1")
@@ -116,12 +116,15 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
       ],
     },
   })
-  assert.deepEqual(started.structuredContent, {
-    turns: [
-      { agent_id: "architecture-reviewer", turn_id: "turn-architecture-reviewer-1", status: "running" },
-      { agent_id: "test-reviewer", turn_id: "turn-test-reviewer-1", status: "running" },
-    ],
-  })
+  assert.equal(
+    toolText(started),
+    [
+      "turns:",
+      "",
+      "- agent_id=architecture-reviewer turn_id=turn-architecture-reviewer-1 status=running",
+      "- agent_id=test-reviewer turn_id=turn-test-reviewer-1 status=running",
+    ].join("\n")
+  )
   assert.ok(starts[1]!.at - starts[0]!.at >= 4_500)
   assert.equal(starts[0]!.notificationSessionId, "launch-session-1")
   assert.equal(starts[1]!.notificationSessionId, "launch-session-1")
@@ -133,43 +136,49 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
     name: "subagent_result",
     arguments: { turn_ids: ["turn-architecture-reviewer-1", "turn-test-reviewer-1"], wait_ms: 0 },
   })
-  assert.deepEqual(results.structuredContent, {
-    turns: [
-      { turn_id: "turn-architecture-reviewer-1", status: "completed", response: "architecture-reviewer:1:Review the architecture." },
-      { turn_id: "turn-test-reviewer-1", status: "completed", response: "test-reviewer:1:Review the tests." },
-    ],
-  })
+  assert.equal(
+    toolText(results),
+    [
+      "---- turn_id=turn-architecture-reviewer-1 status=completed ----",
+      "",
+      "architecture-reviewer:1:Review the architecture.",
+      "",
+      "---- turn_id=turn-test-reviewer-1 status=completed ----",
+      "",
+      "test-reviewer:1:Review the tests.",
+    ].join("\n")
+  )
   assert.equal(maxActivePolls, 2)
 
   const mixed = await second.client.callTool({
     name: "subagent_result",
     arguments: { turn_ids: ["turn-architecture-reviewer-1", "missing-turn"], wait_ms: 0 },
   })
-  assert.deepEqual(mixed.structuredContent, {
-    turns: [
-      { turn_id: "turn-architecture-reviewer-1", status: "completed", response: "architecture-reviewer:1:Review the architecture." },
-      { turn_id: "missing-turn", status: "failed", error: "subagent_failed: unknown turn missing-turn" },
-    ],
-  })
+  assert.equal(
+    toolText(mixed),
+    [
+      "---- turn_id=turn-architecture-reviewer-1 status=completed ----",
+      "",
+      "architecture-reviewer:1:Review the architecture.",
+      "",
+      "---- turn_id=missing-turn status=failed ----",
+      "",
+      "subagent_failed: unknown turn missing-turn",
+    ].join("\n")
+  )
 
   const heartbeat = await second.client.callTool({ name: "subagent_result", arguments: { turn_ids: ["heartbeat-fixture"] } })
-  assert.deepEqual(heartbeat.structuredContent, {
-    turns: [{ turn_id: "heartbeat-fixture", status: "running", activity: "Searching the web", activity_age_ms: 2_750 }],
-  })
+  assert.equal(toolText(heartbeat), '---- turn_id=heartbeat-fixture status=running activity="Searching the web" activity_age_ms=2750 ----')
 
   const followUp = await second.client.callTool({
     name: "subagent_run",
     arguments: { agents: [{ agent_id: "architecture-reviewer", prompt: "Now critique your answer." }] },
   })
-  assert.deepEqual(followUp.structuredContent, {
-    turns: [{ agent_id: "architecture-reviewer", turn_id: "turn-architecture-reviewer-2", status: "running" }],
-  })
+  assert.equal(toolText(followUp), "turns:\n\n- agent_id=architecture-reviewer turn_id=turn-architecture-reviewer-2 status=running")
 
   const failedStart = await second.client.callTool({
     name: "subagent_run",
     arguments: { agents: [{ agent_id: "unavailable-agent", prompt: "Try to start." }] },
   })
-  assert.deepEqual(failedStart.structuredContent, {
-    turns: [{ agent_id: "unavailable-agent", status: "failed", error: "subagent_failed: browser unavailable" }],
-  })
+  assert.equal(toolText(failedStart), 'turns:\n\n- agent_id=unavailable-agent status=failed error="subagent_failed: browser unavailable"')
 })

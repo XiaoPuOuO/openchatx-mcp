@@ -94,7 +94,6 @@ function formatInvocationMarkers(value: unknown): string {
   if (!argumentsRecord) return ""
 
   const markers: string[] = []
-  if (argumentsRecord.structured === true) markers.push("structured")
   if (typeof argumentsRecord.max_output_tokens === "number" && Number.isFinite(argumentsRecord.max_output_tokens)) {
     markers.push(`max_output_tokens=${argumentsRecord.max_output_tokens}`)
   }

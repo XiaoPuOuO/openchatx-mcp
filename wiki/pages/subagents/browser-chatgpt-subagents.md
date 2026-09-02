@@ -13,7 +13,7 @@ This page documents the browser-backed ChatGPT subagent runtime, including durab
 
 ## Model
 
-`subagent_run` uses the authenticated dedicated Chrome only as a ChatGPT client. Each `agent_id` owns a conversation identity and, while active, one managed background page. Conversation URL and turn count are persisted best-effort in `~/.shellby/subagents.sqlite`, so a later MCP process can restore the same ChatGPT conversation. A new agent opens `MCP_CHATGPT_PROJECT_URL` when configured, otherwise `https://chatgpt.com/` (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
+`subagent_run` uses the authenticated dedicated Chrome only as a ChatGPT client. Each `agent_id` owns a conversation identity and, while active, one managed background page. Conversation URL and turn count are persisted best-effort in `~/.shellby/subagents.sqlite`, so a later MCP process can restore the same ChatGPT conversation. A new agent opens the active `.shellby/config.toml` `chatgpt.project_url` (`src/config.ts`, `src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
 
 Normal completion comes from raw CDP streams: `/backend-api/f/conversation` SSE and `conversation-turn-*` WebSocket frames feed the same exact-prompt tracker. Rendered DOM and application-level polling are not completion sources. Conversation history is read only during the single catastrophic recovery attempt.
 

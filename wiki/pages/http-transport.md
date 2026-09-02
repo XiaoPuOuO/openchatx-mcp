@@ -39,7 +39,7 @@ Production also injects the repository-local MCP audit logger at this boundary. 
 
 Because neither the modern 2026 serving model nor Shellby's legacy stateless fallback retains an MCP HTTP session ID, an existing client can send its next request after the server is rebuilt and restarted on the same URL without reconnecting. The bound owner survives because it lives outside the repository in `~/.shellby/auth.json`; process-local shell, webpage-cache, and `start_here` state reset, so a ChatGPT conversation must initialize again after process restart. ChatGPT needs an app refresh when advertised tool metadata or server instructions change (`src/auth/auth.ts`, `src/server/http-server.ts`).
 
-The shared `McpHttpHandler` tracks modern in-flight exchanges and is closed before process-level runtime services are disposed. The Node HTTP server is closed in parallel; shell, Peekaboo, and subagent services are released afterward (`src/server/http-server.ts`, `src/index.ts`).
+The shared `McpHttpHandler` tracks modern in-flight exchanges and closes with the Node HTTP server. Process-level shell, Peekaboo, subagent, and cursor-host services are owned and disposed separately by the production composition root (`src/server/http-server.ts`, `src/index.ts`).
 
 Integration tests prove modern `2026-07-28` negotiation, legacy 2025 fallback, state sharing across SDK clients, continued client use after a stop/start on the same port, and HTTP 403 for an attacker-controlled Host (`test/integrations/server.ts`).
 

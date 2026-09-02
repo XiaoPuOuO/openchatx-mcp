@@ -1,11 +1,39 @@
 import { constants } from "node:fs"
-import { copyFile, mkdir, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { dirname, join, resolve } from "node:path"
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-export const DEFAULT_WORKSPACE = "~/Desktop/agent-workspace"
+import { parse, stringify } from "smol-toml"
+
 const STARTER_SKILL_SOURCE = fileURLToPath(new URL("../skills/create-skill/SKILL.md", import.meta.url))
+const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
+
+const DEFAULT_PUBLIC_CONFIG = {
+  workspace: "~/Desktop/agent-workspace",
+  shell: {
+    path: "/bin/zsh",
+  },
+  chatgpt: {
+    cdp_endpoint: "http://127.0.0.1:9222",
+    project_url: "https://chatgpt.com/",
+  },
+  tools: {
+    review: true,
+    shell: true,
+    apply_patch: true,
+    clones: true,
+    subagents: true,
+    web: true,
+    skills: true,
+    image: true,
+    computer: true,
+  },
+}
+
+const CONFIG_HEADER = `# Shellby configuration.
+# These are the active values used by Shellby. Edit them to customize this installation.
+
+`
 
 const STARTER_AGENTS_MD = `# Workspace Instructions
 
@@ -17,14 +45,7 @@ This file contains persistent instructions for coding work in this workspace. Cu
 - Prefer more-specific project instructions when they conflict with this file.
 `
 
-export function resolveWorkspacePath(configured) {
-  if (configured === "~") return homedir()
-  if (configured.startsWith("~/")) return join(homedir(), configured.slice(2))
-  return resolve(configured)
-}
-
-export async function initializeWorkspace(configured = process.env.MCP_CWD ?? DEFAULT_WORKSPACE) {
-  const workspace = resolveWorkspacePath(configured)
+export async function initializeWorkspace(workspace) {
   await mkdir(workspace, { recursive: true })
 
   const agentsPath = join(workspace, "AGENTS.md")
@@ -48,4 +69,46 @@ export async function initializeWorkspace(configured = process.env.MCP_CWD ?? DE
   }
 
   return { workspace, agentsPath, starterSkillPath, created: agentsCreated, starterSkillCreated }
+}
+
+export async function initializeShellbyConfig(repositoryRoot = REPOSITORY_ROOT) {
+  const configPath = join(repositoryRoot, ".shellby", "config.toml")
+  await mkdir(dirname(configPath), { recursive: true })
+
+  try {
+    await writeFile(configPath, serializeConfig(DEFAULT_PUBLIC_CONFIG), { encoding: "utf8", flag: "wx" })
+    return { configPath, created: true, updated: false }
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error
+  }
+
+  const existing = parse(await readFile(configPath, "utf8"))
+  const complete = fillMissingConfig(existing, DEFAULT_PUBLIC_CONFIG)
+  const updated = JSON.stringify(existing) !== JSON.stringify(complete)
+  if (updated) await writeFile(configPath, serializeConfig(complete), "utf8")
+  return { configPath, created: false, updated }
+}
+
+function fillMissingConfig(current, defaults) {
+  if (!isRecord(current) || !isRecord(defaults)) return current ?? defaults
+
+  const complete = { ...current }
+  for (const [key, defaultValue] of Object.entries(defaults)) {
+    if (!(key in complete)) {
+      complete[key] = defaultValue
+      continue
+    }
+    if (isRecord(complete[key]) && isRecord(defaultValue)) {
+      complete[key] = fillMissingConfig(complete[key], defaultValue)
+    }
+  }
+  return complete
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function serializeConfig(config) {
+  return `${CONFIG_HEADER}${stringify(config)}\n`
 }

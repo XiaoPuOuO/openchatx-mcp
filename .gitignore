@@ -1,8 +1,7 @@
 node_modules/
 dist/
-.shellby/
+.shellby/*
 .env*
-!.env.example
 /agent-commands.md
 /agent-commands.yaml
 *.log

@@ -4,12 +4,13 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 
+import { MCP_CONFIG } from "../src/config.ts"
+
 const setup = process.argv.includes("--setup")
 const auto = process.argv.includes("--auto")
 const optional = process.argv.includes("--optional")
-const endpoint = new URL(process.env.MCP_CHATGPT_CDP_ENDPOINT?.trim() || "http://127.0.0.1:9222")
+const endpoint = new URL(MCP_CONFIG.chatGpt.cdpEndpoint)
 const profileDir = join(homedir(), ".shellby", "chatgpt-chrome")
-const chromeProfileDirectory = process.env.MCP_CHATGPT_PROFILE_DIRECTORY?.trim()
 const markerPath = join(profileDir, ".configured")
 const mobileUserAgent = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 const mobileWindowSize = "430,900"
@@ -34,9 +35,7 @@ if (!setup && !configured) {
 
 if (cdpReady) {
   if (setup && !configured) {
-    fail(
-      `${endpoint.host} is already serving a Chrome DevTools session. Close that debug Chrome or configure a different MCP_CHATGPT_CDP_ENDPOINT before setup.`
-    )
+    fail(`${endpoint.host} is already serving a Chrome DevTools session. Close that debug Chrome or configure a different chatgpt.cdp_endpoint before setup.`)
   }
   if (auto) hideManagedChrome()
   else showManagedChrome()
@@ -57,14 +56,13 @@ if (!chrome) {
 }
 
 await mkdir(profileDir, { recursive: true })
-const port = endpoint.port || "9222"
+const port = endpoint.port
 const child = spawn(
   chrome,
   [
     `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
     `--user-data-dir=${profileDir}`,
-    ...(chromeProfileDirectory ? [`--profile-directory=${chromeProfileDirectory}`] : []),
     `--user-agent=${mobileUserAgent}`,
     `--window-size=${mobileWindowSize}`,
     "--force-dark-mode", // Enables dark mode for Chrome UI
@@ -76,7 +74,7 @@ const child = spawn(
     "--disable-breakpad",
     "--no-first-run",
     "--no-default-browser-check",
-    "https://chatgpt.com/",
+    MCP_CONFIG.chatGpt.projectUrl,
   ],
   { detached: true, stdio: "ignore" }
 )
@@ -101,10 +99,9 @@ if (setup) {
 
 async function findChrome() {
   const candidates = [
-    process.env.CHROME_BIN?.trim(),
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     join(homedir(), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
-  ].filter(Boolean)
+  ]
 
   for (const candidate of candidates) {
     try {

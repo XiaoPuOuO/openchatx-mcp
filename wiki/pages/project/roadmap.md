@@ -12,7 +12,7 @@ This page records uncommitted experiments and deferred architectural work; none 
 
 ## Future experiments
 
-- [ ] Add a repo-local, gitignored `.shellby/` configuration area for user customization. Start with `.shellby/config.toml` as the public Shellby configuration surface and `.shellby/prompts/` for optional `start_here` prompt overrides. Migrate ordinary `.env` configuration into one shared TOML loader used by runtime and scripts, keep external-tool credentials such as ngrok auth in their native tooling, and retain code-owned defaults/validation in `src/config.ts`.
+- [x] Add a repo-local, gitignored `.shellby/` configuration area for user customization. `.shellby/config.toml` is the complete active public Shellby configuration surface and `.shellby/prompts/` remains the optional `start_here` prompt override surface. `npm run setup` creates and migrates the active TOML; runtime and startup scripts consume one validated `MCP_CONFIG`; Shellby-owned workspace, shell, ChatGPT routing, and static tool-group settings come only from TOML, while validation and non-configurable limits remain code-owned in `src/config.ts`.
 
 - [ ] Broaden host portability beyond the current macOS release without weakening the local-agent model or adding platform abstractions before they are needed.
 - [ ] Consider adding `CTRL_C` support to `shell_run` so an agent can interrupt a stuck foreground command without resetting the persistent shell and losing cwd/environment state.

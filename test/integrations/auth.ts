@@ -13,7 +13,7 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", { 
   const root = await mkdtemp(join(tmpdir(), "shellby-mcp-remote-auth-"))
   const authStore = new ShellbyAuthStore(join(root, "auth.json"))
   await authStore.ensureState()
-  const running = await startMcpHttpServer({ port: 0, authStore })
+  const running = await startMcpHttpServer({ authStore })
   t.after(async () => {
     await running.close()
     await rm(root, { recursive: true, force: true })
@@ -63,7 +63,7 @@ test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, as
   const filePath = join(root, "auth.json")
   const firstAuthStore = new ShellbyAuthStore(filePath)
   await firstAuthStore.ensureState()
-  let running = await startMcpHttpServer({ port: 0, authStore: firstAuthStore })
+  let running = await startMcpHttpServer({ authStore: firstAuthStore })
   const port = running.port
   const remoteUrl = `http://${running.host}:${port}/mcp`
 

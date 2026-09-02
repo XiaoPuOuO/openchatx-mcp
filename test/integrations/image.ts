@@ -22,7 +22,7 @@ test("returns image_view as native MCP image content", { timeout: 20_000 }, asyn
     .png()
     .toFile(imagePath)
 
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(async () => {
     await running.close()
     await rm(root, { recursive: true, force: true })

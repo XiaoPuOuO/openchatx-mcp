@@ -3,8 +3,8 @@ import { dirname, join } from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
+import { MCP_CONFIG } from "../src/config.ts"
 import { checkPublicRuntime, printPreflightErrors } from "./preflight.mjs"
-import { DEFAULT_WORKSPACE, resolveWorkspacePath } from "./workspace-setup.mjs"
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const restarting = process.argv.includes("--restart")
@@ -15,7 +15,7 @@ if (errors.length > 0) {
   process.exit(1)
 }
 
-const workspace = resolveWorkspacePath(process.env.MCP_CWD ?? DEFAULT_WORKSPACE)
+const workspace = MCP_CONFIG.workspace
 try {
   await access(workspace)
 } catch {
@@ -28,7 +28,9 @@ if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
 run("npm", ["run", "build"])
 runAllowFailure(pm2Path, ["delete", "shellby-cursor-host"])
 run(pm2Path, ["startOrReload", "ecosystem.config.cjs", "--update-env"], { quiet: true })
-run(process.execPath, [join(repoRoot, "scripts", "chatgpt-browser.mjs"), "--auto"])
+if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
+  run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "chatgpt-browser.mjs"), "--auto"])
+}
 
 if (!(await waitForMcp())) {
   console.error("MCP server did not become healthy at http://127.0.0.1:3333/healthz.")

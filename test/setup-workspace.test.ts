@@ -4,7 +4,8 @@ import { join } from "node:path"
 import test from "node:test"
 
 // @ts-expect-error scripts are plain ESM entrypoints without declaration files.
-import { initializeWorkspace } from "../scripts/workspace-setup.mjs"
+import { initializeShellbyConfig, initializeWorkspace } from "../scripts/workspace-setup.mjs"
+import { loadPublicConfig } from "../src/config.js"
 import { SkillCatalog } from "../src/tools/skills.js"
 import { tempDir } from "./helpers/temp.js"
 
@@ -32,4 +33,35 @@ test("workspace setup creates starter instructions and create-skill without over
   assert.equal(repeated.starterSkillCreated, false)
   assert.equal(await readFile(agentsPath, "utf8"), "# My Instructions\n")
   assert.match(await readFile(skillPath, "utf8"), /My custom skill/)
+})
+
+test("setup creates a complete active Shellby config and fills missing fields without replacing user values", async (t) => {
+  const root = await tempDir(t, "shellby-config-scaffold-")
+
+  const initial = await initializeShellbyConfig(root)
+  assert.equal(initial.created, true)
+  assert.equal(initial.updated, false)
+  assert.equal(initial.configPath, join(root, ".shellby", "config.toml"))
+  const scaffold = loadPublicConfig(initial.configPath)
+  assert.equal(scaffold.workspace, "~/Desktop/agent-workspace")
+  assert.deepEqual(scaffold.shell, { path: "/bin/zsh" })
+  assert.deepEqual(scaffold.chatgpt, {
+    cdp_endpoint: "http://127.0.0.1:9222",
+    project_url: "https://chatgpt.com/",
+  })
+  assert.equal(scaffold.tools.computer, true)
+
+  await writeFile(initial.configPath, 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
+  const repeated = await initializeShellbyConfig(root)
+  assert.equal(repeated.created, false)
+  assert.equal(repeated.updated, true)
+  const migrated = loadPublicConfig(initial.configPath)
+  assert.equal(migrated.workspace, "~/Custom")
+  assert.equal(migrated.tools.computer, false)
+  assert.equal(migrated.tools.shell, true)
+  assert.equal(migrated.chatgpt.project_url, "https://chatgpt.com/")
+
+  const complete = await initializeShellbyConfig(root)
+  assert.equal(complete.created, false)
+  assert.equal(complete.updated, false)
 })

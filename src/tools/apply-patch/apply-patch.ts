@@ -12,7 +12,7 @@ const FAILURE_OUTPUT_TOKENS = 1_024
 const STOP_GRACE_MS = 500
 const DEFAULT_APPLY_PATCH_BINARY = fileURLToPath(new URL("../../../vendor/apply-patch/apply_patch", import.meta.url))
 
-export function registerApplyPatchTool(server: McpServer, executable = DEFAULT_APPLY_PATCH_BINARY): void {
+export function registerApplyPatchTool(server: McpServer): void {
   server.registerTool(
     "apply_patch",
     {
@@ -46,7 +46,7 @@ export function registerApplyPatchTool(server: McpServer, executable = DEFAULT_A
     },
     async ({ patch, cwd }, ctx) => {
       try {
-        const result = await applyPatch({ patch, cwd, executable, signal: ctx.mcpReq.signal })
+        const result = await applyPatch({ patch, cwd, executable: DEFAULT_APPLY_PATCH_BINARY, signal: ctx.mcpReq.signal })
         return {
           ...(result.status === "failed" ? { isError: true } : {}),
           structuredContent: toToolResult(result),
@@ -62,7 +62,7 @@ export function registerApplyPatchTool(server: McpServer, executable = DEFAULT_A
   )
 }
 
-interface ApplyPatchInput {
+export interface ApplyPatchInput {
   patch: string
   cwd: string
   executable: string
@@ -101,7 +101,7 @@ function toToolResult(result: ApplyPatchResult): CompactApplyPatchResult {
   return compact
 }
 
-async function applyPatch(input: ApplyPatchInput): Promise<ApplyPatchResult> {
+export async function applyPatch(input: ApplyPatchInput): Promise<ApplyPatchResult> {
   input.signal?.throwIfAborted()
 
   let cwdStat

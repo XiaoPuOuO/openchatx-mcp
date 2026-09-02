@@ -262,12 +262,9 @@ export class PeekabooClient {
 
       const processError = error as NodeJS.ErrnoException
       if (processError.code === "ENOENT") {
-        throw new PeekabooError(
-          "PEEKABOO_NOT_FOUND",
-          `Peekaboo executable ${JSON.stringify(this.executable)} was not found. Run npm install or set MCP_PEEKABOO_BIN.`,
-          undefined,
-          { cause: error }
-        )
+        throw new PeekabooError("PEEKABOO_NOT_FOUND", `Peekaboo executable ${JSON.stringify(this.executable)} was not found. Run npm install.`, undefined, {
+          cause: error,
+        })
       }
 
       const detail = error instanceof Error ? error.message : String(error)

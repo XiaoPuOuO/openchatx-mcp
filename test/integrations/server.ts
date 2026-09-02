@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -7,13 +7,14 @@ import test from "node:test"
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
 import { MCP_CONFIG } from "../../src/config.js"
+import { REVIEW_PROMPT_TOOL_CALLS } from "../../src/tools/review/review-tool.js"
 import { discoverPromptModes, readStartPrompt } from "../../src/tools/start-here/start-here.js"
 import { createShellSession } from "../../src/tools/shell/session.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
-import { callUntilComplete, connectClient, connectLegacyClient, postWithHost, startMcpHttpServer } from "./helpers.js"
+import { callUntilComplete, connectClient, connectLegacyClient, postWithHost, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "tool-surface-client")
   t.after(() => connected.client.close())
@@ -63,11 +64,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
 
   const startHere = tools.tools.find((tool) => tool.name === "start_here")
   assert.ok(startHere)
-  assert.deepEqual((startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum, [
-    "code-review",
-    "coding",
-    "general",
-  ])
+  assert.deepEqual((startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum, ["code-review", "coding", "general"])
 
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
@@ -91,7 +88,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.equal(webTokens?.maximum, MCP_CONFIG.web.maxOutputTokens)
   assert.equal(webCompact?.default, false)
   assert.deepEqual(webFormat?.enum, ["markdown", "html"])
-  assert.ok(fetchUrl.outputSchema)
+  assert.equal(fetchUrl.outputSchema, undefined)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
   const dragProperties = computerDrag.inputSchema.properties as Record<string, Record<string, unknown>>
@@ -100,18 +97,44 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.equal(dragProperties.to?.anyOf, undefined)
 })
 
-test("asks once for a Shellby review after sustained tool use and saves the response", { timeout: 10_000 }, async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "shellby-review-"))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  const reviewFilePath = join(root, ".shellby", "reviews.jsonl")
-  const running = await startMcpHttpServer({ port: 0, reviewPromptThreshold: 3, reviewFilePath })
+test("publishes only start_here when every optional tool group is disabled", { timeout: 10_000 }, async (t) => {
+  const previousTools = { ...MCP_CONFIG.tools }
+  Object.assign(MCP_CONFIG.tools, {
+    review: false,
+    shell: false,
+    applyPatch: false,
+    clones: false,
+    subagents: false,
+    web: false,
+    skills: false,
+    image: false,
+    computer: false,
+  })
+  t.after(() => Object.assign(MCP_CONFIG.tools, previousTools))
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "minimal-tool-surface-client")
+  t.after(() => connected.client.close())
+
+  const tools = await connected.client.listTools()
+  assert.deepEqual(
+    tools.tools.map((tool) => tool.name),
+    ["start_here"]
+  )
+})
+
+test("asks once for a Shellby review after sustained tool use", { timeout: 10_000 }, async (t) => {
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "review-client", undefined, false, "review-session")
   t.after(() => connected.client.close())
 
   await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "review-feedback" } })
 
-  const beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  let beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  for (let call = 1; call < REVIEW_PROMPT_TOOL_CALLS - 2; call += 1) {
+    beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  }
   assert.doesNotMatch(beforeThreshold.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
 
   const prompted = await connected.client.callTool({ name: "shell_list", arguments: {} })
@@ -119,25 +142,12 @@ test("asks once for a Shellby review after sustained tool use and saves the resp
 
   const noRepeat = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.doesNotMatch(noRepeat.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
-
-  const submitted = await connected.client.callTool({
-    name: "submit_review",
-    arguments: { rating: 8.7, review: "Fast local tools; shell polling was easy to follow." },
-  })
-  assert.match(submitted.content.find((item) => item.type === "text")?.text ?? "", /Review saved/)
-
-  const records = (await readFile(reviewFilePath, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>)
-  assert.equal(records.length, 1)
-  assert.equal(records[0]?.rating, "8.7")
-  assert.equal(Object.hasOwn(records[0] ?? {}, "session"), false)
-  assert.doesNotMatch(JSON.stringify(records[0]), /review-session/)
 })
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-"))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const running = await startMcpHttpServer({
-    port: 0,
     shellManager: createShellSessionManager({ defaultShell: createShellSession({ cwd: workspace }) }),
   })
   t.after(() => running.close())
@@ -203,7 +213,6 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
   const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-missing-"))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const running = await startMcpHttpServer({
-    port: 0,
     shellManager: createShellSessionManager({ defaultShell: createShellSession({ cwd: workspace }) }),
   })
   t.after(() => running.close())
@@ -219,7 +228,7 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
 })
 
 test("does not require start_here when no ChatGPT session is provided", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "startup-local-client")
   t.after(() => connected.client.close())
@@ -229,7 +238,7 @@ test("does not require start_here when no ChatGPT session is provided", { timeou
 })
 
 test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectLegacyClient(running.url, "legacy-compatibility-client")
   t.after(() => connected.client.close())
@@ -239,41 +248,24 @@ test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, asy
   assert.ok((await connected.client.listTools()).tools.length > 0)
 })
 
-test("supports structured output modes through the public MCP surface", { timeout: 20_000 }, async () => {
-  for (const mode of ["always", "optional", "never"] as const) {
-    const running = await startMcpHttpServer({ port: 0, toolOutputStructured: mode })
-    const connected = await connectClient(running.url, `tool-output-${mode}`)
-    try {
-      const tools = await connected.client.listTools()
-      const shellList = tools.tools.find((tool) => tool.name === "shell_list")
-      assert.ok(shellList)
-      const properties = shellList.inputSchema.properties as Record<string, Record<string, unknown>>
+test("publishes ordinary tool results only through the compact MCP surface", { timeout: 10_000 }, async (t) => {
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "compact-output-client")
+  t.after(() => connected.client.close())
 
-      if (mode === "always") {
-        assert.ok(shellList.outputSchema)
-        assert.equal("structured" in properties, false)
-      } else {
-        assert.equal(shellList.outputSchema, undefined)
-        assert.equal("structured" in properties, mode === "optional")
-      }
+  const shellList = (await connected.client.listTools()).tools.find((tool) => tool.name === "shell_list")
+  assert.ok(shellList)
+  assert.equal(shellList.outputSchema, undefined)
+  assert.equal("structured" in (shellList.inputSchema.properties as Record<string, unknown>), false)
 
-      const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
-      assert.equal(Boolean(result.structuredContent), mode === "always")
-      if (mode !== "always") assert.ok(result.content.some((item) => item.type === "text"))
-
-      if (mode === "optional") {
-        const structured = await connected.client.callTool({ name: "shell_list", arguments: { structured: true } })
-        assert.ok(structured.structuredContent)
-      }
-    } finally {
-      await connected.client.close()
-      await running.close()
-    }
-  }
+  const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(result.structuredContent, undefined)
+  assert.match(toolText(result), /count=\d+ limit=\d+/)
 })
 
 test("continues serving an existing client after an HTTP server restart", { timeout: 20_000 }, async (t) => {
-  const firstServer = await startMcpHttpServer({ port: 0 })
+  const firstServer = await startMcpHttpServer()
   const { port, url } = firstServer
   const connection = await connectClient(url, "restart-client")
 
@@ -290,7 +282,7 @@ test("continues serving an existing client after an HTTP server restart", { time
 })
 
 test("rejects a mismatched HTTP Host", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
 
   const status = await postWithHost(running.url, "attacker.example", {

@@ -53,7 +53,7 @@ test("reports a missing Peekaboo executable", async (t) => {
 
   const error = await peekabooRejection(client.run(["app", "list"]))
   assert.equal(error.code, "PEEKABOO_NOT_FOUND")
-  assert.match(error.message, /MCP_PEEKABOO_BIN/)
+  assert.match(error.message, /Run npm install/)
 })
 
 test("passes literal values as exact argv without invoking a shell", async (t) => {

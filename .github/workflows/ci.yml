@@ -32,6 +32,7 @@ jobs:
           node-version: 22.13.0
           cache: npm
       - run: npm ci
+      - run: npm run setup -- --config-only
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

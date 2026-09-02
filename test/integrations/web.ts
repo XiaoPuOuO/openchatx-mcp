@@ -6,12 +6,14 @@ import sharp from "sharp"
 
 import { WebOpenError } from "../../src/tools/web/web-open.js"
 import { WebPageOpener } from "../../src/tools/web/web-open.js"
-import { connectClient, startMcpHttpServer } from "./helpers.js"
+import { compactField, connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("renders a real localhost page through the default web stack", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" })
-    response.end("<!doctype html><html><head><title>Integration Test</title></head><body><main><h1>Hello MCP</h1><p>Real browser rendering works.</p></main></body></html>")
+    response.end(
+      "<!doctype html><html><head><title>Integration Test</title></head><body><main><h1>Hello MCP</h1><p>Real browser rendering works.</p></main></body></html>"
+    )
   })
   await new Promise<void>((resolve, reject) => {
     pageServer.once("error", reject)
@@ -24,7 +26,7 @@ test("renders a real localhost page through the default web stack", { timeout: 6
   const address = pageServer.address()
   assert.ok(address && typeof address !== "string")
 
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "fetch-url-real-render-client")
   t.after(() => connected.client.close())
@@ -38,12 +40,13 @@ test("renders a real localhost page through the default web stack", { timeout: 6
   })
 
   assert.equal(result.isError, undefined)
-  const content = result.structuredContent as { url: string; title: string; status: number; content_type?: string; content: string }
-  assert.equal(content.title, "Integration Test")
-  assert.equal(content.status, 200)
-  assert.equal(content.content_type, "text/html; charset=utf-8")
-  assert.match(content.content, /Hello MCP/)
-  assert.match(content.content, /Real browser rendering works\./)
+  assert.equal(result.structuredContent, undefined)
+  const resultText = toolText(result)
+  assert.equal(compactField(resultText, "title"), "Integration Test")
+  assert.equal(compactField(resultText, "status"), "200")
+  assert.equal(compactField(resultText, "content_type"), "text/html; charset=utf-8")
+  assert.match(compactField(resultText, "content") ?? "", /Hello MCP/)
+  assert.match(compactField(resultText, "content") ?? "", /Real browser rendering works\./)
 })
 
 test("returns successful empty responses with HTTP metadata", { timeout: 60_000 }, async (t) => {
@@ -132,7 +135,7 @@ test("continues one cached website across MCP client sessions", { timeout: 20_00
       }
     },
   })
-  const running = await startMcpHttpServer({ port: 0, webPageOpener })
+  const running = await startMcpHttpServer({ webPageOpener })
   t.after(() => running.close())
 
   const first = await connectClient(running.url, "fetch-url-client-1")
@@ -146,9 +149,11 @@ test("continues one cached website across MCP client sessions", { timeout: 20_00
     },
   })
   assert.equal(firstResult.isError, undefined)
-  const firstContent = firstResult.structuredContent as { url: string; content: string; next_cursor?: string }
-  assert.equal(firstContent.url, "https://example.com/final")
-  assert.ok(firstContent.next_cursor)
+  const firstText = toolText(firstResult)
+  const firstContent = compactField(firstText, "content") ?? ""
+  const nextCursor = compactField(firstText, "next_cursor")
+  assert.equal(compactField(firstText, "url"), "https://example.com/final")
+  assert.ok(nextCursor)
   await first.client.close()
 
   const second = await connectClient(running.url, "fetch-url-client-2")
@@ -159,14 +164,15 @@ test("continues one cached website across MCP client sessions", { timeout: 20_00
       url: "https://example.com/start",
       format: "html",
       compact: false,
-      cursor: firstContent.next_cursor,
+      cursor: nextCursor,
       max_output_tokens: 256,
     },
   })
   assert.equal(secondResult.isError, undefined)
-  const secondContent = secondResult.structuredContent as { content: string; next_cursor?: string }
-  assert.equal(firstContent.content + secondContent.content, expected)
-  assert.equal(secondContent.next_cursor, undefined)
+  const secondText = toolText(secondResult)
+  const secondContent = compactField(secondText, "content") ?? ""
+  assert.equal(firstContent + secondContent, expected)
+  assert.equal(compactField(secondText, "next_cursor"), undefined)
   assert.equal(renders, 1)
 })
 
@@ -360,7 +366,7 @@ test("returns direct image URLs as native MCP image content", { timeout: 60_000 
 
   const address = pageServer.address()
   assert.ok(address && typeof address !== "string")
-  const running = await startMcpHttpServer({ port: 0 })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "fetch-url-image-client")
   t.after(() => connected.client.close())
@@ -374,13 +380,13 @@ test("returns direct image URLs as native MCP image content", { timeout: 60_000 
   assert.ok(imageBlock && imageBlock.type === "image")
   assert.equal(imageBlock.mimeType, "image/jpeg")
   assert.ok(imageBlock.data.length > 0)
-  assert.deepEqual(result.structuredContent, {
-    url: `http://127.0.0.1:${address.port}/pixel.png`,
-    title: "pixel.png",
-    status: 200,
-    content_type: "image/png",
-    content: "",
-  })
+  assert.equal(result.structuredContent, undefined)
+  const resultText = toolText(result)
+  assert.equal(compactField(resultText, "url"), `http://127.0.0.1:${address.port}/pixel.png`)
+  assert.equal(compactField(resultText, "title"), "pixel.png")
+  assert.equal(compactField(resultText, "status"), "200")
+  assert.equal(compactField(resultText, "content_type"), "image/png")
+  assert.equal(compactField(resultText, "content"), "")
 })
 
 test("preserves browser-discovered cookies across redirected resources without refetching the final URL", { timeout: 60_000 }, async (t) => {
@@ -433,7 +439,8 @@ test("sniffs headerless HTML, PDF, image, and text responses", { timeout: 60_000
     .toBuffer()
   const pageServer = createServer((request, response) => {
     response.statusCode = 200
-    if (request.url === "/page") response.end("<!doctype html><html><head><title>Headerless HTML</title></head><body><h1>Rendered headerless HTML</h1></body></html>")
+    if (request.url === "/page")
+      response.end("<!doctype html><html><head><title>Headerless HTML</title></head><body><h1>Rendered headerless HTML</h1></body></html>")
     else if (request.url === "/doc") response.end(pdf)
     else if (request.url === "/image") response.end(image)
     else response.end("headerless plain text")

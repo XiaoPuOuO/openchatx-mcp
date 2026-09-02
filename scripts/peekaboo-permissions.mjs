@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 
 const optional = process.argv.includes("--optional")
 const statusOnly = process.argv.includes("--status")
-const executable = process.env.MCP_PEEKABOO_BIN?.trim() || fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
+const executable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
 const args = statusOnly ? ["permissions", "status", "--all-sources"] : ["permissions", "grant"]
 const result = spawnSync(executable, args, { stdio: "inherit" })
 

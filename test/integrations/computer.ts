@@ -24,7 +24,7 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
     timeoutMs: 2_000,
     localOnly: true,
   })
-  const running = await startMcpHttpServer({ port: 0, peekaboo })
+  const running = await startMcpHttpServer({ peekaboo })
   t.after(async () => {
     await running.close()
     await rm(root, { recursive: true, force: true })

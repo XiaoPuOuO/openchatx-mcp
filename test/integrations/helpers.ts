@@ -3,10 +3,61 @@ import { request as httpRequest } from "node:http"
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 
-import { startMcpHttpServer as startMcpHttpServerRaw, type StartMcpServerOptions } from "../../src/server/http-server.js"
+import { MCP_CONFIG } from "../../src/config.js"
+import { PeekabooClient } from "../../src/tools/computer/peekaboo.js"
+import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
+import { createChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent.js"
+import { WebPageOpener } from "../../src/tools/web/web-open.js"
+import { startMcpHttpServer as startMcpHttpServerRaw, type McpRuntimeServices } from "../../src/server/http-server.js"
 
-export function startMcpHttpServer(options: StartMcpServerOptions = {}) {
-  return startMcpHttpServerRaw({ toolOutputStructured: "always", ...options })
+type TestMcpServerOptions = Partial<McpRuntimeServices> & {
+  port?: number
+}
+
+MCP_CONFIG.port = 0
+Object.assign(MCP_CONFIG.tools, {
+  review: true,
+  shell: true,
+  applyPatch: true,
+  clones: true,
+  subagents: true,
+  web: true,
+  skills: true,
+  image: true,
+  computer: true,
+})
+
+export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
+  const { port = 0, ...services } = options
+  MCP_CONFIG.port = port
+  const shellManager = MCP_CONFIG.tools.shell ? (services.shellManager ?? createShellSessionManager()) : undefined
+  const peekaboo = MCP_CONFIG.tools.computer ? (services.peekaboo ?? new PeekabooClient({ localOnly: true })) : undefined
+  const chatGptSubagents = MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? (services.chatGptSubagents ?? createChatGptSubagentService()) : undefined
+  const runtime = {
+    shellManager,
+    peekaboo,
+    chatGptSubagents,
+    webPageOpener: MCP_CONFIG.tools.web ? (services.webPageOpener ?? new WebPageOpener()) : undefined,
+    auditLogger: services.auditLogger,
+    authStore: services.authStore,
+  }
+  const closeRuntime = () =>
+    Promise.allSettled([shellManager?.close() ?? Promise.resolve(), peekaboo?.close() ?? Promise.resolve(), chatGptSubagents?.dispose() ?? Promise.resolve()])
+
+  try {
+    await shellManager?.startDefault()
+    const running = await startMcpHttpServerRaw(runtime)
+    return {
+      ...running,
+      close: async () => {
+        await running.close()
+        await closeRuntime()
+      },
+    }
+  } catch (error) {
+    await closeRuntime()
+    throw error
+  }
 }
 
 export async function connectClient(url: string, name: string, openAiSubject?: string, trustedRemote = false, openAiSession?: string) {
@@ -135,6 +186,61 @@ export async function callUntilComplete(
 
 export function snapshotFromResult(result: Awaited<ReturnType<Client["callTool"]>>): ToolSnapshot {
   assert.equal(result.isError, undefined)
-  assert.ok(result.structuredContent)
-  return result.structuredContent as unknown as ToolSnapshot
+  const text = toolText(result)
+  const status = compactField(text, "status")
+  const cwd = compactField(text, "cwd")
+  const output = compactField(text, "output")
+  assert.ok(status === "running" || status === "completed" || status === "shell_exited" || status === "reset")
+  assert.ok(cwd !== undefined)
+  assert.ok(output !== undefined)
+
+  const nextCursor = compactNumberField(text, "next_cursor")
+  const exitCode = compactNumberField(text, "exit_code")
+  const droppedOutputBytes = compactNumberField(text, "dropped_output_bytes")
+  return {
+    status,
+    cwd,
+    output,
+    ...(compactField(text, "shell_id") ? { shell_id: compactField(text, "shell_id") } : {}),
+    ...(compactField(text, "request_id") ? { request_id: compactField(text, "request_id") } : {}),
+    ...(nextCursor !== undefined ? { next_cursor: nextCursor } : {}),
+    ...(exitCode !== undefined ? { exit_code: exitCode } : {}),
+    ...(compactField(text, "cursor_expired") === "true" ? { cursor_expired: true } : {}),
+    ...(compactField(text, "output_truncated") === "true" ? { output_truncated: true } : {}),
+    ...(droppedOutputBytes !== undefined ? { dropped_output_bytes: droppedOutputBytes } : {}),
+  }
+}
+
+export function toolText(result: Awaited<ReturnType<Client["callTool"]>>): string {
+  return result.content
+    .map((item) => (item.type === "text" ? item.text : ""))
+    .filter(Boolean)
+    .join("\n")
+}
+
+export function compactField(text: string, key: string): string | undefined {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const inline = text.match(new RegExp(`(?:^|\\s)${escapedKey}=("(?:\\\\.|[^"\\\\])*"|[^\\s]+)`))?.[1]
+  if (inline !== undefined) return decodeCompactScalar(inline)
+
+  const section = text.match(new RegExp(`(?:^|\\n\\n)${escapedKey}:\\n`))
+  if (!section || section.index === undefined) return undefined
+  let start = section.index + section[0].length
+  if (text[start] === "\n") start += 1
+  const rest = text.slice(start)
+  const nextSection = rest.search(/\n\n[a-z][a-z0-9_]*:\n/)
+  return nextSection >= 0 ? rest.slice(0, nextSection) : rest
+}
+
+function compactNumberField(text: string, key: string): number | undefined {
+  const value = compactField(text, key)
+  if (value === undefined) return undefined
+  const parsed = Number(value)
+  assert.ok(Number.isFinite(parsed), `${key} must be numeric`)
+  return parsed
+}
+
+function decodeCompactScalar(value: string): string {
+  if (!value.startsWith('"')) return value
+  return JSON.parse(value) as string
 }

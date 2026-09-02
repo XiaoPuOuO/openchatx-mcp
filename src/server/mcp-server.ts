@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server"
 
-import { buildMcpInstructions, MCP_CONFIG, type ToolOutputStructuredMode } from "../config.js"
+import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import { registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
 import { registerComputerUseTools } from "../tools/computer/computer-tools.js"
 import { PeekabooClient } from "../tools/computer/peekaboo.js"
@@ -20,26 +20,23 @@ import type { McpAuditRequest } from "./audit/audit-log.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
 export interface CreateMcpServerOptions {
-  chatGptSubagents: ChatGptSubagentService
-  peekaboo: PeekabooClient
-  webPageOpener: WebPageOpener
-  applyPatchExecutable?: string
-  toolOutputStructured?: ToolOutputStructuredMode
+  shellManager?: ShellSessionManager
+  chatGptSubagents?: ChatGptSubagentService
+  peekaboo?: PeekabooClient
+  webPageOpener?: WebPageOpener
   sessionId?: string
   startedSessions?: Set<string>
-  reviewPromptTracker: ReviewPromptTracker
-  reviewFilePath?: string
+  reviewPromptTracker?: ReviewPromptTracker
   auditRequest?: McpAuditRequest
 }
 
-export function createMcpServer(shells: ShellSessionManager, options: CreateMcpServerOptions): McpServer {
-  const workspace = shells.initialCwd
+export function createMcpServer(options: CreateMcpServerOptions): McpServer {
+  const workspace = MCP_CONFIG.workspace
   const server = new McpServer(MCP_CONFIG.server, {
     instructions: buildMcpInstructions(workspace),
   })
   installToolRegistrationBoundary(server, {
-    toolOutputStructured: options.toolOutputStructured ?? MCP_CONFIG.toolOutputStructured,
-    drainPendingEvents: () => options.chatGptSubagents.drainEvents(options.sessionId),
+    drainPendingEvents: options.chatGptSubagents ? () => options.chatGptSubagents!.drainEvents(options.sessionId) : undefined,
     sessionId: options.sessionId,
     startedSessions: options.startedSessions,
     reviewPromptTracker: options.reviewPromptTracker,
@@ -47,18 +44,24 @@ export function createMcpServer(shells: ShellSessionManager, options: CreateMcpS
   })
 
   registerStartHereTool(server)
-  registerReviewTool(server, options.reviewFilePath)
-  registerShellExecutionTools(server, shells, workspace)
+  if (MCP_CONFIG.tools.review) registerReviewTool(server)
+  const shells = MCP_CONFIG.tools.shell ? requireCapabilityService(options.shellManager, "shell") : undefined
+  if (shells) registerShellExecutionTools(server, shells, workspace)
   // iOS shell is experimental and intentionally disabled until the bridge is revisited.
   // registerIosShellTool(server)
-  registerApplyPatchTool(server, options.applyPatchExecutable)
-  registerShellManagementTools(server, shells)
-  registerCloneTools(server, options.chatGptSubagents, options.sessionId)
-  registerSubagentTools(server, options.chatGptSubagents, options.sessionId)
-  registerWebTool(server, options.webPageOpener)
-  registerSkillTools(server, workspace)
-  registerImageTools(server, workspace)
-  registerComputerUseTools(server, options.peekaboo)
+  if (MCP_CONFIG.tools.applyPatch) registerApplyPatchTool(server)
+  if (shells) registerShellManagementTools(server, shells)
+  if (MCP_CONFIG.tools.clones) registerCloneTools(server, requireCapabilityService(options.chatGptSubagents, "clone"), options.sessionId)
+  if (MCP_CONFIG.tools.subagents) registerSubagentTools(server, requireCapabilityService(options.chatGptSubagents, "subagent"), options.sessionId)
+  if (MCP_CONFIG.tools.web) registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
+  if (MCP_CONFIG.tools.skills) registerSkillTools(server, workspace)
+  if (MCP_CONFIG.tools.image) registerImageTools(server, workspace)
+  if (MCP_CONFIG.tools.computer) registerComputerUseTools(server, requireCapabilityService(options.peekaboo, "computer"))
 
   return server
+}
+
+function requireCapabilityService<T>(service: T | undefined, capability: string): T {
+  if (service === undefined) throw new Error(`${capability} tools are enabled but their runtime service was not created.`)
+  return service
 }

@@ -15,9 +15,7 @@ export interface ReviewPromptTracker {
   recordToolCall(sessionId?: string): string[]
 }
 
-export function createReviewPromptTracker(threshold = REVIEW_PROMPT_TOOL_CALLS): ReviewPromptTracker {
-  if (!Number.isSafeInteger(threshold) || threshold < 1) throw new Error("review prompt threshold must be a positive integer")
-
+export function createReviewPromptTracker(): ReviewPromptTracker {
   const toolCalls = new Map<string, number>()
   const promptedSessions = new Set<string>()
 
@@ -26,7 +24,7 @@ export function createReviewPromptTracker(threshold = REVIEW_PROMPT_TOOL_CALLS):
       if (!sessionId) return []
       const count = (toolCalls.get(sessionId) ?? 0) + 1
       toolCalls.set(sessionId, count)
-      if (count < threshold || promptedSessions.has(sessionId)) return []
+      if (count < REVIEW_PROMPT_TOOL_CALLS || promptedSessions.has(sessionId)) return []
       promptedSessions.add(sessionId)
       return [
         `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and a brief note about your Shellby MCP experience.`,
@@ -35,7 +33,7 @@ export function createReviewPromptTracker(threshold = REVIEW_PROMPT_TOOL_CALLS):
   }
 }
 
-export function registerReviewTool(server: McpServer, filePath = DEFAULT_REVIEW_FILE): void {
+export function registerReviewTool(server: McpServer): void {
   server.registerTool(
     REVIEW_TOOL_NAME,
     {
@@ -53,7 +51,7 @@ export function registerReviewTool(server: McpServer, filePath = DEFAULT_REVIEW_
     },
     async ({ rating, review }) => {
       try {
-        await saveReview(filePath, { rating, review })
+        await saveReview(DEFAULT_REVIEW_FILE, { rating, review })
         return { content: [{ type: "text" as const, text: "Review saved to .shellby/reviews.jsonl." }] }
       } catch (error) {
         return {
@@ -65,10 +63,7 @@ export function registerReviewTool(server: McpServer, filePath = DEFAULT_REVIEW_
   )
 }
 
-export async function saveReview(
-  filePath: string,
-  input: { rating: number; review: string }
-): Promise<void> {
+export async function saveReview(filePath: string, input: { rating: number; review: string }): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
   const record = {
     created_at: new Date().toISOString(),

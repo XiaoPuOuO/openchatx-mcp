@@ -1,21 +1,74 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+
+import { parse } from "smol-toml"
+import { z } from "zod"
 
 const packageMetadata = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
 const packageVersion = typeof packageMetadata.version === "string" ? packageMetadata.version : undefined
 if (!packageVersion) throw new Error("package.json is missing a valid version.")
 
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
 const bundledPeekabooExecutable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
-const peekabooExecutable = process.env.MCP_PEEKABOO_BIN?.trim() || bundledPeekabooExecutable
-/**
- * ToolOutputStructuredMode is a enum that describes the structured mode of the tool output.
- * - always: the tool output is always structured. Includes output schemas.
- * - optional: the caller can request full structured tool output with a tool-call argument. Public output schemas remain omitted.
- * - never: the tool output is never structured. Output schemas are omitted.
- */
-export type ToolOutputStructuredMode = "always" | "optional" | "never"
+const defaultConfigPath = fileURLToPath(new URL("../.shellby/config.toml", import.meta.url))
+const httpUrl = z.url().refine((value) => value.startsWith("http://") || value.startsWith("https://"), "URL must use http or https")
+const cdpEndpoint = httpUrl.refine((value) => {
+  const url = new URL(value)
+  const managedLocal = url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost")
+  return !managedLocal || url.port.length > 0
+}, "Local CDP endpoint must include an explicit port")
+
+const publicConfigSchema = z
+  .object({
+    workspace: z.string().trim().min(1),
+    shell: z.object({ path: z.string().trim().min(1) }).strict(),
+    chatgpt: z
+      .object({
+        cdp_endpoint: cdpEndpoint,
+        project_url: httpUrl,
+      })
+      .strict(),
+    tools: z
+      .object({
+        review: z.boolean(),
+        shell: z.boolean(),
+        apply_patch: z.boolean(),
+        clones: z.boolean(),
+        subagents: z.boolean(),
+        web: z.boolean(),
+        skills: z.boolean(),
+        image: z.boolean(),
+        computer: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict()
+
+type ShellbyPublicConfig = z.infer<typeof publicConfigSchema>
+
+export function loadPublicConfig(path = defaultConfigPath): ShellbyPublicConfig {
+  if (!existsSync(path)) {
+    throw new Error(`Shellby config is missing at ${path}. Run \`npm run setup\` first.`)
+  }
+
+  let value: unknown
+  try {
+    value = parse(readFileSync(path, "utf8"))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Invalid Shellby config at ${path}: ${message}`, { cause: error })
+  }
+
+  const parsed = publicConfigSchema.safeParse(value)
+  if (!parsed.success) {
+    throw new Error(`Invalid Shellby config at ${path}: ${z.prettifyError(parsed.error)}`)
+  }
+  return parsed.data
+}
+
+const publicConfig = loadPublicConfig()
 
 export const MCP_CONFIG = {
   server: {
@@ -31,14 +84,14 @@ export const MCP_CONFIG = {
   },
   host: "127.0.0.1",
   port: 3333,
-  workspace: resolveWorkspacePath(process.env.MCP_CWD ?? "~/Desktop/agent-workspace"),
+  workspace: resolveConfiguredPath(publicConfig.workspace),
   peekaboo: {
-    executable: peekabooExecutable,
-    cursorHostExecutable: join(dirname(peekabooExecutable), "peekaboo-cursor-host"),
+    executable: bundledPeekabooExecutable,
+    cursorHostExecutable: join(dirname(bundledPeekabooExecutable), "peekaboo-cursor-host"),
   },
   chatGpt: {
-    cdpEndpoint: process.env.MCP_CHATGPT_CDP_ENDPOINT ?? "http://127.0.0.1:9222",
-    projectUrl: process.env.MCP_CHATGPT_PROJECT_URL?.trim() || undefined,
+    cdpEndpoint: publicConfig.chatgpt.cdp_endpoint,
+    projectUrl: publicConfig.chatgpt.project_url,
     defaultOververbosity: 2,
     defaultPollWaitMs: 30_000,
     maxPollWaitMs: 270_000,
@@ -52,9 +105,8 @@ export const MCP_CONFIG = {
     documentTtlMs: 10 * 60 * 1_000,
     documentLimit: 20,
   },
-  toolOutputStructured: "never" as ToolOutputStructuredMode,
   shell: {
-    path: process.env.MCP_SHELL ?? "/bin/zsh",
+    path: publicConfig.shell.path,
     // Rolling shell-wide stdout/stderr retention used by cursor-based shell_poll.
     // This is a server-memory/history bound, not a model-output limit.
     transcriptChars: 1024 * 1024,
@@ -78,18 +130,23 @@ export const MCP_CONFIG = {
     idleTimeoutMs: 5 * 60 * 1000, // 5 minutes
     cacheTimeoutMs: 24 * 60 * 60 * 1000, // 24 hours
   },
-  ios: {
-    host: process.env.MCP_IOS_HOST,
-    port: 8765,
-    tokenFile: process.env.MCP_IOS_TOKEN_FILE,
-    timeoutMs: 5_000,
+  tools: {
+    review: publicConfig.tools.review,
+    shell: publicConfig.tools.shell,
+    applyPatch: publicConfig.tools.apply_patch,
+    clones: publicConfig.tools.clones,
+    subagents: publicConfig.tools.subagents,
+    web: publicConfig.tools.web,
+    skills: publicConfig.tools.skills,
+    image: publicConfig.tools.image,
+    computer: publicConfig.tools.computer,
   },
 }
 
-function resolveWorkspacePath(configured: string): string {
+function resolveConfiguredPath(configured: string): string {
   if (configured === "~") return homedir()
   if (configured.startsWith("~/")) return join(homedir(), configured.slice(2))
-  return resolve(configured)
+  return resolve(repositoryRoot, configured)
 }
 
 export function buildMcpInstructions(workspacePath: string): string {

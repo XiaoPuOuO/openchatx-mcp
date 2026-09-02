@@ -1,7 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server"
-import { z } from "zod"
 
-import type { ToolOutputStructuredMode } from "../config.js"
 import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
@@ -81,7 +79,6 @@ interface ToolRegistrationConfig {
 }
 
 export interface ToolRegistrationBoundaryOptions {
-  toolOutputStructured: ToolOutputStructuredMode
   drainPendingEvents?: () => string[]
   sessionId?: string
   startedSessions?: Set<string>
@@ -109,12 +106,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
   server.registerTool = ((name: string, config: ToolRegistrationConfig, callback: unknown) => {
     const computerUse = name.startsWith("computer_")
     const nativeContent = computerUse || name === "image_view"
-    if (!nativeContent && options.toolOutputStructured !== "always") {
-      delete config.outputSchema
-    }
-    if (!nativeContent && options.toolOutputStructured === "optional") {
-      config.inputSchema = addStructuredInput(config.inputSchema)
-    }
+    if (!nativeContent) delete config.outputSchema
     canonicalizeStandardSchema(config.inputSchema)
     canonicalizeStandardSchema(config.outputSchema)
     const annotations = compactToolAnnotations(config.annotations)
@@ -125,12 +117,6 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
     const wrapped = async (...args: unknown[]) => {
       const input = isRecord(args[0]) ? args[0] : undefined
       const auditCall = options.auditRequest?.claimTool(name, input ?? {})
-      const structuredRequested = options.toolOutputStructured === "always" || (options.toolOutputStructured === "optional" && input?.structured === true)
-      if (input && "structured" in input) {
-        const toolInput = { ...input }
-        delete toolInput.structured
-        args[0] = toolInput
-      }
 
       try {
         if (options.sessionId && options.startedSessions && name !== START_HERE_TOOL_NAME && !options.startedSessions.has(options.sessionId)) {
@@ -143,7 +129,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
         if (name === START_HERE_TOOL_NAME && options.sessionId && options.startedSessions && !isToolError(result)) {
           options.startedSessions.add(options.sessionId)
         }
-        const projected = !nativeContent && !structuredRequested ? compactToolResult(name, result) : result
+        const projected = nativeContent ? result : compactToolResult(name, result)
         const events = [
           ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
           ...(options.drainPendingEvents?.() ?? []),
@@ -170,14 +156,6 @@ function startupRequiredResult() {
 
 function isToolError(value: unknown): boolean {
   return isRecord(value) && value.isError === true
-}
-
-function addStructuredInput(schema: unknown): unknown {
-  const structured = z.boolean().optional().default(false).describe("Return full structured tool schema result")
-  if (schema === undefined) return z.object({ structured })
-  if (!isRecord(schema) || typeof schema.extend !== "function") return schema
-  const extend = schema.extend as (shape: Record<string, unknown>) => unknown
-  return extend({ structured })
 }
 
 export function compactToolAnnotations(value: unknown): unknown {
