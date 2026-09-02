@@ -7,7 +7,7 @@ import { prepareShellCommand } from "./rtk.js"
 
 export type { ParallelCommandStatus } from "./shell-contracts.js"
 
-const PARALLEL_COMMAND_LIMIT = 4
+const PARALLEL_COMMAND_LIMIT = 8
 export const DEFAULT_PARALLEL_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
 
 const STOP_GRACE_MS = 500

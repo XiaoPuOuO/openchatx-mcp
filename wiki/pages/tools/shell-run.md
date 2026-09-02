@@ -4,6 +4,7 @@ paths:
   - src/tools/shell/shell-tools.ts
   - src/tools/shell/shell-contracts.ts
   - src/tools/shell/session.ts
+  - src/tools/shell/rtk.ts
 ---
 
 # `shell_run` / `shell_poll`
@@ -25,6 +26,8 @@ Inputs:
 - `max_output_tokens`: usually omit. Default 1024, max 16384. Controls one response chunk, not total retained output.
 
 Normal commands run in the persistent shell. `cd`, exported env, functions, aliases, and other live shell state persist while that shell stays live.
+
+When `shell.rtk = true`, Shellby may transparently rewrite supported commands through the external RTK executable resolved at startup before evaluation. Callers still send normal zsh; request identity, retries, auditing, and command previews use the original command. Unsupported or failed rewrites execute the exact original command, and `RTK_DISABLED=1 <command>` bypasses rewriting for one command.
 
 One foreground operation may use a `shell_id` at a time. Use another shell ID for separate concurrent stateful work.
 
@@ -131,4 +134,5 @@ Poll `wait_ms`: default 2000 ms, max 270 s (4.5 minutes).
 ## Related
 
 - [Persistent Shell Runtime](../persistent-shell-runtime.md)
+- [Configuration and Startup](../operations/configuration-and-startup.md)
 - [MCP Tool Surface](../mcp-tool-surface.md)
