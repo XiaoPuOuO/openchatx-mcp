@@ -22,6 +22,9 @@ test("loads and validates Shellby TOML config", async (t) => {
       'cdp_endpoint = "http://127.0.0.1:9222"',
       'project_url = "https://chatgpt.com/"',
       "",
+      "[mcp]",
+      'tool_output = "structured"',
+      "",
       "[tools]",
       "review = true",
       "shell = true",
@@ -39,6 +42,7 @@ test("loads and validates Shellby TOML config", async (t) => {
     workspace: "~/Work",
     shell: { path: "/bin/zsh" },
     chatgpt: { cdp_endpoint: "http://127.0.0.1:9222", project_url: "https://chatgpt.com/" },
+    mcp: { tool_output: "structured" },
     tools: {
       review: true,
       shell: true,
@@ -90,6 +94,8 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1"',
       'project_url = "https://chatgpt.com/"',
+      "[mcp]",
+      'tool_output = "compact"',
       "[tools]",
       "review = true",
       "shell = true",
@@ -103,4 +109,29 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
     ].join("\n")
   )
   assert.throws(() => loadPublicConfig(path), /Local CDP endpoint must include an explicit port/)
+
+  await writeFile(
+    path,
+    [
+      'workspace = "~/Work"',
+      "[shell]",
+      'path = "/bin/zsh"',
+      "[chatgpt]",
+      'cdp_endpoint = "http://127.0.0.1:9222"',
+      'project_url = "https://chatgpt.com/"',
+      "[mcp]",
+      'tool_output = "verbose"',
+      "[tools]",
+      "review = true",
+      "shell = true",
+      "apply_patch = true",
+      "clones = true",
+      "subagents = true",
+      "web = true",
+      "skills = true",
+      "image = true",
+      "computer = true",
+    ].join("\n")
+  )
+  assert.throws(() => loadPublicConfig(path), /compact|structured/)
 })

@@ -20,6 +20,9 @@ const cdpEndpoint = httpUrl.refine((value) => {
   return !managedLocal || url.port.length > 0
 }, "Local CDP endpoint must include an explicit port")
 
+const toolOutputFormatSchema = z.enum(["compact", "structured"])
+export type ToolOutputFormat = z.infer<typeof toolOutputFormatSchema>
+
 const publicConfigSchema = z
   .object({
     workspace: z.string().trim().min(1),
@@ -30,6 +33,7 @@ const publicConfigSchema = z
         project_url: httpUrl,
       })
       .strict(),
+    mcp: z.object({ tool_output: toolOutputFormatSchema }).strict(),
     tools: z
       .object({
         review: z.boolean(),
@@ -95,6 +99,9 @@ export const MCP_CONFIG = {
     defaultOververbosity: 2,
     defaultPollWaitMs: 30_000,
     maxPollWaitMs: 270_000,
+  },
+  mcp: {
+    toolOutput: publicConfig.mcp.tool_output,
   },
   web: {
     defaultFormat: "markdown" as const,

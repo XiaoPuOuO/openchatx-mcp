@@ -172,7 +172,7 @@ npm start
 
 Shellby's public configuration is the gitignored `.shellby/config.toml`. `npm run setup` creates a complete active config for new installations and fills newly introduced fields on later setup runs while preserving existing user values. Every user-configurable Shellby value is read from this file.
 
-The TOML surface currently owns the workspace, shell path, ChatGPT CDP/project routing, and startup-static tool groups. The generated config enables every tool group. Setting a group to `false` removes those tools from `tools/list` after Shellby restarts and skips its supporting runtime service where one exists. `start_here` is always published.
+The TOML surface currently owns the workspace, shell path, ChatGPT CDP/project routing, MCP tool-output format, and startup-static tool groups. The generated config enables every tool group and defaults tool output to `compact`. Setting a group to `false` removes those tools from `tools/list` after Shellby restarts and skips its supporting runtime service where one exists. `start_here` is always published. For example, this customization disables browser-backed agents and Computer Use:
 
 ```toml
 workspace = "~/Desktop/agent-workspace"
@@ -183,6 +183,9 @@ path = "/bin/zsh"
 [chatgpt]
 cdp_endpoint = "http://127.0.0.1:9222"
 project_url = "https://chatgpt.com/"
+
+[mcp]
+tool_output = "compact"
 
 [tools]
 review = true
@@ -195,6 +198,8 @@ skills = true
 image = true
 computer = false
 ```
+
+`mcp.tool_output` controls the representation used for ordinary tool results. `compact` is optimized for model context and omits public output schemas; `structured` preserves each tool's structured result and output schema for MCP clients that use them. Computer Use and `image_view` keep their native MCP content in either mode. Changing this setting requires a Shellby restart.
 
 Shellby does not use a repository `.env` file. User-configurable Shellby settings come only from `.shellby/config.toml`; external tools use their normal machine-level configuration. In particular, ngrok is resolved from `PATH` and authentication is configured with `ngrok config add-authtoken`. Chrome is discovered in the normal macOS application locations, and Shellby uses its bundled Peekaboo build. Host, port, runtime limits, and other non-configurable settings remain code-owned in [`src/config.ts`](src/config.ts).
 

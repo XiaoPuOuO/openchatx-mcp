@@ -44,19 +44,20 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   })
 
   registerStartHereTool(server)
-  if (MCP_CONFIG.tools.review) registerReviewTool(server)
   const shells = MCP_CONFIG.tools.shell ? requireCapabilityService(options.shellManager, "shell") : undefined
   if (shells) registerShellExecutionTools(server, shells, workspace)
   // iOS shell is experimental and intentionally disabled until the bridge is revisited.
   // registerIosShellTool(server)
   if (MCP_CONFIG.tools.applyPatch) registerApplyPatchTool(server)
   if (shells) registerShellManagementTools(server, shells)
-  if (MCP_CONFIG.tools.clones) registerCloneTools(server, requireCapabilityService(options.chatGptSubagents, "clone"), options.sessionId)
   if (MCP_CONFIG.tools.subagents) registerSubagentTools(server, requireCapabilityService(options.chatGptSubagents, "subagent"), options.sessionId)
   if (MCP_CONFIG.tools.web) registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (MCP_CONFIG.tools.skills) registerSkillTools(server, workspace)
   if (MCP_CONFIG.tools.image) registerImageTools(server, workspace)
   if (MCP_CONFIG.tools.computer) registerComputerUseTools(server, requireCapabilityService(options.peekaboo, "computer"))
+  if (MCP_CONFIG.tools.clones) registerCloneTools(server, requireCapabilityService(options.chatGptSubagents, "clone"), options.sessionId)
+
+  if (MCP_CONFIG.tools.review) registerReviewTool(server)
 
   return server
 }

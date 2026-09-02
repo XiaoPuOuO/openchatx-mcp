@@ -32,16 +32,12 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     tools.tools.map((tool) => tool.name),
     [
       "start_here",
-      "submit_review",
       "shell_run",
       "shell_poll",
       "apply_patch",
       "shell_reset",
       "shell_list",
       "shell_close",
-      "clone_self",
-      "clone_run",
-      "clone_result",
       "subagent_run",
       "subagent_result",
       "fetch_url",
@@ -59,6 +55,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "computer_drag",
       "computer_app",
       "computer_window",
+      "clone_self",
+      "clone_run",
+      "clone_result",
+      "submit_review",
     ]
   )
 
@@ -262,6 +262,25 @@ test("publishes ordinary tool results only through the compact MCP surface", { t
   const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(result.structuredContent, undefined)
   assert.match(toolText(result), /count=\d+ limit=\d+/)
+})
+
+test("preserves structured tool output when configured", { timeout: 10_000 }, async (t) => {
+  const previousToolOutput = MCP_CONFIG.mcp.toolOutput
+  MCP_CONFIG.mcp.toolOutput = "structured"
+  t.after(() => {
+    MCP_CONFIG.mcp.toolOutput = previousToolOutput
+  })
+
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "structured-output-client")
+  t.after(() => connected.client.close())
+
+  const shellList = (await connected.client.listTools()).tools.find((tool) => tool.name === "shell_list")
+  assert.ok(shellList?.outputSchema)
+
+  const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.ok(result.structuredContent)
 })
 
 test("continues serving an existing client after an HTTP server restart", { timeout: 20_000 }, async (t) => {

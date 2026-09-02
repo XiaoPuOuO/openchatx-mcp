@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 
+import { MCP_CONFIG } from "../config.js"
 import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
@@ -102,11 +103,12 @@ interface StandardSchemaJsonSource {
 
 export function installToolRegistrationBoundary(server: McpServer, options: ToolRegistrationBoundaryOptions): void {
   const registerTool = server.registerTool.bind(server) as unknown as (name: string, config: ToolRegistrationConfig, callback: unknown) => unknown
+  const structuredOutput = MCP_CONFIG.mcp.toolOutput === "structured"
 
   server.registerTool = ((name: string, config: ToolRegistrationConfig, callback: unknown) => {
     const computerUse = name.startsWith("computer_")
     const nativeContent = computerUse || name === "image_view"
-    if (!nativeContent) delete config.outputSchema
+    if (!nativeContent && !structuredOutput) delete config.outputSchema
     canonicalizeStandardSchema(config.inputSchema)
     canonicalizeStandardSchema(config.outputSchema)
     const annotations = compactToolAnnotations(config.annotations)
@@ -129,7 +131,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
         if (name === START_HERE_TOOL_NAME && options.sessionId && options.startedSessions && !isToolError(result)) {
           options.startedSessions.add(options.sessionId)
         }
-        const projected = nativeContent ? result : compactToolResult(name, result)
+        const projected = nativeContent || structuredOutput ? result : compactToolResult(name, result)
         const events = [
           ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
           ...(options.drainPendingEvents?.() ?? []),
