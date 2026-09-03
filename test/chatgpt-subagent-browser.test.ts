@@ -24,10 +24,13 @@ test("history recovery rejects an older identical prompt before the current turn
   ]
 
   assert.equal(findLatestAssistantAfterPrompt(staleHistory, "repeat", 2), undefined)
-  assert.deepEqual(findLatestAssistantAfterPrompt([...staleHistory, { role: "user", text: "repeat" }, { role: "assistant", text: "new answer" }], "repeat", 2), {
-    role: "assistant",
-    text: "new answer",
-  })
+  assert.deepEqual(
+    findLatestAssistantAfterPrompt([...staleHistory, { role: "user", text: "repeat" }, { role: "assistant", text: "new answer" }], "repeat", 2),
+    {
+      role: "assistant",
+      text: "new answer",
+    }
+  )
 })
 
 test("CDP tracker binds only the submitted prompt and reconstructs exact final Markdown", () => {

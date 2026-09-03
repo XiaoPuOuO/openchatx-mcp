@@ -387,7 +387,10 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
           message: "Supply element_id or x and y for background scrolling, or set foreground=true.",
         })
       }
-      if (value.foreground && (value.element_id !== undefined || hasCoordinates || value.app !== undefined || value.window_id !== undefined || value.snapshot_id !== undefined)) {
+      if (
+        value.foreground &&
+        (value.element_id !== undefined || hasCoordinates || value.app !== undefined || value.window_id !== undefined || value.snapshot_id !== undefined)
+      ) {
         context.addIssue({
           code: "custom",
           message: "foreground pointer scrolling cannot be combined with a background target.",
@@ -477,15 +480,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         if (screenCapture || target.windowId === undefined) {
           throw new PeekabooError("EXACT_WINDOW_REQUIRED", "Background dragging requires an exact window observation.")
         }
-        const args = [
-          "drag",
-          "--from",
-          `${input.from.x},${input.from.y}`,
-          "--to",
-          `${input.to.x},${input.to.y}`,
-          "--window-id",
-          String(target.windowId),
-        ]
+        const args = ["drag", "--from", `${input.from.x},${input.from.y}`, "--to", `${input.to.x},${input.to.y}`, "--window-id", String(target.windowId)]
         if (input.duration_ms !== undefined) args.push("--duration", String(input.duration_ms))
         if (input.steps !== undefined) args.push("--steps", String(input.steps))
 

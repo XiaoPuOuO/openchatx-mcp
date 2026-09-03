@@ -51,7 +51,9 @@ test("reduces JPEG quality when needed to stay under the response budget", async
   const width = 512
   const height = 512
   const pixels = randomBytes(width * height * 3)
-  const input = await sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer()
+  const input = await sharp(pixels, { raw: { width, height, channels: 3 } })
+    .png()
+    .toBuffer()
   const quality65 = await sharp(input).jpeg({ quality: 65, progressive: true, chromaSubsampling: "4:4:4" }).toBuffer()
   const quality55 = await sharp(input).jpeg({ quality: 55, progressive: true, chromaSubsampling: "4:4:4" }).toBuffer()
   assert.ok(quality55.length < quality65.length)
@@ -69,7 +71,9 @@ test("fails instead of resizing when an image cannot fit", async () => {
   const width = 512
   const height = 512
   const pixels = randomBytes(width * height * 3)
-  const input = await sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer()
+  const input = await sharp(pixels, { raw: { width, height, channels: 3 } })
+    .png()
+    .toBuffer()
 
   await assert.rejects(
     encodeImageForMcp(input, { maxResponseBytes: 66 * 1024 }),

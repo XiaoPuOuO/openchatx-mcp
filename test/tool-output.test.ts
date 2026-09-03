@@ -27,14 +27,17 @@ test("does not treat changed or failed as block strings by default", () => {
 })
 
 test("formats top-level output blocks with a shared boundary", () => {
-  assert.equal(formatOutputBlock(["turn_id=test_turn_1", "status=completed"], "## Result\n\nDone."), "---- turn_id=test_turn_1 status=completed ----\n\n## Result\n\nDone.")
+  assert.equal(
+    formatOutputBlock(["turn_id=test_turn_1", "status=completed"], "## Result\n\nDone."),
+    "---- turn_id=test_turn_1 status=completed ----\n\n## Result\n\nDone."
+  )
 })
 
 test("formats global tool events as notices", () => {
-  const result = appendToolEvents(
-    { content: [{ type: "text", text: "Done." }] },
-    ["Use the `apply_patch` MCP tool over `shell_run` for file changes.", "agent_finished agent_id=reviewer turn_id=reviewer_turn_1"]
-  ) as { content: Array<{ type: string; text: string }> }
+  const result = appendToolEvents({ content: [{ type: "text", text: "Done." }] }, [
+    "Use the `apply_patch` MCP tool over `shell_run` for file changes.",
+    "agent_finished agent_id=reviewer turn_id=reviewer_turn_1",
+  ]) as { content: Array<{ type: string; text: string }> }
 
   assert.equal(
     result.content[0]?.text,
@@ -114,7 +117,10 @@ test("compact fetch_url image results preserve native image content while render
   }) as { structuredContent?: unknown; content?: Array<{ type: string; text?: string; data?: string }> }
 
   assert.equal(result.structuredContent, undefined)
-  assert.equal(result.content?.some((item) => item.type === "image" && item.data === "abc"), true)
+  assert.equal(
+    result.content?.some((item) => item.type === "image" && item.data === "abc"),
+    true
+  )
   assert.match(result.content?.find((item) => item.type === "text")?.text ?? "", /url=https:\/\/example.com\/pixel.png.*status=200.*content_type=image\/png/)
 })
 

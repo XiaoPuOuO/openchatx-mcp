@@ -8,11 +8,7 @@ import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
 import { MCP_CONFIG } from "../../src/config.js"
 import { REVIEW_PROMPT_TOOL_CALLS } from "../../src/tools/review/review-tool.js"
-import {
-  buildStartHereInstructions,
-  discoverPromptModes,
-  readStartPrompt,
-} from "../../src/tools/start-here/start-here.js"
+import { buildStartHereInstructions, discoverPromptModes, readStartPrompt } from "../../src/tools/start-here/start-here.js"
 import { createShellSession } from "../../src/tools/shell/session.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
 import { callUntilComplete, connectClient, connectLegacyClient, postWithHost, startMcpHttpServer, toolText } from "./helpers.js"

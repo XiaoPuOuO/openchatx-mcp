@@ -19,9 +19,7 @@ export function shellRunFileEditNotices(input: Record<string, unknown> | undefin
 
   const commands = [
     ...(typeof input.command === "string" ? [input.command] : []),
-    ...(Array.isArray(input.commands)
-      ? input.commands.flatMap((entry) => (isRecord(entry) && typeof entry.command === "string" ? [entry.command] : []))
-      : []),
+    ...(Array.isArray(input.commands) ? input.commands.flatMap((entry) => (isRecord(entry) && typeof entry.command === "string" ? [entry.command] : [])) : []),
   ]
 
   return commands.some((command) => SHELL_FILE_WRITE_PATTERN.test(command)) ? [SHELL_FILE_EDIT_NOTICE] : []

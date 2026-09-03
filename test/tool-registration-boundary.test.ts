@@ -119,7 +119,7 @@ test("emits apply_patch notice for obvious shell file edits", () => {
     "printf hello | tee notes.txt",
     "sed -i '' 's/old/new/' notes.txt",
     "perl -pi -e 's/old/new/' notes.txt",
-    "python -c 'from pathlib import Path; Path(\"notes.txt\").write_text(\"hello\")'",
+    'python -c \'from pathlib import Path; Path("notes.txt").write_text("hello")\'',
     `python -c 'open("notes.txt", "w").write("hello")'`,
     `node -e 'require("fs").writeFileSync("notes.txt", "hello")'`,
   ]

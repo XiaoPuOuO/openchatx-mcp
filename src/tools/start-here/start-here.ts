@@ -48,15 +48,8 @@ export function registerStartHereTool(server: McpServer, workspacePath: string):
   )
 }
 
-export async function buildStartHereInstructions(
-  mode: string,
-  workspacePath: string,
-  root = repositoryRoot
-): Promise<string> {
-  const [selected, shared] = await Promise.all([
-    readStartPrompt(mode, root),
-    readStartPrompt(SHARED_PROMPT_NAME, root),
-  ])
+export async function buildStartHereInstructions(mode: string, workspacePath: string, root = repositoryRoot): Promise<string> {
+  const [selected, shared] = await Promise.all([readStartPrompt(mode, root), readStartPrompt(SHARED_PROMPT_NAME, root)])
   const sharedInstructions = [
     shared.prompt.trim(),
     `- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${workspacePath}\`.`,

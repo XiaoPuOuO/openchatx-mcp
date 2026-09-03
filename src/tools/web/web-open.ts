@@ -56,13 +56,7 @@ interface FetchedImageResource {
 type FetchedResource = FetchedTextResource | FetchedImageResource
 
 export interface WebPageOpenerOptions {
-  renderPage?: (
-    url: string,
-    format: WebsiteContentFormat,
-    compact: boolean,
-    signal?: AbortSignal,
-    resourceByteLimit?: number
-  ) => Promise<FetchedResource>
+  renderPage?: (url: string, format: WebsiteContentFormat, compact: boolean, signal?: AbortSignal, resourceByteLimit?: number) => Promise<FetchedResource>
   defaultOutputTokens?: number
   maxOutputTokens?: number
   documentByteLimit?: number
@@ -646,17 +640,7 @@ async function compactRenderedHtml(html: string): Promise<string> {
   body.querySelectorAll('script, style, noscript, template, nav, footer, svg, [hidden], [aria-hidden="true"]').forEach((element) => element.remove())
 
   const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/i
-  const strippedAttributes = new Set([
-    "class",
-    "style",
-    "srcset",
-    "sizes",
-    "width",
-    "height",
-    "loading",
-    "decoding",
-    "fetchpriority",
-  ])
+  const strippedAttributes = new Set(["class", "style", "srcset", "sizes", "width", "height", "loading", "decoding", "fetchpriority"])
 
   for (const element of document.querySelectorAll("*")) {
     const style = element.getAttribute("style")
