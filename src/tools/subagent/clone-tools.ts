@@ -158,7 +158,7 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
           .min(0)
           .max(MCP_CONFIG.chatGpt.maxPollWaitMs)
           .default(MCP_CONFIG.chatGpt.defaultPollWaitMs)
-          .describe("How long to wait for agent completion. Use 0 only for immediate check. Agent turns average about 3 minute and may run up to 30 minutes."),
+          .describe("Use 0 for an immediate status check; turns may run up to 30 minutes."),
       }),
       outputSchema: z.object({ turns: z.array(cloneResultSchema) }),
       annotations: {

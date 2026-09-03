@@ -179,5 +179,6 @@ export function buildMcpInstructions(workspacePath: string): string {
 - Call \`start_here\` before using any other Shellby tool.
 - Read the context required to do the work correctly. Do not guess, shortcut, or act on partial context when the necessary context can be inspected.
 - Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.
+- For tools that have an _id_ argument, use short, descriptive slugs like "api-audit-01" 
 - Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${workspacePath}\`.`
 }

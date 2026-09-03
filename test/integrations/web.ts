@@ -92,6 +92,53 @@ test("returns successful empty responses with HTTP metadata", { timeout: 60_000 
   assert.equal(reset.content, "")
 })
 
+test("returns bodyless HTTP errors with metadata instead of navigation failures", { timeout: 60_000 }, async (t) => {
+  const pageServer = createServer((request, response) => {
+    if (request.url === "/redirect") {
+      response.writeHead(302, { location: "/missing" })
+      response.end()
+      return
+    }
+    const status = request.url === "/missing" ? 404 : 500
+    response.writeHead(status, { "content-type": "text/html; charset=utf-8", "content-length": "0" })
+    response.end()
+  })
+  await new Promise<void>((resolve, reject) => {
+    pageServer.once("error", reject)
+    pageServer.listen(0, "127.0.0.1", resolve)
+  })
+  t.after(async () => {
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+  })
+
+  const address = pageServer.address()
+  assert.ok(address && typeof address !== "string")
+  const opener = new WebPageOpener()
+  const base = `http://127.0.0.1:${address.port}`
+
+  const missing = await opener.open({
+    url: `${base}/redirect`,
+    format: "markdown",
+    compact: true,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+  assert.equal(missing.status, 404)
+  assert.equal(missing.url, `${base}/missing`)
+  assert.equal(missing.content_type, "text/html; charset=utf-8")
+  assert.equal(missing.content, "")
+
+  const failed = await opener.open({
+    url: `${base}/failed`,
+    format: "markdown",
+    compact: true,
+    maxOutputTokens: opener.maximumOutputTokens,
+  })
+  assert.equal(failed.status, 500)
+  assert.equal(failed.url, `${base}/failed`)
+  assert.equal(failed.content_type, "text/html; charset=utf-8")
+  assert.equal(failed.content, "")
+})
+
 test("waits for delayed client rendering beyond one second", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" })

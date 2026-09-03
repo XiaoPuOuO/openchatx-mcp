@@ -7,12 +7,15 @@ import { shellRunFileEditNotices } from "../src/tools/shell/apply-patch-guidance
 test("canonicalizes schema keywords while preserving property order", () => {
   const schema = canonicalizeJsonSchema({
     $schema: "https://json-schema.org/draft/2020-12/schema",
+    title: "Ignored title",
+    examples: [{ z: "example" }],
     description: "Example",
     required: ["z", "type"],
     properties: {
-      z: { maxLength: 64, description: "Z", type: "string", minLength: 1 },
+      z: { maxLength: 64, description: "Z", type: "string", minLength: 1, pattern: "^.+$", format: "uri" },
       type: { default: "example", description: "Named type", type: "string" },
-      a: { maximum: 10, type: "integer", description: "A", minimum: 1 },
+      a: { maximum: 10, type: "integer", description: "A", minimum: 1, multipleOf: 1 },
+      items: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 3 },
     },
     type: "object",
   }) as Record<string, unknown>
@@ -20,10 +23,11 @@ test("canonicalizes schema keywords while preserving property order", () => {
   assert.deepEqual(Object.keys(schema), ["description", "type", "properties", "required"])
 
   const properties = schema.properties as Record<string, Record<string, unknown>>
-  assert.deepEqual(Object.keys(properties), ["z", "type", "a"])
-  assert.deepEqual(Object.keys(properties.z ?? {}), ["description", "type", "minLength", "maxLength"])
+  assert.deepEqual(Object.keys(properties), ["z", "type", "a", "items"])
+  assert.deepEqual(Object.keys(properties.z ?? {}), ["description", "type", "pattern"])
   assert.deepEqual(Object.keys(properties.type ?? {}), ["description", "type", "default"])
-  assert.deepEqual(Object.keys(properties.a ?? {}), ["description", "type", "minimum", "maximum"])
+  assert.deepEqual(Object.keys(properties.a ?? {}), ["description", "type", "maximum"])
+  assert.deepEqual(properties.items, { type: "array", items: { type: "string" }, maxItems: 3 })
 })
 
 test("removes schema metadata and artificial safe-integer bounds", () => {
@@ -34,6 +38,9 @@ test("removes schema metadata and artificial safe-integer bounds", () => {
       unbounded: { type: "integer", minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER },
       nonnegative: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
       bounded: { type: "integer", minimum: 0, maximum: 255 },
+      max_output_tokens: { type: "integer", minimum: 1, maximum: 16_384, default: 1024 },
+      oververbosity: { type: "integer", minimum: 1, maximum: 5, default: 2 },
+      rating: { type: "number", minimum: 1, maximum: 10 },
       number: { type: "number", minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER },
     },
   }) as Record<string, unknown>
@@ -41,8 +48,11 @@ test("removes schema metadata and artificial safe-integer bounds", () => {
   assert.equal("$schema" in schema, false)
   const properties = schema.properties as Record<string, Record<string, unknown>>
   assert.deepEqual(properties.unbounded, { type: "integer" })
-  assert.deepEqual(properties.nonnegative, { type: "integer", minimum: 0 })
-  assert.deepEqual(properties.bounded, { type: "integer", minimum: 0, maximum: 255 })
+  assert.deepEqual(properties.nonnegative, { type: "integer" })
+  assert.deepEqual(properties.bounded, { type: "integer", maximum: 255 })
+  assert.deepEqual(properties.max_output_tokens, { type: "integer", default: 1024, maximum: 16_384 })
+  assert.deepEqual(properties.oververbosity, { type: "integer", default: 2, maximum: 5 })
+  assert.deepEqual(properties.rating, { type: "number", maximum: 10 })
   assert.deepEqual(properties.number, {
     type: "number",
     minimum: Number.MIN_SAFE_INTEGER,

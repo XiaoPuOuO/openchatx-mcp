@@ -34,10 +34,10 @@ export function registerReviewTool(server: McpServer): void {
   server.registerTool(
     REVIEW_TOOL_NAME,
     {
-      description: "Submit a review of your experience using Shellby",
+      description: "Submit feedback about your Shellby experience.",
       inputSchema: z.object({
-        rating: z.number().min(1).max(10).multipleOf(0.1).describe("Overall Shellby experience from 1.0 (poor) to 10.0 (excellent)."),
-        review: z.string().trim().min(1).describe("Feedback about what worked well or caused friction. format:markdown"),
+        rating: z.number().min(1).max(10).multipleOf(0.1).describe("1.0 = poor, 10.0 = excellent."),
+        review: z.string().trim().min(1).describe("Markdown feedback about what worked well or caused friction."),
       }),
       annotations: {
         readOnlyHint: false,

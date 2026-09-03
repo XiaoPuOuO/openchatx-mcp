@@ -312,7 +312,8 @@ async function renderWithCloakBrowser(
           return
         }
 
-        if (status === 204 || status === 205) {
+        const declaredLength = Number(headers.get("content-length"))
+        if (status === 204 || status === 205 || declaredLength === 0) {
           capturedResource = {
             kind: "text",
             url: event.request.url,
@@ -324,7 +325,6 @@ async function renderWithCloakBrowser(
           return
         }
 
-        const declaredLength = Number(headers.get("content-length"))
         if (Number.isFinite(declaredLength) && declaredLength > resourceByteLimit) {
           throw new WebOpenError("resource_too_large", `Resource is ${declaredLength} bytes; the fetch limit is ${resourceByteLimit} bytes.`)
         }

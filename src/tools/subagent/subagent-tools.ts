@@ -13,26 +13,22 @@ const subagentInputSchema = z.object({
     .max(64)
     .refine((value) => value.trim().length > 0, "agent_id cannot be only whitespace.")
     .transform((value) => value.trim())
-    .describe("Unique identifier like api-audit-1. Reuse the same agent_id to continue that conversation; use a different one for independent work."),
+    .describe("Stable subagent conversation ID. Reuse to continue it; use a new ID for independent work."),
   prompt: z
     .string()
     .refine((value) => value.trim().length > 0, "prompt cannot be only whitespace.")
     .transform((value) => value.trim())
-    .describe("Task or next message to send to the subagent.\n- Give the subagent a task with enough context to act."),
+    .describe("Task or follow-up instruction. Include enough context for the subagent to act."),
   oververbosity: z
     .int()
     .min(1)
     .max(5)
     .default(MCP_CONFIG.chatGpt.defaultOververbosity)
-    .describe(
-      "Response verbosity for a new subagent conversation. Applied only when this agent_id is first created; later values do not change that conversation."
-    ),
+    .describe("Response verbosity for a new agent. Ignored on later turns for the same agent_id."),
   memory: z
     .boolean()
     .default(true)
-    .describe(
-      "Allow access to memory outside this agent conversation. Turn history for the same agent_id is always preserved. Applied only when first creating the agent."
-    ),
+    .describe("Allow a new agent to access memory outside its conversation. Turn history is always preserved."),
 })
 
 const subagentRunResultSchema = z.object({
@@ -55,8 +51,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
   server.registerTool(
     "subagent_run",
     {
-      description:
-        "Submit tasks to subagents and continue working. Reuse an agent_id to continue the same subagent conversation. Use the returned turn_id with `subagent_result` to retrieve that specific turn.",
+      description: "Submit 1-3 subagent tasks and continue working. Retrieve returned turn_id values with subagent_result.",
       inputSchema: z.object({
         agents: z
           .array(subagentInputSchema)
@@ -120,7 +115,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
   server.registerTool(
     "subagent_result",
     {
-      description: "Turn IDs returned by subagent_run. Each identifies one specific submitted turn.",
+      description: "Retrieve status or results for 1-3 submitted subagent turns.",
       inputSchema: z.object({
         turn_ids: z
           .array(
@@ -132,13 +127,13 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
           )
           .min(1)
           .max(3)
-          .describe("Turn IDs returned by subagent_run calls. Use to retrieve the exact submitted turns concurrently."),
+          .describe("turn_id values returned by subagent_run."),
         wait_ms: z
           .int()
           .min(0)
           .max(MCP_CONFIG.chatGpt.maxPollWaitMs)
           .default(MCP_CONFIG.chatGpt.defaultPollWaitMs)
-          .describe("How long to wait for agent completion. Use 0 only for immediate check. Agent turns average about 3 minute and may run up to 30 minutes."),
+          .describe("Use 0 for an immediate status check; turns may run up to 30 minutes."),
       }),
       outputSchema: z.object({
         turns: z.array(subagentResultSchema),

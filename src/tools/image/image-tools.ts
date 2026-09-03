@@ -12,7 +12,7 @@ export function registerImageTools(server: McpServer, workspace: string): void {
     {
       description: "View a local image file.",
       inputSchema: z.object({
-        path: z.string().min(1).describe("Absolute path to the local image file."),
+        path: z.string().min(1).describe("Local image path. Relative paths resolve from the workspace."),
       }),
       annotations: {
         readOnlyHint: true,

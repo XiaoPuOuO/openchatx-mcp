@@ -25,7 +25,7 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_run",
     {
-      description: `Run arbitrary zsh commands in a persistent shell. New shells start in ${workspaceDescription}.\n- Use the apply_patch tool for file changes.`,
+      description: `Run commands in a persistent zsh shell. Provide exactly one of command or commands. Shells cwd start in ${workspaceDescription}.`,
       inputSchema: shellRunInputSchema,
       outputSchema: shellRunOutputSchema,
       annotations: {
@@ -49,8 +49,7 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_poll",
     {
-      description:
-        "Long-poll a prior shell_run for additional output or completion. While the command is running, shell_poll coalesces output until it completes, the wait expires, or the response budget fills. If status remains running, poll again with next_cursor; avoid rapid repeated polls.",
+      description: "Continue a shell_run from next_cursor. Returns on completion, wait expiry, or output budget; poll again while next_cursor is returned.",
       inputSchema: shellPollInputSchema,
       outputSchema: shellPollOutputSchema,
       annotations: {
@@ -76,8 +75,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_reset",
     {
-      description:
-        "Attempt to terminate the persistent shell process group, discard its working directory and environment state, and start a clean shell. Use this to recover from a stuck foreground command. Process-group cleanup is best effort if signaling is denied.",
+      description: "Reset a stuck shell, discarding its process, cwd, environment, and retained state before starting clean.",
       inputSchema: shellResetInputSchema,
       outputSchema: shellResetOutputSchema,
       annotations: {
@@ -104,7 +102,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_list",
     {
-      description: "List currently open persistent shells, their activity state, idle duration, and whether they may be closed.",
+      description: "List open persistent shells.",
       outputSchema: shellListOutputSchema,
       annotations: {
         readOnlyHint: true,
@@ -134,7 +132,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_close",
     {
-      description: `Terminate a named shell, discard its state and retained records, and immediately free its slot. The ${DEFAULT_SHELL_ID} shell is protected; use shell_reset if it freezes.`,
+      description: `Close a named shell and discard its state. The ${DEFAULT_SHELL_ID} shell must be reset instead.`,
       inputSchema: shellCloseInputSchema,
       outputSchema: shellCloseOutputSchema,
       annotations: {
