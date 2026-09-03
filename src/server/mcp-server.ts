@@ -31,7 +31,7 @@ export interface CreateMcpServerOptions {
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   const workspace = MCP_CONFIG.workspace
   const server = new McpServer(MCP_CONFIG.server, {
-    instructions: buildMcpInstructions(workspace),
+    instructions: buildMcpInstructions(),
   })
   installToolRegistrationBoundary(server, {
     drainPendingEvents: options.chatGptSubagents ? () => options.chatGptSubagents!.drainEvents() : undefined,
@@ -39,7 +39,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
     auditRequest: options.auditRequest,
   })
 
-  registerStartHereTool(server)
+  registerStartHereTool(server, workspace)
   const shells = MCP_CONFIG.tools.shell ? requireCapabilityService(options.shellManager, "shell") : undefined
   if (shells) registerShellExecutionTools(server, shells, workspace)
   if (MCP_CONFIG.tools.applyPatch) registerApplyPatchTool(server)

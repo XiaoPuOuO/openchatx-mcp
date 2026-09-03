@@ -28,7 +28,7 @@ export const shellRunInputSchema = z
       .min(0)
       .max(MCP_CONFIG.shell.maxWaitMs)
       .default(MCP_CONFIG.shell.defaultWaitMs)
-      .describe("If still running after this, continue with shell_poll."),
+      .describe("If still running after this, shell_poll can continue it."),
     max_output_tokens: maxOutputTokensInput,
   })
   .refine((input) => (input.command === undefined) !== (input.commands === undefined), {

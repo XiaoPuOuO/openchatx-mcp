@@ -19,7 +19,7 @@ type PromptSource = {
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
-export function registerStartHereTool(server: McpServer): void {
+export function registerStartHereTool(server: McpServer, workspacePath: string): void {
   const modes = discoverPromptModes()
   if (modes.length === 0) throw new Error("start_here requires at least one prompt mode")
 
@@ -39,14 +39,31 @@ export function registerStartHereTool(server: McpServer): void {
       },
     },
     async ({ mode, task_id }) => {
-      const [selected, shared] = await Promise.all([readStartPrompt(mode), readStartPrompt(SHARED_PROMPT_NAME)])
-      const instructions = [selected.prompt.trim(), shared.prompt.trim()].filter(Boolean).join("\n\n")
+      const instructions = await buildStartHereInstructions(mode, workspacePath)
       setAgentTaskSlug(task_id)
       return {
         content: [{ type: "text", text: instructions }],
       }
     }
   )
+}
+
+export async function buildStartHereInstructions(
+  mode: string,
+  workspacePath: string,
+  root = repositoryRoot
+): Promise<string> {
+  const [selected, shared] = await Promise.all([
+    readStartPrompt(mode, root),
+    readStartPrompt(SHARED_PROMPT_NAME, root),
+  ])
+  const sharedInstructions = [
+    shared.prompt.trim(),
+    `- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${workspacePath}\`.`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+  return [sharedInstructions, selected.prompt.trim()].filter(Boolean).join("\n\n")
 }
 
 export function discoverPromptModes(root = repositoryRoot): string[] {

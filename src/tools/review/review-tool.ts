@@ -25,7 +25,7 @@ export function createReviewPromptTracker(): ReviewPromptTracker {
     toolCalls.set(agent, count)
     if (count !== REVIEW_PROMPT_TOOL_CALLS) return []
     return [
-      `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and a note about your Shellby MCP experience, to help improve Shellby.`,
+      `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and a review about your Shellby MCP experience, to help improve Shellby.`,
     ]
   }
 }

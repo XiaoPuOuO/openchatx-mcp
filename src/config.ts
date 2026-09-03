@@ -172,13 +172,9 @@ function resolvePathExecutable(name: string): string | undefined {
   return executable || undefined
 }
 
-export function buildMcpInstructions(workspacePath: string): string {
+export function buildMcpInstructions(): string {
   return `# Shellby MCP
 
-- The user is invoking Shellby because they want deep task execution. Treat the instructions returned by \`start_here\` as the operating instructions for how to work in this conversation. You are now in Deep Work Mode.
 - Call \`start_here\` before using any other Shellby tool.
-- Read the context required to do the work correctly. Do not guess, shortcut, or act on partial context when the necessary context can be inspected.
-- Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.
-- For tools that have an _id_ argument, use descriptive slugs to help understand the context of the tool call.
-- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${workspacePath}\`.`
+- Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.`
 }

@@ -49,7 +49,8 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_poll",
     {
-      description: "Continue a shell_run from next_cursor. Returns on completion, wait expiry, or output budget.",
+      description:
+        "Continue a shell_run from next_cursor. Returns on completion, wait expiry, or output budget. If next_cursor is returned, continue only if more output or updated status is needed.",
       inputSchema: shellPollInputSchema,
       outputSchema: shellPollOutputSchema,
       annotations: {

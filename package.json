@@ -26,6 +26,7 @@
     "status": "pm2 status",
     "logs": "pm2 logs",
     "print-url": "node scripts/print-url.mjs",
+    "prompt": "node --import tsx scripts/print-start-prompt.ts",
     "schemas": "node --import tsx scripts/tool-schemas.ts",
     "inspect": "npx @modelcontextprotocol/inspector",
     "tunnel": "ngrok http 3333 --traffic-policy-file ./ngrok-traffic-policy.yml --inspect=false",
