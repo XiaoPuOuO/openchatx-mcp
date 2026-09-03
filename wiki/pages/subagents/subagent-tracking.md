@@ -23,7 +23,7 @@ Shellby tracks only the ChatGPT conversation that made each MCP request. The HTT
 X-OpenAI-Session -> { sessionId, agent, taskSlug }
 ```
 
-No attempt is made to classify a caller as a browser subagent or infer relationships between sessions. `agent_id` remains the reusable browser-conversation key for `subagent_run`; it is unrelated to MCP caller identity.
+No attempt is made to classify a caller as a browser subagent or infer relationships between sessions. For `subagent_run`, the caller's `AgentIdentity` is the runtime ownership boundary: `agent_id` is reusable within that identity, and persistence derives only its stable `sessionId` when writing the SQLite mapping.
 
 Each distinct session receives a short first-seen `agent-N` identity from `agent-context.ts`:
 

@@ -41,7 +41,7 @@ This page maps the process-level components and follows one request from the HTT
 1. `src/config.ts` loads and validates the required active `.shellby/config.toml`; `src/index.ts` prepares durable/process-level state and composes only the runtime services required by enabled tool groups (`src/config.ts`, `src/index.ts`).
 2. `src/server/http-server.ts` accepts an MCP request, applies the HTTP/ownership boundary, and routes it through `createMcpHandler`. The handler selects modern `2026-07-28` or stateless legacy serving and obtains a short-lived MCP server from the shared factory. See [HTTP Transport](./http-transport.md).
 3. `src/server/mcp-server.ts` registers `start_here` plus the startup-enabled model-facing tool groups; the selected capability module under `src/tools/` owns its schema, handler, result, and domain errors.
-4. Stateful capabilities retain only their intended boundary: named shells and webpage documents are process-local; Computer Use capture targets are process-local; subagent turn state is process-local while conversation URL + turn count persist best-effort in `~/.shellby/subagents.sqlite`. Dedicated pages document those lifecycles.
+4. Stateful capabilities retain only their intended boundary: named shells and webpage documents are process-local; Computer Use capture targets are process-local; subagent turn state is process-local while main-session-scoped conversation URL + turn count mappings persist best-effort in `~/.shellby/subagents.sqlite`. Dedicated pages document those lifecycles.
 
 ## Related
 

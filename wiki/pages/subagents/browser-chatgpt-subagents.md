@@ -13,7 +13,7 @@ This page documents the browser-backed ChatGPT subagent runtime, including durab
 
 ## Model
 
-`subagent_run` uses the authenticated dedicated Chrome only as a ChatGPT client. Each `agent_id` owns a conversation identity and, while active, one managed background page. Conversation URL and turn count are persisted best-effort in `~/.shellby/subagents.sqlite`, so a later MCP process can restore the same ChatGPT conversation. A new agent opens the active `.shellby/config.toml` `chatgpt.project_url` (`src/config.ts`, `src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
+`subagent_run` uses the authenticated dedicated Chrome only as a ChatGPT client. Runtime ownership follows the caller's canonical `AgentIdentity`; each `agent_id` is unique within that owner and, while active, owns one managed background page. Persistence stores `AgentIdentity.sessionId` with the conversation URL and turn count so a later MCP process can restore the same ChatGPT conversation. A new agent opens the active `.shellby/config.toml` `chatgpt.project_url` (`src/config.ts`, `src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
 
 Normal completion comes from raw CDP streams: `/backend-api/f/conversation` SSE and `conversation-turn-*` WebSocket frames feed the same exact-prompt tracker. Rendered DOM and application-level polling are not completion sources. Conversation history is read only during the single catastrophic recovery attempt.
 
@@ -22,11 +22,13 @@ Normal completion comes from raw CDP streams: `/backend-api/f/conversation` SSE 
 One process-level service owns:
 
 ```text
-agents: agent_id -> lifecycle status + optional page + conversation URL + turn counter + timestamps
-turns: turn_id -> detached local turn state
-activeOperations: agent_id -> reserved/submitted turn
-pendingEvents: launching MCP session -> completion notifications
-store: SQLite agent_id -> conversation URL + turn count
+scopes: AgentIdentity -> {
+  agents: agent_id -> lifecycle status + optional page + conversation URL + turn counter + timestamps
+  turns: turn_id -> detached local turn state
+  activeOperations: agent_id -> reserved/submitted turn
+  pendingEvents: completion notifications
+}
+store: SQLite (AgentIdentity.sessionId, agent_id) -> conversation URL + turn count
 ```
 
 The agent lifecycle reuses the existing activity values: `Working`, `Searching the web`, `Using tools`, and `Generating response`, plus `idle` and `uncertain`. `activeOperations` remains only the concurrency/race lock. Live turns, responses, activity, pending events, pages, and uncertain status are process-local. The persisted store keeps only conversation URL and turn count (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
@@ -37,7 +39,7 @@ The launching MCP session is retained only so a detached `agent_finished` event 
 
 For each turn `askSubagent()`:
 
-1. enforces the existing rate-limit cooldown and three-generation cap;
+1. enforces the existing rate-limit cooldown and three-generation cap for the calling main-agent session;
 2. reuses the expected page, navigates a mismatched managed page to the saved conversation, or opens one replacement background page;
 3. keeps the configured inter-turn delay;
 4. installs the raw CDP turn observer before submission;
@@ -56,7 +58,7 @@ A project URL matters when creating the first conversation. ChatGPT owns the res
 
 Before submission, the page must match that saved identity. A mismatched open page is navigated to the correct URL; a closed or unusable page is replaced with one background page. The prompt is still submitted at most once.
 
-After 30 minutes without an active turn, cleanup closes only the background page and retains the agent, conversation reference, and turn count. A later call with the same `agent_id` reopens the saved conversation. After process restart, first reuse loads the stored conversation URL and turn count and navigates a fresh background page there. `npm run reset-agents` deletes the SQLite store when an operator intentionally wants to forget persisted agent mappings. A submitted turn with 30 minutes of no observed progress enters the one-shot history recovery path described in [Subagent Completion](./subagent-completion.md) (`scripts/reset-agents.mjs`, `src/tools/subagent/chatgpt-subagent.ts`).
+After 30 minutes without an active turn, cleanup closes only the background page and retains the agent, conversation reference, and turn count. A later call from the same main-agent session with the same `agent_id` reopens the saved conversation. After process restart, first reuse loads the stored conversation URL and turn count and navigates a fresh background page there. `npm run reset-agents` deletes the SQLite store when an operator intentionally wants to forget persisted agent mappings. A submitted turn with 30 minutes of no observed progress enters the one-shot history recovery path described in [Subagent Completion](./subagent-completion.md) (`scripts/reset-agents.mjs`, `src/tools/subagent/chatgpt-subagent.ts`).
 
 ## Code Map
 

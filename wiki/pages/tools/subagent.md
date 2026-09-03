@@ -15,11 +15,11 @@ Caller-facing contract for detached browser-backed ChatGPT delegation. Public to
 
 One call accepts one to three distinct agents. Each entry provides:
 
-- `agent_id`: durable conversation identity; reuse it for multi-turn context. Conversation URL and turn count are persisted best-effort across MCP restarts.
+- `agent_id`: durable conversation identity within the calling MCP session; reuse it for multi-turn context. Conversation URL and turn count are persisted best-effort across MCP restarts.
 - `prompt`: task for that turn.
 - `oververbosity`: optional 1-5 value applied only when that `agent_id` creates its first conversation.
 
-A new agent starts from the configured ChatGPT project URL when present. Reused agents continue in or restore the same ChatGPT conversation. At most three generations run process-wide. Three-entry batches retain the existing staggered submission delays.
+A new agent starts from the configured ChatGPT project URL when present. Reused agents continue in or restore the same ChatGPT conversation. At most three generations run concurrently per calling MCP session. Different main-agent sessions can reuse the same `agent_id` independently. Three-entry batches retain the existing staggered submission delays.
 
 ## `subagent_result`
 
@@ -46,7 +46,7 @@ Compact results separate returned turns with top-level metadata headers and plac
 
 ## Lifetime and Failures
 
-Turn records and prior `turn_id` results are process-local. Conversation URL and turn count are persisted best-effort in `~/.shellby/subagents.sqlite`, so reusing an `agent_id` after restart restores the saved conversation when that mapping exists. `npm run reset-agents` intentionally clears persisted agent mappings (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
+Turn records and prior `turn_id` results are process-local. The calling `X-OpenAI-Session`, `agent_id`, conversation URL, and turn count form the persisted mapping in `~/.shellby/subagents.sqlite`, so the same main-agent session can reuse an `agent_id` after restart without colliding with another session's agent of the same name. `npm run reset-agents` intentionally clears those mappings (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
 
 After 30 idle minutes, only the managed background page closes; the saved conversation identity and prior results remain. A later call restores that conversation. Submitted turns also have a 30-minute no-progress cutoff and one recovery attempt that reopens and reads the saved conversation once but never resubmits the prompt or waits on a second observer. If recovery cannot prove the submitted turn finished, that agent is marked `uncertain` and rejects later prompts with `AGENT_BUSY`; use a new `agent_id` instead of risking an overlapping upstream turn.
 

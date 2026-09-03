@@ -51,7 +51,7 @@ test("runs parallel command batches from one root with relative paths and retain
   assert.equal(after.output, repoDirectory)
 })
 
-test("runs at most four parallel children and queues the rest", { timeout: 10_000 }, async (t) => {
+test("runs at most six parallel children", { timeout: 10_000 }, async (t) => {
   const directory = await tempDir(t, "shell-mcp-parallel-limit-")
   const releaseFile = join(directory, "release")
   const shell = createShellSession()
@@ -68,8 +68,8 @@ test("runs at most four parallel children and queues the rest", { timeout: 10_00
   })
 
   assert.equal(first.status, "running")
-  assert.equal(first.commands?.filter((run) => run.status === "running").length, 4)
-  assert.equal(first.commands?.filter((run) => run.status === "queued").length, 2)
+  assert.equal(first.commands?.filter((run) => run.status === "running").length, 6)
+  assert.equal(first.commands?.filter((run) => run.status === "queued").length, 0)
 
   await writeFile(releaseFile, "go")
   const completed = await pollToCompletion(shell, first)

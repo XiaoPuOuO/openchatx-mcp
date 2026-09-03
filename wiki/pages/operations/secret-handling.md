@@ -17,7 +17,7 @@ This page defines what authentication, provider, audit-log, and machine-local in
 
 Remote ChatGPT ownership state is stored outside the repository in `~/.shellby/auth.json` with owner-only permissions. Treat the bound OpenAI subject as private authentication metadata; transport and binding mechanics are documented in [HTTP Transport](../http-transport.md) (`src/auth/auth.ts`, `src/server/http-server.ts`).
 
-Subagent conversation mappings are stored best-effort in `~/.shellby/subagents.sqlite`. The database contains ChatGPT conversation URLs and turn counts, which can expose private account/conversation identifiers. Unlike the auth store, `subagent-store.ts` does not explicitly chmod the SQLite database; treat the file and its `-wal` / `-shm` sidecars as sensitive local state (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
+Subagent conversation mappings are stored best-effort in `~/.shellby/subagents.sqlite`. The database contains parent MCP session IDs, ChatGPT conversation URLs, and turn counts, which can expose private account/conversation identifiers. Unlike the auth store, `subagent-store.ts` does not explicitly chmod the SQLite database; treat the file and its `-wal` / `-shm` sidecars as sensitive local state (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
 
 Provider credentials such as ngrok, npm, or future CI tokens belong in provider/user configuration or a password manager, not repository Markdown (`package.json`).
 
