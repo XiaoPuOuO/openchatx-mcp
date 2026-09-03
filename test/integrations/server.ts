@@ -129,7 +129,7 @@ test("asks once for a Shellby review after sustained tool use", { timeout: 10_00
   const connected = await connectClient(running.url, "review-client", undefined, false, "review-session")
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "review-feedback" } })
+  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "review-feedback" } })
 
   let beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
   for (let call = 1; call < REVIEW_PROMPT_TOOL_CALLS - 2; call += 1) {
@@ -160,7 +160,7 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   assert.equal(blocked.isError, true)
   assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
 
-  const started = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_slug: "startup-session" } })
+  const started = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "startup-session" } })
   assert.equal(started.isError, undefined)
 
   const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
@@ -191,7 +191,7 @@ test("suppresses rapid duplicate skill loads for the same agent", { timeout: 10_
   const connected = await connectClient(running.url, "skill-cooldown-client", undefined, false, "skill-cooldown-session")
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_slug: "skill-cooldown" } })
+  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "skill-cooldown" } })
 
   const simultaneous = await Promise.all([
     connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
@@ -259,7 +259,7 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
   const connected = await connectClient(running.url, "startup-failure", undefined, false, "startup-session-failure")
   t.after(() => connected.client.close())
 
-  const failed = await connected.client.callTool({ name: "start_here", arguments: { mode: "invalid", task_slug: "invalid-mode" } })
+  const failed = await connected.client.callTool({ name: "start_here", arguments: { mode: "invalid", task_id: "invalid-mode" } })
   assert.equal(failed.isError, true)
 
   const blocked = await connected.client.callTool({ name: "shell_list", arguments: {} })

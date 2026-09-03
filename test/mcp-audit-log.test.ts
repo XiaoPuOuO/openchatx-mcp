@@ -122,7 +122,7 @@ test("adds the successful start_here task slug to later audit session aliases", 
     const identity = getAgentIdentity()!
     const [startHere] = claimAuditToolCalls(logger, {
       method: "tools/call",
-      params: { name: "start_here", arguments: { mode: "coding", task_slug: "audit-session-labels" } },
+      params: { name: "start_here", arguments: { mode: "coding", task_id: "audit-session-labels" } },
     })
     assert.ok(startHere)
     startHere.finish({ toolResult: { content: [{ type: "text", text: "instructions" }] } })
@@ -136,7 +136,7 @@ test("adds the successful start_here task slug to later audit session aliases", 
   })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, new RegExp(`--- # start_here[\\s\\S]*?session: "${agent}"[\\s\\S]*?task_slug.*audit-session-labels`))
+  assert.match(log, new RegExp(`--- # start_here[\\s\\S]*?session: "${agent}"[\\s\\S]*?task_id.*audit-session-labels`))
   assert.match(log, new RegExp(`--- # shell_list[\\s\\S]*?session: "${agent}/audit-session-labels"`))
   assert.doesNotMatch(log, /raw-session-task-slug/)
 })

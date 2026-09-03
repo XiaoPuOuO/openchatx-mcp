@@ -12,24 +12,24 @@ const closableShellIdInput = z.string().min(3).max(128)
 const maxOutputTokensInput = z.int().min(1).max(MCP_CONFIG.shell.maxOutputTokens).default(MCP_CONFIG.shell.defaultOutputTokens)
 
 const shellBatchCommandInputSchema = z.object({
-  command: z.string().min(1).describe("Exact zsh command or multiline script."),
-  cwd: z.string().min(1).optional().describe("Omit to inherit the shell_run cwd."),
+  command: z.string().min(1),
+  cwd: z.string().min(1).optional(),
 })
 
 export const shellRunInputSchema = z
   .object({
-    shell_id: shellIdInput.describe("Unique persistent shell label such as api-audit. Reuse for command(s) that should share cwd or environment."),
-    request_id: requestIdInput.describe("Unique within this shell_id, such as scan-routes-1."),
-    cwd: z.string().min(1).optional().describe("Omit to keep the shell's cwd. Parallel commands inherit it."),
-    command: z.string().min(1).optional().describe("Exact zsh command or multiline script."),
-    commands: z.array(shellBatchCommandInputSchema).min(1).optional().describe("Independent zsh commands to run in parallel. Each command may override cwd."),
+    shell_id: shellIdInput.describe("Reuse for command(s) that should share cwd or environment."),
+    request_id: requestIdInput.describe("Unique within this shell_id"),
+    cwd: z.string().min(1).optional().describe("Omit to keep cwd"),
+    command: z.string().min(1).optional(),
+    commands: z.array(shellBatchCommandInputSchema).min(1).optional().describe("Runs independently in parallel. Each may override cwd."),
     wait_ms: z
       .int()
       .min(0)
       .max(MCP_CONFIG.shell.maxWaitMs)
       .default(MCP_CONFIG.shell.defaultWaitMs)
-      .describe("Command keeps running after return; continue with shell_poll."),
-    max_output_tokens: maxOutputTokensInput.describe("Output budget for this response; continue retained output with shell_poll."),
+      .describe("If still running after this, continue with shell_poll."),
+    max_output_tokens: maxOutputTokensInput,
   })
   .refine((input) => (input.command === undefined) !== (input.commands === undefined), {
     message: "Provide exactly one of command or commands.",
@@ -38,9 +38,9 @@ export const shellRunInputSchema = z
 export type ShellRunInput = z.infer<typeof shellRunInputSchema>
 
 export const shellPollInputSchema = z.object({
-  shell_id: shellIdInput.describe("Omit if the original run used the default shell; otherwise use same shell_id."),
-  request_id: requestIdInput.describe("request_id from the original shell_run."),
-  cursor: z.int().nonnegative().describe("next_cursor from the previous shell_run or shell_poll."),
+  shell_id: shellIdInput,
+  request_id: requestIdInput,
+  cursor: z.int().nonnegative().describe("next_cursor from a previous shell_run or shell_poll."),
   wait_ms: z.int().min(0).max(MCP_CONFIG.shell.maxPollWaitMs).default(MCP_CONFIG.shell.defaultPollWaitMs),
   max_output_tokens: maxOutputTokensInput,
 })

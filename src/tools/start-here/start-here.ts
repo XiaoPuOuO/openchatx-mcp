@@ -29,7 +29,7 @@ export function registerStartHereTool(server: McpServer): void {
       description: "Initialize Shellby once per conversation. Loads the selected Deep Work mode and unlocks the other tools",
       inputSchema: z.object({
         mode: z.enum(modes as [string, ...string[]]),
-        task_slug: z.string().min(1).max(64).describe("Short lowercase kebab-case task label, e.g. audit-session-labels."),
+        task_id: z.string().min(1).max(128),
       }),
       annotations: {
         readOnlyHint: true,
@@ -38,10 +38,10 @@ export function registerStartHereTool(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ mode, task_slug }) => {
+    async ({ mode, task_id }) => {
       const [selected, shared] = await Promise.all([readStartPrompt(mode), readStartPrompt(SHARED_PROMPT_NAME)])
       const instructions = [selected.prompt.trim(), shared.prompt.trim()].filter(Boolean).join("\n\n")
-      setAgentTaskSlug(task_slug)
+      setAgentTaskSlug(task_id)
       return {
         content: [{ type: "text", text: instructions }],
       }

@@ -49,7 +49,7 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
   server.registerTool(
     "shell_poll",
     {
-      description: "Continue a shell_run from next_cursor. Returns on completion, wait expiry, or output budget; poll again while next_cursor is returned.",
+      description: "Continue a shell_run from next_cursor. Returns on completion, wait expiry, or output budget.",
       inputSchema: shellPollInputSchema,
       outputSchema: shellPollOutputSchema,
       annotations: {
@@ -75,7 +75,7 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
   server.registerTool(
     "shell_reset",
     {
-      description: "Reset a stuck shell, discarding its process, cwd, environment, and retained state before starting clean.",
+      description: "Reset a stuck shell.",
       inputSchema: shellResetInputSchema,
       outputSchema: shellResetOutputSchema,
       annotations: {

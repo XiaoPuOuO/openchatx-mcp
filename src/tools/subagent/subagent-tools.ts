@@ -25,10 +25,7 @@ const subagentInputSchema = z.object({
     .max(5)
     .default(MCP_CONFIG.chatGpt.defaultOververbosity)
     .describe("Response verbosity for a new agent. Ignored on later turns for the same agent_id."),
-  memory: z
-    .boolean()
-    .default(true)
-    .describe("Allow a new agent to access memory outside its conversation. Turn history is always preserved."),
+  memory: z.boolean().default(true).describe("Allow a new agent to access memory outside its conversation. Turn history is always preserved."),
 })
 
 const subagentRunResultSchema = z.object({
@@ -115,7 +112,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
   server.registerTool(
     "subagent_result",
     {
-      description: "Retrieve status or results for 1-3 submitted subagent turns.",
+      description: "Retrieve status or results for 1-3 submitted subagent turns. Be patient, subagents may take up to 30 minutes to complete.",
       inputSchema: z.object({
         turn_ids: z
           .array(
@@ -133,7 +130,7 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
           .min(0)
           .max(MCP_CONFIG.chatGpt.maxPollWaitMs)
           .default(MCP_CONFIG.chatGpt.defaultPollWaitMs)
-          .describe("Use 0 for an immediate status check; turns may run up to 30 minutes."),
+          .describe("Returns immediately if completed."),
       }),
       outputSchema: z.object({
         turns: z.array(subagentResultSchema),

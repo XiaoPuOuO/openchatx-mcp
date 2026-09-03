@@ -66,7 +66,7 @@ export async function saveReview(filePath: string, input: { rating: number; revi
   const record = {
     created_at: new Date().toISOString(),
     ...(identity ? { agent: identity.agent } : {}),
-    ...(identity?.taskSlug ? { task_slug: identity.taskSlug } : {}),
+    ...(identity?.taskSlug ? { task_id: identity.taskSlug } : {}),
     rating: input.rating.toFixed(1),
     review: input.review,
   }
