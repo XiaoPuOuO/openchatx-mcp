@@ -1,5 +1,5 @@
 import { Activity, RefreshCw, Wifi, WifiOff } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { AgentCard } from "./components/AgentCard"
 import { Button } from "./components/ui/button"
@@ -14,7 +14,7 @@ export function App() {
     return () => window.clearInterval(timer)
   }, [])
 
-  const activeCount = useMemo(() => agents.filter((agent) => agent.current).length, [agents])
+  const activeCount = agents.filter((agent) => now - agent.lastSeenAt < 30_000).length
 
   return (
     <main className="min-h-screen">

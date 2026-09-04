@@ -39,7 +39,7 @@ test("removes schema metadata and artificial safe-integer bounds", () => {
       nonnegative: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
       bounded: { type: "integer", minimum: 0, maximum: 255 },
       max_output_tokens: { type: "integer", minimum: 1, maximum: 16_384, default: 1024 },
-      oververbosity: { type: "integer", minimum: 1, maximum: 5, default: 2 },
+      response_detail: { type: "integer", minimum: 1, maximum: 5, default: 2 },
       rating: { type: "number", minimum: 1, maximum: 10 },
       number: { type: "number", minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER },
     },
@@ -51,7 +51,7 @@ test("removes schema metadata and artificial safe-integer bounds", () => {
   assert.deepEqual(properties.nonnegative, { type: "integer" })
   assert.deepEqual(properties.bounded, { type: "integer", maximum: 255 })
   assert.deepEqual(properties.max_output_tokens, { type: "integer", default: 1024, maximum: 16_384 })
-  assert.deepEqual(properties.oververbosity, { type: "integer", default: 2, maximum: 5 })
+  assert.deepEqual(properties.response_detail, { type: "integer", default: 2, maximum: 5 })
   assert.deepEqual(properties.rating, { type: "number", maximum: 10 })
   assert.deepEqual(properties.number, {
     type: "number",

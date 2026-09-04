@@ -8,6 +8,8 @@ export interface AgentCallSnapshot {
   id: string
   tool: string
   summary: string
+  detail?: string
+  detailLanguage?: string
   startedAt: number
   finishedAt?: number
   status: AgentCallStatus
@@ -46,6 +48,7 @@ export interface AgentObserver {
   finishTool(agent: AgentIdentity | undefined, callId: string | undefined): void
   failTool(agent: AgentIdentity | undefined, callId: string | undefined): void
   queueInstruction(agentId: string, message: string): AgentInstructionSnapshot | undefined
+  cancelInstruction(agentId: string, instructionId: string): boolean
   drainInstructions(agent: AgentIdentity | undefined): string[]
   subscribe(listener: (event: AgentObserverEvent) => void): () => void
 }
@@ -103,6 +106,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
       id: `call-${++callCounter}`,
       tool,
       summary: summarizeTool(tool, input),
+      ...formatToolDetail(tool, input),
       startedAt: timestamp,
       status: "running",
     }
@@ -143,6 +147,17 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     return { ...instruction }
   }
 
+  function cancelInstruction(agentId: string, instructionId: string): boolean {
+    const sessionId = sessionsByAgentId.get(agentId)
+    const agent = sessionId ? agentsBySession.get(sessionId) : undefined
+    if (!agent) return false
+    const instruction = agent.instructions.find((item) => item.id === instructionId)
+    if (!instruction || instruction.deliveredAt !== undefined) return false
+    agent.instructions = agent.instructions.filter((item) => item.id !== instructionId)
+    emitAgent(agent)
+    return true
+  }
+
   function drainInstructions(identity: AgentIdentity | undefined): string[] {
     if (!identity) return []
     const agent = agentsBySession.get(identity.sessionId)
@@ -170,6 +185,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     finishTool: (agent, callId) => settleTool(agent, callId, "completed"),
     failTool: (agent, callId) => settleTool(agent, callId, "failed"),
     queueInstruction,
+    cancelInstruction,
     drainInstructions,
     subscribe,
   }
@@ -219,6 +235,28 @@ function summarizeTool(tool: string, input: unknown): string {
     if (typeof record[key] === "string") return singleLine(record[key] as string, 140)
   }
   return ""
+}
+
+function formatToolDetail(tool: string, input: unknown): Pick<AgentCallSnapshot, "detail" | "detailLanguage"> {
+  const record = asRecord(input)
+  if (tool === "shell_run" && record) {
+    if (typeof record.command === "string") return { detail: record.command, detailLanguage: "bash" }
+    if (Array.isArray(record.commands)) {
+      const commands = record.commands
+        .map((item) => asRecord(item)?.command)
+        .filter((command): command is string => typeof command === "string")
+      if (commands.length > 0) return { detail: commands.join("\n\n"), detailLanguage: "bash" }
+    }
+  }
+  if (tool === "apply_patch" && record && typeof record.patch === "string") {
+    return { detail: record.patch, detailLanguage: "diff" }
+  }
+  if (input === undefined) return {}
+  try {
+    return { detail: JSON.stringify(input, null, 2), detailLanguage: "json" }
+  } catch {
+    return { detail: String(input) }
+  }
 }
 
 function singleLine(value: string, maxLength: number): string {

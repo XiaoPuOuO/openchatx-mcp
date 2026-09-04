@@ -94,7 +94,7 @@ test(
       const firstRun = await client.callTool({
         name: "subagent_run",
         arguments: {
-          agents: [{ agent_id: LIVE_AGENT_ID, prompt: firstPrompt, oververbosity: 5 }],
+          agents: [{ agent_id: LIVE_AGENT_ID, prompt: firstPrompt }],
         },
       })
       const firstRunTurn = getRunTurn(toolText(firstRun.content))
@@ -121,7 +121,7 @@ test(
       const secondRun = await client.callTool({
         name: "subagent_run",
         arguments: {
-          agents: [{ agent_id: LIVE_AGENT_ID, prompt: secondPrompt, oververbosity: 5 }],
+          agents: [{ agent_id: LIVE_AGENT_ID, prompt: secondPrompt }],
         },
       })
       const secondRunTurn = getRunTurn(toolText(secondRun.content))

@@ -9,7 +9,6 @@ export type ChatGptSubagentActivity = z.infer<typeof chatGptSubagentActivitySche
 export interface ChatGptSubagentRequest {
   prompt: string
   agentId: string
-  oververbosity: number
   memory: boolean
 }
 

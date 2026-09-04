@@ -50,7 +50,7 @@ For each turn `askSubagent()`:
 9. clicks Send once;
 10. records detached local turn state and returns `turn_id`.
 
-The first-turn prompt contract is unchanged: oververbosity `1` selects caveman `ultra`, `2` selects `full`, `3` selects `lite`, `4` selects `lite` plus its completeness qualifier, and `5` injects nothing. Later turns send only the caller prompt.
+The first turn appends a fixed internal instruction: `Oververbosity: 1.` plus `Do not use \`subagent\` or \`computer_*\` tools.` Later turns send only the caller prompt. Verbosity is intentionally not part of the public subagent tool contract.
 
 ## Multi-turn and Projects
 

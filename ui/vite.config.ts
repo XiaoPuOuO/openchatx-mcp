@@ -4,7 +4,14 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   base: "/ui/",
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: ["babel-plugin-react-compiler"],
+      },
+    }),
+    tailwindcss(),
+  ],
   server: {
     proxy: {
       "/ui/api": {

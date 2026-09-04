@@ -15,6 +15,8 @@ test("tracks current and recent tool activity for one agent", () => {
     id: callId,
     tool: "shell_run",
     summary: "npm test",
+    detail: "npm test",
+    detailLanguage: "bash",
     startedAt: 1_000,
     status: "running",
   })
@@ -40,6 +42,29 @@ test("queues and delivers steering instructions once", () => {
   assert.deepEqual(observer.drainInstructions(agent), ["Human instruction: Focus only on the dashboard."])
   assert.deepEqual(observer.drainInstructions(agent), [])
   assert.equal(observer.listAgents()[0]?.instructions[0]?.deliveredAt, 2_500)
+})
+
+test("cancels queued steering instructions before delivery", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
+
+  observer.startTool(agent, "shell_run", { command: "pwd" })
+  const instruction = observer.queueInstruction("agent-1", "Do not run tests")
+  assert.ok(instruction)
+  assert.equal(observer.cancelInstruction("agent-1", instruction.id), true)
+  assert.deepEqual(observer.drainInstructions(agent), [])
+  assert.deepEqual(observer.listAgents()[0]?.instructions, [])
+})
+
+test("does not cancel an instruction after it is delivered", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
+
+  observer.startTool(agent, "shell_run", { command: "pwd" })
+  const instruction = observer.queueInstruction("agent-1", "Keep going")
+  assert.ok(instruction)
+  assert.deepEqual(observer.drainInstructions(agent), ["Human instruction: Keep going"])
+  assert.equal(observer.cancelInstruction("agent-1", instruction.id), false)
 })
 
 test("keeps steering instructions scoped to the intended agent", () => {

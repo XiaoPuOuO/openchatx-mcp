@@ -104,7 +104,6 @@ export const MCP_CONFIG = {
   chatGpt: {
     cdpEndpoint: publicConfig.chatgpt.cdp_endpoint,
     projectUrl: publicConfig.chatgpt.project_url,
-    defaultOververbosity: 2,
     defaultPollWaitMs: 30_000,
     maxPollWaitMs: 270_000,
   },

@@ -49,9 +49,7 @@ const SUBMISSION_GRACE_MS = 500
 const TEMPORARY_CHAT_URL = "https://chatgpt.com/?temporary-chat=true"
 const CHATGPT_START_URL = MCP_CONFIG.chatGpt.projectUrl
 
-const INJECTED_PROMPT =
-  "Respond terse like smart caveman — drop articles, filler, pleasantries. Fragments OK. Technical terms exact. Code unchanged. Pattern: [thing] [action] [reason]. [next step].\n\nNot use `subagent` or `computer_*` tools."
-
+const INJECTED_PROMPT = `Oververbosity: 1.\n\nDo not use \`subagent\`${MCP_CONFIG.tools.computer ? " or `computer_*`" : ""} tools.`
 type BrowserAgentStatus = "idle" | "uncertain" | ChatGptSubagentActivity
 
 interface BrowserAgentState {
@@ -130,11 +128,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         scope.agents.set(agent.agentId, agent)
       }
       let submittedPrompt = request.prompt
-      if (agent.turnCount === 0 && request.oververbosity !== 5) {
-        const level = request.oververbosity === 1 ? "ultra" : request.oververbosity === 2 ? "full" : "lite"
-        const qualifier = request.oververbosity === 4 ? " Favor completeness over terseness when useful." : ""
-        submittedPrompt = `${request.prompt}\n\n---\n\nSwitch to caveman ${level} mode. ${INJECTED_PROMPT}${qualifier}`
-      }
+      if (agent.turnCount === 0) submittedPrompt = `${request.prompt}\n\n---\n\n${INJECTED_PROMPT}`
       const turnId = await submitAgentTurn(parentAgent, scope, agent, submittedPrompt)
       operationTransferred = true
       return turnId

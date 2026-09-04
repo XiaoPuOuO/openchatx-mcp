@@ -108,6 +108,15 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
       }
       res.status(202).json({ instruction })
     })
+
+    app.delete("/ui/api/agents/:agentId/instructions/:instructionId", (req, res) => {
+      const cancelled = agentObserver.cancelInstruction(req.params.agentId, req.params.instructionId)
+      if (!cancelled) {
+        res.status(404).json({ error: "queued instruction not found" })
+        return
+      }
+      res.status(204).end()
+    })
   }
 
   if (agentObserver) {

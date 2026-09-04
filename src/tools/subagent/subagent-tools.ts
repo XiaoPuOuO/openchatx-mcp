@@ -19,12 +19,6 @@ const subagentInputSchema = z.object({
     .refine((value) => value.trim().length > 0, "prompt cannot be only whitespace.")
     .transform((value) => value.trim())
     .describe("Task or follow-up instruction. Include enough context for the subagent to act."),
-  oververbosity: z
-    .int()
-    .min(1)
-    .max(5)
-    .default(MCP_CONFIG.chatGpt.defaultOververbosity)
-    .describe("Response verbosity for a new agent. Ignored on later turns for the same agent_id."),
   memory: z.boolean().default(true).describe("Allow a new agent to access memory outside its conversation. Turn history is always preserved."),
 })
 
@@ -87,7 +81,6 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
             {
               agentId: agent.agent_id,
               prompt: agent.prompt,
-              oververbosity: agent.oververbosity,
               memory: agent.memory,
             },
             { signal: ctx.mcpReq.signal }

@@ -17,9 +17,9 @@ One call accepts one to three distinct agents. Each entry provides:
 
 - `agent_id`: durable conversation identity within the calling MCP session; reuse it for multi-turn context. Conversation URL and turn count are persisted best-effort across MCP restarts.
 - `prompt`: task for that turn.
-- `oververbosity`: optional 1-5 value applied only when that `agent_id` creates its first conversation.
+- `memory`: optional flag controlling whether a new agent may restore persisted conversation state; defaults to `true`.
 
-A new agent starts from the configured ChatGPT project URL when present. Reused agents continue in or restore the same ChatGPT conversation. At most three generations run concurrently per calling MCP session. Different main-agent sessions can reuse the same `agent_id` independently. Three-entry batches retain the existing staggered submission delays.
+A new agent starts from the configured ChatGPT project URL when present. Its first prompt also receives the internal instructions `Oververbosity: 1.` and `Do not use \`subagent\` or \`computer_*\` tools.`Reused agents continue in or restore the same ChatGPT conversation. At most three generations run concurrently per calling MCP session. Different main-agent sessions can reuse the same`agent_id` independently. Three-entry batches retain the existing staggered submission delays.
 
 ## `subagent_result`
 

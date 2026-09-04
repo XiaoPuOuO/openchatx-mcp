@@ -31,3 +31,14 @@ export async function steerAgent(agentId: string, message: string): Promise<Agen
   const body = (await response.json()) as { instruction: AgentInstruction }
   return body.instruction
 }
+
+export async function cancelSteer(agentId: string, instructionId: string): Promise<void> {
+  const response = await fetch(
+    `/ui/api/agents/${encodeURIComponent(agentId)}/instructions/${encodeURIComponent(instructionId)}`,
+    { method: "DELETE" }
+  )
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to cancel steer (${response.status})`)
+  }
+}
