@@ -5,6 +5,8 @@ paths:
   - tsconfig.json
   - tsconfig.build.json
   - test/
+  - scripts/chatgpt-cdp-probe.mjs
+  - scripts/summarize-chatgpt-cdp-probe.mjs
   - .github/workflows/
 ---
 
@@ -26,15 +28,17 @@ This page maps the compile boundary, focused validation commands, test responsib
 
 ## Validation
 
-| Command                      | Purpose                                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- |
-| `npm test`                   | Run `test/*.test.ts` through `tsx`                                                                 |
-| `npm run test:live:subagent` | Manually exercise one real browser-backed subagent conversation across two turns; excluded from CI |
-| `npm run typecheck`          | Check source and tests without emitting                                                            |
-| `npm run lint`               | Lint `src/` and `test/` with ESLint                                                                |
-| `npm run format`             | Format source, tests, and project config with Prettier                                             |
-| `npm run build`              | Emit production JavaScript to `dist/`                                                              |
-| `npm run schemas`            | Print the actual registered MCP tool schemas                                                       |
+| Command                               | Purpose                                                                                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `npm test`                            | Run `test/*.test.ts` through `tsx`                                                                 |
+| `npm run test:live:subagent`          | Manually exercise one real browser-backed subagent conversation across two turns; excluded from CI |
+| `npm run probe:chatgpt-cdp`           | Record raw CDP/DOM evidence from the dedicated ChatGPT Chrome for manual transport diagnosis       |
+| `npm run probe:chatgpt-cdp:summary`   | Summarize a saved ChatGPT CDP JSONL trace                                                          |
+| `npm run typecheck`                   | Check source and tests without emitting                                                            |
+| `npm run lint`                        | Lint `src/` and `test/` with ESLint                                                                |
+| `npm run format`                      | Format source, tests, and project config with Prettier                                             |
+| `npm run build`                       | Emit production JavaScript to `dist/`                                                              |
+| `npm run schemas`                     | Print the actual registered MCP tool schemas                                                       |
 
 Run the cheapest focused test first, then the broader commands when the change warrants them (`package.json`).
 
@@ -52,6 +56,7 @@ As verified on 2026-09-01, the default 28-tool production surface costs 4,497 `o
 - Authentication unit tests cover durable state, owner-only permissions, first-owner binding, concurrent first calls, reset, and malformed-state failure. MCP integration tests additionally cover exact routing, local access, discovery without binding, binding on an invalid first tool call, same-owner reuse, different-owner rejection, and owner persistence across an HTTP restart (`test/auth.test.ts`, `test/mcp-integration.test.ts`).
 - Subagent unit tests keep pure prompt/URL behavior and browser/protocol parsing isolated from the runtime service. Public service composition is covered through MCP integration tests, while `test/subagent-store.test.ts` separately verifies SQLite create/set/get/reopen behavior. The full service-level restart-and-restore path is not currently exercised end-to-end (`test/chatgpt-subagent.test.ts`, `test/chatgpt-subagent-browser.test.ts`, `test/mcp-integration.test.ts`, `test/subagent-store.test.ts`).
 - `test/live/subagent-live.test.ts` is a separate manual black-box canary for the real MCP subagent lifecycle. It is outside the `test/*.test.ts` glob, refuses to run in CI, and `npm run test:live:subagent` is the intended entry point. It starts the normal MCP HTTP server with the production ChatGPT subagent service and interacts only through public `subagent_run`/`subagent_result`. Turn 1 must start and return a non-empty response containing a random context key; Turn 2 uses the same `agent_id` and must return a non-empty response containing the remembered key. That is intentionally the whole behavioral assertion surface; protocol details, page identity, and conversation IDs belong to deterministic tests. The canary records poll timing/status plus failure details in ignored `test/live/artifacts/subagent-live-last.json` for post-failure diagnosis, never deliberately reloads the managed conversation itself, and has a live-test-only five-minute process hard cap in case the Playwright/CDP handle keeps Node alive after the test body finishes. Run it only when the authenticated dedicated Chrome is already running and no other subagent generation is active.
+- `scripts/chatgpt-cdp-probe.mjs` is the manual transport diagnostic companion to the black-box live canary. It attaches to the already-running dedicated ChatGPT Chrome and records raw CDP network/WebSocket events plus lightweight DOM state without owning browser lifecycle or navigation. Use `npm run probe:chatgpt-cdp -- --capture-bodies` when decoded conversation SSE is needed, then summarize the resulting ignored JSONL artifact with `npm run probe:chatgpt-cdp:summary -- <trace>`. Captured bodies can contain private prompts and responses even though sensitive headers and token-like URL query values are redacted, so probe artifacts remain local and uncommitted. See [ChatGPT CDP Transport](../subagents/chatgpt-cdp-transport.md) for the observed protocol and interpretation guidance.
 
 Tests use temporary directories and real local child shells; `test/helpers/temp.ts` centralizes disposable-directory cleanup. Process-group tests are POSIX-specific (`test/shell-session.test.ts`, `test/shell-parallel.test.ts`).
 

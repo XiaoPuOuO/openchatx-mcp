@@ -28,7 +28,8 @@ export class ChatGptTurnTracker {
   constructor(
     private readonly prompt: string,
     private readonly onActivity?: (activity: ChatGptSubagentActivity) => void,
-    private readonly onConversationId?: (conversationId: string) => void
+    private readonly onConversationId?: (conversationId: string) => void,
+    private readonly onProgress?: () => void
   ) {}
 
   ingestFrame(payloadData: string): ChatGptTurnCompletion | undefined {
@@ -90,6 +91,8 @@ export class ChatGptTurnTracker {
       this.applyDelta(record)
       if (record.type === "message_stream_complete") this.complete = true
     }
+
+    if (this.sourceId === sourceId && text.length > 0) this.onProgress?.()
 
     return this.result()
   }

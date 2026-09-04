@@ -15,10 +15,11 @@ export async function observeAssistantResponse(
     prompt: string
     onActivity?: (activity: ChatGptSubagentActivity) => void
     onConversationId?: (conversationId: string) => void
+    onProgress?: () => void
   }
 ): Promise<AssistantResponseObservation> {
-  const webSocketTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
-  const httpTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
+  const webSocketTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId, input.onProgress)
+  const httpTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId, input.onProgress)
   const requestIds = new Set<string>()
   const buffers = new Map<string, string>()
   let cdp: CDPSession | undefined
@@ -97,7 +98,7 @@ export async function observeAssistantResponse(
       .then((result) => {
         if (settled || typeof result.body !== "string") return
         const body = result.base64Encoded ? Buffer.from(result.body, "base64").toString("utf8") : result.body
-        const fallback = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
+        const fallback = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId, input.onProgress)
         finish(fallback.ingestSse(body))
       })
       .catch(() => undefined)

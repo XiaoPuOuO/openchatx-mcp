@@ -73,6 +73,7 @@ interface BrowserTurnState {
   status: "running" | "completed" | "failed"
   recoveryAttempted: boolean
   lastActivityAt: number
+  lastProgressAt: number
   response?: string
   errorCode?: string
   errorMessage?: string
@@ -260,6 +261,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         status: "running",
         recoveryAttempted: false,
         lastActivityAt: Date.now(),
+        lastProgressAt: Date.now(),
         prompt: submittedPrompt,
         settled: settlement.promise,
         settle: settlement.resolve,
@@ -270,7 +272,12 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         onConversationId: agent.kind === "clone" ? undefined : (conversationId) => bindConversation(parentAgent, agent, conversationId),
         onActivity: (activity) => {
           agent.status = activity
-          turn.lastActivityAt = Date.now()
+          const now = Date.now()
+          turn.lastActivityAt = now
+          turn.lastProgressAt = now
+        },
+        onProgress: () => {
+          turn.lastProgressAt = Date.now()
         },
       })
 
@@ -387,7 +394,9 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
     if (!turn.recoveryAttempted && agent.conversationUrl) {
       turn.recoveryAttempted = true
-      turn.lastActivityAt = Date.now()
+      const now = Date.now()
+      turn.lastActivityAt = now
+      turn.lastProgressAt = now
       agent.status = "Working"
       try {
         if (await recoverSubmittedTurn(turn)) return
@@ -653,9 +662,9 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         const activeTurn = activeOperation?.turnId ? scope.turns.get(activeOperation.turnId) : undefined
 
         if (activeTurn?.status === "running") {
-          if (agent.memory && !activeTurn.recoveryAttempted && now - activeTurn.lastActivityAt >= STALE_TURN_RECOVERY_MS) {
-            await failOrRecoverSubmittedTurn(activeTurn, new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn had no observable activity for 3 minutes."))
-          } else if (now - activeTurn.lastActivityAt >= AGENT_IDLE_TTL_MS) {
+          if (agent.memory && !activeTurn.recoveryAttempted && now - activeTurn.lastProgressAt >= STALE_TURN_RECOVERY_MS) {
+            await failOrRecoverSubmittedTurn(activeTurn, new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn had no observable progress for 3 minutes."))
+          } else if (now - activeTurn.lastProgressAt >= AGENT_IDLE_TTL_MS) {
             await failOrRecoverSubmittedTurn(
               activeTurn,
               new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn expired after 30 minutes without observable progress.")

@@ -4,6 +4,8 @@ paths:
   - src/tools/subagent/chatgpt-subagent-observer.ts
   - src/tools/subagent/chatgpt-subagent-protocol.ts
   - src/tools/subagent/chatgpt-subagent.ts
+  - scripts/chatgpt-cdp-probe.mjs
+  - scripts/summarize-chatgpt-cdp-probe.mjs
 ---
 
 # ChatGPT CDP Transport
@@ -19,6 +21,32 @@ Submitting in ChatGPT Web starts through `/backend-api/f/conversation`, then gen
 Observed stream data includes the submitted user message, assistant/tool messages, incremental v1 patches, `conversation_id`, `message_stream_complete`, and explicit turn completion. Source Markdown and fenced code are preserved in the structured stream.
 
 Raw CDP also proved that `/backend-api/f/conversation` can be consumed incrementally with `Network.streamResourceContent` plus `Network.dataReceived`. The production tracker accepts that HTTP path because current ChatGPT/project sessions may choose either transport.
+
+Long-running turns can remain alive without producing assistant/tool messages for several minutes. During the observed ChatGPT UI state that says "Our systems are thinking a bit more about this request before responding," the HTTP conversation stream emitted a `safety_review_update` event and then continued sending SSE comment heartbeats shaped like `: ping - <timestamp>` about every 15 seconds. These are transport-liveness signals even when they do not represent user-visible activity.
+
+Production liveness therefore uses a separate progress timestamp from the user-facing activity timestamp. Once the exact submitted prompt binds a tracker to a source, every subsequent non-empty turn-stream block refreshes progress, including SSE comment heartbeats, `safety_review_update`, assistant/tool messages, deltas, and matching WebSocket stream items. Heartbeats received before exact-prompt binding do not count.
+
+## CDP Probe
+
+`scripts/chatgpt-cdp-probe.mjs` is a manual diagnostic recorder for the dedicated authenticated ChatGPT Chrome. It attaches to the configured CDP endpoint and records JSONL evidence without launching, closing, reloading, or navigating Chrome. It is intended for investigating private transport changes and subagent liveness failures against the real ChatGPT Web client.
+
+Start a capture before reproducing the behavior:
+
+```sh
+npm run probe:chatgpt-cdp -- --capture-bodies
+```
+
+Run the subagent scenario, then stop the probe with Ctrl-C. Captures are written under ignored `test/live/artifacts/` by default. The probe records raw CDP network/WebSocket events, decoded conversation SSE chunks when body capture is enabled, page lifecycle/runtime events, and lightweight DOM state useful for correlating transport behavior with what ChatGPT displays.
+
+Summarize a saved trace with:
+
+```sh
+npm run probe:chatgpt-cdp:summary -- test/live/artifacts/<trace>.jsonl
+```
+
+The summarizer reports event counts, candidate transport-liveness gaps, and captured DOM streaming states. It is useful for answering whether Chrome stopped receiving turn traffic or whether Shellby's production tracker ignored traffic that was still arriving.
+
+The recorder redacts sensitive request headers and token-like URL query values, but captured conversation bodies can still contain prompts, responses, and other private conversation data. Treat trace files as private diagnostic artifacts and do not commit them.
 
 ## Production Choice
 
@@ -40,6 +68,8 @@ ChatGPT's own frontend may still issue its own bootstrap/history traffic; the ru
 ## Private Protocol Risk
 
 The HTTP/turn-WebSocket schemas are private and can change. Deterministic protocol tests and the manual two-turn live canary are the compatibility boundary. A schema change gets one bounded recovery attempt, then fails the turn clearly.
+
+When the private protocol appears to drift, use the CDP probe to establish the current browser behavior before changing the production parser. Prefer stable structured transport signals over DOM text or CSS selectors when both expose the same state.
 
 ## Related
 
