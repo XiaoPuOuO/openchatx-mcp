@@ -6,7 +6,7 @@ summary: "Mandatory startup context for Shellby MCP"
 
 ## What This Is
 
-Shellby MCP is a local macOS agent harness that gives ChatGPT Web stateful, high-authority tools backed by the user's machine. It exists so agents can perform sustained engineering work with persistent local capabilities instead of treating every tool call as an isolated action. Shellby deliberately inherits the current macOS user's authority; it is a coordination and capability layer, not a sandbox or hosted multi-user service.
+Shellby MCP is a local macOS agent harness that gives ChatGPT Web stateful, high-authority tools backed by the user's machine. It exists so agents can perform sustained engineering work with persistent local capabilities instead of treating every tool call as an isolated action. Shellby deliberately inherits the current macOS user's authority; it is a coordination and capability layer, not a sandbox or hosted multi-user service. The MCP is entirely for agents at this time, not for human users.
 
 ## Engineering Approach
 

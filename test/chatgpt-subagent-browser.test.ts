@@ -38,7 +38,9 @@ test("CDP tracker binds only the submitted prompt and reconstructs exact final M
   const conversationIds: string[] = []
   const tracker = new ChatGptTurnTracker(
     "review",
-    (activity) => activities.push(activity),
+    (activity) => {
+      if (activity) activities.push(activity)
+    },
     (conversationId) => conversationIds.push(conversationId)
   )
   const topic = "conversation-turn-turn-1"
@@ -76,22 +78,16 @@ test("HTTP SSE tracker reconstructs the same final assistant response", () => {
   assert.deepEqual(tracker.ingestSse(sse), { text: "HTTP exact", conversationId: "conversation-http", turnId: undefined })
 })
 
-test("HTTP SSE tracker counts bound heartbeats and safety review updates as progress without changing activity", () => {
-  const activities: string[] = []
-  let progressCount = 0
-  const tracker = new ChatGptTurnTracker(
-    "review",
-    (activity) => activities.push(activity),
-    undefined,
-    () => progressCount++
-  )
+test("HTTP SSE tracker counts bound heartbeats and safety review updates as activity without changing the status label", () => {
+  const activities: Array<string | undefined> = []
+  const tracker = new ChatGptTurnTracker("review", (activity) => activities.push(activity))
 
   tracker.ingestSse(": ping - before-bind\r\n\r\n")
-  assert.equal(progressCount, 0)
+  assert.deepEqual(activities, [])
 
   tracker.ingestSse(message("user", "review"))
+  const labeledActivities = activities.filter((activity) => activity !== undefined)
   const activityCount = activities.length
-  const boundProgressCount = progressCount
 
   tracker.ingestSse(": ping - 2026-09-04 04:04:39.098910+00:00\r\n\r\n")
   tracker.ingestSse(
@@ -104,20 +100,24 @@ test("HTTP SSE tracker counts bound heartbeats and safety review updates as prog
     })}\n\n`
   )
 
-  assert.equal(progressCount, boundProgressCount + 2)
-  assert.equal(activities.length, activityCount)
+  assert.equal(activities.length, activityCount + 2)
+  assert.deepEqual(
+    activities.filter((activity) => activity !== undefined),
+    labeledActivities
+  )
 })
 
-test("CDP tracker counts bound turn stream traffic as progress even when it has no message", () => {
-  let progressCount = 0
-  const tracker = new ChatGptTurnTracker("review", undefined, undefined, () => progressCount++)
+test("CDP tracker counts bound turn stream traffic as activity even when it has no status label", () => {
+  const activities: Array<string | undefined> = []
+  const tracker = new ChatGptTurnTracker("review", (activity) => activities.push(activity))
   const topic = "conversation-turn-turn-progress"
 
   tracker.ingestFrame(turnFrame(topic, message("user", "review")))
-  const boundProgressCount = progressCount
+  const activityCount = activities.length
   tracker.ingestFrame(turnFrame(topic, ": ping - transport-only\n\n"))
 
-  assert.equal(progressCount, boundProgressCount + 1)
+  assert.equal(activities.length, activityCount + 1)
+  assert.equal(activities.at(-1), undefined)
 })
 
 test("CDP tracker tolerates ChatGPT prompt whitespace normalization", () => {

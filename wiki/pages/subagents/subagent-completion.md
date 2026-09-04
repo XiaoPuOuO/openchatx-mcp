@@ -18,13 +18,13 @@ One authority completes normal turns: structured ChatGPT turn data observed dire
 
 The tracker binds only when a candidate stream contains the exact submitted user prompt. It then reconstructs assistant v1 text patches. Completion requires a final assistant message with `status: finished_successfully`, `end_turn: true`, recipient `all`/empty, plus an explicit stream-completion signal. Tool-call assistant messages such as `recipient: web.run` cannot complete the turn.
 
-The same stream provides `conversation_id`; the runtime uses it to capture or construct the stable conversation URL stored on the owning agent. User-facing activity and transport liveness are tracked separately: assistant/tool messages update the activity label, while any bound turn-stream traffic also refreshes the turn's progress timestamp. This includes HTTP SSE heartbeats and non-message events such as `safety_review_update`.
+The same stream provides `conversation_id`; the runtime uses it to capture or construct the stable conversation URL stored on the owning agent. Any bound turn-stream traffic refreshes the turn's activity timestamp, including HTTP SSE heartbeats and non-message events such as `safety_review_update`. Assistant/tool messages may additionally update the coarse activity label; unlabeled traffic leaves the current label unchanged.
 
 There is no DOM completion observer or application-level `stream_status` polling.
 
 ## Recovery
 
-Every submitted turn gets at most one catastrophic recovery attempt. A memory-backed turn with three minutes of no bound transport progress enters recovery; the hard idle limit remains 30 minutes. Regular SSE heartbeats keep a healthy long-running turn out of this path even when no assistant/tool message is visible. Observer/page failure follows the same recovery path. Recovery disposes the old observer and opens one fresh background page at the saved conversation URL. The recovery navigation reads ChatGPT's conversation payload once and completes locally only when it contains a final assistant answer after the exact submitted prompt.
+Every submitted turn gets at most one catastrophic recovery attempt. A memory-backed turn with three minutes of no bound observable activity enters recovery; the hard idle limit remains 30 minutes. Regular SSE heartbeats refresh the activity timestamp and keep a healthy long-running turn out of this path even when no assistant/tool message is visible. Observer/page failure follows the same recovery path. Recovery disposes the old observer and opens one fresh background page at the saved conversation URL. The recovery navigation reads ChatGPT's conversation payload once and completes locally only when it contains a final assistant answer after the exact submitted prompt.
 
 Recovery never clicks Send, resubmits the prompt, or attaches a second turn observer. If that single history read has no matching final answer, or the recovery navigation fails, the turn fails immediately and releases global generation capacity, but the agent becomes `uncertain` because ChatGPT may still be processing upstream. That `agent_id` rejects later submissions with `AGENT_BUSY`; callers can use a new `agent_id` rather than risk overlapping turns in the same conversation.
 
@@ -47,7 +47,7 @@ Completed/failed results remain available only in the current MCP process, even 
 5. Tool-call messages cannot masquerade as final answers.
 6. `subagent_result` reads local state only.
 7. Recovery may navigate and read conversation history once, but never resubmits.
-8. Bound turn-stream traffic is liveness even when it does not change the user-facing activity label; a memory-backed turn gets one recovery attempt after three minutes without such progress, with a 30-minute hard idle limit.
+8. Bound turn-stream traffic counts as activity even when it does not change the coarse activity label; a memory-backed turn gets one recovery attempt after three minutes without such activity, with a 30-minute hard idle limit.
 9. An unreconciled submitted turn leaves its agent `uncertain` and unavailable for reuse.
 10. Existing interaction/inter-turn delays and rate-limit cooldown remain in force.
 

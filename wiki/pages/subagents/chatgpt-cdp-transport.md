@@ -24,7 +24,7 @@ Raw CDP also proved that `/backend-api/f/conversation` can be consumed increment
 
 Long-running turns can remain alive without producing assistant/tool messages for several minutes. During the observed ChatGPT UI state that says "Our systems are thinking a bit more about this request before responding," the HTTP conversation stream emitted a `safety_review_update` event and then continued sending SSE comment heartbeats shaped like `: ping - <timestamp>` about every 15 seconds. These are transport-liveness signals even when they do not represent user-visible activity.
 
-Production liveness therefore uses a separate progress timestamp from the user-facing activity timestamp. Once the exact submitted prompt binds a tracker to a source, every subsequent non-empty turn-stream block refreshes progress, including SSE comment heartbeats, `safety_review_update`, assistant/tool messages, deltas, and matching WebSocket stream items. Heartbeats received before exact-prompt binding do not count.
+Once the exact submitted prompt binds a tracker to a source, every subsequent non-empty turn-stream block refreshes the turn's activity timestamp, including SSE comment heartbeats, `safety_review_update`, assistant/tool messages, deltas, and matching WebSocket stream items. Only events with a meaningful coarse label update the displayed activity string; unlabeled heartbeats still reset `activity_age_ms`. Heartbeats received before exact-prompt binding do not count.
 
 ## CDP Probe
 
