@@ -5,6 +5,7 @@ import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import { getAgentIdentity } from "./agent-context.js"
+import type { AgentObserver } from "./agent-observer.js"
 import type { McpAuditRequest } from "./audit/audit-log.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
@@ -83,6 +84,7 @@ interface ToolRegistrationConfig {
 
 export interface ToolRegistrationBoundaryOptions {
   drainPendingEvents?: () => string[]
+  agentObserver?: AgentObserver
   reviewPromptTracker?: ReviewPromptTracker
   auditRequest?: McpAuditRequest
 }
@@ -119,6 +121,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
     const wrapped = async (...args: unknown[]) => {
       const input = isRecord(args[0]) ? args[0] : undefined
       const auditCall = options.auditRequest?.claimTool(name, input ?? {})
+      let observedCallId: string | undefined
 
       try {
         const agent = getAgentIdentity()
@@ -128,17 +131,22 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
           return result
         }
 
+        observedCallId = options.agentObserver?.startTool(agent, name, input)
         const result = await callback(...args)
+        options.agentObserver?.finishTool(agent, observedCallId)
         const projected = nativeContent || structuredOutput ? result : compactToolResult(name, result)
         const events = [
           ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
           ...(options.drainPendingEvents?.() ?? []),
+          ...(options.agentObserver?.drainInstructions(agent) ?? []),
           ...(options.reviewPromptTracker?.() ?? []),
         ]
         const finalResult = appendToolEvents(projected, events)
         auditCall?.finish({ toolResult: result, modelResult: finalResult })
         return finalResult
       } catch (error) {
+        const agent = getAgentIdentity()
+        options.agentObserver?.failTool(agent, observedCallId)
         auditCall?.finish({ error })
         throw error
       }

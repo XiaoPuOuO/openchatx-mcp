@@ -253,13 +253,15 @@ See [SECURITY.md](SECURITY.md) for reporting and scope.
 
 ```bash
 npm run dev
+npm run ui:dev
 npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run ui:build
 ```
 
-Use `npm run inspect` for the MCP inspector and `npm run schemas` to print the published tool schemas. Authenticated browser tests are excluded from CI. See [Build and Test](wiki/pages/operations/build-and-test.md).
+Run `npm run ui:install` once after cloning to install the dashboard dependencies. Use `npm run inspect` for the MCP inspector and `npm run schemas` to print the published tool schemas. Authenticated browser tests are excluded from CI. See [Build and Test](wiki/pages/operations/build-and-test.md).
 
 ## Documentation
 

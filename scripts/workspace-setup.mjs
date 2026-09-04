@@ -21,6 +21,9 @@ const DEFAULT_PUBLIC_CONFIG = {
   mcp: {
     tool_output: "compact",
   },
+  ui: {
+    enabled: false,
+  },
   tools: {
     review: true,
     shell: true,

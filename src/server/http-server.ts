@@ -1,14 +1,16 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 import { createServer, type Server as HttpServer } from "node:http"
+import { fileURLToPath } from "node:url"
 import { createMcpExpressApp } from "@modelcontextprotocol/express"
 import { toNodeHandler } from "@modelcontextprotocol/node"
 import { createMcpHandler } from "@modelcontextprotocol/server"
-import type { Request, Response } from "express"
+import { static as expressStatic, type Request, type Response } from "express"
 
 import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/auth.js"
 import { MCP_CONFIG } from "../config.js"
 import { createReviewPromptTracker } from "../tools/review/review-tool.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
+import type { AgentObserver } from "./agent-observer.js"
 import { runWithAgent } from "./agent-context.js"
 import { createMcpServer } from "./mcp-server.js"
 import { McpAuditLogger, type McpAuditRequest } from "./audit/audit-log.js"
@@ -34,11 +36,12 @@ export interface McpRuntimeServices {
   auditLogger?: McpAuditLogger
   authStore?: ShellbyAuthStore
   webPageOpener?: WebPageOpener
+  agentObserver?: AgentObserver
 }
 
 export async function startMcpHttpServer(services: McpRuntimeServices): Promise<RunningMcpServer> {
   const { host, port } = MCP_CONFIG
-  const { shellManager, peekaboo, auditLogger, chatGptSubagents, authStore, webPageOpener } = services
+  const { shellManager, peekaboo, auditLogger, chatGptSubagents, authStore, webPageOpener, agentObserver } = services
   const reviewPromptTracker = MCP_CONFIG.tools.review ? createReviewPromptTracker() : undefined
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -55,6 +58,7 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
         webPageOpener,
         reviewPromptTracker,
         auditRequest: requestContext?.auditRequest,
+        agentObserver,
       })
     },
     {
@@ -67,6 +71,49 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   app.get("/healthz", (_req, res) => {
     res.json({ ok: true })
   })
+
+  if (agentObserver) {
+    app.get("/ui/api/agents", (_req, res) => {
+      res.json({ agents: agentObserver.listAgents() })
+    })
+
+    app.get("/ui/api/events", (req, res) => {
+      res.setHeader("Content-Type", "text/event-stream")
+      res.setHeader("Cache-Control", "no-cache")
+      res.setHeader("Connection", "keep-alive")
+      res.flushHeaders()
+
+      const unsubscribe = agentObserver.subscribe((event) => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`)
+      })
+      const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 15_000)
+      heartbeat.unref()
+
+      req.once("close", () => {
+        clearInterval(heartbeat)
+        unsubscribe()
+      })
+    })
+
+    app.post("/ui/api/agents/:agentId/steer", (req, res) => {
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : ""
+      if (!message) {
+        res.status(400).json({ error: "message is required" })
+        return
+      }
+      const instruction = agentObserver.queueInstruction(req.params.agentId, message)
+      if (!instruction) {
+        res.status(404).json({ error: "agent not found" })
+        return
+      }
+      res.status(202).json({ instruction })
+    })
+  }
+
+  if (agentObserver) {
+    const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
+    app.use("/ui", expressStatic(dashboardDir, { index: "index.html" }))
+  }
 
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)

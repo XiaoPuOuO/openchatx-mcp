@@ -1,8 +1,8 @@
-import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { ShellbyAuthStore } from "./auth/auth.js"
 import { MCP_CONFIG } from "./config.js"
+import { createAgentObserver } from "./server/agent-observer.js"
 import { createChatGptSubagentService } from "./tools/subagent/chatgpt-subagent.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { createShellSession } from "./tools/shell/session.js"
@@ -12,12 +12,11 @@ import { CursorHostManager } from "./tools/computer/cursor-host.js"
 import { PeekabooClient } from "./tools/computer/peekaboo.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const auditLogPath = resolve(repositoryRoot, "agent-commands.yaml")
+const auditLogPath = fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
 const auditLogger = new McpAuditLogger(auditLogPath)
+const agentObserver = MCP_CONFIG.ui.enabled ? createAgentObserver() : undefined
 const authStore = new ShellbyAuthStore()
 await authStore.ensureState()
-const cwd = MCP_CONFIG.workspace
 const chatGptSubagents = MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? createChatGptSubagentService() : undefined
 const peekaboo = MCP_CONFIG.tools.computer ? new PeekabooClient({ localOnly: true }) : undefined
 const webPageOpener = MCP_CONFIG.tools.web ? new WebPageOpener() : undefined
@@ -26,7 +25,7 @@ const cursorHostStarted = cursorHost?.start() ?? false
 
 const shells = MCP_CONFIG.tools.shell
   ? createShellSessionManager({
-      createShell: (initialState) => createShellSession({ cwd, initialState }),
+      createShell: (initialState) => createShellSession({ cwd: MCP_CONFIG.workspace, initialState }),
     })
   : undefined
 
@@ -38,6 +37,7 @@ try {
     peekaboo,
     chatGptSubagents,
     auditLogger,
+    agentObserver,
     authStore,
     webPageOpener,
   })
@@ -46,8 +46,9 @@ try {
   throw error
 }
 console.log(`Local shell MCP server: ${running.url}`)
+if (MCP_CONFIG.ui.enabled) console.log(`Agent dashboard: http://${running.host}:${running.port}/ui`)
 console.log("Remote MCP authentication: trusted ChatGPT origin + bound OpenAI subject")
-console.log(`Default workspace: ${cwd}`)
+console.log(`Default workspace: ${MCP_CONFIG.workspace}`)
 console.log(`Shell tools: ${shells ? `enabled (${MCP_CONFIG.shell.path}, max ${shells.maximumShells})` : "disabled"}`)
 console.log(`Agent MCP audit log: ${auditLogPath}`)
 console.log(`Computer Use: ${peekaboo ? `enabled via Peekaboo CLI (${MCP_CONFIG.peekaboo.executable})` : "disabled"}`)

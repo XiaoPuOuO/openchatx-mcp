@@ -40,6 +40,7 @@ const publicConfigSchema = z
       })
       .strict(),
     mcp: z.object({ tool_output: toolOutputFormatSchema }).strict(),
+    ui: z.object({ enabled: z.boolean() }).strict(),
     tools: z
       .object({
         review: z.boolean(),
@@ -109,6 +110,9 @@ export const MCP_CONFIG = {
   },
   mcp: {
     toolOutput: publicConfig.mcp.tool_output,
+  },
+  ui: {
+    enabled: publicConfig.ui.enabled,
   },
   web: {
     defaultFormat: "markdown" as const,

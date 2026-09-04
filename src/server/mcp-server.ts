@@ -17,6 +17,7 @@ import { registerSubagentTools } from "../tools/subagent/subagent-tools.js"
 import { WebPageOpener } from "../tools/web/web-open.js"
 import { registerWebTool } from "../tools/web/web-tool.js"
 import type { McpAuditRequest } from "./audit/audit-log.js"
+import type { AgentObserver } from "./agent-observer.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
 export interface CreateMcpServerOptions {
@@ -26,6 +27,7 @@ export interface CreateMcpServerOptions {
   webPageOpener?: WebPageOpener
   reviewPromptTracker?: ReviewPromptTracker
   auditRequest?: McpAuditRequest
+  agentObserver?: AgentObserver
 }
 
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
@@ -34,6 +36,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   })
   installToolRegistrationBoundary(server, {
     drainPendingEvents: options.chatGptSubagents ? () => options.chatGptSubagents!.drainEvents() : undefined,
+    agentObserver: options.agentObserver,
     reviewPromptTracker: options.reviewPromptTracker,
     auditRequest: options.auditRequest,
   })
@@ -49,7 +52,6 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   if (MCP_CONFIG.tools.image) registerImageTools(server)
   if (MCP_CONFIG.tools.computer) registerComputerUseTools(server, requireCapabilityService(options.peekaboo, "computer"))
   if (MCP_CONFIG.tools.clones) registerCloneTools(server, requireCapabilityService(options.chatGptSubagents, "clone"))
-
   if (MCP_CONFIG.tools.review) registerReviewTool(server)
 
   return server

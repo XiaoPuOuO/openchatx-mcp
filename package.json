@@ -16,6 +16,9 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "dev": "node --import tsx --watch src/index.ts",
+    "ui:install": "npm --prefix ui ci",
+    "ui:dev": "npm --prefix ui run dev",
+    "ui:build": "npm --prefix ui run build",
     "preflight": "node scripts/preflight.mjs",
     "setup": "node --import tsx scripts/setup.mjs",
     "setup:computer": "node scripts/peekaboo-permissions.mjs",
