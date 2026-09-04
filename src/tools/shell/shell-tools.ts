@@ -19,8 +19,8 @@ import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
 import { ShellSessionError, type ShellSnapshot } from "./session.js"
 import type { ShellSessionManager } from "./session-manager.js"
 
-export function registerShellExecutionTools(server: McpServer, shells: ShellSessionManager, workspace: string): void {
-  const workspaceDescription = JSON.stringify(workspace)
+export function registerShellExecutionTools(server: McpServer, shells: ShellSessionManager): void {
+  const workspaceDescription = JSON.stringify(shells.initialCwd)
 
   server.registerTool(
     "shell_run",

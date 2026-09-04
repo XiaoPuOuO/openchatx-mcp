@@ -4,9 +4,10 @@ import { basename, isAbsolute, resolve } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { MCP_CONFIG } from "../../config.js"
 import { encodeImageForMcp, formatBytes, ImageEncodingError } from "./image-encoding.js"
 
-export function registerImageTools(server: McpServer, workspace: string): void {
+export function registerImageTools(server: McpServer): void {
   server.registerTool(
     "image_view",
     {
@@ -22,7 +23,7 @@ export function registerImageTools(server: McpServer, workspace: string): void {
       },
     },
     async ({ path }, ctx) => {
-      const imagePath = isAbsolute(path) ? path : resolve(workspace, path)
+      const imagePath = isAbsolute(path) ? path : resolve(MCP_CONFIG.workspace, path)
       try {
         const encoded = await encodeImageForMcp(await readFile(imagePath, { signal: ctx.mcpReq.signal }))
         return {

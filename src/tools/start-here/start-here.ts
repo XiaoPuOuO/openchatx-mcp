@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { MCP_CONFIG } from "../../config.js"
 import { setAgentTaskSlug } from "../../server/agent-context.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
@@ -19,7 +20,7 @@ type PromptSource = {
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
-export function registerStartHereTool(server: McpServer, workspacePath: string): void {
+export function registerStartHereTool(server: McpServer): void {
   const modes = discoverPromptModes()
   if (modes.length === 0) throw new Error("start_here requires at least one prompt mode")
 
@@ -39,7 +40,7 @@ export function registerStartHereTool(server: McpServer, workspacePath: string):
       },
     },
     async ({ mode, task_id }) => {
-      const instructions = await buildStartHereInstructions(mode, workspacePath)
+      const instructions = await buildStartHereInstructions(mode)
       setAgentTaskSlug(task_id)
       return {
         content: [{ type: "text", text: instructions }],
@@ -48,11 +49,11 @@ export function registerStartHereTool(server: McpServer, workspacePath: string):
   )
 }
 
-export async function buildStartHereInstructions(mode: string, workspacePath: string, root = repositoryRoot): Promise<string> {
+export async function buildStartHereInstructions(mode: string, root = repositoryRoot): Promise<string> {
   const [selected, shared] = await Promise.all([readStartPrompt(mode, root), readStartPrompt(SHARED_PROMPT_NAME, root)])
   const sharedInstructions = [
     shared.prompt.trim(),
-    `- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${workspacePath}\`.`,
+    `- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${MCP_CONFIG.workspace}\`.`,
   ]
     .filter(Boolean)
     .join("\n")

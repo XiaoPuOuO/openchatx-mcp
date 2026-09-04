@@ -29,7 +29,6 @@ export interface CreateMcpServerOptions {
 }
 
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
-  const workspace = MCP_CONFIG.workspace
   const server = new McpServer(MCP_CONFIG.server, {
     instructions: buildMcpInstructions(),
   })
@@ -39,15 +38,15 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
     auditRequest: options.auditRequest,
   })
 
-  registerStartHereTool(server, workspace)
+  registerStartHereTool(server)
   const shells = MCP_CONFIG.tools.shell ? requireCapabilityService(options.shellManager, "shell") : undefined
-  if (shells) registerShellExecutionTools(server, shells, workspace)
+  if (shells) registerShellExecutionTools(server, shells)
   if (MCP_CONFIG.tools.applyPatch) registerApplyPatchTool(server)
   if (shells) registerShellManagementTools(server, shells)
   if (MCP_CONFIG.tools.subagents) registerSubagentTools(server, requireCapabilityService(options.chatGptSubagents, "subagent"))
   if (MCP_CONFIG.tools.web) registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
-  if (MCP_CONFIG.tools.skills) registerSkillTools(server, workspace)
-  if (MCP_CONFIG.tools.image) registerImageTools(server, workspace)
+  if (MCP_CONFIG.tools.skills) registerSkillTools(server)
+  if (MCP_CONFIG.tools.image) registerImageTools(server)
   if (MCP_CONFIG.tools.computer) registerComputerUseTools(server, requireCapabilityService(options.peekaboo, "computer"))
   if (MCP_CONFIG.tools.clones) registerCloneTools(server, requireCapabilityService(options.chatGptSubagents, "clone"))
 

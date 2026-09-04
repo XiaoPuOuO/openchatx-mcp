@@ -166,7 +166,7 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   const [sharedPrompt, codingPrompt] = await Promise.all([readStartPrompt("shared"), readStartPrompt("coding")])
   assert.ok(startInstructions.indexOf(sharedPrompt.prompt.trim()) < startInstructions.indexOf(codingPrompt.prompt.trim()))
   assert.ok(startInstructions.includes(MCP_CONFIG.workspace))
-  assert.equal(startInstructions, await buildStartHereInstructions("coding", MCP_CONFIG.workspace))
+  assert.equal(startInstructions, await buildStartHereInstructions("coding"))
 
   const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(allowed.isError, undefined)

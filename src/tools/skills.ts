@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { MCP_CONFIG } from "../config.js"
 import { getAgentIdentity, type AgentIdentity } from "../server/agent-context.js"
 
 export const MAX_SKILL_BYTES = 256 * 1024
@@ -106,8 +107,8 @@ function isValidSkillName(name: string): boolean {
   return SKILL_NAME_PATTERN.test(name)
 }
 
-export function registerSkillTools(server: McpServer, workspace: string): void {
-  const skills = new SkillCatalog(join(workspace, "skills"))
+export function registerSkillTools(server: McpServer): void {
+  const skills = new SkillCatalog(join(MCP_CONFIG.workspace, "skills"))
 
   server.registerTool(
     "skill_list",
