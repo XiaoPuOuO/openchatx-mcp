@@ -27,7 +27,7 @@ export function prepareShellCommand(command: string, cwd: string, env: NodeJS.Pr
     "() {",
     "local RTK_TEE=0 RTK_TELEMETRY_DISABLED=1 RTK_DB_PATH=/dev/null",
     `local PATH=${shellQuote(rtkDirectory)}:$PATH`,
-    "export RTK_TEE RTK_TELEMETRY_DISABLED RTK_DB_PATH",
+    "export PATH RTK_TEE RTK_TELEMETRY_DISABLED RTK_DB_PATH",
     `eval ${shellQuote(value)}`,
     "}",
   ].join("\n")

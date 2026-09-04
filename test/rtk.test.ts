@@ -59,6 +59,21 @@ test("RTK execution disables RTK-local tee, telemetry, and persistent tracking",
   assert.equal(result.stdout, "0|1|/dev/null")
 })
 
+test("rewritten commands export the RTK path to child processes", async (t) => {
+  const root = await fakeRtkRoot(t)
+  const childTool = join(root, "child-tool")
+  await writeFile(childTool, "#!/bin/sh\nexec rtk env-probe\n")
+  await chmod(childTool, 0o755)
+  useRtk(t, join(root, "rtk"))
+
+  const env = { ...process.env, PATH: "/usr/bin:/bin" }
+  const prepared = prepareShellCommand("child-tool", root, env)
+  const result = spawnSync(MCP_CONFIG.shell.path, ["-c", prepared], { cwd: root, env, encoding: "utf8" })
+
+  assert.equal(result.status, 0)
+  assert.equal(result.stdout, "0|1|/dev/null")
+})
+
 test("RTK rewriting fails open when disabled, unavailable, unsupported, or opted out", async (t) => {
   const root = await fakeRtkRoot(t)
   const executable = join(root, "rtk")
@@ -148,6 +163,7 @@ case "\${1:-}" in
     case "$command" in
       "cat fixture.txt") printf '%s' 'rtk read fixture.txt'; exit 3 ;;
       "rtk env-probe") printf '%s' 'rtk env-probe'; exit 3 ;;
+      "child-tool") printf '%s' 'child-tool'; exit 3 ;;
       "cd child && export SHELLBY_RTK_STATE=present && git status --short")
         printf '%s' 'cd child && export SHELLBY_RTK_STATE=present && rtk git status --short'; exit 3 ;;
       "git status --short") printf '%s' 'rtk git status --short'; exit 3 ;;
