@@ -2,9 +2,10 @@
 // See ui/THIRD_PARTY_NOTICES.md.
 
 import type { Agent, AgentCall } from "../types"
+import { gridToPixel, ROOM_LAYOUT, type RoomDirection, type RoomStation } from "./agentRoomLayout"
 
-export type AgentStation = "home" | "terminal" | "patch" | "web" | "image" | "agents"
-export type AgentDirection = "down" | "up" | "right" | "left"
+export type AgentStation = RoomStation
+export type AgentDirection = RoomDirection
 
 type RoomMode = "idle" | "walking" | "working"
 
@@ -33,16 +34,17 @@ export interface AgentRoomState {
   activityQueueInitialized: boolean
 }
 
-export const ROOM_WIDTH = 448
-export const ROOM_HEIGHT = 288
+function station(layout: { x: number; y: number; label: string; facing: AgentDirection }) {
+  return { ...layout, x: gridToPixel(layout.x), y: gridToPixel(layout.y) }
+}
 
 export const STATIONS: Record<AgentStation, { x: number; y: number; label: string; facing: AgentDirection }> = {
-  home: { x: 224, y: 194, label: "Home", facing: "right" },
-  terminal: { x: 92, y: 206, label: "Shell", facing: "up" },
-  patch: { x: 356, y: 206, label: "Patch", facing: "up" },
-  web: { x: 368, y: 112, label: "Web", facing: "up" },
-  image: { x: 80, y: 112, label: "Image", facing: "up" },
-  agents: { x: 88, y: 258, label: "Agents", facing: "right" },
+  home: station(ROOM_LAYOUT.stations.home),
+  terminal: station(ROOM_LAYOUT.stations.terminal),
+  patch: station(ROOM_LAYOUT.stations.patch),
+  web: station(ROOM_LAYOUT.stations.web),
+  image: station(ROOM_LAYOUT.stations.image),
+  agents: station(ROOM_LAYOUT.stations.agents),
 }
 
 const WALK_SPEED = 86
@@ -80,9 +82,7 @@ export function syncAgentActivities(state: AgentRoomState, agent: Agent): void {
     return
   }
 
-  const unseen = calls
-    .filter((call) => !state.seenCallIds.has(call.id))
-    .sort((a, b) => a.startedAt - b.startedAt)
+  const unseen = calls.filter((call) => !state.seenCallIds.has(call.id)).sort((a, b) => a.startedAt - b.startedAt)
 
   for (const call of unseen) enqueueActivity(state, call)
 }

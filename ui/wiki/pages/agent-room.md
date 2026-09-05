@@ -3,6 +3,7 @@ summary: "Canvas agent-room architecture, activity queue semantics, tool-to-stat
 paths:
   - src/components/AgentRoom.tsx
   - src/game/agentRoomEngine.ts
+  - src/game/agentRoomLayout.ts
   - public/pixel-agents/
   - THIRD_PARTY_NOTICES.md
 ---
@@ -12,6 +13,8 @@ paths:
 ## Mental Model
 
 `AgentRoom.tsx` renders room and sprites on Canvas. `agentRoomEngine.ts` owns movement, direction, tool station mapping, animation queue, and RAF update loop. Keep React out of per-frame state.
+
+Static room composition lives in `agentRoomLayout.ts`. Its coordinates use an 8px logical grid, so decimal values such as `8.5` are valid for half-grid placement. Asset choices, station anchors, rugs, wall decor, and furniture positions should be edited there rather than spread through rendering functions.
 
 Room copies selected Pixel Agents character, floor, and furniture graphics under `public/pixel-agents/`. `THIRD_PARTY_NOTICES.md` carries MIT attribution. Current composition intentionally follows Pixel Agents office principles: 16px-grid-like placement, wall band, coherent furniture clusters, pixelated scaling, and foreground/background layering.
 
