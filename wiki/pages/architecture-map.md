@@ -46,6 +46,7 @@ This page maps the process-level components and follows one request from the HTT
 ## Related
 
 - [Project Overview](./project-overview.md)
+- [UI Dashboard Wiki](../../ui/wiki/index.md)
 - [HTTP Transport](./http-transport.md)
 - [MCP Tool Surface](./mcp-tool-surface.md)
 - [Configuration and Startup](./operations/configuration-and-startup.md)

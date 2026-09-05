@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "pages": {
+    "pages/agent-room.md": {
+      "fingerprint": "sha256:30ea34e6456e5f6645baec030993f3604bdea7819806938eb9029c348ebeabba"
+    },
+    "pages/architecture.md": {
+      "fingerprint": "sha256:c81653074c5bd2d05a27e27f8d0926d4ad65fc2fd1e71e2b4b1a1efbf5e07281"
+    }
+  }
+}
