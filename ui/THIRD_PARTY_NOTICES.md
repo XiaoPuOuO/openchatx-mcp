@@ -2,7 +2,7 @@
 
 ## Pixel Agents
 
-The Shellby agent-room animation adapts the game-loop/state-machine approach from Pixel Agents and includes a subset of Pixel Agents' bundled character, floor, furniture, and status-bubble graphics.
+The Shellby agent-room animation adapts the game-loop/state-machine approach from Pixel Agents and vendors Pixel Agents' bundled UI asset tree for the local room editor and renderer. The vendored source revision is recorded in `public/pixel-agents/UPSTREAM_COMMIT`.
 
 Pixel Agents is licensed under the MIT License.
 

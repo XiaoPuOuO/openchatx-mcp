@@ -2,7 +2,7 @@
 // See ui/THIRD_PARTY_NOTICES.md.
 
 import type { Agent, AgentCall } from "../types"
-import { gridToPixel, ROOM_LAYOUT, type RoomDirection, type RoomStation } from "./agentRoomLayout"
+import { gridToPixel, ROOM_LAYOUT, type RoomDirection, type RoomLayout, type RoomStation } from "./agentRoomLayout"
 
 export type AgentStation = RoomStation
 export type AgentDirection = RoomDirection
@@ -38,21 +38,27 @@ function station(layout: { x: number; y: number; label: string; facing: AgentDir
   return { ...layout, x: gridToPixel(layout.x), y: gridToPixel(layout.y) }
 }
 
-export const STATIONS: Record<AgentStation, { x: number; y: number; label: string; facing: AgentDirection }> = {
-  home: station(ROOM_LAYOUT.stations.home),
-  terminal: station(ROOM_LAYOUT.stations.terminal),
-  patch: station(ROOM_LAYOUT.stations.patch),
-  web: station(ROOM_LAYOUT.stations.web),
-  image: station(ROOM_LAYOUT.stations.image),
-  agents: station(ROOM_LAYOUT.stations.agents),
+export type AgentStationMap = Record<AgentStation, { x: number; y: number; label: string; facing: AgentDirection }>
+
+export function stationsForLayout(layout: RoomLayout): AgentStationMap {
+  return {
+    home: station(layout.stations.home),
+    terminal: station(layout.stations.terminal),
+    patch: station(layout.stations.patch),
+    web: station(layout.stations.web),
+    image: station(layout.stations.image),
+    agents: station(layout.stations.agents),
+  }
 }
+
+export const STATIONS = stationsForLayout(ROOM_LAYOUT as unknown as RoomLayout)
 
 const WALK_SPEED = 86
 const MAX_DELTA_TIME_SEC = 0.1
 const MIN_ACTIVITY_DURATION_SEC = 3
 
-export function createAgentRoomState(): AgentRoomState {
-  const home = STATIONS.home
+export function createAgentRoomState(stations: AgentStationMap = STATIONS): AgentRoomState {
+  const home = stations.home
   return {
     x: home.x,
     y: home.y,
@@ -87,7 +93,7 @@ export function syncAgentActivities(state: AgentRoomState, agent: Agent): void {
   for (const call of unseen) enqueueActivity(state, call)
 }
 
-export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion = false): void {
+export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion = false, stations: AgentStationMap = STATIONS): void {
   const clampedDt = Math.min(dt, MAX_DELTA_TIME_SEC)
 
   if (!state.activeActivity && state.queue.length > 0 && state.station === "home") {
@@ -96,7 +102,7 @@ export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion
 
   if (state.activeActivity) {
     if (!state.returningHome) {
-      const target = STATIONS[state.targetStation]
+      const target = stations[state.targetStation]
       if (state.mode === "walking") {
         moveToward(state, target.x, target.y, reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt)
         state.walkFrame += clampedDt * 8
@@ -126,15 +132,15 @@ export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion
       return
     }
 
-    const home = STATIONS.home
+    const home = stations.home
     moveToward(state, home.x, home.y, reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt)
     state.walkFrame += clampedDt * 8
-    if (distance(state.x, state.y, home.x, home.y) < 0.5) finishActivity(state)
+    if (distance(state.x, state.y, home.x, home.y) < 0.5) finishActivity(state, stations)
     return
   }
 
   state.bubble = undefined
-  const home = STATIONS.home
+  const home = stations.home
   if (distance(state.x, state.y, home.x, home.y) > 0.5) {
     state.mode = "walking"
     state.targetStation = "home"
@@ -188,8 +194,8 @@ function startNextActivity(state: AgentRoomState): void {
   state.mode = "walking"
 }
 
-function finishActivity(state: AgentRoomState): void {
-  const home = STATIONS.home
+function finishActivity(state: AgentRoomState, stations: AgentStationMap): void {
+  const home = stations.home
   state.x = home.x
   state.y = home.y
   state.station = "home"

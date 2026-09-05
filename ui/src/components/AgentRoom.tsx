@@ -4,45 +4,58 @@ import type { Agent } from "../types"
 import {
   createAgentRoomState,
   startAgentRoomLoop,
-  STATIONS,
+  stationsForLayout,
   syncAgentActivities,
   updateAgentRoom,
   type AgentRoomState,
+  type AgentStationMap,
 } from "../game/agentRoomEngine"
 import {
   gridToPixel,
-  ROOM_ASSETS,
-  ROOM_GRID_SIZE,
   ROOM_HEIGHT,
-  ROOM_LAYOUT,
   ROOM_WIDTH,
-  type RoomFurnitureItem,
+  type RoomLayout,
 } from "../game/agentRoomLayout"
+import {
+  drawRoomBorder,
+  drawRoomForeground,
+  drawRoomFurnitureItems,
+  drawRoomPets,
+  drawRoomSurface,
+  drawRoomWalls,
+  getRoomImage,
+  ROOM_PIXEL_SCALE,
+} from "../game/agentRoomRenderer"
+import { useRoomLayout } from "../game/roomLayoutStorage"
 
 const CHAR_FRAME_WIDTH = 16
 const CHAR_FRAME_HEIGHT = 32
-const PIXEL_SCALE = 2
 const SITTING_OFFSET = gridToPixel(1.5)
-
-const imageCache = new Map<string, HTMLImageElement>()
 
 export function AgentRoom({ agent }: { agent: Agent }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<AgentRoomState>(createAgentRoomState())
+  const layout = useRoomLayout()
 
   useEffect(() => {
     syncAgentActivities(stateRef.current, agent)
   }, [agent])
 
   useEffect(() => {
+    stateRef.current = createAgentRoomState(stationsForLayout(layout))
+    syncAgentActivities(stateRef.current, agent)
+  }, [layout])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const stations = stationsForLayout(layout)
     return startAgentRoomLoop(canvas, {
-      update: (dt) => updateAgentRoom(stateRef.current, dt, reducedMotion),
-      render: (ctx) => renderRoom(ctx, stateRef.current, agent.id),
+      update: (dt) => updateAgentRoom(stateRef.current, dt, reducedMotion, stations),
+      render: (ctx) => renderRoom(ctx, stateRef.current, agent.id, layout, stations),
     })
-  }, [agent.id])
+  }, [agent.id, layout])
 
   return (
     <div className="overflow-hidden rounded-lg border bg-[#d8e7c3]">
@@ -57,82 +70,24 @@ export function AgentRoom({ agent }: { agent: Agent }) {
   )
 }
 
-function renderRoom(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string): void {
+function renderRoom(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string, layout: RoomLayout, stations: AgentStationMap): void {
   ctx.clearRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT)
-  drawRoomSurface(ctx)
-  drawWallDecor(ctx)
-  drawStationFocus(ctx, state)
-  drawBackFurniture(ctx, state)
-  drawCharacter(ctx, state, agentId)
+  drawRoomSurface(ctx, layout)
+  drawRoomWalls(ctx, layout)
+  drawRoomFurnitureItems(ctx, layout.wallDecor)
+  drawStationFocus(ctx, state, layout, stations)
+  drawRoomFurnitureItems(ctx, layout.furniture)
+  drawRoomPets(ctx, layout.pets)
+  drawCharacter(ctx, state, agentId, layout)
   const delegating = isDelegating(state)
-  if (delegating) drawSubagentConversation(ctx, state, agentId)
-  drawForegroundFurniture(ctx, state)
+  if (delegating) drawSubagentConversation(ctx, state, agentId, layout, stations)
+  if (state.mode === "working") drawRoomForeground(ctx, layout, state.station)
   if (state.bubble && !delegating) drawSpeechBubble(ctx, state.x, state.y, state.bubble)
   drawRoomBorder(ctx)
 }
 
-function drawRoomSurface(ctx: CanvasRenderingContext2D): void {
-  const wallHeight = gridToPixel(ROOM_LAYOUT.wallHeight)
-  ctx.fillStyle = "#26394d"
-  ctx.fillRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT)
-
-  const floor = getImage(ROOM_ASSETS.floor)
-  if (isReady(floor)) {
-    const size = gridToPixel(ROOM_LAYOUT.floorTileSize)
-    for (let y = wallHeight; y < ROOM_HEIGHT; y += size) {
-      for (let x = 0; x < ROOM_WIDTH; x += size) ctx.drawImage(floor, x, y, size, size)
-    }
-
-    ctx.save()
-    ctx.globalCompositeOperation = "multiply"
-    ctx.fillStyle = "#b9784c"
-    ctx.fillRect(0, wallHeight, ROOM_WIDTH, ROOM_HEIGHT - wallHeight)
-    ctx.restore()
-  }
-
-  ctx.fillStyle = "#172331"
-  ctx.fillRect(0, wallHeight - 4, ROOM_WIDTH, 8)
-
-  for (const rug of ROOM_LAYOUT.rugs) drawRug(ctx, rug)
-}
-
-function drawRoomBorder(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = "#111923"
-  ctx.fillRect(0, 0, ROOM_WIDTH, 5)
-  ctx.fillRect(0, ROOM_HEIGHT - 5, ROOM_WIDTH, 5)
-  ctx.fillRect(0, 0, 5, ROOM_HEIGHT)
-  ctx.fillRect(ROOM_WIDTH - 5, 0, 5, ROOM_HEIGHT)
-}
-
-function drawRug(ctx: CanvasRenderingContext2D, rug: (typeof ROOM_LAYOUT.rugs)[number]): void {
-  const x = gridToPixel(rug.x)
-  const y = gridToPixel(rug.y)
-  const width = gridToPixel(rug.width)
-  const height = gridToPixel(rug.height)
-  ctx.fillStyle = rug.border
-  ctx.fillRect(x, y, width, height)
-  ctx.fillStyle = rug.fill
-  ctx.fillRect(x + ROOM_GRID_SIZE / 2, y + ROOM_GRID_SIZE / 2, width - ROOM_GRID_SIZE, height - ROOM_GRID_SIZE)
-}
-
-function drawWallDecor(ctx: CanvasRenderingContext2D): void {
-  drawFurnitureItems(ctx, ROOM_LAYOUT.wallDecor)
-}
-
-function drawBackFurniture(ctx: CanvasRenderingContext2D, state: AgentRoomState): void {
-  drawFurnitureItems(ctx, ROOM_LAYOUT.furniture)
-}
-
-function drawForegroundFurniture(ctx: CanvasRenderingContext2D, state: AgentRoomState): void {
-  if (state.mode !== "working") return
-  drawFurnitureItems(
-    ctx,
-    ROOM_LAYOUT.furniture.filter((item) => item.foregroundWhenWorkingAt === state.station)
-  )
-}
-
-function drawCharacter(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string): void {
-  const character = getImage(`/ui/pixel-agents/characters/char_${characterIndex(agentId)}.png`)
+function drawCharacter(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string, layout: RoomLayout): void {
+  const character = getRoomImage(layout.characterAsset ?? `/ui/pixel-agents/assets/characters/char_${characterIndex(agentId)}.png`)
   if (!isReady(character)) return
 
   const row = state.direction === "down" ? 0 : state.direction === "up" ? 1 : 2
@@ -157,15 +112,21 @@ function drawCharacter(ctx: CanvasRenderingContext2D, state: AgentRoomState, age
   drawCharacterFrame(ctx, character, frame, row, x, y, state.direction)
 }
 
-function drawSubagentConversation(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string): void {
-  const subagent = getImage(`/ui/pixel-agents/characters/char_${(characterIndex(agentId) + 1) % 6}.png`)
+function drawSubagentConversation(
+  ctx: CanvasRenderingContext2D,
+  state: AgentRoomState,
+  agentId: string,
+  layout: RoomLayout,
+  stations: AgentStationMap
+): void {
+  const subagent = getRoomImage(`/ui/pixel-agents/assets/characters/char_${(characterIndex(agentId) + 1) % 6}.png`)
   if (!isReady(subagent)) return
 
-  const x = gridToPixel(ROOM_LAYOUT.subagentSeat.x)
-  const y = gridToPixel(ROOM_LAYOUT.subagentSeat.y) + SITTING_OFFSET
+  const x = gridToPixel(layout.subagentSeat.x)
+  const y = gridToPixel(layout.subagentSeat.y) + SITTING_OFFSET
   const frame = 1
-  drawCharacterFrame(ctx, subagent, frame, 2, x, y, ROOM_LAYOUT.subagentSeat.facing)
-  const station = STATIONS.agents
+  drawCharacterFrame(ctx, subagent, frame, 2, x, y, layout.subagentSeat.facing)
+  const station = stations.agents
   drawConversationBubble(ctx, station.x + 24, station.y - 86, 2)
 }
 
@@ -178,8 +139,8 @@ function drawCharacterFrame(
   y: number,
   direction: "down" | "up" | "right" | "left"
 ): void {
-  const destWidth = CHAR_FRAME_WIDTH * PIXEL_SCALE
-  const destHeight = CHAR_FRAME_HEIGHT * PIXEL_SCALE
+  const destWidth = CHAR_FRAME_WIDTH * ROOM_PIXEL_SCALE
+  const destHeight = CHAR_FRAME_HEIGHT * ROOM_PIXEL_SCALE
 
   ctx.save()
   if (direction === "left") {
@@ -266,49 +227,12 @@ function isDelegating(state: AgentRoomState): boolean {
   return Boolean(tool && (tool.startsWith("subagent_") || tool.startsWith("clone_")) && state.station === "agents" && state.mode === "working")
 }
 
-function drawStationFocus(ctx: CanvasRenderingContext2D, state: AgentRoomState): void {
+function drawStationFocus(ctx: CanvasRenderingContext2D, state: AgentRoomState, layout: RoomLayout, stations: AgentStationMap): void {
   if (!state.currentTool) return
-  const station = STATIONS[state.targetStation]
-  const size = gridToPixel(ROOM_LAYOUT.stationFocusSize)
+  const station = stations[state.targetStation]
+  const size = gridToPixel(layout.stationFocusSize)
   ctx.fillStyle = "rgba(255,255,255,0.08)"
   ctx.fillRect(station.x - size / 2, station.y - size / 2, size, size)
-}
-
-function drawAsset(ctx: CanvasRenderingContext2D, path: string, x: number, y: number, scale = 1): void {
-  const image = getImage(path)
-  if (!isReady(image)) return
-  ctx.drawImage(image, x, y, image.naturalWidth * scale, image.naturalHeight * scale)
-}
-
-function drawFurnitureItems(ctx: CanvasRenderingContext2D, items: readonly RoomFurnitureItem[]): void {
-  for (const item of items) {
-    const path = ROOM_ASSETS[item.asset]
-    const x = gridToPixel(item.x)
-    const y = gridToPixel(item.y)
-    if (item.mirror) drawAssetMirrored(ctx, path, x, y, PIXEL_SCALE)
-    else drawAsset(ctx, path, x, y, PIXEL_SCALE)
-  }
-}
-
-function drawAssetMirrored(ctx: CanvasRenderingContext2D, path: string, x: number, y: number, scale = 1): void {
-  const image = getImage(path)
-  if (!isReady(image)) return
-  const width = image.naturalWidth * scale
-  const height = image.naturalHeight * scale
-  ctx.save()
-  ctx.translate(x + width, y)
-  ctx.scale(-1, 1)
-  ctx.drawImage(image, 0, 0, width, height)
-  ctx.restore()
-}
-
-function getImage(path: string): HTMLImageElement {
-  const cached = imageCache.get(path)
-  if (cached) return cached
-  const image = new Image()
-  image.src = path
-  imageCache.set(path, image)
-  return image
 }
 
 function isReady(image: HTMLImageElement): boolean {

@@ -121,6 +121,9 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
 
   if (agentObserver) {
     const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
+    app.get("/ui/editor", (_req, res) => {
+      res.sendFile(fileURLToPath(new URL("../../ui/dist/index.html", import.meta.url)))
+    })
     app.use("/ui", expressStatic(dashboardDir, { index: "index.html" }))
   }
 

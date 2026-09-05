@@ -42,6 +42,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor:apply-patch": "scripts/build-apply-patch.sh",
     "vendor:peekaboo": "scripts/build-peekaboo.sh",
+    "vendor:pixel-agents": "node scripts/vendor-pixel-agents.mjs",
+    "vendor:pixel-agents:check": "node scripts/vendor-pixel-agents.mjs --check",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "format": "prettier --write src test scripts package.json tsconfig.json tsconfig.build.json eslint.config.js ecosystem.config.cjs"

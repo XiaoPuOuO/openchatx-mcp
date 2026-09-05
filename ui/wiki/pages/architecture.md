@@ -8,13 +8,15 @@ paths:
   - src/components/AgentCard.tsx
   - src/components/SteerComposer.tsx
   - src/components/ToolCallModal.tsx
+  - src/components/RoomEditor.tsx
+  - src/game/roomLayoutStorage.ts
 ---
 
 # Runtime and Interaction Map
 
 ## Data Flow
 
-`useAgents` performs one `GET /ui/api/agents` snapshot, then opens `EventSource("/ui/api/events")`. Each `agent_changed` event replaces that agent by ID and resorts list by `lastSeenAt`.
+`useAgents` performs one `GET /ui/api/agents` snapshot, then opens `EventSource("/ui/api/events")`. Each `agent_changed` event replaces that agent in place by ID; newly observed agents append. The initial snapshot determines card order so concurrent activity does not make agent cards trade positions while the dashboard is being watched.
 
 Browser types in `src/types.ts` mirror observer snapshots: agent identity/task slug, current call, recent calls, and steering instructions. Keep changes aligned with server observer payloads in root repo `src/server/agent-observer.ts`.
 
@@ -28,6 +30,7 @@ Browser types in `src/types.ts` mirror observer snapshots: agent identity/task s
 | API calls | `src/lib/api.ts` | Relative `/ui/api/...` URLs only. |
 | Steering | `src/components/SteerComposer.tsx` | Queue on server; cancel queued instruction; delivered dismissal local only. |
 | Tool details | `src/components/ToolCallModal.tsx` | Show captured call detail with limited highlight.js languages. |
+| Room editor | `src/components/RoomEditor.tsx` | Edit the 8px room layout interactively and save a browser-local override used by agent rooms. |
 
 ## Steering Contract
 

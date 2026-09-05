@@ -1,11 +1,18 @@
-import { Activity, RefreshCw, Wifi, WifiOff } from "lucide-react"
+import { Activity, PencilRuler, RefreshCw, Wifi, WifiOff } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { AgentCard } from "./components/AgentCard"
+import { RoomEditor } from "./components/RoomEditor"
 import { Button } from "./components/ui/button"
 import { useAgents } from "./hooks/useAgents"
 
 export function App() {
+  const editorRoute = window.location.pathname.replace(/\/+$/, "") === "/ui/editor" || new URLSearchParams(window.location.search).has("editor")
+  if (editorRoute) return <RoomEditor />
+  return <Dashboard />
+}
+
+function Dashboard() {
   const { agents, connected, loading, error } = useAgents()
   const [now, setNow] = useState(Date.now())
 
@@ -34,6 +41,10 @@ export function App() {
               {connected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
               {connected ? "Live" : "Reconnecting"}
             </div>
+            <Button variant="outline" size="sm" onClick={() => (window.location.href = "/ui/?editor=1")}>
+              <PencilRuler className="size-3.5" />
+              Edit room
+            </Button>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
               <RefreshCw className="size-3.5" />
               Refresh

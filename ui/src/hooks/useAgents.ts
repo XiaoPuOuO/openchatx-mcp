@@ -11,16 +11,20 @@ export function useAgents() {
 
   useEffect(() => {
     void fetchAgents()
-      .then(setAgents)
+      .then((snapshot) => {
+        setAgents((current) => mergeInitialSnapshot(current, snapshot))
+      })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)))
       .finally(() => setLoading(false))
 
     return subscribeToAgents(
       ({ agent }) => {
         setAgents((current) => {
-          const next = current.filter((item) => item.id !== agent.id)
-          next.push(agent)
-          return next.sort((left, right) => right.lastSeenAt - left.lastSeenAt)
+          const index = current.findIndex((item) => item.id === agent.id)
+          if (index === -1) return [...current, agent]
+          const next = [...current]
+          next[index] = agent
+          return next
         })
       },
       setConnected
@@ -28,4 +32,15 @@ export function useAgents() {
   }, [])
 
   return { agents, connected, loading, error }
+}
+
+function mergeInitialSnapshot(current: Agent[], snapshot: Agent[]): Agent[] {
+  if (current.length === 0) return snapshot
+
+  const liveById = new Map(current.map((agent) => [agent.id, agent]))
+  const snapshotIds = new Set(snapshot.map((agent) => agent.id))
+  return [
+    ...snapshot.map((agent) => liveById.get(agent.id) ?? agent),
+    ...current.filter((agent) => !snapshotIds.has(agent.id)),
+  ]
 }
