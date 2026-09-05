@@ -63,7 +63,6 @@ export const ROOM_LAYOUT = {
   ] satisfies RoomFurnitureItem[],
   furniture: [
     // Web
-    { asset: "plant", x: 48, y: 8 },
 
     // Shell
     { asset: "cushionedChairSide", x: 5, y: 28, mirror: true },
@@ -71,10 +70,10 @@ export const ROOM_LAYOUT = {
     { asset: "pcSide", x: 1, y: 24, mirror: true, foregroundWhenWorkingAt: "terminal" },
 
     // Home / idle
+    { asset: "plant", x: 28, y: 10 },
     { asset: "cushionedChairSide", x: 24, y: 20 },
     { asset: "smallTableSide", x: 28, y: 12 },
     { asset: "pcSide", x: 28, y: 16 },
-    { asset: "plant", x: 32, y: 12 },
 
     // Patch
     { asset: "whiteboard", x: 40, y: 12 },
