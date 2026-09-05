@@ -2,6 +2,7 @@ import { Check, Circle, LoaderCircle, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
 import type { Agent, AgentCall } from "../types"
+import { AgentRoom } from "./AgentRoom"
 import { SteerComposer } from "./SteerComposer"
 import { ToolCallModal } from "./ToolCallModal"
 import { Badge } from "./ui/badge"
@@ -28,6 +29,8 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
       </CardHeader>
 
       <CardContent className="space-y-4 pt-4">
+        <AgentRoom agent={agent} />
+
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent</h3>
           <div className="max-h-32 space-y-1 overflow-y-auto pr-1">

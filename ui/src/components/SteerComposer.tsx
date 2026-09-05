@@ -61,7 +61,7 @@ export function SteerComposer({ agent }: { agent: Agent }) {
           type="button"
           variant="ghost"
           size="icon"
-          className={`absolute right-1 top-1 size-7 ${message.trim() && !sending ? "bg-blue-600 hover:bg-blue-50 hover:text-blue-700" : "text-muted-foreground"}`}
+          className={`absolute right-1 top-1 size-7 ${message.trim() && !sending ? "bg-blue-600 hover:bg-blue-50 hover:text-blue-700 text-white" : "text-muted-foreground"}`}
           aria-label="Send instruction"
           disabled={!message.trim() || sending}
           onClick={() => void submit()}
