@@ -86,13 +86,13 @@ export const MCP_CONFIG = {
   server: {
     name: "shellby-mcp",
     version: packageVersion,
-    icons: [
-      {
-        src: `data:image/png;base64,${readFileSync(new URL("../docs/assets/icon-80_square-compressed.png", import.meta.url)).toString("base64")}`,
-        mimeType: "image/png",
-        sizes: ["80x80"],
-      },
-    ],
+    // icons: [
+    //   {
+    //     src: `data:image/png;base64,${readFileSync(new URL("../docs/assets/icon-80_square-compressed.png", import.meta.url)).toString("base64")}`,
+    //     mimeType: "image/png",
+    //     sizes: ["80x80"],
+    //   },
+    // ],
   },
   host: "127.0.0.1",
   port: 3333,

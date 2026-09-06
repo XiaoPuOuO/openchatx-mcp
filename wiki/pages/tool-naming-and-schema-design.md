@@ -136,7 +136,7 @@ This does not establish that Zod `.meta()` itself is unsafe. The relevant change
 
 Zod remains the source of truth for runtime validation. Before a schema is advertised through `tools/list`, the registration boundary creates a leaner model-facing JSON Schema. Removing a keyword from the advertised schema does not remove the corresponding Zod validation.
 
-The boundary currently strips validation details that add little useful information to ChatGPT's TypeScript-like projection: `$schema`, `title`, `examples`, `format`, `multipleOf`, `minLength`, `maxLength`, `minItems`, and numeric `minimum` values of `0` or `1`. It preserves `pattern` because the exact accepted string shape can be difficult to infer from a TypeScript-like type alone. Defensive validation remains enforced by Zod even when these details are omitted from the advertised schema.
+The boundary currently strips validation details that add little useful information to ChatGPT's TypeScript-like projection: `$schema`, `title`, `examples`, `format`, `multipleOf`, `maxLength`, `minItems`, `minLength` values of `0` or `1`, and numeric `minimum` values of `0` or `1`. It preserves larger `minLength` values and `pattern` because those constraints can materially affect how the model should construct a valid string. Defensive validation remains enforced by Zod even when details are omitted from the advertised schema.
 
 Keep model-facing structure and constraints when they affect how the agent should plan or choose a value. In particular, preserve required/optional shape, types, enums, defaults, `maxItems`, numeric ceilings, and meaningful numeric ranges. A three-subagent `maxItems` limit changes planning; a 128-character ID ceiling usually does not.
 

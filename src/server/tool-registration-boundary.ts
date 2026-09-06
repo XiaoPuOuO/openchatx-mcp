@@ -72,7 +72,7 @@ const SCHEMA_VALUE_KEYS = new Set([
   "unevaluatedItems",
 ])
 const SCHEMA_ARRAY_KEYS = new Set(["prefixItems", "allOf", "anyOf", "oneOf"])
-const MODEL_SCHEMA_STRIP_KEYS = new Set(["$schema", "examples", "title", "format", "multipleOf", "minLength", "maxLength", "minItems"])
+const MODEL_SCHEMA_STRIP_KEYS = new Set(["$schema", "examples", "title", "format", "multipleOf", "maxLength", "minItems"])
 const canonicalizedSchemas = new WeakSet<object>()
 
 interface ToolRegistrationConfig {
@@ -158,7 +158,7 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
 function startupRequiredResult() {
   return {
     isError: true,
-    content: [{ type: "text" as const, text: "Shellby has not been initialized for this conversation. Call `start_here` first." }],
+    content: [{ type: "text" as const, text: "Shellby has not been initialized for this conversation. Call `start_here` first, and follow the instructions." }],
   }
 }
 
@@ -188,6 +188,7 @@ export function canonicalizeJsonSchema(value: unknown): unknown {
   for (const key of keys) {
     const child = value[key]
     if (MODEL_SCHEMA_STRIP_KEYS.has(key)) continue
+    if (key === "minLength" && (child === 0 || child === 1)) continue
     if (isIntegerSchema && key === "minimum" && child === Number.MIN_SAFE_INTEGER) continue
     if (isNumericSchema && key === "minimum" && (child === 0 || child === 1)) continue
     if (isIntegerSchema && key === "maximum" && child === Number.MAX_SAFE_INTEGER) continue

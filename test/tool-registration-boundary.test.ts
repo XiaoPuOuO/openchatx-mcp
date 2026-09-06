@@ -10,9 +10,10 @@ test("canonicalizes schema keywords while preserving property order", () => {
     title: "Ignored title",
     examples: [{ z: "example" }],
     description: "Example",
-    required: ["z", "type"],
+    required: ["z", "slug", "type"],
     properties: {
       z: { maxLength: 64, description: "Z", type: "string", minLength: 1, pattern: "^.+$", format: "uri" },
+      slug: { type: "string", minLength: 3 },
       type: { default: "example", description: "Named type", type: "string" },
       a: { maximum: 10, type: "integer", description: "A", minimum: 1, multipleOf: 1 },
       items: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 3 },
@@ -23,11 +24,18 @@ test("canonicalizes schema keywords while preserving property order", () => {
   assert.deepEqual(Object.keys(schema), ["description", "type", "properties", "required"])
 
   const properties = schema.properties as Record<string, Record<string, unknown>>
-  assert.deepEqual(Object.keys(properties), ["z", "type", "a", "items"])
+  assert.deepEqual(Object.keys(properties), ["z", "slug", "type", "a", "items"])
   assert.deepEqual(Object.keys(properties.z ?? {}), ["description", "type", "pattern"])
+  assert.deepEqual(properties.slug, { type: "string", minLength: 3 })
   assert.deepEqual(Object.keys(properties.type ?? {}), ["description", "type", "default"])
   assert.deepEqual(Object.keys(properties.a ?? {}), ["description", "type", "maximum"])
   assert.deepEqual(properties.items, { type: "array", items: { type: "string" }, maxItems: 3 })
+})
+
+test("preserves meaningful minLength constraints", () => {
+  assert.deepEqual(canonicalizeJsonSchema({ type: "string", minLength: 0 }), { type: "string" })
+  assert.deepEqual(canonicalizeJsonSchema({ type: "string", minLength: 1 }), { type: "string" })
+  assert.deepEqual(canonicalizeJsonSchema({ type: "string", minLength: 2 }), { type: "string", minLength: 2 })
 })
 
 test("removes schema metadata and artificial safe-integer bounds", () => {
