@@ -66,7 +66,7 @@ test("isolates named shells and allows independent foreground work", { timeout: 
   const started = snapshotFromResult(
     await connected.client.callTool({
       name: "shell_run",
-      arguments: { shell_id: "alpha", request_id: "alpha-slow", command: slowCommand, wait_ms: 0 },
+      arguments: { shell_id: "alpha", request_id: "alpha-slow", command: slowCommand, yield_time_ms: 0 },
     })
   )
   assert.equal(started.status, "running")
@@ -107,7 +107,7 @@ test("maps an expired shell cursor to an MCP tool error", { timeout: 10_000 }, a
   const started = snapshotFromResult(
     await connected.client.callTool({
       name: "shell_run",
-      arguments: { request_id: "expires", command: "sleep 0.1; printf AB", wait_ms: 0 },
+      arguments: { request_id: "expires", command: "sleep 0.1; printf AB", yield_time_ms: 0 },
     })
   )
   assert.equal(started.status, "running")
@@ -119,7 +119,7 @@ test("maps an expired shell cursor to an MCP tool error", { timeout: 10_000 }, a
 
   const expired = await connected.client.callTool({
     name: "shell_poll",
-    arguments: { request_id: "expires", cursor: started.next_cursor, wait_ms: 0 },
+    arguments: { request_id: "expires", cursor: started.next_cursor, yield_time_ms: 0 },
   })
   assert.equal(expired.isError, true)
   assert.match(JSON.stringify(expired.content), /cursor_expired/)

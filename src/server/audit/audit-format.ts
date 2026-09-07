@@ -130,7 +130,7 @@ function formatShellRunArguments(argumentsRecord: Record<string, unknown>, toolF
   const cwd = typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
   const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
   const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`]
-  pushExplicitNumberArgument(fields, argumentsRecord, "wait_ms")
+  pushExplicitNumberArgument(fields, argumentsRecord, "yield_time_ms")
   pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
   if (inputShape === "both" || inputShape === "neither") fields.push(`input: ${inputShape}`)
   if (cwd) fields.push(cwd.slice(1))
@@ -146,7 +146,7 @@ function formatShellPollArguments(argumentsRecord: Record<string, unknown>, tool
   const cursor = typeof argumentsRecord.cursor === "number" ? argumentsRecord.cursor : 0
   const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
   const fields = [`shell: ${yamlString(`${shellId}/${requestId}`)}`, `cursor: ${cursor}`]
-  pushExplicitNumberArgument(fields, argumentsRecord, "wait_ms")
+  pushExplicitNumberArgument(fields, argumentsRecord, "yield_time_ms")
   pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
   if (message) fields.push(message.slice(1))
   return fields.join("\n")

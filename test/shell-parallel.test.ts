@@ -63,7 +63,7 @@ test("runs at most six parallel children", { timeout: 10_000 }, async (t) => {
   const first = await shell.runCommand({
     request_id: "parallel-limit",
     commands,
-    wait_ms: 50,
+    yield_time_ms: 50,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
 
@@ -87,7 +87,7 @@ test("coalesces completed parallel runs while the batch is still running", { tim
   const running = await shell.runCommand({
     request_id: "parallel-coalesced-poll",
     commands: [{ command: "sleep 0.05; printf first" }, { command: "sleep 0.2; printf second" }],
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -97,7 +97,7 @@ test("coalesces completed parallel runs while the batch is still running", { tim
   const completed = await shell.pollCommand({
     request_id: "parallel-coalesced-poll",
     cursor: running.next_cursor,
-    wait_ms: 1_000,
+    yield_time_ms: 1_000,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
 
@@ -116,8 +116,8 @@ test("keeps batch concurrency isolated per shell", { timeout: 10_000 }, async (t
 
   const commands = Array.from({ length: 4 }, () => ({ command: `while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done` }))
   const [first, second] = await Promise.all([
-    firstShell.runCommand({ request_id: "parallel-isolated-first", commands, wait_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
-    secondShell.runCommand({ request_id: "parallel-isolated-second", commands, wait_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
+    firstShell.runCommand({ request_id: "parallel-isolated-first", commands, yield_time_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
+    secondShell.runCommand({ request_id: "parallel-isolated-second", commands, yield_time_ms: 50, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens }),
   ])
 
   assert.equal(first.commands?.filter((run) => run.status === "running").length, 4)
@@ -201,7 +201,7 @@ test("inherits the parallel cwd when a run directory is omitted and accepts over
   await assert.rejects(
     shell.runCommand({
       request_id: "parallel-missing-command",
-      wait_ms: 0,
+      yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     } as never),
     (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /exactly one of command or commands/.test(error.message)
@@ -211,7 +211,7 @@ test("inherits the parallel cwd when a run directory is omitted and accepts over
       request_id: "parallel-conflicting-command-inputs",
       command: "pwd",
       commands: [{ command: "printf should-not-run" }],
-      wait_ms: 0,
+      yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     } as never),
     (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /exactly one of command or commands/.test(error.message)
@@ -272,7 +272,7 @@ test("reset kills running parallel children and retains the batch as reset", { t
     request_id: "parallel-reset",
     cwd: directory,
     commands: [{ command: `printf '%s' "$$" > ${quote(pidFile)}; while :; do sleep 1; done` }],
-    wait_ms: 25,
+    yield_time_ms: 25,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -283,7 +283,7 @@ test("reset kills running parallel children and retains the batch as reset", { t
   const old = await shell.pollCommand({
     request_id: "parallel-reset",
     cursor: running.next_cursor,
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(old.status, "reset")

@@ -105,8 +105,8 @@ command: string, // minLength: 1
 cwd?: string, // minLength: 1
 }
 >,
-// Max wait time before returning. Running commands continue; use shell_poll.
-wait_ms?: integer, // default: 3000, minimum: 0, maximum: 10000
+// Wait before yielding a still-running command. Commands that finish sooner return immediately.
+yield_time_ms?: integer, // default: 10000, minimum: 0, maximum: 10000
 // Usually omit. Increase only when you need more output in one response; continue retained output with shell_poll.
 max_output_tokens?: integer, // default: 1024, minimum: 1, maximum: 16384
 }) => any;

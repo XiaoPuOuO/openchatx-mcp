@@ -155,7 +155,7 @@ export async function callUntilComplete(
         ...(shellId ? { shell_id: shellId } : {}),
         request_id: requestId,
         ...(typeof command === "string" ? { command } : { commands: command }),
-        wait_ms: 1_000,
+        yield_time_ms: 1_000,
       },
     })
   )
@@ -174,7 +174,7 @@ export async function callUntilComplete(
           ...(shellId ? { shell_id: shellId } : {}),
           request_id: requestId,
           cursor: snapshot.next_cursor,
-          wait_ms: 100,
+          yield_time_ms: 100,
         },
       })
     )

@@ -78,7 +78,7 @@ test("rejects invalid explicit working directories", { timeout: 10_000 }, async 
       request_id: "missing-cwd",
       command: "printf blocked",
       cwd: "missing/path",
-      wait_ms: 0,
+      yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     }),
     (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /not accessible/.test(error.message)
@@ -89,7 +89,7 @@ test("rejects invalid explicit working directories", { timeout: 10_000 }, async 
       request_id: "file-cwd",
       command: "printf blocked",
       cwd: file,
-      wait_ms: 0,
+      yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     }),
     (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /not a directory/.test(error.message)
@@ -134,7 +134,7 @@ test("deduplicates retries and rejects request id conflicts", { timeout: 10_000 
     shell.runCommand({
       request_id: "dedupe",
       command: "printf different",
-      wait_ms: 0,
+      yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     }),
     (error: unknown) => error instanceof ShellSessionError && error.code === "request_conflict"
@@ -162,7 +162,7 @@ test("keeps a completed retry bounded after later commands", { timeout: 10_000 }
   const retry = await shell.runCommand({
     request_id: "bounded-retry",
     command: "printf first",
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(retry.output, "first")
@@ -180,7 +180,7 @@ test("admits only one concurrent command without corrupting the active record", 
   ])
   const attempts = await Promise.allSettled(
     [...commands].map(([requestId, command]) =>
-      shell.runCommand({ request_id: requestId, command, wait_ms: 0, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens })
+      shell.runCommand({ request_id: requestId, command, yield_time_ms: 0, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens })
     )
   )
   const admitted = attempts.filter((result): result is PromiseFulfilledResult<ShellSnapshot> => result.status === "fulfilled")
@@ -222,7 +222,7 @@ test("caps o200k tokens without splitting characters and allows an override", { 
   const first = await shell.runCommand({
     request_id: "token-cap",
     command: `printf '${expected}'`,
-    wait_ms: 1_000,
+    yield_time_ms: 1_000,
     max_output_tokens: 64,
   })
   assert.equal(expected.startsWith(first.output), true)
@@ -236,7 +236,7 @@ test("caps o200k tokens without splitting characters and allows an override", { 
     snapshot = await shell.pollCommand({
       request_id: "token-cap",
       cursor: snapshot.next_cursor,
-      wait_ms: 100,
+      yield_time_ms: 100,
       max_output_tokens: 512,
     })
     assert.ok(countTokens(snapshot.output) <= 512)
@@ -312,7 +312,7 @@ test("preserves rolling transcript cursors across repeated overflow", { timeout:
   const stale = await shell.pollCommand({
     request_id: "overflow-0",
     cursor: firstCursor,
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(stale.cursor_expired, true)
@@ -337,7 +337,7 @@ test("waits for a quick command to complete instead of returning on its first ou
   const result = await shell.runCommand({
     request_id: "wait-for-completion",
     command: "printf first; sleep 0.05; printf second",
-    wait_ms: 1_000,
+    yield_time_ms: 1_000,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
 
@@ -356,7 +356,7 @@ test("keeps completed command polling bounded after later commands", { timeout: 
   const stalePoll = await shell.pollCommand({
     request_id: "poll-boundary-first",
     cursor: first.snapshot.next_cursor,
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
 
@@ -375,7 +375,7 @@ test("rejects poll cursors before the requested command", { timeout: 10_000 }, a
     shell.pollCommand({
       request_id: "poll-before-second",
       cursor: 0,
-      wait_ms: 0,
+      yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     }),
     (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_cursor"
@@ -389,7 +389,7 @@ test("coalesces foreground output while a command is still running", { timeout: 
   const running = await shell.runCommand({
     request_id: "coalesced-foreground",
     command: "sleep 0.05; printf first; sleep 0.15; printf second",
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -399,7 +399,7 @@ test("coalesces foreground output while a command is still running", { timeout: 
   const completed = await shell.pollCommand({
     request_id: "coalesced-foreground",
     cursor: running.next_cursor,
-    wait_ms: 1_000,
+    yield_time_ms: 1_000,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.ok(Date.now() - startedAt >= 50, "poll should not return immediately just because unread output exists")
@@ -418,7 +418,7 @@ test("handles multiline commands, quotes, and redirected background output", { t
   const background = await shell.runCommand({
     request_id: "background",
     command: `(sleep 0.1; printf background-finished > ${quote(backgroundFile)}) &`,
-    wait_ms: 500,
+    yield_time_ms: 500,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(background.status, "completed")
@@ -479,7 +479,7 @@ test("reset cancels a stuck command and creates a clean shell", { timeout: 10_00
   const running = await shell.runCommand({
     request_id: "stuck",
     command: "export SHOULD_DISAPPEAR=yes; sleep 30",
-    wait_ms: 25,
+    yield_time_ms: 25,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -490,7 +490,7 @@ test("reset cancels a stuck command and creates a clean shell", { timeout: 10_00
   const old = await shell.pollCommand({
     request_id: "stuck",
     cursor: running.next_cursor,
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(old.status, "reset")

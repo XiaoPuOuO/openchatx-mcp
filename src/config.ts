@@ -138,9 +138,9 @@ export const MCP_CONFIG = {
     defaultOutputTokens: 1_024,
     // Largest model-output token budget a caller may explicitly request per call.
     maxOutputTokens: 16_384,
-    defaultWaitMs: 3_000,
+    defaultWaitMs: 10_000,
     maxWaitMs: 10_000,
-    defaultPollWaitMs: 2_000,
+    defaultPollWaitMs: 40_000,
     maxPollWaitMs: 270_000,
     readyTimeoutMs: 10_000,
     stopGraceMs: 500,
@@ -178,6 +178,6 @@ function resolvePathExecutable(name: string): string | undefined {
 export function buildMcpInstructions(): string {
   return `# Shellby MCP
 
-- Call \`start_here\` before using any other Shellby tool.
+- Call start_here exactly once per conversation before using other Shellby tools.
 - Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.`
 }

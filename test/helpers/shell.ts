@@ -12,7 +12,7 @@ export async function runToCompletion(
     request_id: requestId,
     ...(typeof command === "string" ? { command } : { commands: command }),
     cwd: options.cwd,
-    wait_ms: 1_000,
+    yield_time_ms: 1_000,
     max_output_tokens: maxOutputTokens,
   })
   let output = first.output
@@ -25,7 +25,7 @@ export async function runToCompletion(
     snapshot = await shell.pollCommand({
       request_id: requestId,
       cursor: snapshot.next_cursor,
-      wait_ms: 100,
+      yield_time_ms: 100,
       max_output_tokens: maxOutputTokens,
     })
     output += snapshot.output
@@ -49,7 +49,7 @@ export async function pollToCompletion(
     snapshot = await shell.pollCommand({
       request_id: first.request_id,
       cursor: snapshot.next_cursor,
-      wait_ms: 100,
+      yield_time_ms: 100,
       max_output_tokens: maxOutputTokens,
     })
     output += snapshot.output

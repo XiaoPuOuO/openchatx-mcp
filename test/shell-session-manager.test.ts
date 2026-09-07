@@ -24,19 +24,19 @@ test("creates named shells lazily and keeps their state isolated", async (t) => 
   await alpha.runCommand({
     request_id: "state1",
     command: "cd /tmp && export NAMED_SHELL_STATE=alpha",
-    wait_ms: MCP_CONFIG.shell.defaultWaitMs,
+    yield_time_ms: MCP_CONFIG.shell.defaultWaitMs,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   const alphaState = await alpha.runCommand({
     request_id: "state2",
     command: `printf '%s|%s' "$PWD" "$NAMED_SHELL_STATE"`,
-    wait_ms: MCP_CONFIG.shell.defaultWaitMs,
+    yield_time_ms: MCP_CONFIG.shell.defaultWaitMs,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   const betaState = await beta.runCommand({
     request_id: "state2",
     command: `printf '%s|%s' "$PWD" "\${NAMED_SHELL_STATE-unset}"`,
-    wait_ms: MCP_CONFIG.shell.defaultWaitMs,
+    yield_time_ms: MCP_CONFIG.shell.defaultWaitMs,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
 
@@ -128,7 +128,7 @@ test("closing a named shell terminates its active foreground command", async (t)
   const running = await alpha.runCommand({
     request_id: "long-running",
     command: "sleep 5; printf should-not-complete",
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -176,7 +176,7 @@ test("does not evict a named shell while it has active work", async (t) => {
   const running = await alpha.runCommand({
     request_id: "active",
     command: "sleep 0.15; printf done",
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -190,7 +190,7 @@ test("does not evict a named shell while it has active work", async (t) => {
     snapshot = await alpha.pollCommand({
       request_id: "active",
       cursor: snapshot.next_cursor,
-      wait_ms: 100,
+      yield_time_ms: 100,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     })
   }
@@ -280,7 +280,7 @@ test("never pressure-evicts busy shells and blocks when no evictable slot exists
   const running = await alpha.runCommand({
     request_id: "busy-capacity",
     command: "sleep 0.2",
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")
@@ -302,7 +302,7 @@ test("pressure eviction skips a busy older shell and evicts the next LRU shell",
   const running = await alpha.runCommand({
     request_id: "busy-lru",
     command: "sleep 0.2",
-    wait_ms: 0,
+    yield_time_ms: 0,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(running.status, "running")

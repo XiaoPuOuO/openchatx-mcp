@@ -182,7 +182,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       if (existing.commandHash !== commandHash) {
         throw new ShellSessionError("request_conflict", `request_id ${JSON.stringify(input.request_id)} was already used for a different command.`)
       }
-      if (existing.status === "running") await waitForCommandResult(existing, existing.startCursor, maxOutputTokens, input.wait_ms, input.signal)
+      if (existing.status === "running") await waitForCommandResult(existing, existing.startCursor, maxOutputTokens, input.yield_time_ms, input.signal)
       return snapshot(existing, existing.startCursor, maxOutputTokens)
     }
 
@@ -192,7 +192,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
         throw new ShellSessionError("request_conflict", `request_id ${JSON.stringify(input.request_id)} was already used for a different command.`)
       }
       if (existingParallel.status === "running") {
-        await waitForParallelResult(existingParallel, 0, maxOutputTokens, input.wait_ms, input.signal)
+        await waitForParallelResult(existingParallel, 0, maxOutputTokens, input.yield_time_ms, input.signal)
       }
       return parallelSnapshot(existingParallel, 0, maxOutputTokens)
     }
@@ -244,7 +244,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       throw new ShellSessionError("shell_unavailable", `Could not write to the shell: ${errorMessage(error)}`)
     }
 
-    await waitForCommandResult(record, record.startCursor, maxOutputTokens, input.wait_ms, input.signal)
+    await waitForCommandResult(record, record.startCursor, maxOutputTokens, input.yield_time_ms, input.signal)
     return snapshot(record, record.startCursor, maxOutputTokens)
   }
 
@@ -258,7 +258,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     if (parallelRecord) {
       const maxOutputTokens = input.max_output_tokens
       if (parallelRecord.status === "running") {
-        await waitForParallelResult(parallelRecord, input.cursor, maxOutputTokens, input.wait_ms, input.signal)
+        await waitForParallelResult(parallelRecord, input.cursor, maxOutputTokens, input.yield_time_ms, input.signal)
       }
       return parallelSnapshot(parallelRecord, input.cursor, maxOutputTokens)
     }
@@ -268,7 +268,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 
     const maxOutputTokens = input.max_output_tokens
     if (record.status === "running") {
-      await waitForCommandResult(record, input.cursor, maxOutputTokens, input.wait_ms, input.signal)
+      await waitForCommandResult(record, input.cursor, maxOutputTokens, input.yield_time_ms, input.signal)
     }
     return snapshot(record, input.cursor, maxOutputTokens)
   }
@@ -353,7 +353,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       record.tasks.push(task)
     }
 
-    await waitForParallelResult(record, 0, options.maxOutputTokens, options.input.wait_ms, options.input.signal)
+    await waitForParallelResult(record, 0, options.maxOutputTokens, options.input.yield_time_ms, options.input.signal)
     return parallelSnapshot(record, 0, options.maxOutputTokens)
   }
 

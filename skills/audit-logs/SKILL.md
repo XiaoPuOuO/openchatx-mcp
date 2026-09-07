@@ -36,8 +36,8 @@ For ChatGPT sessions, `start_here` is normally the first successful Shellby tool
 
 ## Tool Bodies
 
-- `shell_run`: shell/request ID, explicitly supplied `wait_ms` / `max_output_tokens`, optional cwd, and either one command or a parallel commands array
-- `shell_poll`: shell/request ID, cursor, and explicitly supplied `wait_ms` / `max_output_tokens`
+- `shell_run`: shell/request ID, explicitly supplied `yield_time_ms` / `max_output_tokens`, optional cwd, and either one command or a parallel commands array
+- `shell_poll`: shell/request ID, cursor, and explicitly supplied `yield_time_ms` / `max_output_tokens`
 - `apply_patch`: cwd + patch size; patch body retained only on failure
 - other tools: serialized `args`
 

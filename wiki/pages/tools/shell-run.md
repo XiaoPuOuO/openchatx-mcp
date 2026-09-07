@@ -22,7 +22,7 @@ Inputs:
 - `cwd`: optional cwd change. Omit to keep cwd.
 - `command`: exact zsh for one command. Mutually exclusive with `commands`.
 - `commands`: independent commands to run in parallel. Each item has `command` and optional `cwd`.
-- `wait_ms`: how long this call waits. Default 3000 ms, max 10 s. Returning does not stop the command.
+- `yield_time_ms`: wait before yielding a still-running command. Default 10 s, max 10 s. Commands that finish sooner return immediately. Returning does not stop the command.
 - `max_output_tokens`: usually omit. Default 1024, max 16384. Controls one response chunk, not total retained output.
 
 Normal commands run in the persistent shell. `cd`, exported env, functions, aliases, and other live shell state persist while that shell stays live.
@@ -109,9 +109,9 @@ Pass:
 - same `request_id`
 - previous `next_cursor` as `cursor`
 
-Repeat with each returned `next_cursor` while status remains `running`. `shell_poll` long-polls: while work is still running it coalesces available output until the command completes, `wait_ms` expires, or the response token budget fills. `wait_ms` does not stop the command. Batch polls use the same behavior and return the same per-command `commands` summary.
+Repeat with each returned `next_cursor` while status remains `running`. `shell_poll` long-polls: while work is still running it coalesces available output until the command completes, `yield_time_ms` expires, or the response token budget fills. `yield_time_ms` does not stop the command. Batch polls use the same behavior and return the same per-command `commands` summary.
 
-Poll `wait_ms`: default 2000 ms, max 270 s (4.5 minutes).
+Poll `yield-time_ms`: default 40 s, max 270 s (4.5 minutes). For ordinary running commands, omit it and let the default long poll return early on completion or output-budget exhaustion.
 
 ## Shell Lifetime
 

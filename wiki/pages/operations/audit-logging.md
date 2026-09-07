@@ -25,7 +25,7 @@ Session aliases identify only the conversation that made the MCP request. The au
 ## Retention Rules
 
 - `shell_run` command text is retained as a block scalar capped at 2,000 characters.
-- `shell_run` entries retain `shell_id/request_id` as one `shell` key, explicitly supplied `wait_ms` / `max_output_tokens`, and optional requested cwd; `shell_poll` entries retain the same shell/request identity, requested cursor, and explicitly supplied `wait_ms` / `max_output_tokens`. Omitted defaults stay omitted so the log distinguishes caller choices from Shellby defaults. When the bounded response is available, both also retain a compact `result` summary containing useful fields such as status, exit code, actual cwd, cursor, and truncation/drop state. Failed shell calls retain their MCP failure message capped at 1,000 characters.
+- `shell_run` entries retain `shell_id/request_id` as one `shell` key, explicitly supplied `yield_time_ms` / `max_output_tokens`, and optional requested cwd; `shell_poll` entries retain the same shell/request identity, requested cursor, and explicitly supplied `yield_time_ms` / `max_output_tokens`. Omitted defaults stay omitted so the log distinguishes caller choices from Shellby defaults. When the bounded response is available, both also retain a compact `result` summary containing useful fields such as status, exit code, actual cwd, cursor, and truncation/drop state. Failed shell calls retain their MCP failure message capped at 1,000 characters.
 - Ordinary tool arguments are capped at 600 characters.
 - Successful `apply_patch` calls retain cwd and patch size, not patch text.
 - Failed `apply_patch` calls may retain the bounded failure message and up to 32,000 patch characters.

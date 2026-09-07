@@ -6,12 +6,13 @@ import { dirname, join, resolve } from "node:path"
 import { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
-import { setAgentTaskSlug } from "../../server/agent-context.js"
+import { getAgentIdentity, setAgentTaskSlug, type AgentIdentity } from "../../server/agent-context.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const START_HERE_COOLDOWN_MS = 5_000
+const recentStartLoads = new Map<AgentIdentity, Map<string, { startedAt: number; load: Promise<string> }>>()
 
 type PromptSource = {
   path: string
@@ -35,15 +36,42 @@ export function registerStartHereTool(server: McpServer): void {
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
-        idempotentHint: true,
+        idempotentHint: false,
         openWorldHint: false,
       },
     },
     async ({ mode, task_id }) => {
-      const instructions = await buildStartHereInstructions(mode)
-      setAgentTaskSlug(task_id)
-      return {
-        content: [{ type: "text", text: instructions }],
+      const agent = getAgentIdentity()
+      let agentLoads = agent ? recentStartLoads.get(agent) : undefined
+      const recent = agentLoads?.get(mode)
+      if (recent && Date.now() - recent.startedAt < START_HERE_COOLDOWN_MS) {
+        try {
+          await recent.load
+          setAgentTaskSlug(task_id)
+          return {
+            content: [{ type: "text", text: `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.` }],
+          }
+        } catch {
+          if (agentLoads?.get(mode) === recent) agentLoads.delete(mode)
+        }
+      }
+
+      const load = buildStartHereInstructions(mode)
+      const tracked = { startedAt: Date.now(), load }
+      if (agent) {
+        agentLoads ??= new Map()
+        recentStartLoads.set(agent, agentLoads)
+        agentLoads.set(mode, tracked)
+      }
+      try {
+        const instructions = await load
+        setAgentTaskSlug(task_id)
+        return {
+          content: [{ type: "text", text: instructions }],
+        }
+      } catch (error) {
+        if (agentLoads?.get(mode) === tracked) agentLoads.delete(mode)
+        throw error
       }
     }
   )
@@ -51,13 +79,7 @@ export function registerStartHereTool(server: McpServer): void {
 
 export async function buildStartHereInstructions(mode: string, root = repositoryRoot): Promise<string> {
   const [selected, shared] = await Promise.all([readStartPrompt(mode, root), readStartPrompt(SHARED_PROMPT_NAME, root)])
-  const sharedInstructions = [
-    shared.prompt.trim(),
-    `- Unless the user specifies another location, perform Shellby work in the configured default workspace: \`${MCP_CONFIG.workspace}\`.`,
-  ]
-    .filter(Boolean)
-    .join("\n")
-  return [sharedInstructions, selected.prompt.trim()].filter(Boolean).join("\n\n")
+  return [shared.prompt.trim(), selected.prompt.trim()].filter(Boolean).join("\n\n")
 }
 
 export function discoverPromptModes(root = repositoryRoot): string[] {

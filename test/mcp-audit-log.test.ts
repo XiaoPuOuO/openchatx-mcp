@@ -141,7 +141,7 @@ test("adds the successful start_here task slug to later audit session aliases", 
   assert.doesNotMatch(log, /raw-session-task-slug/)
 })
 
-test("keeps shell-specific wait and output arguments in the tool body", async (t) => {
+test("keeps shell-specific yield and output arguments in the tool body", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -156,7 +156,7 @@ test("keeps shell-specific wait and output arguments in the tool body", async (t
         shell_id: "default",
         request_id: "markers",
         command: "pwd",
-        wait_ms: 1_000,
+        yield_time_ms: 1_000,
         max_output_tokens: 4_096,
       },
     },
@@ -166,7 +166,7 @@ test("keeps shell-specific wait and output arguments in the tool body", async (t
 
   const log = await readFile(file, "utf8")
   assert.match(log, /^--- # shell_run - 0ms - \d+ in - Aug 14 8:11 AM$/m)
-  assert.match(log, /shell: "default\/markers"\nwait_ms: 1000\nmax_output_tokens: 4096\ncommand: \|-\n {2}pwd/)
+  assert.match(log, /shell: "default\/markers"\nyield_time_ms: 1000\nmax_output_tokens: 4096\ncommand: \|-\n {2}pwd/)
 
   const [poll] = claimAuditToolCalls(logger, {
     method: "tools/call",
@@ -176,7 +176,7 @@ test("keeps shell-specific wait and output arguments in the tool body", async (t
         shell_id: "default",
         request_id: "markers",
         cursor: 42,
-        wait_ms: 5_000,
+        yield_time_ms: 5_000,
         max_output_tokens: 8_192,
       },
     },
@@ -185,7 +185,7 @@ test("keeps shell-specific wait and output arguments in the tool body", async (t
   poll.finish({ httpStatus: 200, state: "finished" })
 
   const finalLog = await readFile(file, "utf8")
-  assert.match(finalLog, /shell: "default\/markers"\ncursor: 42\nwait_ms: 5000\nmax_output_tokens: 8192/)
+  assert.match(finalLog, /shell: "default\/markers"\ncursor: 42\nyield_time_ms: 5000\nmax_output_tokens: 8192/)
 })
 
 test("audits batched tool calls independently", async (t) => {

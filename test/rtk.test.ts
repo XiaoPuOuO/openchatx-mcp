@@ -131,7 +131,7 @@ test("parallel RTK execution keeps the original command in caller-visible run me
   const result = await shell.runCommand({
     request_id: "rtk-parallel",
     commands: [{ command: "git status --short", cwd: "child" }],
-    wait_ms: MCP_CONFIG.shell.maxWaitMs,
+    yield_time_ms: MCP_CONFIG.shell.maxWaitMs,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
   assert.equal(result.commands?.[0]?.command, "git status --short")

@@ -19,16 +19,16 @@ const shellBatchCommandInputSchema = z.object({
 export const shellRunInputSchema = z
   .object({
     shell_id: shellIdInput.describe("Reuse for command(s) that should share cwd or environment."),
-    request_id: requestIdInput.describe("Unique within this shell_id"),
+    request_id: requestIdInput.describe("Concise descriptive slug for the immediate purpose of this command. Unique within this shell_id."),
     cwd: z.string().min(1).optional().describe("Omit to keep cwd"),
     command: z.string().min(1).optional(),
     commands: z.array(shellBatchCommandInputSchema).min(1).optional().describe("Runs independently in parallel. Each may override cwd."),
-    wait_ms: z
+    yield_time_ms: z
       .int()
       .min(0)
       .max(MCP_CONFIG.shell.maxWaitMs)
       .default(MCP_CONFIG.shell.defaultWaitMs)
-      .describe("If still running after this, shell_poll can continue it."),
+      .describe("Wait before yielding a still-running command. Commands that finish sooner return immediately."),
     max_output_tokens: maxOutputTokensInput,
   })
   .refine((input) => (input.command === undefined) !== (input.commands === undefined), {
@@ -41,7 +41,12 @@ export const shellPollInputSchema = z.object({
   shell_id: shellIdInput,
   request_id: requestIdInput,
   cursor: z.int().nonnegative().describe("next_cursor from a previous shell_run or shell_poll."),
-  wait_ms: z.int().min(0).max(MCP_CONFIG.shell.maxPollWaitMs).default(MCP_CONFIG.shell.defaultPollWaitMs),
+  yield_time_ms: z
+    .int()
+    .min(0)
+    .max(MCP_CONFIG.shell.maxPollWaitMs)
+    .default(MCP_CONFIG.shell.defaultPollWaitMs)
+    .describe("Long-poll duration. For ordinary running commands, omit this value. Returns earlier when the command completes or the output budget fills. Avoid repeated short polls."),
   max_output_tokens: maxOutputTokensInput,
 })
 

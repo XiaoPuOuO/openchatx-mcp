@@ -7,6 +7,7 @@ import test from "node:test"
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
 import { MCP_CONFIG } from "../../src/config.js"
+import { getAgentIdentity, runWithAgent } from "../../src/server/agent-context.js"
 import { REVIEW_PROMPT_TOOL_CALLS } from "../../src/tools/review/review-tool.js"
 import { buildStartHereInstructions, discoverPromptModes, readStartPrompt } from "../../src/tools/start-here/start-here.js"
 import { createShellSession } from "../../src/tools/shell/session.js"
@@ -73,17 +74,17 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const computerDrag = tools.tools.find((tool) => tool.name === "computer_drag")
   assert.ok(shellRun && shellPoll && fetchUrl && subagentResult && computerDrag)
 
-  const runWait = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
-  const pollWait = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
+  const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)["yield_time_ms"]
+  const pollYield = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>)["yield_time_ms"]
   const webProperties = fetchUrl.inputSchema.properties as Record<string, Record<string, unknown>>
   const webTokens = webProperties.max_output_tokens
   const webCompact = webProperties.compact
   const webFormat = webProperties.format
   const subagentWait = (subagentResult.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
-  assert.equal(runWait?.default, MCP_CONFIG.shell.defaultWaitMs)
-  assert.equal(runWait?.maximum, MCP_CONFIG.shell.maxWaitMs)
-  assert.equal(pollWait?.default, MCP_CONFIG.shell.defaultPollWaitMs)
-  assert.equal(pollWait?.maximum, MCP_CONFIG.shell.maxPollWaitMs)
+  assert.equal(runYield?.default, MCP_CONFIG.shell.defaultWaitMs)
+  assert.equal(runYield?.maximum, MCP_CONFIG.shell.maxWaitMs)
+  assert.equal(pollYield?.default, MCP_CONFIG.shell.defaultPollWaitMs)
+  assert.equal(pollYield?.maximum, MCP_CONFIG.shell.maxPollWaitMs)
   assert.equal(webTokens?.default, MCP_CONFIG.web.defaultOutputTokens)
   assert.equal(webTokens?.maximum, MCP_CONFIG.web.maxOutputTokens)
   assert.equal(webCompact?.default, false)
@@ -165,14 +166,48 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   const startInstructions = toolText(started)
   const [sharedPrompt, codingPrompt] = await Promise.all([readStartPrompt("shared"), readStartPrompt("coding")])
   assert.ok(startInstructions.indexOf(sharedPrompt.prompt.trim()) < startInstructions.indexOf(codingPrompt.prompt.trim()))
-  assert.ok(startInstructions.includes(MCP_CONFIG.workspace))
   assert.equal(startInstructions, await buildStartHereInstructions("coding"))
+
 
   const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(allowed.isError, undefined)
 
   const stillBlocked = await second.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(stillBlocked.isError, true)
+})
+
+test("suppresses duplicate start_here modes for five seconds per agent", { timeout: 10_000 }, async (t) => {
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const first = await connectClient(running.url, "start-cooldown-first", undefined, false, "start-cooldown-session-a")
+  const second = await connectClient(running.url, "start-cooldown-second", undefined, false, "start-cooldown-session-b")
+  t.after(() => Promise.all([first.client.close(), second.client.close()]))
+
+  let now = Date.now()
+  t.mock.method(Date, "now", () => now)
+  const codingInstructions = await buildStartHereInstructions("coding")
+  const simultaneous = await Promise.all([
+    first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "initial-task" } }),
+    first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "renamed-task" } }),
+  ])
+  assert.ok(simultaneous.every((result) => !result.isError))
+  const simultaneousText = simultaneous.map(toolText)
+  assert.equal(simultaneousText.filter((text) => text === codingInstructions).length, 1)
+  assert.equal(simultaneousText.filter((text) => /loaded recently by this agent/.test(text)).length, 1)
+
+  now += 4_999
+  const duplicate = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "updated-task" } })
+  assert.match(toolText(duplicate), /loaded recently by this agent/)
+  assert.equal(runWithAgent("start-cooldown-session-a", () => getAgentIdentity()?.taskSlug), "updated-task")
+
+  const otherMode = await first.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "general-task" } })
+  assert.equal(toolText(otherMode), await buildStartHereInstructions("general"))
+  const otherAgent = await second.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "other-task" } })
+  assert.equal(toolText(otherAgent), codingInstructions)
+
+  now += 1
+  const expired = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "after-cooldown" } })
+  assert.equal(toolText(expired), codingInstructions)
 })
 
 test("suppresses rapid duplicate skill loads for the same agent", { timeout: 10_000 }, async (t) => {
@@ -270,6 +305,11 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
   const blocked = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(blocked.isError, true)
   assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
+
+  const retry = await connected.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "retry-startup" } })
+  assert.equal(toolText(retry), await buildStartHereInstructions("coding"))
+  const allowed = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  assert.equal(allowed.isError, undefined)
 })
 
 test("does not require start_here when no ChatGPT session is provided", { timeout: 10_000 }, async (t) => {
@@ -280,6 +320,12 @@ test("does not require start_here when no ChatGPT session is provided", { timeou
 
   const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(result.isError, undefined)
+
+  const instructions = await buildStartHereInstructions("coding")
+  for (let call = 0; call < 2; call += 1) {
+    const started = await connected.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "local-startup" } })
+    assert.equal(toolText(started), instructions)
+  }
 })
 
 test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, async (t) => {
