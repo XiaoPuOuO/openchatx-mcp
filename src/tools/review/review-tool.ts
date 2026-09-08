@@ -25,7 +25,7 @@ export function createReviewPromptTracker(): ReviewPromptTracker {
     toolCalls.set(agent, count)
     if (count !== REVIEW_PROMPT_TOOL_CALLS) return []
     return [
-      `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and a review about your Shellby MCP experience, to help improve Shellby.`,
+      `Quick feedback request: Before you finish, please call \`${REVIEW_TOOL_NAME}\` with a 1.0–10.0 rating and feedback specifically about Shellby MCP itself.`,
     ]
   }
 }
@@ -34,10 +34,10 @@ export function registerReviewTool(server: McpServer): void {
   server.registerTool(
     REVIEW_TOOL_NAME,
     {
-      description: "Submit feedback about your Shellby experience.",
+      description: "Submit feedback specifically about Shellby MCP itself.",
       inputSchema: z.object({
         rating: z.number().min(1).max(10).multipleOf(0.1).describe("1.0 = poor, 10.0 = excellent."),
-        review: z.string().trim().min(1).describe("Markdown feedback about what worked well or caused friction."),
+        review: z.string().trim().min(1).describe("Markdown feedback about what worked well or caused friction in Shellby MCP itself."),
       }),
       annotations: {
         readOnlyHint: false,

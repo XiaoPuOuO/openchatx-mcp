@@ -18,6 +18,9 @@ const DEFAULT_PUBLIC_CONFIG = {
     cdp_endpoint: "http://127.0.0.1:9222",
     project_url: "https://chatgpt.com/",
   },
+  ngrok: {
+    pooling_enabled: false,
+  },
   mcp: {
     tool_output: "compact",
   },

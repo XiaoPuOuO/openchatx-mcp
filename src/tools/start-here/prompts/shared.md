@@ -20,3 +20,5 @@ Use whichever tool has the strongest access to the required context, and combine
 - Prefer `rg` and `rg --files` for searching local text and files. Prefer targeted context or known ranges before reading whole files. When output may be large, or unknown, cap it explicitly, for example `head -c 4096`.
 - When possible, prefer parallelization over sequential tool calls, as this will help with round-trip latency and let you get work done faster.
 - Do not chain shell commands with separators like `echo "====";` or `printf '---'`; the output becomes noisy in a way that makes the user's side of the conversation worse.
+- Keep implementation details out of product (e.g. webpage, app) user flows unless it helps the user of the product make a meaningful decision
+- Avoid using AI slop words or phrases like "Bottom Line:" in conclusions, "delve," "foster," "leverage," "it's worth noting," "importantly," "Question? Answer." or "This isn't about X. It's about Y.", "genuinely" or hyphenated compound descriptions and adjectives.

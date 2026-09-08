@@ -24,6 +24,22 @@ const cdpEndpoint = httpUrl.refine((value) => {
 const toolOutputFormatSchema = z.enum(["compact", "structured"])
 export type ToolOutputFormat = z.infer<typeof toolOutputFormatSchema>
 
+const ngrokConfigSchema = z
+  .object({
+    url: httpUrl.optional(),
+    pooling_enabled: z.boolean().default(false),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.pooling_enabled && !value.url) {
+      context.addIssue({
+        code: "custom",
+        path: ["url"],
+        message: "ngrok.url is required when ngrok.pooling_enabled is true",
+      })
+    }
+  })
+
 const publicConfigSchema = z
   .object({
     workspace: z.string().trim().min(1),
@@ -39,6 +55,7 @@ const publicConfigSchema = z
         project_url: httpUrl,
       })
       .strict(),
+    ngrok: ngrokConfigSchema.optional(),
     mcp: z.object({ tool_output: toolOutputFormatSchema }).strict(),
     ui: z.object({ enabled: z.boolean() }).strict(),
     tools: z
@@ -106,6 +123,10 @@ export const MCP_CONFIG = {
     projectUrl: publicConfig.chatgpt.project_url,
     defaultPollWaitMs: 30_000,
     maxPollWaitMs: 270_000,
+  },
+  ngrok: {
+    url: publicConfig.ngrok?.url,
+    poolingEnabled: publicConfig.ngrok?.pooling_enabled ?? false,
   },
   mcp: {
     toolOutput: publicConfig.mcp.tool_output,

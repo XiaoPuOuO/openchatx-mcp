@@ -23,6 +23,10 @@ test("loads and validates Shellby TOML config", async (t) => {
       'cdp_endpoint = "http://127.0.0.1:9222"',
       'project_url = "https://chatgpt.com/"',
       "",
+      "[ngrok]",
+      'url = "https://shellby.ngrok.app"',
+      "pooling_enabled = true",
+      "",
       "[mcp]",
       'tool_output = "structured"',
       "",
@@ -46,6 +50,7 @@ test("loads and validates Shellby TOML config", async (t) => {
     workspace: "~/Work",
     shell: { path: "/bin/zsh", rtk: false },
     chatgpt: { cdp_endpoint: "http://127.0.0.1:9222", project_url: "https://chatgpt.com/" },
+    ngrok: { url: "https://shellby.ngrok.app", pooling_enabled: true },
     mcp: { tool_output: "structured" },
     ui: { enabled: true },
     tools: {
