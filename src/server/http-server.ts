@@ -145,9 +145,9 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   }
 
   app.all(mcpRoute, async (req: Request, res: Response) => {
-    if (req.method === "POST" && authStore && isTrustedRemoteRequest(req) && containsToolCall(req.body)) {
+    if (req.method === "POST" && authStore && isTrustedRemoteRequest(req) && requiresRemoteAuth(req.body)) {
       try {
-        await authStore.authorizeToolCall(req.get("x-openai-subject"))
+        await authStore.authorizeRemoteAccess(req.get("x-openai-subject"))
       } catch (error) {
         remoteAuthError(res, error)
         return
@@ -185,11 +185,12 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   }
 }
 
-function containsToolCall(payload: unknown): boolean {
+function requiresRemoteAuth(payload: unknown): boolean {
   const requests = Array.isArray(payload) ? payload : [payload]
   return requests.some((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false
     const request = value as { method?: unknown; params?: { name?: unknown } }
+    if (request.method === "tools/list") return true
     return request.method === "tools/call" && typeof request.params?.name === "string" && request.params.name.length > 0
   })
 }

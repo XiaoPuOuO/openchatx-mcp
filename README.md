@@ -98,7 +98,7 @@ Google Chrome is optional and is used for browser-backed subagents. Computer Use
 6. In ChatGPT Developer Mode, create a custom MCP app with the printed `https://.../mcp` URL and select **No Auth**.
 
 > [!IMPORTANT]
-> The first trusted remote tool call binds the installation to that ChatGPT subject. Use `npm run auth:reset` only when you intend to clear that binding.
+> The first trusted remote `tools/list` or tool call binds the installation to that ChatGPT subject. Use `npm run auth:reset` only when you intend to clear that binding.
 
 ### Verify the installation
 
@@ -243,7 +243,7 @@ More startup and recovery details are in [Configuration and Startup](wiki/pages/
 
 - The checked-in ngrok traffic policy exposes the local MCP endpoint to ChatGPT.
 - Direct localhost MCP access is unauthenticated. Do not expose the local endpoint through another untrusted proxy.
-- Trusted remote tool calls are bound to the first ChatGPT subject stored in `~/.shellby/auth.json`.
+- Trusted remote `tools/list` and tool calls are bound to the first ChatGPT subject stored in `~/.shellby/auth.json`.
 - The dedicated authenticated Chrome profile is part of the trust boundary for browser subagents.
 - `agent-commands.yaml` can contain sensitive tool inputs. It is gitignored and permission-restricted and should be treated as private.
 

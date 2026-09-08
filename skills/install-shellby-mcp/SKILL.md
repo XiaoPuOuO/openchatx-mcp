@@ -162,9 +162,9 @@ After they do this, verify locally that `agent-commands.yaml` received a new `to
 
 ## 9. Verify first trusted tool use
 
-Ask the human to start a fresh ChatGPT conversation with Shellby enabled. The first Shellby call should be `start_here`; after it succeeds, make one simple follow-up call such as `shell_list` or running `pwd`. The first trusted remote `tools/call` binds this installation to that ChatGPT user using their subject header.
+Ask the human to start a fresh ChatGPT conversation with Shellby enabled. ChatGPT's first trusted remote `tools/list` already binds this installation to that ChatGPT user using their subject header. The first Shellby call should still be `start_here`; after it succeeds, make one simple follow-up call such as `shell_list` or running `pwd`.
 
-Verify that the call reached Shellby from the audit log and that `~/.shellby/auth.json` now exists. Do not print the stored subject value.
+Verify that `tools/list` reached Shellby from the audit log and that `~/.shellby/auth.json` now exists. Do not print the stored subject value.
 
 Use `npm run auth:reset` only when the human intentionally wants to clear that binding. (This MCP can only bind to a single ChatGPT user.)
 

@@ -9,7 +9,7 @@ console.warn(
   [
     "WARNING: resetting Shellby MCP authentication will:",
     "- remove the currently bound ChatGPT identity",
-    "- allow a new ChatGPT user to bind on the next tool call",
+    "- allow a new ChatGPT user to bind on the next tools/list or tool call",
   ].join("\n")
 )
 
