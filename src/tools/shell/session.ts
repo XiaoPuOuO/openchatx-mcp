@@ -557,10 +557,7 @@ function batchCommandPreview(command: string): string {
 }
 
 function formatParallelRunOutput(run: ParallelRunRecord, output: string): string {
-  const result = run.status === "completed" ? `exit=${run.exitCode ?? "n/a"}` : `status=${run.status}`
-  const metadata = [`run=${run.run}`, `path=${JSON.stringify(run.path)}`, result]
-  if (run.droppedOutputBytes > 0) metadata.push(`dropped_bytes=${run.droppedOutputBytes}`)
-  const block = formatOutputBlock(metadata, output)
+  const block = formatOutputBlock([`run=${run.run}`], output)
   return `${block}\n\n`
 }
 

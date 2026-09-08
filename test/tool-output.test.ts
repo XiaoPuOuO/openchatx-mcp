@@ -161,12 +161,31 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
       ],
     },
     expected:
-      'status=completed cwd=/workspace exit_code=1\n\noutput:\n\nline one\nline two\n\ncommands:\n\n- run=1 command="npm run lint" status=completed exit_code=0\n- run=2 command="npm run typecheck…" path=./api status=completed exit_code=1',
+      'status=completed cwd=/workspace exit_code=1\n\ncommands:\n\n- run=1 exit_code=0 command="npm run lint"\n- run=2 exit_code=1 command="npm run typecheck…" path=./api\n\noutput:\n\nline one\nline two',
   },
   {
     tool: "shell_poll",
     structuredContent: { status: "running", output: "chunk one\nchunk two", next_cursor: 8 },
     expected: "status=running next_cursor=8\n\noutput:\n\nchunk one\nchunk two",
+  },
+  {
+    tool: "shell_poll",
+    structuredContent: {
+      status: "running",
+      output: "---- run=1 ----\n\nfinished",
+      next_cursor: 24,
+      commands: [
+        { run: 1, command: "printf finished", status: "completed", exit_code: 0, dropped_output_bytes: 10 },
+        { run: 2, command: "sleep 10", status: "running", exit_code: null },
+        { run: 3, command: "pwd", status: "queued", exit_code: null },
+        { run: 4, command: "sleep 100", status: "timed_out", exit_code: null },
+        { run: 5, command: "missing", status: "failed", exit_code: null },
+        { run: 6, command: "sleep 1", status: "reset", exit_code: null },
+        { run: 7, command: "kill -TERM $$", status: "completed", exit_code: null },
+      ],
+    },
+    expected:
+      'status=running next_cursor=24\n\ncommands:\n\n- run=1 exit_code=0 command="printf finished" dropped_output_bytes=10\n- run=2 status=running command="sleep 10"\n- run=3 status=queued command=pwd\n- run=4 status=timed_out command="sleep 100"\n- run=5 status=failed command=missing\n- run=6 status=reset command="sleep 1"\n- run=7 status=completed command="kill -TERM $$"\n\noutput:\n\n---- run=1 ----\n\nfinished',
   },
   {
     tool: "apply_patch",

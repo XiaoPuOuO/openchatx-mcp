@@ -146,7 +146,7 @@ export function executeParallelCommand(input: ExecuteParallelCommandInput): Prom
 
     try {
       const executionCommand = prepareShellCommand(input.command, input.cwd, input.env)
-      child = spawn(input.shellPath, ["-c", executionCommand], {
+      child = spawn(input.shellPath, ["-f", "-c", executionCommand], {
         cwd: input.cwd,
         env: input.env,
         detached: process.platform !== "win32",

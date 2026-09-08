@@ -31,9 +31,27 @@ export function renderStructuredContent(value: unknown): string {
 }
 
 function renderToolStructuredContent(toolName: string, value: unknown): string {
+  if (toolName === "shell_run" || toolName === "shell_poll") return renderShellResult(value)
   if (toolName === "apply_patch") return renderApplyPatchResult(value)
   if (toolName === "subagent_result") return renderSubagentResult(value)
   return renderStructuredContent(value)
+}
+
+function renderShellResult(value: unknown): string {
+  if (!isRecord(value) || !Array.isArray(value.commands) || !value.commands.every(isRecord)) return renderStructuredContent(value)
+
+  const { commands, output, ...metadata } = value
+  return renderStructuredContent({
+    ...metadata,
+    commands: commands.map(({ run, status, exit_code, command, ...details }) => ({
+      run,
+      ...(status === "completed" && typeof exit_code === "number" ? {} : { status }),
+      ...(exit_code === null ? {} : { exit_code }),
+      command,
+      ...details,
+    })),
+    output,
+  })
 }
 
 function renderApplyPatchResult(value: unknown): string {

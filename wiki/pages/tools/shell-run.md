@@ -5,6 +5,7 @@ paths:
   - src/tools/shell/shell-contracts.ts
   - src/tools/shell/session.ts
   - src/tools/shell/rtk.ts
+  - src/server/tool-output.ts
 ---
 
 # `shell_run` / `shell_poll`
@@ -59,18 +60,19 @@ Rules:
 - Batch `exit_code=0` only when every child succeeds; otherwise `1`.
 - Batch run/retry/poll waits for completion or the requested yield deadline even when output fills a page. Completed batches report `status=completed` with their exit code while unread output remains; pagination does not keep work running.
 
-Batch result adds compact per-command state:
+Batch result puts per-command state before output, in input order:
 
 ```text
 commands:
-- run=1 command="npm test" status=completed exit_code=0
-- run=2 command="npm run check" path=./api status=completed exit_code=1
+- run=1 exit_code=0 command="npm test"
+- run=2 exit_code=1 command="npm run check" path=./api
 ```
 
 - `run` matches the `run=N` grouped-output header.
 - `command` = first non-empty command line, normalized, max 20 characters including `…`.
-- `path` appears only for a cwd override.
-- Status: `queued`, `running`, `completed`, `timed_out`, `failed`, or `reset`.
+- `path` appears only when the command's resolved cwd differs from the batch cwd.
+- Compact text omits `status=completed` when a numeric exit code conveys completion, and omits null exit codes. Other states (`queued`, `running`, `timed_out`, `failed`, or `reset`) remain visible. Structured results retain the full status and nullable exit code.
+- Per-command dropped-output counts appear in this summary. The summary remains available on every output page.
 
 Non-batch result has no `commands` field.
 
@@ -85,10 +87,10 @@ output:
 ...
 ```
 
-Batch output is grouped and labeled:
+Batch output remains in completion order. Headers only identify the run; exit codes, paths, and dropped-output counts live in the summary:
 
 ```text
----- run=2 path="./api" exit=1 ----
+---- run=2 ----
 
 ...
 ```

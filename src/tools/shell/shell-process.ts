@@ -241,7 +241,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     const spawnEnv = restoreState?.env ?? env
     currentCwd = spawnCwd
 
-    const spawned = spawn("/bin/sh", ["-c", 'exec "$1" -l 2>&1', "mcp-shell", shellPath], {
+    const spawned = spawn("/bin/sh", ["-c", 'exec "$1" -f 2>&1', "mcp-shell", shellPath], {
       cwd: spawnCwd,
       env: spawnEnv,
       detached: process.platform !== "win32",

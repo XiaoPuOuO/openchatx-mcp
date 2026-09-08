@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server"
+import { resolve } from "node:path"
 
 import {
   DEFAULT_SHELL_ID,
@@ -186,7 +187,7 @@ function pollSnapshotResult(snapshot: ShellSnapshot) {
   }
   if (snapshot.status === "running" || snapshot.output_truncated) structuredContent.next_cursor = snapshot.next_cursor
   if (snapshot.dropped_output_bytes > 0) structuredContent.dropped_output_bytes = snapshot.dropped_output_bytes
-  if (snapshot.commands) structuredContent.commands = compactBatchCommands(snapshot.commands)
+  if (snapshot.commands) structuredContent.commands = compactBatchCommands(snapshot.commands, snapshot.cwd)
 
   return {
     structuredContent,
@@ -194,11 +195,11 @@ function pollSnapshotResult(snapshot: ShellSnapshot) {
   }
 }
 
-function compactBatchCommands(commands: NonNullable<ShellSnapshot["commands"]>): ShellBatchCommandOutput[] {
+function compactBatchCommands(commands: NonNullable<ShellSnapshot["commands"]>, cwd: string): ShellBatchCommandOutput[] {
   return commands.map((command) => ({
     run: command.run,
     command: command.command,
-    ...(command.path === "." ? {} : { path: command.path }),
+    ...(resolve(cwd, command.path) === cwd ? {} : { path: command.path }),
     status: command.status,
     exit_code: command.exit_code,
     ...(command.dropped_output_bytes ? { dropped_output_bytes: command.dropped_output_bytes } : {}),
@@ -220,7 +221,7 @@ function compactShellSnapshot(snapshot: ShellSnapshot, shellId: string): ShellRu
   if (snapshot.cursor_expired) compact.cursor_expired = true
   if (snapshot.output_truncated) compact.output_truncated = true
   if (snapshot.dropped_output_bytes > 0) compact.dropped_output_bytes = snapshot.dropped_output_bytes
-  if (snapshot.commands) compact.commands = compactBatchCommands(snapshot.commands)
+  if (snapshot.commands) compact.commands = compactBatchCommands(snapshot.commands, snapshot.cwd)
   return compact
 }
 

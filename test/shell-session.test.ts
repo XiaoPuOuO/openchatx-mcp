@@ -26,6 +26,21 @@ test("retains cwd and environment across commands", { timeout: 10_000 }, async (
   assert.equal(second.snapshot.exit_code, 0)
 })
 
+test("preserves the parent PATH without login-shell startup rewriting it", { timeout: 10_000 }, async (t) => {
+  const zdotdir = await tempDir(t, "shellby-zdotdir-")
+  const expectedPath = `/tmp/shellby-path-${Date.now()}`
+  await writeFile(join(zdotdir, ".zshenv"), 'export PATH="/tmp/zsh-startup:$PATH"\n')
+  const shell = createShellSession({ env: { ...process.env, PATH: expectedPath, ZDOTDIR: zdotdir } })
+  t.after(() => shell.close())
+
+  const result = await runToCompletion(shell, "preserve-parent-path", `printf '%s' "$PATH"`)
+  assert.equal(result.output, expectedPath)
+
+  const parallel = await runToCompletion(shell, "preserve-parent-path-parallel", [{ command: `printf '%s' "$PATH"` }])
+  assert.match(parallel.output, new RegExp(expectedPath))
+  assert.doesNotMatch(parallel.output, /zsh-startup/)
+})
+
 test("starts in an explicit cwd, reports it, and retains it", { timeout: 10_000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "shell-mcp-explicit-cwd-"))
   const shell = createShellSession()
