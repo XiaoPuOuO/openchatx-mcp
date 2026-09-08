@@ -14,6 +14,7 @@ if (!packageVersion) throw new Error("package.json is missing a valid version.")
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
 const bundledPeekabooExecutable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
 const defaultConfigPath = fileURLToPath(new URL("../.shellby/config.toml", import.meta.url))
+const DEFAULT_CHATGPT_PROJECT_URL = "https://chatgpt.com"
 const httpUrl = z.url().refine((value) => value.startsWith("http://") || value.startsWith("https://"), "URL must use http or https")
 const cdpEndpoint = httpUrl.refine((value) => {
   const url = new URL(value)
@@ -52,7 +53,7 @@ const publicConfigSchema = z
     chatgpt: z
       .object({
         cdp_endpoint: cdpEndpoint,
-        project_url: httpUrl,
+        project_url: httpUrl.default(DEFAULT_CHATGPT_PROJECT_URL),
       })
       .strict(),
     ngrok: ngrokConfigSchema.optional(),
