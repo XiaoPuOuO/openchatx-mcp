@@ -8,7 +8,10 @@ import { WebOpenError } from "../../src/tools/web/web-open.js"
 import { WebPageOpener } from "../../src/tools/web/web-open.js"
 import { compactField, connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
-test("renders a real localhost page through the default web stack", { timeout: 60_000 }, async (t) => {
+const LIVE_WEB_TEST_ENABLED = process.env.RUN_LIVE_WEB_TESTS === "1" && !process.env.CI
+const liveWebTest = LIVE_WEB_TEST_ENABLED ? test : test.skip
+
+liveWebTest("renders a real localhost page through the default web stack", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" })
     response.end(
@@ -49,7 +52,7 @@ test("renders a real localhost page through the default web stack", { timeout: 6
   assert.match(compactField(resultText, "content") ?? "", /Real browser rendering works\./)
 })
 
-test("returns successful empty responses with HTTP metadata", { timeout: 60_000 }, async (t) => {
+liveWebTest("returns successful empty responses with HTTP metadata", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((request, response) => {
     if (request.url === "/reset") {
       response.writeHead(205, { "content-type": "text/plain; charset=utf-8" })
@@ -92,7 +95,7 @@ test("returns successful empty responses with HTTP metadata", { timeout: 60_000 
   assert.equal(reset.content, "")
 })
 
-test("returns bodyless HTTP errors with metadata instead of navigation failures", { timeout: 60_000 }, async (t) => {
+liveWebTest("returns bodyless HTTP errors with metadata instead of navigation failures", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((request, response) => {
     if (request.url === "/redirect") {
       response.writeHead(302, { location: "/missing" })
@@ -139,7 +142,7 @@ test("returns bodyless HTTP errors with metadata instead of navigation failures"
   assert.equal(failed.content, "")
 })
 
-test("waits for delayed client rendering beyond one second", { timeout: 60_000 }, async (t) => {
+liveWebTest("waits for delayed client rendering beyond one second", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" })
     response.end(`<!doctype html><html><head><title>Delayed</title></head><body><main><p>Initial</p></main><script>
@@ -223,7 +226,7 @@ test("continues one cached website across MCP client sessions", { timeout: 20_00
   assert.equal(renders, 1)
 })
 
-test("compact only removes explicit token-heavy markup", { timeout: 60_000 }, async (t) => {
+liveWebTest("compact only removes explicit token-heavy markup", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" })
     response.end(`<!doctype html>
@@ -322,7 +325,7 @@ test("compact only removes explicit token-heavy markup", { timeout: 60_000 }, as
   assert.doesNotMatch(compactMarkdown.content, /Site Navigation|Site Footer|ARIA hidden detail|Hidden detail|Inline hidden detail/)
 })
 
-test("extracts PDF text and decodes common text resources", { timeout: 60_000 }, async (t) => {
+liveWebTest("extracts PDF text and decodes common text resources", { timeout: 60_000 }, async (t) => {
   const pdf = createTextPdf("PDF extraction works")
   const pageServer = createServer((request, response) => {
     if (request.url === "/guide.pdf") {
@@ -393,7 +396,7 @@ test("extracts PDF text and decodes common text resources", { timeout: 60_000 },
   assert.match(extractedPdf.content, /PDF extraction works/)
 })
 
-test("returns direct image URLs as native MCP image content", { timeout: 60_000 }, async (t) => {
+liveWebTest("returns direct image URLs as native MCP image content", { timeout: 60_000 }, async (t) => {
   const image = await sharp({
     create: { width: 32, height: 16, channels: 3, background: { r: 20, g: 40, b: 60 } },
   })
@@ -436,7 +439,7 @@ test("returns direct image URLs as native MCP image content", { timeout: 60_000 
   assert.equal(compactField(resultText, "content"), "")
 })
 
-test("preserves browser-discovered cookies across redirected resources without refetching the final URL", { timeout: 60_000 }, async (t) => {
+liveWebTest("preserves browser-discovered cookies across redirected resources without refetching the final URL", { timeout: 60_000 }, async (t) => {
   let secretRequests = 0
   const pageServer = createServer((request, response) => {
     if (request.url === "/download") {
@@ -477,7 +480,7 @@ test("preserves browser-discovered cookies across redirected resources without r
   assert.equal(secretRequests, 1)
 })
 
-test("sniffs headerless HTML, PDF, image, and text responses", { timeout: 60_000 }, async (t) => {
+liveWebTest("sniffs headerless HTML, PDF, image, and text responses", { timeout: 60_000 }, async (t) => {
   const pdf = createTextPdf("Headerless PDF")
   const image = await sharp({
     create: { width: 24, height: 12, channels: 3, background: { r: 10, g: 20, b: 30 } },
@@ -521,7 +524,7 @@ test("sniffs headerless HTML, PDF, image, and text responses", { timeout: 60_000
   assert.equal(text.content, "headerless plain text")
 })
 
-test("rejects unsupported and oversized binary resources explicitly", { timeout: 60_000 }, async (t) => {
+liveWebTest("rejects unsupported and oversized binary resources explicitly", { timeout: 60_000 }, async (t) => {
   const pageServer = createServer((request, response) => {
     if (request.url === "/chunked-large.bin") {
       response.writeHead(200, { "content-type": "application/octet-stream" })

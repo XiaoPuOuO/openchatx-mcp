@@ -50,7 +50,7 @@ test("setup creates a complete active Shellby config and fills missing fields wi
     project_url: "https://chatgpt.com/",
   })
   assert.deepEqual(scaffold.mcp, { tool_output: "compact" })
-  assert.deepEqual(scaffold.ui, { enabled: true })
+  assert.deepEqual(scaffold.ui, { enabled: false })
   assert.equal(scaffold.tools.computer, true)
 
   await writeFile(initial.configPath, 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
@@ -64,7 +64,7 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   assert.equal(migrated.shell.rtk, false)
   assert.equal(migrated.chatgpt.project_url, "https://chatgpt.com/")
   assert.equal(migrated.mcp.tool_output, "compact")
-  assert.equal(migrated.ui.enabled, true)
+  assert.equal(migrated.ui.enabled, false)
 
   const complete = await initializeShellbyConfig(root)
   assert.equal(complete.created, false)

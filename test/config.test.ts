@@ -107,7 +107,7 @@ test("ignores TOML comments and defaults omitted chatgpt.project_url", async (t)
   const loaded = loadPublicConfig(path)
   assert.equal(loaded.workspace, "~/Work")
   assert.equal(loaded.chatgpt.cdp_endpoint, "http://127.0.0.1:9222")
-  assert.equal(loaded.chatgpt.project_url, "https://chatgpt.com/")
+  assert.equal(loaded.chatgpt.project_url, "https://chatgpt.com")
 })
 
 test("requires the active config file and every public config field", async (t) => {
