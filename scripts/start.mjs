@@ -7,8 +7,9 @@ import { MCP_CONFIG } from "../src/config.ts"
 import { checkPublicRuntime, checkRtkRuntime, printPreflightErrors } from "./preflight.mjs"
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+const pm2Script = join(repoRoot, "scripts", "pm2.mjs")
 const restarting = process.argv.includes("--restart")
-const { errors, pm2Path } = await checkPublicRuntime()
+const { errors } = await checkPublicRuntime()
 const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
 if (rtkError) errors.push(rtkError)
 
@@ -25,11 +26,15 @@ try {
   process.exit(1)
 }
 
-if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
-
 run("npm", ["run", "build"])
-runAllowFailure(pm2Path, ["delete", "shellby-cursor-host"])
-run(pm2Path, ["startOrReload", "ecosystem.config.cjs", "--update-env"], { quiet: true })
+if (restarting) {
+  // Reloading apps retains the daemon's macOS session; recreate PM2 to recover stale system-service connections.
+  run(process.execPath, [pm2Script, "kill"])
+  await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
+} else {
+  runAllowFailure(process.execPath, [pm2Script, "delete", "shellby-cursor-host"])
+}
+run(process.execPath, [pm2Script, "startOrReload", "ecosystem.config.cjs", "--update-env"], { quiet: true })
 if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
   run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "chatgpt-browser.mjs"), "--auto"])
 }

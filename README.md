@@ -149,15 +149,27 @@ See [Browser ChatGPT Subagents](wiki/pages/subagents/browser-chatgpt-subagents.m
 | Command                | Purpose                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------ |
 | `npm start`            | Build and start or reload Shellby MCP, ngrok, and enabled supporting services. |
-| `npm run restart`      | Clear the current audit log, rebuild, and reload the managed runtime.          |
+| `npm run restart`      | Rebuild, recreate Shellby's PM2 daemon, clear the audit log, and start services. |
 | `npm run status`       | Show PM2 process state.                                                        |
 | `npm run logs`         | Follow PM2 logs.                                                               |
+| `npm run pm2 -- <args>` | Run a PM2 command against Shellby's dedicated daemon.                          |
 | `npm run print-url`    | Print the active public `/mcp` URL.                                            |
 | `npm run stop`         | Stop the managed Shellby MCP and ngrok processes.                              |
 | `npm run auth:reset`   | Clear the bound remote ChatGPT subject after confirmation.                     |
 | `npm run reset-agents` | Forget persisted subagent conversation mappings.                               |
 
-PM2 is installed as a repository dependency.
+PM2 is installed as a repository dependency. All Shellby PM2 commands use `~/.shellby/pm2` for their daemon, sockets, logs, and process state. This is separate from the default `~/.pm2` daemon used by other projects; use `npm run pm2 -- <args>` for direct access to Shellby's daemon.
+
+Run `npm run restart` from a healthy Terminal.app session. It recreates only Shellby's dedicated daemon and starts Shellby's services. Build failures leave the running services and audit log intact. The authenticated ChatGPT Chrome profile is reused.
+
+If Shellby was previously running under the default shared daemon, move it once from Terminal.app before using the new commands:
+
+```sh
+PM2_HOME="$HOME/.pm2" ./node_modules/.bin/pm2 delete shellby-mcp shellby-ngrok
+npm run restart
+```
+
+The first command removes only Shellby's old app entries, leaving the shared daemon and other projects running. If an older installation still has a `shellby-cursor-host` entry in that daemon, delete that entry there too. The migration briefly interrupts Shellby; it does not erase authentication or browser profiles. Future restarts need only `npm run restart`.
 
 ### Update an existing installation
 
@@ -233,7 +245,7 @@ Run `npm run setup:computer` from Terminal.app and follow Peekaboo's permission 
 <details>
 <summary><strong>The PM2 daemon needs to be recreated</strong></summary>
 
-Check whether that PM2 daemon manages other applications before killing it. `./node_modules/.bin/pm2 kill` stops every application attached to the daemon. After recreating it, run `npm start` from Terminal.app.
+Run `npm run restart` from a newly opened Terminal.app session. This recreates Shellby's dedicated PM2 daemon as well as Shellby MCP and ngrok. A stale macOS session inherited by PM2 can cause Chromium to abort before navigation and DNS lookups to fail even while MCP remains reachable. Restarting from inside that broken Shellby session cannot provide a healthy replacement session. Daemon isolation does not make PM2 independent of Terminal's macOS session; keep Terminal.app running until PM2 is managed through a macOS LaunchAgent.
 
 </details>
 
