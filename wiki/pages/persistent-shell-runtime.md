@@ -31,7 +31,7 @@ The wrapper clears `errexit` before and after evaluation so a prior `set -e` doe
 
 - `TranscriptBuffer` uses absolute JavaScript-string cursors, advances a logical retained-output head as the rolling window fills, and compacts discarded backing text in batches instead of slicing the full retained string on every append. It drops whole surrogate pairs at the rolling boundary. A cursor older than retained output is clamped and returns `cursor_expired` (`src/tools/shell/session.ts`, `test/shell-session.test.ts`).
 - Response ceilings use `o200k_base` token counts. Transcript reads tokenize only a bounded local character window instead of the entire remaining transcript, so polling large retained output does not repeatedly rescan megabytes. Per-command capture remains byte-based because it protects retained memory (`src/tokenizer.ts`, `src/tools/shell/session.ts`, `src/tools/shell/shell-tools.ts`). See [shell_run](./tools/shell-run.md) for caller-visible pagination/loss semantics.
-- Run waits for completion, abort, timeout, cursor expiry, or a full response. Poll waits on a versioned update when a running command has no new output; completed polls skip that preliminary transcript read and render the result once (`src/tools/shell/session.ts`).
+- Run, retry, and poll share a wait loop ending on completion, abort/reset, or the yield deadline. Output volume and cursor expiry do not shorten the wait. Versioned updates wake the loop; transcript pagination happens only when constructing the response (`src/tools/shell/session.ts`).
 - Command request IDs are scoped to a shell. Exact command retries return the retained record; changed text returns `request_conflict`. Command records are bounded by the config-only `MCP_CONFIG.shell.recordLimit`. Reset has no request ID or retained retry record (`src/config.ts`, `src/tools/shell/session.ts`).
 
 ## Concurrency
@@ -53,6 +53,8 @@ Cached state is process-local and disappears on MCP restart. If a cached cwd no 
 Caller syntax and result semantics: [shell_run](./tools/shell-run.md).
 
 Internally, one batch remains one outer `(shell_id, request_id)` record. `parallel-runner.ts` owns parsing, bounded scheduling/output, child timeout, and process-group cleanup. `PersistentShellSession` captures cwd/exported environment through the process layer, resolves child directories, owns grouped retained output/polling, and integrates reset. Children are short-lived processes, do not consume named-shell slots, do not mutate persistent/sibling state, and do not cancel siblings on nonzero exit (`src/tools/shell/parallel-runner.ts`, `src/tools/shell/session.ts`, `src/tools/shell/shell-process.ts`, `src/tools/shell/shell-tools.ts`). Exact caller limits are in [`shell_run` / `shell_poll`](./tools/shell-run.md).
+
+Output can fill a page before single-command completion markers or batch sibling close events arrive. Returning at that point produced avoidable `running` responses for short commands. Both paths now share the same execution wait; status and exit code track execution independently of pagination. Completed work may still return `output_truncated` and a cursor (`src/tools/shell/session.ts`, `test/shell-session.test.ts`, `test/shell-parallel.test.ts`).
 
 ## Reset and Recovery
 

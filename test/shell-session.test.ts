@@ -8,6 +8,7 @@ import { MCP_CONFIG } from "../src/config.js"
 import { countTokens } from "../src/tokenizer.js"
 import { createShellSession, ShellSessionError, type ShellSnapshot } from "../src/tools/shell/session.js"
 import { isProcessAlive, pollToCompletion, quote, runToCompletion, waitForProcessExit } from "./helpers/shell.js"
+import { tempDir } from "./helpers/temp.js"
 
 test("retains cwd and environment across commands", { timeout: 10_000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "shell-mcp-state-"))
@@ -221,7 +222,7 @@ test("caps o200k tokens without splitting characters and allows an override", { 
   const expected = "🙂éA".repeat(100)
   const first = await shell.runCommand({
     request_id: "token-cap",
-    command: `printf '${expected}'`,
+    command: `printf '${expected}'; sleep 0.1; (exit 7)`,
     yield_time_ms: 1_000,
     max_output_tokens: 64,
   })
@@ -229,6 +230,8 @@ test("caps o200k tokens without splitting characters and allows an override", { 
   assert.ok(first.output.length > 0)
   assert.ok(countTokens(first.output) <= 64)
   assert.equal(first.output_truncated, true)
+  assert.equal(first.status, "completed")
+  assert.equal(first.exit_code, 7)
 
   let output = first.output
   let snapshot = first
@@ -240,11 +243,59 @@ test("caps o200k tokens without splitting characters and allows an override", { 
       max_output_tokens: 512,
     })
     assert.ok(countTokens(snapshot.output) <= 512)
+    assert.equal(snapshot.status, "completed")
+    assert.equal(snapshot.exit_code, 7)
     output += snapshot.output
   }
   assert.equal(output, expected)
   assert.equal(snapshot.status, "completed")
   assert.equal(snapshot.output_truncated, false)
+})
+
+test("single-command retries and polls honor the wait even with a full output page", { timeout: 10_000 }, async (t) => {
+  const directory = await tempDir(t, "shell-mcp-output-wait-")
+  const releaseFile = join(directory, "release")
+  const shell = createShellSession()
+  t.after(() => shell.close())
+  const input = {
+    request_id: "single-truncated-wait",
+    command: `printf '%s' ${quote("output line\n".repeat(1_000))}; while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done; printf released`,
+    yield_time_ms: 200,
+    max_output_tokens: 64,
+  }
+  const first = await shell.runCommand(input)
+  assert.equal(first.status, "running")
+  assert.equal(first.output_truncated, true)
+
+  const retryStartedAt = Date.now()
+  const retry = await shell.runCommand({ ...input, yield_time_ms: 80 })
+  assert.ok(Date.now() - retryStartedAt >= 50, "unread output must not end a retry's wait")
+  assert.equal(retry.status, "running")
+  assert.equal(retry.exit_code, null)
+
+  const pollStartedAt = Date.now()
+  const waiting = await shell.pollCommand({
+    request_id: input.request_id,
+    cursor: first.next_cursor,
+    yield_time_ms: 80,
+    max_output_tokens: 64,
+  })
+  assert.ok(Date.now() - pollStartedAt >= 50, "unread output must not end a poll's wait")
+  assert.equal(waiting.status, "running")
+  assert.equal(waiting.exit_code, null)
+  assert.equal(waiting.output_truncated, true)
+
+  await writeFile(releaseFile, "go")
+  const completed = await shell.pollCommand({
+    request_id: input.request_id,
+    cursor: waiting.next_cursor,
+    yield_time_ms: 1_000,
+    max_output_tokens: 64,
+  })
+  assert.equal(completed.status, "completed")
+  assert.equal(completed.exit_code, 0)
+  assert.equal(completed.output_truncated, true)
+  assert.equal(shell.hasActiveWork, false)
 })
 
 test("drops output beyond the per-command transcript ceiling", { timeout: 10_000 }, async (t) => {

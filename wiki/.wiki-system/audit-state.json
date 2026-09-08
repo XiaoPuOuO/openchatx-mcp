@@ -3,6 +3,12 @@
   "pages": {
     "pages/operations/configuration-and-startup.md": {
       "fingerprint": "sha256:5e1ad926f7c46fb8028095b4db721791f384efcfb2b3317754d1d1a3fc0eb847"
+    },
+    "pages/persistent-shell-runtime.md": {
+      "fingerprint": "sha256:735c1fe02235b5c985d753f4e82e067855fae4832c0c6cc32c556aacaf18e73c"
+    },
+    "pages/tools/shell-run.md": {
+      "fingerprint": "sha256:d5519a09eab082076306dd7ed95a89843c100c7e1fcf7a260405a799784999c3"
     }
   }
 }

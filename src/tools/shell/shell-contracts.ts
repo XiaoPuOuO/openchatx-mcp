@@ -46,7 +46,7 @@ export const shellPollInputSchema = z.object({
     .min(0)
     .max(MCP_CONFIG.shell.maxPollWaitMs)
     .default(MCP_CONFIG.shell.defaultPollWaitMs)
-    .describe("Long-poll duration. For ordinary running commands, omit this value. Returns earlier when the command completes or the output budget fills. Avoid repeated short polls."),
+    .describe("Long-poll duration. Usually omit. Returns early on completion. Avoid repeated short polls."),
   max_output_tokens: maxOutputTokensInput,
 })
 

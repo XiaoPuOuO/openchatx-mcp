@@ -107,6 +107,92 @@ test("coalesces completed parallel runs while the batch is still running", { tim
   assert.match(completed.output, /second/)
 })
 
+test("completed parallel batches keep their exit status while output is paginated", { timeout: 10_000 }, async (t) => {
+  const shell = createShellSession()
+  t.after(() => shell.close())
+  const body = "output line\n".repeat(1_000)
+
+  const first = await shell.runCommand({
+    request_id: "parallel-completed-truncated",
+    commands: [{ command: `printf '%s' ${quote(body)}` }, { command: "sleep 0.1; printf last-command; exit 7" }],
+    yield_time_ms: 1_000,
+    max_output_tokens: 128,
+  })
+
+  assert.equal(first.status, "completed")
+  assert.equal(first.exit_code, 1)
+  assert.equal(first.output_truncated, true)
+  assert.equal(shell.hasActiveWork, false)
+  assert.deepEqual(
+    first.commands?.map((run) => [run.status, run.exit_code]),
+    [
+      ["completed", 0],
+      ["completed", 7],
+    ]
+  )
+
+  let output = first.output
+  let snapshot = first
+  for (let page = 0; snapshot.output_truncated && page < 100; page += 1) {
+    snapshot = await shell.pollCommand({
+      request_id: first.request_id,
+      cursor: snapshot.next_cursor,
+      yield_time_ms: 0,
+      max_output_tokens: 128,
+    })
+    assert.equal(snapshot.status, "completed")
+    assert.equal(snapshot.exit_code, 1)
+    output += snapshot.output
+  }
+  assert.equal(snapshot.output_truncated, false)
+  assert.ok(output.includes(body))
+  assert.match(output, /last-command/)
+})
+
+test("parallel polls wait for status even when completed children have unread output", { timeout: 10_000 }, async (t) => {
+  const directory = await tempDir(t, "shell-mcp-parallel-pagination-")
+  const releaseFile = join(directory, "release")
+  const shell = createShellSession()
+  t.after(() => shell.close())
+  const first = await shell.runCommand({
+    request_id: "parallel-truncated-wait",
+    commands: [
+      { command: `printf '%s' ${quote("output line\n".repeat(1_000))}` },
+      { command: `while [[ ! -e ${quote(releaseFile)} ]]; do sleep 0.01; done; printf released` },
+    ],
+    yield_time_ms: 200,
+    max_output_tokens: 128,
+  })
+  assert.equal(first.status, "running")
+  assert.equal(first.output_truncated, true)
+
+  const startedAt = Date.now()
+  const waiting = await shell.pollCommand({
+    request_id: first.request_id,
+    cursor: 0,
+    yield_time_ms: 80,
+    max_output_tokens: 128,
+  })
+  assert.ok(Date.now() - startedAt >= 50, "unread output must not end the requested wait")
+  assert.equal(waiting.status, "running")
+  assert.equal(waiting.exit_code, null)
+  assert.deepEqual(
+    waiting.commands?.map((run) => run.status),
+    ["completed", "running"]
+  )
+
+  await writeFile(releaseFile, "go")
+  const completed = await shell.pollCommand({
+    request_id: first.request_id,
+    cursor: 0,
+    yield_time_ms: 1_000,
+    max_output_tokens: 128,
+  })
+  assert.equal(completed.status, "completed")
+  assert.equal(completed.exit_code, 0)
+  assert.equal(completed.output_truncated, true)
+})
+
 test("keeps batch concurrency isolated per shell", { timeout: 10_000 }, async (t) => {
   const directory = await tempDir(t, "shell-mcp-parallel-per-shell-")
   const releaseFile = join(directory, "release")

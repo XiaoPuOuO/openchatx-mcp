@@ -182,7 +182,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       if (existing.commandHash !== commandHash) {
         throw new ShellSessionError("request_conflict", `request_id ${JSON.stringify(input.request_id)} was already used for a different command.`)
       }
-      if (existing.status === "running") await waitForCommandResult(existing, existing.startCursor, maxOutputTokens, input.yield_time_ms, input.signal)
+      if (existing.status === "running") await waitForResult(existing, input.yield_time_ms, input.signal)
       return snapshot(existing, existing.startCursor, maxOutputTokens)
     }
 
@@ -192,7 +192,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
         throw new ShellSessionError("request_conflict", `request_id ${JSON.stringify(input.request_id)} was already used for a different command.`)
       }
       if (existingParallel.status === "running") {
-        await waitForParallelResult(existingParallel, 0, maxOutputTokens, input.yield_time_ms, input.signal)
+        await waitForResult(existingParallel, input.yield_time_ms, input.signal)
       }
       return parallelSnapshot(existingParallel, 0, maxOutputTokens)
     }
@@ -244,7 +244,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       throw new ShellSessionError("shell_unavailable", `Could not write to the shell: ${errorMessage(error)}`)
     }
 
-    await waitForCommandResult(record, record.startCursor, maxOutputTokens, input.yield_time_ms, input.signal)
+    await waitForResult(record, input.yield_time_ms, input.signal)
     return snapshot(record, record.startCursor, maxOutputTokens)
   }
 
@@ -258,7 +258,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     if (parallelRecord) {
       const maxOutputTokens = input.max_output_tokens
       if (parallelRecord.status === "running") {
-        await waitForParallelResult(parallelRecord, input.cursor, maxOutputTokens, input.yield_time_ms, input.signal)
+        await waitForResult(parallelRecord, input.yield_time_ms, input.signal)
       }
       return parallelSnapshot(parallelRecord, input.cursor, maxOutputTokens)
     }
@@ -268,7 +268,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 
     const maxOutputTokens = input.max_output_tokens
     if (record.status === "running") {
-      await waitForCommandResult(record, input.cursor, maxOutputTokens, input.yield_time_ms, input.signal)
+      await waitForResult(record, input.yield_time_ms, input.signal)
     }
     return snapshot(record, input.cursor, maxOutputTokens)
   }
@@ -353,7 +353,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       record.tasks.push(task)
     }
 
-    await waitForParallelResult(record, 0, options.maxOutputTokens, options.input.yield_time_ms, options.input.signal)
+    await waitForResult(record, options.input.yield_time_ms, options.input.signal)
     return parallelSnapshot(record, 0, options.maxOutputTokens)
   }
 
@@ -407,23 +407,6 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
         exit_code: run.exitCode,
         ...(run.droppedOutputBytes > 0 ? { output_dropped: true as const, dropped_output_bytes: run.droppedOutputBytes } : {}),
       })),
-    }
-  }
-
-  async function waitForParallelResult(
-    record: ParallelBatchRecord,
-    cursor: number,
-    maxOutputTokens: number,
-    waitMs: number,
-    signal?: AbortSignal
-  ): Promise<void> {
-    const deadline = Date.now() + waitMs
-    while (record.status === "running" && !signal?.aborted) {
-      const read = record.transcript.read(cursor, maxOutputTokens, record.endCursor ?? undefined)
-      if (read.cursorExpired || read.hasMore || read.tokenCount >= maxOutputTokens) return
-      const remainingMs = deadline - Date.now()
-      if (remainingMs <= 0) return
-      await updates.wait(updates.version, remainingMs, signal)
     }
   }
 
@@ -491,11 +474,10 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     }
   }
 
-  async function waitForCommandResult(record: CommandRecord, cursor: number, maxOutputTokens: number, waitMs: number, signal?: AbortSignal): Promise<void> {
+  async function waitForResult(record: CommandRecord | ParallelBatchRecord, waitMs: number, signal?: AbortSignal): Promise<void> {
     const deadline = Date.now() + waitMs
+    // Output pagination is independent of execution: a full page must not shorten the requested wait.
     while (record.status === "running" && !signal?.aborted) {
-      const read = transcript.read(cursor, maxOutputTokens, record.endCursor ?? undefined)
-      if (read.cursorExpired || read.hasMore || read.tokenCount >= maxOutputTokens) return
       const remainingMs = deadline - Date.now()
       if (remainingMs <= 0) return
       await updates.wait(updates.version, remainingMs, signal)

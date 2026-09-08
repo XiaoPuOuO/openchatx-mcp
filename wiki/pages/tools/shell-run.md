@@ -25,6 +25,8 @@ Inputs:
 - `yield_time_ms`: wait before yielding a still-running command. Default 10 s, max 10 s. Commands that finish sooner return immediately. Returning does not stop the command.
 - `max_output_tokens`: usually omit. Default 1024, max 16384. Controls one response chunk, not total retained output.
 
+For single commands and batches, the output limit does not shorten `yield_time_ms`. Use a shorter yield when intermediate output is needed sooner. Existing retention limits still apply while waiting.
+
 Normal commands run in the persistent shell. `cd`, exported env, functions, aliases, and other live shell state persist while that shell stays live.
 
 When `shell.rtk = true`, Shellby may transparently rewrite supported commands through the external RTK executable resolved at startup before evaluation. Callers still send normal zsh; request identity, retries, auditing, and command previews use the original command. Unsupported or failed rewrites execute the exact original command, and `RTK_DISABLED=1 <command>` bypasses rewriting for one command.
@@ -55,6 +57,7 @@ Rules:
 - Each batch child has a 30-minute runtime limit.
 - One child failing does not stop siblings.
 - Batch `exit_code=0` only when every child succeeds; otherwise `1`.
+- Batch run/retry/poll waits for completion or the requested yield deadline even when output fills a page. Completed batches report `status=completed` with their exit code while unread output remains; pagination does not keep work running.
 
 Batch result adds compact per-command state:
 
@@ -109,9 +112,9 @@ Pass:
 - same `request_id`
 - previous `next_cursor` as `cursor`
 
-Repeat with each returned `next_cursor` while status remains `running`. `shell_poll` long-polls: while work is still running it coalesces available output until the command completes, `yield_time_ms` expires, or the response token budget fills. `yield_time_ms` does not stop the command. Batch polls use the same behavior and return the same per-command `commands` summary.
+Repeat with each returned `next_cursor` while status remains `running`, or while more retained output is needed. `shell_poll` long-polls until completion or `yield_time_ms` expiry, regardless of unread output. Batch polls return the same per-command `commands` summary. `yield_time_ms` does not stop the command.
 
-Poll `yield-time_ms`: default 40 s, max 270 s (4.5 minutes). For ordinary running commands, omit it and let the default long poll return early on completion or output-budget exhaustion.
+Poll `yield_time_ms`: default 40 s, max 270 s (4.5 minutes). For ordinary running commands, omit it and let the default long poll return early on completion. Use a shorter yield to inspect intermediate output sooner.
 
 ## Shell Lifetime
 
