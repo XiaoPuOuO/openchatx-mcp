@@ -35,7 +35,7 @@ import {
 const AGENT_IDLE_TTL_MS = 30 * 60_000
 const STALE_TURN_RECOVERY_MS = 3 * 60_000
 const CLEANUP_INTERVAL_MS = 60_000
-const MAX_CONCURRENT_AGENTS = 3
+const MAX_DELEGATED_AGENTS = 3
 const CONNECT_TIMEOUT_MS = 3_000
 const MIN_INTER_TURN_DELAY_MS = 1_500
 const INTERACTION_DELAY_MS = 300
@@ -106,7 +106,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   async function askSubagent(request: ChatGptSubagentRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
     const parentAgent = getAgentIdentity()
     const scope = getScope(parentAgent)
-    await beginAgentOperation(scope, request.agentId, callContext)
+    await beginAgentOperation(parentAgent, scope, request.agentId, callContext)
     let agent: BrowserAgentState | undefined
     let operationTransferred = false
 
@@ -144,7 +144,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     const { signal } = callContext
     const parentAgent = getAgentIdentity()
     const scope = getScope(parentAgent)
-    await beginAgentOperation(scope, request.cloneId, callContext)
+    await beginAgentOperation(parentAgent, scope, request.cloneId, callContext)
     let sourcePage: Page | undefined
     let branchPage: Page | undefined
     let agent: BrowserAgentState | undefined
@@ -192,7 +192,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   async function cloneRun(request: ChatGptCloneRunRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
     const parentAgent = getAgentIdentity()
     const scope = getScope(parentAgent)
-    await beginAgentOperation(scope, request.cloneId, callContext)
+    await beginAgentOperation(parentAgent, scope, request.cloneId, callContext)
     let agent: BrowserAgentState | undefined
     let operationTransferred = false
 
@@ -457,22 +457,25 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     await connectedBrowser?.close().catch(() => undefined)
   }
 
-  async function beginAgentOperation(scope: SubagentScope, agentId: string, callContext: ChatGptSubagentCallContext): Promise<void> {
+  async function beginAgentOperation(
+    parentAgent: AgentIdentity | undefined,
+    scope: SubagentScope,
+    agentId: string,
+    callContext: ChatGptSubagentCallContext
+  ): Promise<void> {
     assertNotRateLimited()
     const agent = scope.agents.get(agentId)
     if (scope.activeOperations.has(agentId)) throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} already has an active turn.`)
     if (agent?.status === "uncertain") {
       throw new ChatGptSubagentError(
         "AGENT_BUSY",
-        `Agent ${agentId} has uncertain upstream state after recovery could not confirm completion. Use a new agent ID.`
+        `Agent ${agentId} has uncertain upstream state after recovery could not confirm completion. Use another existing agent ID, or a new ID if a delegated-agent slot is available.`
       )
     }
     if (agent && agent.status !== "idle") {
       throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} is still ${agent.status}.`)
     }
-    if (scope.activeOperations.size >= MAX_CONCURRENT_AGENTS) {
-      throw new ChatGptSubagentError("SUBAGENT_CAPACITY_REACHED", "Only 3 subagents can generate at a time. Wait for one to finish.")
-    }
+    assertDelegatedAgentSlotAvailable(parentAgent, scope, agentId)
     const operation: ActiveAgentOperation = { ...callContext }
     scope.activeOperations.set(agentId, operation)
 
@@ -616,6 +619,32 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   function persistAgent(parentAgent: AgentIdentity | undefined, agent: BrowserAgentState): void {
     if (!agent.memory || !agent.conversationUrl) return
     store?.set(parentAgent, agent.agentId, { conversationUrl: agent.conversationUrl, turnCount: agent.turnCount, kind: agent.kind })
+  }
+
+  function assertDelegatedAgentSlotAvailable(parentAgent: AgentIdentity | undefined, scope: SubagentScope, requestedAgentId: string): void {
+    const agents = new Map<string, string | undefined>()
+
+    for (const persisted of store?.list(parentAgent) ?? []) {
+      agents.set(persisted.agentId, persisted.turnCount > 0 ? `${persisted.agentId}_turn_${persisted.turnCount}` : undefined)
+    }
+    for (const agent of scope.agents.values()) {
+      const activeTurnId = scope.activeOperations.get(agent.agentId)?.turnId
+      agents.set(agent.agentId, activeTurnId ?? (agent.turnCount > 0 ? `${agent.agentId}_turn_${agent.turnCount}` : undefined))
+    }
+    for (const [agentId, operation] of scope.activeOperations) {
+      if (!agents.has(agentId)) agents.set(agentId, operation.turnId)
+    }
+
+    if (agents.has(requestedAgentId) || agents.size < MAX_DELEGATED_AGENTS) return
+
+    const existing = [...agents.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([existingAgentId, turnId]) => `${existingAgentId} (latest_turn_id=${turnId ?? "pending"})`)
+      .join(", ")
+    throw new ChatGptSubagentError(
+      "AGENT_LIMIT_REACHED",
+      `This main agent already has the maximum ${MAX_DELEGATED_AGENTS} delegated agents. Reuse one of these agent IDs: ${existing}.`
+    )
   }
 
   function assertNotRateLimited(): void {

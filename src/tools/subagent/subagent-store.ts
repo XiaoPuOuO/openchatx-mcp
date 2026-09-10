@@ -11,8 +11,13 @@ export interface PersistedSubagent {
   kind: "subagent" | "clone"
 }
 
+export interface PersistedSubagentEntry extends PersistedSubagent {
+  agentId: string
+}
+
 export interface SubagentStore {
   get(parentAgent: AgentIdentity | undefined, agentId: string): PersistedSubagent | undefined
+  list(parentAgent: AgentIdentity | undefined): PersistedSubagentEntry[]
   set(parentAgent: AgentIdentity | undefined, agentId: string, value: PersistedSubagent): void
   close(): void
 }
@@ -36,6 +41,7 @@ export function createSubagentStore(path = subagentDatabasePath()): SubagentStor
       )
     `)
     const get = db.prepare("SELECT conversation_url, turn_count, kind FROM agents WHERE parent_session_id = ? AND agent_id = ?")
+    const list = db.prepare("SELECT agent_id, conversation_url, turn_count, kind FROM agents WHERE parent_session_id = ? ORDER BY agent_id")
     const set = db.prepare(`
       INSERT INTO agents (parent_session_id, agent_id, conversation_url, turn_count, kind)
       VALUES (?, ?, ?, ?, ?)
@@ -57,6 +63,29 @@ export function createSubagentStore(path = subagentDatabasePath()): SubagentStor
           }
         } catch {
           return undefined
+        }
+      },
+      list(parentAgent) {
+        try {
+          const rows = list.all(parentAgent?.sessionId ?? "") as Array<{
+            agent_id?: unknown
+            conversation_url?: unknown
+            turn_count?: unknown
+            kind?: unknown
+          }>
+          return rows.flatMap((row) => {
+            if (typeof row.agent_id !== "string" || typeof row.conversation_url !== "string" || typeof row.turn_count !== "number") return []
+            return [
+              {
+                agentId: row.agent_id,
+                conversationUrl: row.conversation_url,
+                turnCount: row.turn_count,
+                kind: row.kind === "clone" ? "clone" : "subagent",
+              } satisfies PersistedSubagentEntry,
+            ]
+          })
+        } catch {
+          return []
         }
       },
       set(parentAgent, agentId, value) {

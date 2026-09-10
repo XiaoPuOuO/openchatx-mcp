@@ -16,7 +16,22 @@ test("persists subagent conversation state across store reopen", () => {
     const first = createSubagentStore(path)
     assert.ok(first)
     first.set(mainA, "reviewer", { conversationUrl: "https://chatgpt.com/c/example-a", turnCount: 4, kind: "subagent" })
+    first.set(mainA, "clone-a", { conversationUrl: "https://chatgpt.com/c/clone-a", turnCount: 1, kind: "clone" })
     first.set(mainB, "reviewer", { conversationUrl: "https://chatgpt.com/c/example-b", turnCount: 2, kind: "subagent" })
+    assert.deepEqual(first.list(mainA), [
+      {
+        agentId: "clone-a",
+        conversationUrl: "https://chatgpt.com/c/clone-a",
+        turnCount: 1,
+        kind: "clone",
+      },
+      {
+        agentId: "reviewer",
+        conversationUrl: "https://chatgpt.com/c/example-a",
+        turnCount: 4,
+        kind: "subagent",
+      },
+    ])
     first.close()
 
     const second = createSubagentStore(path)
@@ -31,6 +46,10 @@ test("persists subagent conversation state across store reopen", () => {
       turnCount: 2,
       kind: "subagent",
     })
+    assert.deepEqual(
+      second.list(mainB).map((agent) => agent.agentId),
+      ["reviewer"]
+    )
     second.close()
   } finally {
     rmSync(directory, { recursive: true, force: true })

@@ -39,7 +39,7 @@ The launching MCP session is retained only so a detached `agent_finished` event 
 
 For each turn `askSubagent()`:
 
-1. enforces the existing rate-limit cooldown and three-generation cap for the calling main-agent session;
+1. enforces the rate-limit cooldown and three-delegated-agent cap for the calling main-agent session;
 2. reuses the expected page, navigates a mismatched managed page to the saved conversation, or opens one replacement background page;
 3. keeps the configured inter-turn delay;
 4. installs the raw CDP turn observer before submission;
