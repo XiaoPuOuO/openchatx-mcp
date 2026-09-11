@@ -24,25 +24,25 @@ test("creates durable auth state with owner-only permissions", async (t) => {
   }
 })
 
-test("first remote access binds one subject and later access requires it", async (t) => {
+test("first tool call binds one subject and later calls require it", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-bind-")
   const auth = new ShellbyAuthStore(join(root, "auth.json"))
   await auth.ensureState()
 
-  assert.equal((await auth.authorizeRemoteAccess("subject-a")).subject, "subject-a")
-  assert.equal((await auth.authorizeRemoteAccess("subject-a")).subject, "subject-a")
+  assert.equal((await auth.authorizeToolCall("subject-a")).subject, "subject-a")
+  assert.equal((await auth.authorizeToolCall("subject-a")).subject, "subject-a")
   await assert.rejects(
-    () => auth.authorizeRemoteAccess("subject-b"),
+    () => auth.authorizeToolCall("subject-b"),
     (error: unknown) => error instanceof ShellbyAuthError && error.code === "subject_mismatch"
   )
 })
 
-test("concurrent first remote access binds exactly one subject", async (t) => {
+test("concurrent first tool calls bind exactly one subject", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-race-")
   const auth = new ShellbyAuthStore(join(root, "auth.json"))
   await auth.ensureState()
 
-  const results = await Promise.allSettled([auth.authorizeRemoteAccess("subject-a"), auth.authorizeRemoteAccess("subject-b")])
+  const results = await Promise.allSettled([auth.authorizeToolCall("subject-a"), auth.authorizeToolCall("subject-b")])
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1)
   assert.equal(results.filter((result) => result.status === "rejected").length, 1)
 })
@@ -51,7 +51,7 @@ test("reset clears the bound subject", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-reset-")
   const auth = new ShellbyAuthStore(join(root, "auth.json"))
   await auth.ensureState()
-  await auth.authorizeRemoteAccess("subject-a")
+  await auth.authorizeToolCall("subject-a")
 
   assert.deepEqual(await auth.reset(), { version: 1, subject: null })
 })

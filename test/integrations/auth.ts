@@ -39,25 +39,22 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", { 
 
   const discovery = await connectClient(running.url, "remote-discovery", undefined, true)
   t.after(() => discovery.client.close())
-  await assert.rejects(() => discovery.client.listTools(), /403|denied/i)
+  assert.ok((await discovery.client.listTools()).tools.length > 0)
   assert.equal((await authStore.readState()).subject, null)
   await assert.rejects(() => discovery.client.callTool({ name: "shell_list", arguments: {} }), /403|denied/i)
   assert.equal((await authStore.readState()).subject, null)
 
   const owner = await connectClient(running.url, "remote-owner", "subject-a", true)
   t.after(() => owner.client.close())
-  assert.ok((await owner.client.listTools()).tools.length > 0)
-  assert.equal((await authStore.readState()).subject, "subject-a")
   assert.ok((await owner.client.callTool({ name: "shell_list", arguments: {} })).content)
+  assert.equal((await authStore.readState()).subject, "subject-a")
 
   const sameOwner = await connectClient(running.url, "remote-owner-new-conversation", "subject-a", true)
   t.after(() => sameOwner.client.close())
-  assert.ok((await sameOwner.client.listTools()).tools.length > 0)
   assert.ok((await sameOwner.client.callTool({ name: "shell_list", arguments: {} })).content)
 
   const otherSubject = await connectClient(running.url, "remote-other-subject", "subject-b", true)
   t.after(() => otherSubject.client.close())
-  await assert.rejects(() => otherSubject.client.listTools(), /403|denied/i)
   await assert.rejects(() => otherSubject.client.callTool({ name: "shell_list", arguments: {} }), /403|denied/i)
 })
 
@@ -71,7 +68,7 @@ test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, as
   const remoteUrl = `http://${running.host}:${port}/mcp`
 
   const owner = await connectClient(remoteUrl, "remote-owner-before-restart", "subject-a", true)
-  assert.ok((await owner.client.listTools()).tools.length > 0)
+  await owner.client.callTool({ name: "shell_list", arguments: {} })
   await owner.client.close()
   await running.close()
 

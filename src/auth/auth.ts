@@ -65,9 +65,9 @@ export class ShellbyAuthStore {
     return state
   }
 
-  async authorizeRemoteAccess(subject: string | undefined): Promise<ShellbyAuthState> {
+  async authorizeToolCall(subject: string | undefined): Promise<ShellbyAuthState> {
     if (!isValidSubject(subject)) {
-      throw new ShellbyAuthError("subject_missing", "OpenAI subject is required for remote MCP access.")
+      throw new ShellbyAuthError("subject_missing", "OpenAI subject is required for remote tool calls.")
     }
 
     return this.withMutation(async () => {
