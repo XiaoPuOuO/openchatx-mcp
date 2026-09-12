@@ -8,7 +8,7 @@ export default defineConfig(
     ignores: ["dist/**", "node_modules/**", "vendor/**"],
   },
   {
-    files: ["src/**/*.ts", "test/**/*.ts"],
+    files: ["src/**/*.{ts,cts}", "test/**/*.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommended],
   },
   eslintConfigPrettier

@@ -1,49 +1,19 @@
 import { constants } from "node:fs"
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { parse, stringify } from "smol-toml"
+import { stringify } from "smol-toml"
+
+import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cts"
 
 const STARTER_SKILL_SOURCE = fileURLToPath(new URL("../skills/create-skill/SKILL.md", import.meta.url))
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
 
-const DEFAULT_PUBLIC_CONFIG = {
-  workspace: "~/Desktop/agent-workspace",
-  shell: {
-    path: "/bin/zsh",
-    rtk: false,
-  },
-  chatgpt: {
-    cdp_endpoint: "http://127.0.0.1:9222",
-    project_url: "https://chatgpt.com/",
-    max_delegated_agents: 3,
-  },
-  ngrok: {
-    pooling_enabled: false,
-  },
-  mcp: {
-    tool_output: "compact",
-  },
-  ui: {
-    enabled: false,
-  },
-  tools: {
-    review: true,
-    shell: true,
-    apply_patch: true,
-    clones: true,
-    subagents: true,
-    web: true,
-    skills: true,
-    image: true,
-    computer: true,
-  },
-}
-
 const CONFIG_HEADER = `# Shellby configuration.
 # All supported settings are shown below. Edit active values to customize this installation.
 # Settings without defaults are commented examples; uncomment and customize them to enable.
+# Missing settings use defaults. Invalid settings warn and fall back to defaults.
 
 `
 
@@ -94,27 +64,8 @@ export async function initializeShellbyConfig(repositoryRoot = REPOSITORY_ROOT) 
     if (error?.code !== "EEXIST") throw error
   }
 
-  const existing = parse(await readFile(configPath, "utf8"))
-  const complete = fillMissingConfig(existing, DEFAULT_PUBLIC_CONFIG)
-  const updated = JSON.stringify(existing) !== JSON.stringify(complete)
-  if (updated) await writeFile(configPath, serializeConfig(complete), "utf8")
-  return { configPath, created: false, updated }
-}
-
-function fillMissingConfig(current, defaults) {
-  if (!isRecord(current) || !isRecord(defaults)) return current ?? defaults
-
-  const complete = { ...current }
-  for (const [key, defaultValue] of Object.entries(defaults)) {
-    if (!(key in complete)) {
-      complete[key] = defaultValue
-      continue
-    }
-    if (isRecord(complete[key]) && isRecord(defaultValue)) {
-      complete[key] = fillMissingConfig(complete[key], defaultValue)
-    }
-  }
-  return complete
+  // Runtime supplies missing defaults; preserve existing comments, formatting, and values.
+  return { configPath, created: false, updated: false }
 }
 
 function isRecord(value) {

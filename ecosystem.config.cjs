@@ -1,10 +1,9 @@
 const { execFileSync } = require("node:child_process")
-const { readFileSync } = require("node:fs")
 const { join } = require("node:path")
-const { parse } = require("smol-toml")
+const { loadPublicConfig } = require("./dist/public-config.cjs")
 
 const ngrokExecutable = execFileSync("/usr/bin/which", ["ngrok"], { encoding: "utf8" }).trim()
-const shellbyConfig = parse(readFileSync(join(__dirname, ".shellby", "config.toml"), "utf8"))
+const shellbyConfig = loadPublicConfig(join(__dirname, ".shellby", "config.toml"))
 const ngrokArgs = ["http", "3333"]
 
 if (shellbyConfig.ngrok?.url) ngrokArgs.push("--url", shellbyConfig.ngrok.url)

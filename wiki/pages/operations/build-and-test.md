@@ -13,11 +13,11 @@ paths:
 
 ## Build Boundaries
 
-Backend uses Node 22.13.0+ and TypeScript ESM. `tsconfig.json` typechecks source and tests; `tsconfig.build.json` emits only `src/` into `dist/`. `npm run build` removes the previous backend output before compiling. Root Prettier and ESLint configuration govern source style; exact dependency versions belong in `package.json` and the lockfile.
+Backend uses Node 22.13.0+ and TypeScript ESM, with `src/public-config.cts` emitted as CommonJS so PM2 and the runtime share config interpretation. `tsconfig.json` typechecks source and tests; `tsconfig.build.json` emits only `src/` into `dist/`. `npm run build` removes the previous backend output before compiling. Root Prettier and ESLint configuration govern source style; exact dependency versions belong in `package.json` and the lockfile.
 
 The React dashboard has its own package, TypeScript/Vite config, dependencies, and `ui/dist` output. Root backend build/setup/start do not build it. Use `npm run ui:install`, `npm run ui:build`, or `npm run ui:dev`; see the [UI wiki](../../../ui/wiki/index.md).
 
-Fresh checkouts need `npm ci` and `npm run setup -- --config-only` before tests importing `MCP_CONFIG`. Config is required at module load. Tests should use temporary repositories for config migration and restore any process-config mutations they make.
+Fresh checkouts need `npm ci` and `npm run setup -- --config-only` before tests importing `MCP_CONFIG`. Config is required at module load. Tests should use temporary repositories for config loading and scaffolding and restore any process-config mutations they make.
 
 ## Validation Routes
 

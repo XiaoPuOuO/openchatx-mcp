@@ -3,6 +3,7 @@ summary: "Process-level architecture and request flow across Shellby's HTTP boun
 paths:
   - src/index.ts
   - src/config.ts
+  - src/public-config.cts
   - src/server/
   - src/tools/
 ---
@@ -17,7 +18,7 @@ This page maps the process-level components and follows one request from the HTT
 
 | Layer                 | Responsibility                                                                                                                                  | Implementation                           |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Static MCP config     | Require and validate the active repo-local TOML config, then define server identity, fixed limits, and global instructions                      | `src/config.ts`                          |
+| Static MCP config     | Resolve TOML overrides with shared defaults, then define server identity, runtime limits, and global instructions                      | `src/config.ts`                          |
 | Process entry         | Consume static configuration, conditionally compose enabled runtime services, handle shutdown                                                   | `src/index.ts`                           |
 | HTTP boundary         | Bind localhost, apply MCP Express HTTP guards, expose health/MCP routes, and adapt the v2 per-request MCP handler to Node                       | `src/server/http-server.ts`              |
 | Remote authentication | Persist the bound ChatGPT subject outside the repo                                                                                              | `src/auth/auth.ts`                       |
@@ -41,7 +42,7 @@ The optional `AgentObserver` connects tool execution to the local dashboard and 
 
 ## Request Lifecycle
 
-1. `src/config.ts` loads and validates the required active `.shellby/config.toml`; `src/index.ts` prepares durable/process-level state and composes only the runtime services required by enabled tool groups (`src/config.ts`, `src/index.ts`).
+1. `src/config.ts` loads `.shellby/config.toml` through the shared forgiving loader; `src/index.ts` prepares durable/process-level state and composes only the runtime services required by enabled tool groups (`src/config.ts`, `src/index.ts`).
 2. `src/server/http-server.ts` accepts an MCP request, applies the HTTP/ownership boundary, and routes it through `createMcpHandler`. The handler selects modern `2026-07-28` or stateless legacy serving and obtains a short-lived MCP server from the shared factory. See [HTTP Transport](./http-transport.md).
 3. `src/server/mcp-server.ts` registers `start_here` plus the startup-enabled model-facing tool groups; the selected capability module under `src/tools/` owns its schema, handler, result, and domain errors.
 4. Stateful capabilities retain only their intended boundary: named shells and webpage documents are process-local; Computer Use capture targets are process-local; subagent turn state is process-local while main-session-scoped conversation URL + turn count mappings persist best-effort in `~/.shellby/subagents.sqlite`. Dedicated pages document those lifecycles.

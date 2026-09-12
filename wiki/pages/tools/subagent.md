@@ -5,6 +5,7 @@ paths:
   - src/tools/subagent/chatgpt-subagent-contracts.ts
   - src/tools/subagent/chatgpt-subagent.ts
   - src/config.ts
+  - src/public-config.cts
 ---
 
 # `subagent_run` / `subagent_result`

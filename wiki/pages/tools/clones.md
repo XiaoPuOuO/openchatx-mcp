@@ -6,6 +6,7 @@ paths:
   - src/tools/subagent/chatgpt-subagent-browser.ts
   - src/tools/subagent/subagent-store.ts
   - src/config.ts
+  - src/public-config.cts
 ---
 
 # Clones

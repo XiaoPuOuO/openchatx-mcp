@@ -2,6 +2,7 @@
 summary: "MCP registration, startup prompt loading, result projection, and routing to capability contracts."
 paths:
   - src/config.ts
+  - src/public-config.cts
   - src/server/mcp-server.ts
   - src/server/tool-registration-boundary.ts
   - src/server/tool-output.ts

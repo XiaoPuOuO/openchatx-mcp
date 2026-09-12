@@ -13,3 +13,7 @@ Live validation showed that normal background Chrome works while headless Chrome
 ## 2026-08-15 — Direct conversation recovery fetch was abandoned
 
 An authenticated page-context request to `/backend-api/conversation/<conversation_id>` returned `conversation_inaccessible`, so that direct-fetch recovery approach was dropped. Recovery later converged on observed ChatGPT-owned traffic and ultimately raw-CDP turn tracking with bounded catastrophic recovery. Avoid reintroducing the direct page-context fetch without fresh evidence that the private endpoint behavior changed.
+
+## 2026-09-12 — Config upgrades preserve existing operator choices
+
+Making a newly exposed setting required broke existing configurations. Public settings now resolve omitted defaults at load time and recover invalid values individually, so adding an option does not require a file migration. Setup leaves existing files intact to preserve comments and alternate TOML layouts. Whole-file fallback for malformed syntax was deliberately excluded: it could silently discard disabled tool groups or a reserved tunnel URL. Runtime, scaffold defaults, and PM2/ngrok must share the same interpretation.

@@ -3,6 +3,7 @@ summary: "Default coding workspace behavior and the dynamic reusable-skill catal
 paths:
   - src/tools/skills.ts
   - src/config.ts
+  - src/public-config.cts
   - src/tools/start-here/
   - scripts/workspace-setup.mjs
   - scripts/start.mjs
@@ -19,7 +20,7 @@ This page documents the configured coding workspace and dynamic skill catalog.
 
 ## Default Workspace
 
-`.shellby/config.toml` supplies `MCP_CONFIG.workspace`; the setup-generated active value is `~/Desktop/agent-workspace`. `src/config.ts` expands `~` and resolves relative paths from the repository root; the resolved workspace becomes the initial shell cwd and workspace-relative tool root. `npm run setup -- --config-only` creates or migrates the complete repo-local config without other setup side effects. Full `npm run setup` performs the same migration before loading runtime configuration, then creates the workspace recursively, creates a starter `AGENTS.md` only when absent, and copies the repository's `create-skill` starter into `<workspace>/skills/create-skill/SKILL.md` only when absent. Re-running setup preserves customized values, instructions, and starter skill files. Managed `npm start` requires the config and workspace to already exist and directs missing-config/workspace callers to run setup; `src/index.ts` assumes that bootstrap has already happened. This is a convention, not a sandbox (`src/config.ts`, `src/index.ts`, `scripts/setup.mjs`, `scripts/start.mjs`, `scripts/workspace-setup.mjs`, `skills/create-skill/SKILL.md`, `test/setup-workspace.test.ts`).
+`.shellby/config.toml` supplies `MCP_CONFIG.workspace`; the setup-generated active value is `~/Desktop/agent-workspace`. `src/config.ts` expands `~` and resolves relative paths from the repository root; the resolved workspace becomes the initial shell cwd and workspace-relative tool root. `npm run setup -- --config-only` creates the complete repo-local config only when missing and otherwise preserves the file. Missing fields default at load time. Full `npm run setup` uses the same create-only path before loading runtime configuration, then creates the workspace recursively, creates a starter `AGENTS.md` only when absent, and copies the repository's `create-skill` starter into `<workspace>/skills/create-skill/SKILL.md` only when absent. Re-running setup preserves customized values, instructions, and starter skill files. Managed `npm start` requires the config and workspace to already exist and directs missing-config/workspace callers to run setup; `src/index.ts` assumes that bootstrap has already happened. This is a convention, not a sandbox (`src/config.ts`, `src/index.ts`, `scripts/setup.mjs`, `scripts/start.mjs`, `scripts/workspace-setup.mjs`, `skills/create-skill/SKILL.md`, `test/setup-workspace.test.ts`).
 
 ## Workspace Skills
 

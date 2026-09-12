@@ -1,11 +1,12 @@
-import { existsSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { parse } from "smol-toml"
-import { z } from "zod"
+import { loadPublicConfig } from "./public-config.cjs"
+
+export { loadPublicConfig, type ToolOutputFormat } from "./public-config.cjs"
 
 const packageMetadata = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
 const packageVersion = typeof packageMetadata.version === "string" ? packageMetadata.version : undefined
@@ -13,91 +14,6 @@ if (!packageVersion) throw new Error("package.json is missing a valid version.")
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
 const bundledPeekabooExecutable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
-const defaultConfigPath = fileURLToPath(new URL("../.shellby/config.toml", import.meta.url))
-const DEFAULT_CHATGPT_PROJECT_URL = "https://chatgpt.com"
-const httpUrl = z.url().refine((value) => value.startsWith("http://") || value.startsWith("https://"), "URL must use http or https")
-const cdpEndpoint = httpUrl.refine((value) => {
-  const url = new URL(value)
-  const managedLocal = url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost")
-  return !managedLocal || url.port.length > 0
-}, "Local CDP endpoint must include an explicit port")
-
-const toolOutputFormatSchema = z.enum(["compact", "structured"])
-export type ToolOutputFormat = z.infer<typeof toolOutputFormatSchema>
-
-const ngrokConfigSchema = z
-  .object({
-    url: httpUrl.optional(),
-    pooling_enabled: z.boolean().default(false),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.pooling_enabled && !value.url) {
-      context.addIssue({
-        code: "custom",
-        path: ["url"],
-        message: "ngrok.url is required when ngrok.pooling_enabled is true",
-      })
-    }
-  })
-
-const publicConfigSchema = z
-  .object({
-    workspace: z.string().trim().min(1),
-    shell: z
-      .object({
-        path: z.string().trim().min(1),
-        rtk: z.boolean(),
-      })
-      .strict(),
-    chatgpt: z
-      .object({
-        cdp_endpoint: cdpEndpoint,
-        project_url: httpUrl.default(DEFAULT_CHATGPT_PROJECT_URL),
-        max_delegated_agents: z.number().int().positive(),
-      })
-      .strict(),
-    ngrok: ngrokConfigSchema.optional(),
-    mcp: z.object({ tool_output: toolOutputFormatSchema }).strict(),
-    ui: z.object({ enabled: z.boolean() }).strict(),
-    tools: z
-      .object({
-        review: z.boolean(),
-        shell: z.boolean(),
-        apply_patch: z.boolean(),
-        clones: z.boolean(),
-        subagents: z.boolean(),
-        web: z.boolean(),
-        skills: z.boolean(),
-        image: z.boolean(),
-        computer: z.boolean(),
-      })
-      .strict(),
-  })
-  .strict()
-
-type ShellbyPublicConfig = z.infer<typeof publicConfigSchema>
-
-export function loadPublicConfig(path = defaultConfigPath): ShellbyPublicConfig {
-  if (!existsSync(path)) {
-    throw new Error(`Shellby config is missing at ${path}. Run \`npm run setup\` first.`)
-  }
-
-  let value: unknown
-  try {
-    value = parse(readFileSync(path, "utf8"))
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Invalid Shellby config at ${path}: ${message}`, { cause: error })
-  }
-
-  const parsed = publicConfigSchema.safeParse(value)
-  if (!parsed.success) {
-    throw new Error(`Invalid Shellby config at ${path}: ${z.prettifyError(parsed.error)}`)
-  }
-  return parsed.data
-}
-
 const publicConfig = loadPublicConfig()
 const rtkExecutable = resolvePathExecutable("rtk")
 
@@ -200,8 +116,6 @@ function resolvePathExecutable(name: string): string | undefined {
 }
 
 export function buildMcpInstructions(): string {
-  return `# Shellby MCP
-
-- Call start_here exactly once per conversation before using other Shellby tools.
+  return `# Shellby MCP\n\nThis MCP acts as a connector to a fully permissioned macOS machine. This is normally a personal Mac, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other Shellby tools.
 - Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.`
 }

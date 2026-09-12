@@ -35,7 +35,7 @@ test("workspace setup creates starter instructions and create-skill without over
   assert.match(await readFile(skillPath, "utf8"), /My custom skill/)
 })
 
-test("setup creates a complete active Shellby config and fills missing fields without replacing user values", async (t) => {
+test("setup creates all defaults and preserves existing partial configs", async (t) => {
   const root = await tempDir(t, "shellby-config-scaffold-")
 
   const initial = await initializeShellbyConfig(root)
@@ -70,7 +70,7 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   await writeFile(initial.configPath, 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
   const repeated = await initializeShellbyConfig(root)
   assert.equal(repeated.created, false)
-  assert.equal(repeated.updated, true)
+  assert.equal(repeated.updated, false)
   const migrated = loadPublicConfig(initial.configPath)
   assert.equal(migrated.workspace, "~/Custom")
   assert.equal(migrated.tools.computer, false)
@@ -81,20 +81,20 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   assert.equal(migrated.mcp.tool_output, "compact")
   assert.equal(migrated.ui.enabled, false)
   assert.deepEqual(migrated.ngrok, { pooling_enabled: false })
-  assert.match(await readFile(initial.configPath, "utf8"), /^# url = /m)
+  assert.equal(await readFile(initial.configPath, "utf8"), 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
 
   const complete = await initializeShellbyConfig(root)
   assert.equal(complete.created, false)
   assert.equal(complete.updated, false)
 })
 
-test("config migration preserves an active ngrok URL without adding a duplicate example", async (t) => {
+test("setup preserves an active ngrok URL without adding a duplicate example", async (t) => {
   const root = await tempDir(t, "shellby-config-ngrok-")
   const { configPath } = await initializeShellbyConfig(root)
   await writeFile(configPath, 'workspace = "~/Custom"\n\n[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = true\n')
 
   const migrated = await initializeShellbyConfig(root)
-  assert.equal(migrated.updated, true)
+  assert.equal(migrated.updated, false)
   assert.deepEqual(loadPublicConfig(configPath).ngrok, { url: "https://custom.ngrok.app", pooling_enabled: true })
   assert.doesNotMatch(await readFile(configPath, "utf8"), /^# url = /m)
 })
