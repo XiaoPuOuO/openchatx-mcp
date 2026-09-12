@@ -21,8 +21,6 @@ summary: "Concise description of this page."
 paths:
   - src/related-files/
   - src/related-file.ts
-read_more:
-  - pages/related-wiki-page.md
 ---
 
 [content]

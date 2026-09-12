@@ -2,64 +2,67 @@
   "version": 1,
   "pages": {
     "pages/architecture-map.md": {
-      "fingerprint": "sha256:cb1ef20f9bc421eed97fdac17a00cb9c00ecd517f2be6b6ac9e2e12cb587aa99"
+      "fingerprint": "sha256:bff22788604208aeded3cfc47591e6ba07fd64fd59487fd6399e21682da8ca15"
     },
     "pages/computer-use.md": {
       "fingerprint": "sha256:f09a8e4dbd4a8f22f95f64853ee2aa6c435f3893e680324aa52fe027bde90cf3"
     },
     "pages/http-transport.md": {
-      "fingerprint": "sha256:c7f4992b4b68eef10a11b2351b1256521bcdcff995de80f219ab5b4dbac2ba72"
+      "fingerprint": "sha256:eecbddc97c8cd7cacf9b594faac983b77a9ce8ec4d66a8cdd68ff215759c26d6"
     },
     "pages/mcp-tool-surface.md": {
-      "fingerprint": "sha256:47ee99a36d504a7694624cdb76f1d79480c494bac1743276640d065a66c2fe29"
+      "fingerprint": "sha256:bd92807350aa4664261bed4cddfc14000d338203f09bf43b23ebf667b7978a7a"
     },
     "pages/operations/audit-logging.md": {
-      "fingerprint": "sha256:a999d262de22aab08f1e43e26776155960bd7ab2ce66d27ec185189a15527d56"
+      "fingerprint": "sha256:8e44d3c8605e387caae5a3f7453b8bf5b81b6f5cfff96ab4072a3b584ad69fee"
     },
     "pages/operations/build-and-test.md": {
-      "fingerprint": "sha256:761f48151f4bbce77384bf00993de91470f8d0b64179f39f72af13d9daf065d7"
+      "fingerprint": "sha256:da425cfd43d4e1f4a424eabcae278c3b02253040da8241540018f7bb0ccd9fca"
     },
     "pages/operations/configuration-and-startup.md": {
-      "fingerprint": "sha256:5e1ad926f7c46fb8028095b4db721791f384efcfb2b3317754d1d1a3fc0eb847"
+      "fingerprint": "sha256:fd93f326a33d4870db37a7a30d0e2da36a384928d04cee4bf8b0a982d5aae5b6"
     },
     "pages/operations/secret-handling.md": {
-      "fingerprint": "sha256:287d62220386d57ae3c6ae4384fd3064d5bafc64179332ece9592c712ee08307"
+      "fingerprint": "sha256:45dea3a4f73ef57419ecc4aa7f925da8b72069960273a7a3871b790baad68fde"
     },
     "pages/persistent-shell-runtime.md": {
-      "fingerprint": "sha256:735c1fe02235b5c985d753f4e82e067855fae4832c0c6cc32c556aacaf18e73c"
+      "fingerprint": "sha256:40c04c99284c01fe721fc09a24db30732f95ecfa91254c79699463a03e2c5e52"
     },
     "pages/project/open-questions-and-risks.md": {
-      "fingerprint": "sha256:1c7b45e383d332634cbc978883aabcec7c537989c047227402953cb1fe4df62b"
-    },
-    "pages/project/roadmap.md": {
-      "fingerprint": "sha256:b15706871662456a02b6f93bad152aeb063cfb4c6103085fdbd65937bf1324de"
+      "fingerprint": "sha256:027665a0be7f7ee941f8a466092d6ecb8e7316a129d3949699f306b1928a4a95"
     },
     "pages/subagents/browser-chatgpt-subagents.md": {
-      "fingerprint": "sha256:abde3d7c603d7ef72cfd4f49fa258c7d94cd9aa2834032829e1f237da7cd8301"
+      "fingerprint": "sha256:dd1fb67c71c89dc4910c6a5c25b6316aa023b17dd6cedd9fa15abf4230cebc91"
     },
     "pages/subagents/chatgpt-cdp-transport.md": {
-      "fingerprint": "sha256:af4c927963990b323b5f1faa2f928a65f0ddb50159afa0a90d94f0904ff954d9"
+      "fingerprint": "sha256:15ff575d837d7c6ffac5c643789af6965d1694845a1b06c9f7a29c7b6e340510"
     },
     "pages/subagents/subagent-completion.md": {
-      "fingerprint": "sha256:c004a1500ebacc1a0a095e50eabf8567a3d7ad152d16ae4600ebd812963a9ed0"
+      "fingerprint": "sha256:faa46b7d5e26085ba100a0ece3bfee6b00e7ad07ed82cc8903ce68f18422990a"
     },
     "pages/subagents/subagent-tracking.md": {
-      "fingerprint": "sha256:51f58adb652203f74aa169f407edead0a691c8c5bedf6c6c441424daf9f6a3ae"
+      "fingerprint": "sha256:4202ba62a9c6246565fa3d12b590cf603e84a4a832bcd0d055f9b379363d898a"
     },
     "pages/tool-naming-and-schema-design.md": {
-      "fingerprint": "sha256:775af48d644a19a242f68c3871aebeddc6670091c4839487c743815b1c616477"
+      "fingerprint": "sha256:b22abdd4e82d74afba525b8c3b0109fe1d198cb5865c3956daf411562c799b4c"
     },
     "pages/tools/apply-patch.md": {
       "fingerprint": "sha256:4c3406a671f3e6ef42bb9ea185d1efa482044a14a034d81c39452b4b47853d1e"
+    },
+    "pages/tools/clones.md": {
+      "fingerprint": "sha256:faa03f46419a702d7b5837a6619a39d6b2a00b95438d24aa3da26cd12296fb9c"
+    },
+    "pages/tools/fetch-url.md": {
+      "fingerprint": "sha256:126ca24e7299c91452d2305e53533ec511ac2d2f80abffce527f4b5dd902d1fd"
     },
     "pages/tools/shell-run.md": {
       "fingerprint": "sha256:7f506ee5436e66cb8505be8325089b5686b5dc40a67cea0445b851cf22f3880c"
     },
     "pages/tools/subagent.md": {
-      "fingerprint": "sha256:4a8a5f342ea37dfb35ac4826b78166170fb5d9e7ba041b71a6725f9e2d5f834f"
+      "fingerprint": "sha256:f9d67c298319058a4b8f161aa1b0a0e13013b884bf8cae6c89fdeba1b29c6dd7"
     },
     "pages/workspace-tooling.md": {
-      "fingerprint": "sha256:28510faec4534aca399c7b76bbf7c7182db060968298dbc8abbf50f5b671517c"
+      "fingerprint": "sha256:c64d6bc964ad322e8947cf2cb3d5b1203188bc1df55f7ba5a4e1916bd052fd1f"
     }
   }
 }

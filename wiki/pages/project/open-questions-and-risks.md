@@ -28,6 +28,9 @@ This page is the maintenance lint target for current trust, resource, external-i
 - **Ephemeral observation targets:** screenshot IDs and their capture-target mappings live only in process memory, are capped at 64, and disappear on restart or eviction. Coordinate actions fail closed when the mapping is unavailable, so callers must observe again (`src/tools/computer/peekaboo.ts`, `src/tools/computer/computer-tools.ts`).
 - **Coordinate interpretation:** screen captures require display-origin translation, while app/window clicks use screenshot-relative coordinates with an explicit capture target. Multi-display layout or upstream bounds changes are important real-CLI regression cases (`src/tools/computer/peekaboo.ts`, `src/tools/computer/computer-tools.ts`, `test/peekaboo.test.ts`).
 
+- **Delegated-ID capacity is per caller:** the configured cap counts saved and live IDs, not total sessions or a process-wide running-turn semaphore. Existing IDs remain reusable after lowering the cap. See [Subagent contract](../tools/subagent.md).
+- **Dashboard is local operational authority:** with `ui.enabled`, observer history can expose call inputs and steering can affect agent work. The ngrok policy does not expose `/ui`; preserve that boundary. Snapshot/SSE and queued instructions are process-local. See [HTTP Transport](../http-transport.md).
+
 ## Intentional Unenforced Conventions
 
 - The workspace location is prompt guidance and an initial cwd, not a filesystem boundary (`src/index.ts`, `src/server/mcp-server.ts`).

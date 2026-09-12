@@ -1,5 +1,5 @@
 ---
-summary: "Caller-facing contracts for Shellby MCP's core shell, patch, and subagent tools."
+summary: "Caller-facing contracts for shell execution, patching, browser delegation, clones, and resource fetching."
 ---
 # Tools
 
@@ -8,3 +8,5 @@ summary: "Caller-facing contracts for Shellby MCP's core shell, patch, and subag
 - [`apply_patch`](./apply-patch.md) — Caller-facing apply_patch grammar, execution model, partial-failure behavior, result summaries, limits, and tested semantics.
 - [`shell_run` / `shell_poll`](./shell-run.md) — Caller-facing shell_run and shell_poll contract for persistent state, batches, polling, output retention, and lifecycle behavior.
 - [`subagent_run` / `subagent_result`](./subagent.md) — Caller-facing subagent_run and subagent_result contract for delegation, continuity, capacity, polling, completion, and failures.
+- [Clones](./clones.md) — Clone branching, shared delegated-ID ownership, persistence, and reuse through the ChatGPT agent runtime.
+- [fetch_url](./fetch-url.md) — Browser-backed fetch_url handling for HTML, PDFs, images, raw resources, and retained document pagination.

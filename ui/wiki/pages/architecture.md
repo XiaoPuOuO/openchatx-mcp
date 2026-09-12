@@ -2,6 +2,7 @@
 summary: "Dashboard data flow, component ownership, API boundary, steering behavior, and tool-call inspection."
 paths:
   - src/App.tsx
+  - vite.config.ts
   - src/hooks/useAgents.ts
   - src/lib/api.ts
   - src/types.ts
@@ -17,6 +18,8 @@ paths:
 ## Data Flow
 
 `useAgents` starts one `GET /ui/api/agents` snapshot and opens `EventSource("/ui/api/events")` concurrently. Snapshot merge keeps any newer agent values already received through SSE. Each `agent_changed` event replaces that agent in place by ID; newly observed agents append. The initial snapshot determines card order so concurrent activity does not make agent cards trade positions while the dashboard is being watched.
+
+SSE reconnect does not fetch another snapshot or replay missed events. An agent unchanged after reconnection may remain stale until a later event or page refresh. Preserve the initial snapshot/SSE merge when changing startup behavior.
 
 Browser types in `src/types.ts` mirror observer snapshots: agent identity/task slug, current call, recent calls, and steering instructions. Keep changes aligned with server observer payloads in root repo `src/server/agent-observer.ts`.
 
