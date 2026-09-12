@@ -50,18 +50,18 @@ The recorder redacts sensitive request headers and token-like URL query values, 
 
 ## Production Choice
 
-Subagents use one CDP observer after submission. It feeds the same tracker from either HTTP SSE or WebSocket turn data:
+Subagents install one CDP observer before submission so early turn events cannot be missed. It feeds the same tracker from either HTTP SSE or WebSocket turn data:
 
 ```text
 browser UI -> submit prompt
 raw CDP HTTP/WS -> bind exact prompt -> reconstruct final assistant -> complete local turn
 ```
 
-The DOM remains necessary for composer interaction only. It is not a completion or recovery source; the one-shot catastrophic recovery uses saved conversation JSON or another CDP observation.
+The DOM remains necessary for composer interaction only. It is not a completion or recovery source; the one-shot catastrophic recovery uses the conversation JSON captured during one recovery navigation, without a second turn observer.
 
 ## Rate-limit Finding
 
-Earlier probes showed that extra conversation-history/reload traffic could contribute to ChatGPT's conversation-history rate limit. The runtime performs no normal conversation-history fetch, `stream_status` request, or reload. It permits one conversation navigation/history response only after a submitted turn fails or reaches 30 minutes without progress. The existing UI modal detection, cooldown, inter-turn delay, interaction delays, and pre-submit grace remain.
+Earlier probes showed that extra conversation-history/reload traffic could contribute to ChatGPT's conversation-history rate limit. The runtime performs no normal conversation-history fetch, `stream_status` request, or reload. It permits one conversation navigation/history response after observer/page failure or three minutes without bound progress for a memory-backed turn. A separate 30-minute no-progress cutoff remains for other active turns. See [Subagent Completion](./subagent-completion.md). The existing UI modal detection, cooldown, inter-turn delay, interaction delays, and pre-submit grace remain.
 
 ChatGPT's own frontend may still issue its own bootstrap/history traffic; the runtime cannot prevent upstream client behavior.
 

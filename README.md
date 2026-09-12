@@ -77,7 +77,7 @@ Google Chrome is optional and is used for browser-backed subagents. Computer Use
    npm run setup -- --config-only
    ```
 
-   Review `.shellby/config.toml` and edit any values you want to customize. The generated file is complete and active; Shellby does not merge hidden defaults into it.
+   Review `.shellby/config.toml` and edit any values you want to customize. The generated file shows every supported setting: defaults are active, and settings without defaults are commented examples.
 
 4. Run guided setup:
 
@@ -182,7 +182,7 @@ npm start
 
 ## Configuration
 
-Shellby's public configuration is the gitignored `.shellby/config.toml`. `npm run setup` creates a complete active config for new installations and fills newly introduced fields on later setup runs while preserving existing user values. Every user-configurable Shellby value is read from this file.
+Shellby's public configuration is the gitignored `.shellby/config.toml`. `npm run setup` creates a config showing every supported setting for new installations, with defaults active and the optional `ngrok.url` shown as a commented example. Uncomment and customize that URL to use a reserved ngrok endpoint; leaving it commented lets ngrok assign the public URL. Later setup runs fill newly introduced default fields while preserving existing user values; already-complete files are left untouched. Every user-configurable Shellby value is read from this file.
 
 The TOML surface currently owns the workspace, shell path, ChatGPT CDP/project routing, MCP tool-output format, and startup-static tool groups. The generated config enables every tool group and defaults tool output to `compact`. Setting a group to `false` removes those tools from `tools/list` after Shellby restarts and skips its supporting runtime service where one exists. `start_here` is always published. For example, this customization disables browser-backed agents and Computer Use:
 
@@ -196,6 +196,7 @@ rtk = false
 [chatgpt]
 cdp_endpoint = "http://127.0.0.1:9222"
 project_url = "https://chatgpt.com/"
+max_delegated_agents = 3
 
 [mcp]
 tool_output = "compact"
@@ -211,6 +212,8 @@ skills = true
 image = true
 computer = false
 ```
+
+`chatgpt.max_delegated_agents` sets the maximum number of delegated agent IDs per main-agent session, shared by subagents and clones. It defaults to `3` and must be a positive integer. Saved agents and in-flight creations count toward the limit; existing IDs remain reusable even if the limit is lowered. The per-call batch limit remains three. Run `npm run setup -- --config-only` to add the setting to an existing config, then restart Shellby after changing its value.
 
 `mcp.tool_output` controls the representation used for ordinary tool results. `compact` is optimized for model context and omits public output schemas; `structured` preserves each tool's structured result and output schema for MCP clients that use them. Computer Use and `image_view` keep their native MCP content in either mode. Changing this setting requires a Shellby restart.
 

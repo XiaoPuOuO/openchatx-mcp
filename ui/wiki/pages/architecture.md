@@ -16,7 +16,7 @@ paths:
 
 ## Data Flow
 
-`useAgents` performs one `GET /ui/api/agents` snapshot, then opens `EventSource("/ui/api/events")`. Each `agent_changed` event replaces that agent in place by ID; newly observed agents append. The initial snapshot determines card order so concurrent activity does not make agent cards trade positions while the dashboard is being watched.
+`useAgents` starts one `GET /ui/api/agents` snapshot and opens `EventSource("/ui/api/events")` concurrently. Snapshot merge keeps any newer agent values already received through SSE. Each `agent_changed` event replaces that agent in place by ID; newly observed agents append. The initial snapshot determines card order so concurrent activity does not make agent cards trade positions while the dashboard is being watched.
 
 Browser types in `src/types.ts` mirror observer snapshots: agent identity/task slug, current call, recent calls, and steering instructions. Keep changes aligned with server observer payloads in root repo `src/server/agent-observer.ts`.
 
@@ -51,4 +51,4 @@ Do not derive operational truth from pixel-room queue. Room intentionally lags f
 
 ## Server Boundary
 
-Backend routes and static serving live in root repo `src/server/http-server.ts`. Tool observation and steering delivery live in `src/server/agent-observer.ts` and `src/server/tool-registration-boundary.ts`.
+Backend routes and static serving live in root repo `src/server/http-server.ts`. Server configuration and local-only exposure are documented in [HTTP Transport](../../../wiki/pages/http-transport.md). Tool observation and steering delivery live in `src/server/agent-observer.ts` and `src/server/tool-registration-boundary.ts`.

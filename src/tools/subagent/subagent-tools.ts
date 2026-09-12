@@ -4,7 +4,7 @@ import { z } from "zod"
 import { MCP_CONFIG } from "../../config.js"
 import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
 
-const SUBAGENT_RUN_DELAYS_MS = [0, 5_000, 7_000] as const
+const SUBAGENT_RUN_DELAYS_MS = [1_000, 5_000, 7_000] as const
 
 const subagentInputSchema = z.object({
   agent_id: z

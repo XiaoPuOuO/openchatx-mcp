@@ -2,6 +2,8 @@
 summary: "Default coding workspace behavior and the dynamic reusable-skill catalog exposed through skill_list and skill_load."
 paths:
   - src/tools/skills.ts
+  - src/config.ts
+  - src/tools/start-here/
   - scripts/workspace-setup.mjs
   - scripts/start.mjs
   - skills/create-skill/SKILL.md
@@ -17,11 +19,11 @@ This page documents the configured coding workspace and dynamic skill catalog.
 
 ## Default Workspace
 
-`.shellby/config.toml` supplies `MCP_CONFIG.workspace`; the setup-generated active value is `~/Desktop/agent-workspace`. `src/config.ts` expands `~` and resolves relative paths from the repository root; the resolved workspace becomes the initial shell cwd, advertised `AGENTS.md`, and workspace-relative tool root. `npm run setup -- --config-only` creates or migrates the complete repo-local config without other setup side effects. Full `npm run setup` performs the same migration before loading runtime configuration, then creates the workspace recursively, creates a starter `AGENTS.md` only when absent, and copies the repository's `create-skill` starter into `<workspace>/skills/create-skill/SKILL.md` only when absent. Re-running setup preserves customized values, instructions, and starter skill files. Managed `npm start` requires the config and workspace to already exist and directs missing-config/workspace callers to run setup; `src/index.ts` assumes that bootstrap has already happened. This is a convention, not a sandbox (`src/config.ts`, `src/index.ts`, `scripts/setup.mjs`, `scripts/start.mjs`, `scripts/workspace-setup.mjs`, `skills/create-skill/SKILL.md`, `test/setup-workspace.test.ts`).
+`.shellby/config.toml` supplies `MCP_CONFIG.workspace`; the setup-generated active value is `~/Desktop/agent-workspace`. `src/config.ts` expands `~` and resolves relative paths from the repository root; the resolved workspace becomes the initial shell cwd and workspace-relative tool root. `npm run setup -- --config-only` creates or migrates the complete repo-local config without other setup side effects. Full `npm run setup` performs the same migration before loading runtime configuration, then creates the workspace recursively, creates a starter `AGENTS.md` only when absent, and copies the repository's `create-skill` starter into `<workspace>/skills/create-skill/SKILL.md` only when absent. Re-running setup preserves customized values, instructions, and starter skill files. Managed `npm start` requires the config and workspace to already exist and directs missing-config/workspace callers to run setup; `src/index.ts` assumes that bootstrap has already happened. This is a convention, not a sandbox (`src/config.ts`, `src/index.ts`, `scripts/setup.mjs`, `scripts/start.mjs`, `scripts/workspace-setup.mjs`, `skills/create-skill/SKILL.md`, `test/setup-workspace.test.ts`).
 
 ## Workspace Skills
 
-Reusable agent workflows live under `<workspace>/skills/<name>/SKILL.md`. `skill_list` scans that directory on every call and returns the directory name plus frontmatter description when present; `skill_load` validates one returned name and returns its complete instructions plus local `SKILL.md` path. Skills are therefore dynamic data rather than MCP schema entries, so adding or removing a skill does not require rebuilding the server (`src/tools/skills.ts`, `src/server/mcp-server.ts`).
+Reusable agent workflows live under `<workspace>/skills/<name>/SKILL.md`. `skill_list` scans that directory on every call and returns the directory name plus frontmatter description when present; `skill_load` validates one returned name and returns its complete instructions plus local `SKILL.md` path. Repeated loads of the same skill by the same `AgentIdentity` within five seconds reuse the pending load and return a short reuse notice; failed loads remain retryable. Callers without session identity are not deduplicated. Skills are therefore dynamic data rather than MCP schema entries, so adding or removing a skill does not require rebuilding the server (`src/tools/skills.ts`, `src/server/mcp-server.ts`).
 
 The maintainer workspace catalog is intentionally not enumerated here because it is dynamic and can change without a Shellby rebuild. Directory symlinks are supported, so selected shared skills can stay single-sourced while still appearing under `<workspace>/skills` (`src/tools/skills.ts`, `test/skills.test.ts`).
 

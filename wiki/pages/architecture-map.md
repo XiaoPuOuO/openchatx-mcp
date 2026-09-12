@@ -2,6 +2,7 @@
 summary: "Process-level architecture and request flow across Shellby's HTTP boundary, shared runtime services, and capability handlers."
 paths:
   - src/index.ts
+  - src/config.ts
   - src/server/
   - src/tools/
 ---
@@ -33,8 +34,10 @@ This page maps the process-level components and follows one request from the HTT
 | Apply Patch           | Publish the first-class patch tool and execute the checked-in vendored binary directly                                                          | `src/tools/apply-patch/apply-patch.ts`   |
 | Skill catalog         | Discover and load reusable workspace `SKILL.md` files dynamically                                                                               | `src/tools/skills.ts`                    |
 | Website fetching      | Produce Markdown, cleaned HTML, or raw rendered HTML and retain bounded cursor-addressed documents                                              | `src/tools/web/web-open.ts`              |
-| ChatGPT subagents     | Attach to authenticated Chrome, keep one project-aware page per agent, run up to three detached generations, and complete from CDP turn streams | `src/tools/subagent/chatgpt-subagent.ts` |
+| ChatGPT subagents     | Attach to authenticated Chrome, keep one project-aware page per agent, enforce the configured delegated-agent cap (default three), and complete from CDP turn streams | `src/tools/subagent/chatgpt-subagent.ts` |
 | Subagent store        | Persist best-effort `agent_id` -> conversation URL + turn count mappings outside the repository                                                 | `src/tools/subagent/subagent-store.ts`   |
+
+The optional `AgentObserver` connects tool execution to the local dashboard and queued human instructions. It is composed only when `ui.enabled`; static UI builds and presentation details belong to the [UI wiki](../../ui/wiki/index.md). [HTTP Transport](./http-transport.md) owns its local exposure boundary.
 
 ## Request Lifecycle
 

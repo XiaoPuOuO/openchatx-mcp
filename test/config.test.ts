@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+// @ts-expect-error scripts are plain ESM entrypoints without declaration files.
+import { initializeShellbyConfig } from "../scripts/workspace-setup.mjs"
 import { loadPublicConfig } from "../src/config.js"
 
 test("loads and validates Shellby TOML config", async (t) => {
@@ -22,6 +24,7 @@ test("loads and validates Shellby TOML config", async (t) => {
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1:9222"',
       'project_url = "https://chatgpt.com/"',
+      "max_delegated_agents = 5",
       "",
       "[ngrok]",
       'url = "https://shellby.ngrok.app"',
@@ -49,7 +52,7 @@ test("loads and validates Shellby TOML config", async (t) => {
   assert.deepEqual(loadPublicConfig(path), {
     workspace: "~/Work",
     shell: { path: "/bin/zsh", rtk: false },
-    chatgpt: { cdp_endpoint: "http://127.0.0.1:9222", project_url: "https://chatgpt.com/" },
+    chatgpt: { cdp_endpoint: "http://127.0.0.1:9222", project_url: "https://chatgpt.com/", max_delegated_agents: 5 },
     ngrok: { url: "https://shellby.ngrok.app", pooling_enabled: true },
     mcp: { tool_output: "structured" },
     ui: { enabled: true },
@@ -84,6 +87,7 @@ test("ignores TOML comments and defaults omitted chatgpt.project_url", async (t)
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1:9222"',
       '# project_url = "https://chatgpt.com/g/example/project"',
+      "max_delegated_agents = 3",
       "",
       "[mcp]",
       'tool_output = "compact"',
@@ -148,6 +152,7 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1"',
       'project_url = "https://chatgpt.com/"',
+      "max_delegated_agents = 5",
       "[mcp]",
       'tool_output = "compact"',
       "[ui]",
@@ -176,6 +181,7 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
       "[chatgpt]",
       'cdp_endpoint = "http://127.0.0.1:9222"',
       'project_url = "https://chatgpt.com/"',
+      "max_delegated_agents = 5",
       "[mcp]",
       'tool_output = "verbose"',
       "[ui]",
@@ -193,4 +199,27 @@ test("rejects malformed TOML and unknown public config keys", async (t) => {
     ].join("\n")
   )
   assert.throws(() => loadPublicConfig(path), /compact|structured/)
+})
+
+test("requires a positive integer delegated-agent limit and preserves configured limits during setup", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "shellby-config-agent-limit-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const { configPath } = await initializeShellbyConfig(root)
+  const template = await readFile(configPath, "utf8")
+
+  for (const invalid of ["0", "-1", "1.5", '"3"', "true", "inf", "nan"]) {
+    await writeFile(configPath, template.replace("max_delegated_agents = 3", `max_delegated_agents = ${invalid}`))
+    assert.throws(() => loadPublicConfig(configPath), /max_delegated_agents/)
+  }
+
+  await writeFile(configPath, template.replace("max_delegated_agents = 3", ""))
+  assert.throws(() => loadPublicConfig(configPath), /max_delegated_agents/)
+  assert.equal((await initializeShellbyConfig(root)).updated, true)
+  assert.equal(loadPublicConfig(configPath).chatgpt.max_delegated_agents, 3)
+
+  for (const limit of [1, 5]) {
+    await writeFile(configPath, template.replace("max_delegated_agents = 3", `max_delegated_agents = ${limit}`).replace("rtk = false", ""))
+    assert.equal((await initializeShellbyConfig(root)).updated, true)
+    assert.equal(loadPublicConfig(configPath).chatgpt.max_delegated_agents, limit)
+  }
 })

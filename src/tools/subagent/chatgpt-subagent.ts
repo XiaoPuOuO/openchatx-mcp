@@ -35,7 +35,6 @@ import {
 const AGENT_IDLE_TTL_MS = 30 * 60_000
 const STALE_TURN_RECOVERY_MS = 3 * 60_000
 const CLEANUP_INTERVAL_MS = 60_000
-const MAX_DELEGATED_AGENTS = 3
 const CONNECT_TIMEOUT_MS = 3_000
 const MIN_INTER_TURN_DELAY_MS = 1_500
 const INTERACTION_DELAY_MS = 300
@@ -635,7 +634,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       if (!agents.has(agentId)) agents.set(agentId, operation.turnId)
     }
 
-    if (agents.has(requestedAgentId) || agents.size < MAX_DELEGATED_AGENTS) return
+    if (agents.has(requestedAgentId) || agents.size < MCP_CONFIG.chatGpt.maxDelegatedAgents) return
 
     const existing = [...agents.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
@@ -643,7 +642,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       .join(", ")
     throw new ChatGptSubagentError(
       "AGENT_LIMIT_REACHED",
-      `This main agent already has the maximum ${MAX_DELEGATED_AGENTS} delegated agents. Reuse one of these agent IDs: ${existing}.`
+      `This main agent already has the maximum ${MCP_CONFIG.chatGpt.maxDelegatedAgents} delegated agents. Reuse one of these agent IDs: ${existing}.`
     )
   }
 

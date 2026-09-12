@@ -17,6 +17,7 @@ const DEFAULT_PUBLIC_CONFIG = {
   chatgpt: {
     cdp_endpoint: "http://127.0.0.1:9222",
     project_url: "https://chatgpt.com/",
+    max_delegated_agents: 3,
   },
   ngrok: {
     pooling_enabled: false,
@@ -41,7 +42,8 @@ const DEFAULT_PUBLIC_CONFIG = {
 }
 
 const CONFIG_HEADER = `# Shellby configuration.
-# These are the active values used by Shellby. Edit them to customize this installation.
+# All supported settings are shown below. Edit active values to customize this installation.
+# Settings without defaults are commented examples; uncomment and customize them to enable.
 
 `
 
@@ -120,5 +122,12 @@ function isRecord(value) {
 }
 
 function serializeConfig(config) {
-  return `${CONFIG_HEADER}${stringify(config)}\n`
+  let body = stringify(config)
+  if (isRecord(config.ngrok) && !("url" in config.ngrok)) {
+    body = body.replace(
+      "[ngrok]\n",
+      '[ngrok]\n# Optional reserved endpoint; leave commented to let ngrok assign the public URL.\n# url = "https://your-reserved-domain.ngrok.app"\n'
+    )
+  }
+  return `${CONFIG_HEADER}${body}\n`
 }

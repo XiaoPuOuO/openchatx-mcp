@@ -8,6 +8,8 @@ summary: "Candidate real-work coding benchmarks for comparing ChatGPT Web plus S
 
 The target benchmark is ChatGPT Web + Shellby MCP versus Codex on the same real software-engineering work. Prefer tasks derived from work that actually happened, a single user turn, a recoverable pre-task repository state, one autonomous attempt, and an external grader that scores the final repository rather than the agent's prose.
 
+Benchmark details below preserve an earlier research snapshot, not a refreshed upstream inventory. Recheck official sources before selecting or running an evaluation.
+
 ## SWE-Lancer
 
 SWE-Lancer is derived from real paid Expensify engineering jobs posted on Upwork. The original benchmark contains 1,488 tasks worth $1 million in actual payouts; 764 are individual-contributor implementation tasks and 724 are management proposal-selection tasks. The current public repository says it retains 198 tasks after adjusting and verifying them for offline execution, down from the original 237-problem public set. Issues are presented as originally written, and IC tasks pair the pre-fix codebase with the task description and objective. Professional engineers wrote end-to-end graders and each IC grader was independently reviewed three times.

@@ -15,8 +15,8 @@ Implementation notes for the stateful named-shell runtime behind `shell_run` and
 
 ## Process Model
 
-- `shell-process.ts` owns the persistent login-shell child, command/context markers, shell generation, cwd/environment capture, and reset/close signaling. `session.ts` owns request records, transcripts, output pagination, retry identity, and orchestration around that process (`src/tools/shell/shell-process.ts`, `src/tools/shell/session.ts`).
-- The process layer spawns `/bin/sh -c 'exec "$1" -l 2>&1'` with the configured shell as `$1`, making the configured program a login shell. POSIX children are detached into a process group so reset and close can signal the group, including background descendants (`src/tools/shell/shell-process.ts`).
+- `shell-process.ts` owns the persistent non-interactive shell child, command/context markers, shell generation, cwd/environment capture, and reset/close signaling. `session.ts` owns request records, transcripts, output pagination, retry identity, and orchestration around that process (`src/tools/shell/shell-process.ts`, `src/tools/shell/session.ts`).
+- The process layer spawns `/bin/sh -c 'exec "$1" -f 2>&1'` with the configured shell as `$1`, using fast startup instead of login startup. With zsh, user startup files are skipped; commands inherit Shellby’s process environment. Parallel children use the same `-f` policy with `-c`. Do not assume Terminal aliases or login-script PATH changes exist. POSIX children are detached into a process group so reset and close can signal the group, including background descendants (`src/tools/shell/shell-process.ts`).
 - The initial working directory and environment come from constructor options. There is no PTY. Commands run through the persistent shell while stdout/stderr feed the process parser (`src/tools/shell/shell-process.ts`).
 
 ## Command Protocol
@@ -32,7 +32,7 @@ The wrapper clears `errexit` before and after evaluation so a prior `set -e` doe
 - `TranscriptBuffer` uses absolute JavaScript-string cursors, advances a logical retained-output head as the rolling window fills, and compacts discarded backing text in batches instead of slicing the full retained string on every append. It drops whole surrogate pairs at the rolling boundary. A cursor older than retained output is clamped and returns `cursor_expired` (`src/tools/shell/session.ts`, `test/shell-session.test.ts`).
 - Response ceilings use `o200k_base` token counts. Transcript reads tokenize only a bounded local character window instead of the entire remaining transcript, so polling large retained output does not repeatedly rescan megabytes. Per-command capture remains byte-based because it protects retained memory (`src/tokenizer.ts`, `src/tools/shell/session.ts`, `src/tools/shell/shell-tools.ts`). See [shell_run](./tools/shell-run.md) for caller-visible pagination/loss semantics.
 - Run, retry, and poll share a wait loop ending on completion, abort/reset, or the yield deadline. Output volume and cursor expiry do not shorten the wait. Versioned updates wake the loop; transcript pagination happens only when constructing the response (`src/tools/shell/session.ts`).
-- Command request IDs are scoped to a shell. Exact command retries return the retained record; changed text returns `request_conflict`. Command records are bounded by the config-only `MCP_CONFIG.shell.recordLimit`. Reset has no request ID or retained retry record (`src/config.ts`, `src/tools/shell/session.ts`).
+- Command request IDs are scoped to a shell. Exact command retries return the retained record; changed text returns `request_conflict`. Command records are bounded by the code-owned `MCP_CONFIG.shell.recordLimit`. Reset has no request ID or retained retry record (`src/config.ts`, `src/tools/shell/session.ts`).
 
 ## Concurrency
 

@@ -48,10 +48,24 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   assert.deepEqual(scaffold.chatgpt, {
     cdp_endpoint: "http://127.0.0.1:9222",
     project_url: "https://chatgpt.com/",
+    max_delegated_agents: 3,
   })
   assert.deepEqual(scaffold.mcp, { tool_output: "compact" })
   assert.deepEqual(scaffold.ui, { enabled: false })
   assert.equal(scaffold.tools.computer, true)
+  assert.deepEqual(scaffold.ngrok, { pooling_enabled: false })
+
+  const scaffoldText = await readFile(initial.configPath, "utf8")
+  assert.match(scaffoldText, /^# url = "https:\/\/your-reserved-domain.ngrok.app"$/m)
+  const unchanged = await initializeShellbyConfig(root)
+  assert.equal(unchanged.updated, false)
+  assert.equal(await readFile(initial.configPath, "utf8"), scaffoldText)
+
+  await writeFile(initial.configPath, scaffoldText.replace(/^# url = /m, "url = ").replace("pooling_enabled = false", "pooling_enabled = true"))
+  assert.deepEqual(loadPublicConfig(initial.configPath).ngrok, {
+    url: "https://your-reserved-domain.ngrok.app",
+    pooling_enabled: true,
+  })
 
   await writeFile(initial.configPath, 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
   const repeated = await initializeShellbyConfig(root)
@@ -63,10 +77,24 @@ test("setup creates a complete active Shellby config and fills missing fields wi
   assert.equal(migrated.tools.shell, true)
   assert.equal(migrated.shell.rtk, false)
   assert.equal(migrated.chatgpt.project_url, "https://chatgpt.com/")
+  assert.equal(migrated.chatgpt.max_delegated_agents, 3)
   assert.equal(migrated.mcp.tool_output, "compact")
   assert.equal(migrated.ui.enabled, false)
+  assert.deepEqual(migrated.ngrok, { pooling_enabled: false })
+  assert.match(await readFile(initial.configPath, "utf8"), /^# url = /m)
 
   const complete = await initializeShellbyConfig(root)
   assert.equal(complete.created, false)
   assert.equal(complete.updated, false)
+})
+
+test("config migration preserves an active ngrok URL without adding a duplicate example", async (t) => {
+  const root = await tempDir(t, "shellby-config-ngrok-")
+  const { configPath } = await initializeShellbyConfig(root)
+  await writeFile(configPath, 'workspace = "~/Custom"\n\n[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = true\n')
+
+  const migrated = await initializeShellbyConfig(root)
+  assert.equal(migrated.updated, true)
+  assert.deepEqual(loadPublicConfig(configPath).ngrok, { url: "https://custom.ngrok.app", pooling_enabled: true })
+  assert.doesNotMatch(await readFile(configPath, "utf8"), /^# url = /m)
 })

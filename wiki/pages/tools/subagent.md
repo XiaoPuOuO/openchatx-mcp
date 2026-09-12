@@ -3,6 +3,8 @@ summary: "Caller-facing subagent_run and subagent_result contract for delegation
 paths:
   - src/tools/subagent/subagent-tools.ts
   - src/tools/subagent/chatgpt-subagent-contracts.ts
+  - src/tools/subagent/chatgpt-subagent.ts
+  - src/config.ts
 ---
 
 # `subagent_run` / `subagent_result`
@@ -17,9 +19,9 @@ One call accepts one to three distinct agents. Each entry provides:
 
 - `agent_id`: durable conversation identity within the calling MCP session; reuse it for multi-turn context. Conversation URL and turn count are persisted best-effort across MCP restarts.
 - `prompt`: task for that turn.
-- `memory`: optional flag controlling whether a new agent may restore persisted conversation state; defaults to `true`.
+- `memory`: chosen when creating an agent; defaults to `true`. With `false`, a new agent starts a temporary ChatGPT chat and skips persisted lookup/save. Its live page still supports follow-up turns, but cannot restore context after page loss or process restart. Supplying a different flag when reusing a live ID does not change that agent’s mode.
 
-A new agent starts from the configured ChatGPT project URL when present. Its first prompt also receives the internal instructions `Oververbosity: 1.` and `Do not use \`subagent\` or \`computer_*\` tools.` Reused agents continue in or restore the same ChatGPT conversation. Each main-agent session may own at most three delegated agent IDs total across subagents and clones; existing IDs can receive unlimited follow-up turns. The limit includes persisted mappings and in-flight creations, so it also bounds generation concurrency to three. Different main-agent sessions can reuse the same `agent_id` independently. Three-entry batches retain the existing staggered submission delays.
+A new memory-backed agent starts from the configured ChatGPT project URL. Its first prompt receives the internal instructions described in [Browser ChatGPT Subagents](../subagents/browser-chatgpt-subagents.md). Reused agents continue in or restore the same ChatGPT conversation. Each main-agent session may own at most `chatgpt.max_delegated_agents` delegated agent IDs total across subagents and clones (default `3`); existing IDs can receive unlimited follow-up turns. The limit counts persisted mappings, live IDs, and in-flight creations. It controls admission of new IDs, not a separate running-turn semaphore. Lowering the limit preserves reuse of all existing IDs, even when their count exceeds the new value. The per-call batch limit remains three. Different main-agent sessions can reuse the same `agent_id` independently. Three-entry batches retain the existing staggered submission delays.
 
 ## `subagent_result`
 
@@ -29,7 +31,7 @@ Pass one to three returned `turn_id` values. Results are retrieved concurrently 
 - `completed`: includes `response`;
 - `failed`: includes `error`.
 
-`wait_ms` defaults to 30 seconds and waits on the local settlement promise only. Use `0` only for an immediate status check. Agent turns average about 3 minute and may run up to 30 minutes. It never polls or reloads ChatGPT.
+`wait_ms` defaults to 30 seconds and waits on the local settlement promise only. Use `0` only for an immediate status check. This wait does not impose a generation deadline; no-progress recovery is separate. It never polls or reloads ChatGPT.
 
 Activity remains one of `Working`, `Searching the web`, `Using tools`, or `Generating response`.
 
@@ -48,7 +50,7 @@ Compact results separate returned turns with top-level metadata headers and plac
 
 Turn records and prior `turn_id` results are process-local. The calling `X-OpenAI-Session`, `agent_id`, conversation URL, and turn count form the persisted mapping in `~/.shellby/subagents.sqlite`, so the same main-agent session can reuse an `agent_id` after restart without colliding with another session's agent of the same name. `npm run reset-agents` intentionally clears those mappings (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
 
-After 30 idle minutes, only the managed background page closes; the saved conversation identity and prior results remain. A later call restores that conversation. Submitted turns also have a 30-minute no-progress cutoff and one recovery attempt that reopens and reads the saved conversation once but never resubmits the prompt or waits on a second observer. If recovery cannot prove the submitted turn finished, that agent is marked `uncertain` and rejects later prompts with `AGENT_BUSY`; use another existing agent ID, or a new ID when a delegated-agent slot is available, instead of risking an overlapping upstream turn.
+After 30 idle minutes, the managed background page closes; saved conversation identity and prior local results remain. A later call restores a memory-backed conversation. Temporary chats have no saved URL for restoration. Memory-backed turns enter one-shot recovery after three minutes without bound progress; observer failures also trigger recovery. Other active turns retain a 30-minute no-progress cutoff. Recovery reopens and reads the saved conversation once, never resubmits the prompt, and never waits on a second observer. If recovery cannot prove the submitted turn finished, that agent is marked `uncertain` and rejects later prompts with `AGENT_BUSY`; use another existing agent ID, or a new ID when a delegated-agent slot is available, instead of risking an overlapping upstream turn.
 
 Important failures include `BROWSER_UNAVAILABLE`, `CHATGPT_NOT_AUTHENTICATED`, `AGENT_BUSY`, `AGENT_LIMIT_REACHED`, `AGENT_TARGET_LOST`, `AGENT_IDLE_EXPIRED`, `UNKNOWN_TURN`, `REQUEST_ABORTED`, and `CHATGPT_UI_CHANGED`. `AGENT_LIMIT_REACHED` lists the delegated agent IDs already owned by that main agent and each agent's latest known turn ID so the caller can reuse one.
 

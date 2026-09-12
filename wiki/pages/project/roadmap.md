@@ -1,7 +1,5 @@
 ---
 summary: "Uncommitted experiments and deferred architectural work that may be revisited when a concrete need justifies it."
-paths:
-  - src/server/http-server.ts
 ---
 
 # Roadmap

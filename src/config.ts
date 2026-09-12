@@ -54,6 +54,7 @@ const publicConfigSchema = z
       .object({
         cdp_endpoint: cdpEndpoint,
         project_url: httpUrl.default(DEFAULT_CHATGPT_PROJECT_URL),
+        max_delegated_agents: z.number().int().positive(),
       })
       .strict(),
     ngrok: ngrokConfigSchema.optional(),
@@ -122,6 +123,7 @@ export const MCP_CONFIG = {
   chatGpt: {
     cdpEndpoint: publicConfig.chatgpt.cdp_endpoint,
     projectUrl: publicConfig.chatgpt.project_url,
+    maxDelegatedAgents: publicConfig.chatgpt.max_delegated_agents,
     defaultPollWaitMs: 30_000,
     maxPollWaitMs: 270_000,
   },

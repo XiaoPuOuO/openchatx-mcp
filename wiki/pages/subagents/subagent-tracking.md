@@ -7,10 +7,6 @@ paths:
   - src/server/mcp-server.ts
   - src/tools/subagent/chatgpt-subagent.ts
   - src/tools/subagent/subagent-tools.ts
-read_more:
-  - pages/http-transport.md
-  - pages/operations/audit-logging.md
-  - pages/subagents/browser-chatgpt-subagents.md
 ---
 
 # Session Tracking
@@ -68,3 +64,9 @@ one MCP caller session -> one AgentIdentity
 ```
 
 Audit output answers which conversation called Shellby. It does not claim how that conversation relates to any other conversation.
+
+## Related
+
+- [HTTP Transport](../http-transport.md)
+- [Audit Logging](../operations/audit-logging.md)
+- [Browser ChatGPT Subagents](./browser-chatgpt-subagents.md)

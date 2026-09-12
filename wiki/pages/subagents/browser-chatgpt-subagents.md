@@ -39,7 +39,7 @@ The launching MCP session is retained only so a detached `agent_finished` event 
 
 For each turn `askSubagent()`:
 
-1. enforces the rate-limit cooldown and three-delegated-agent cap for the calling main-agent session;
+1. enforces the rate-limit cooldown and configured `chatgpt.max_delegated_agents` cap (default `3`) for the calling main-agent session;
 2. reuses the expected page, navigates a mismatched managed page to the saved conversation, or opens one replacement background page;
 3. keeps the configured inter-turn delay;
 4. installs the raw CDP turn observer before submission;
@@ -50,7 +50,7 @@ For each turn `askSubagent()`:
 9. clicks Send once;
 10. records detached local turn state and returns `turn_id`.
 
-The first turn appends a fixed internal instruction: `Oververbosity: 1.` plus `Do not use \`subagent\` or \`computer_*\` tools.` Later turns send only the caller prompt. Verbosity is intentionally not part of the public subagent tool contract.
+The first subagent turn appends `Oververbosity: 1.` and a prohibition on subagent tools; the prohibition includes `computer_*` only when Computer Use is enabled. Later turns send only the caller prompt. Clones preserve branched context and do not receive this first-subagent-turn injection. Verbosity is intentionally not part of the public subagent tool contract.
 
 ## Multi-turn and Projects
 
