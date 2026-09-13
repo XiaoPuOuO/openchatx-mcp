@@ -17,3 +17,7 @@ An authenticated page-context request to `/backend-api/conversation/<conversatio
 ## 2026-09-12 — Config upgrades preserve existing operator choices
 
 Making a newly exposed setting required broke existing configurations. Public settings now resolve omitted defaults at load time and recover invalid values individually, so adding an option does not require a file migration. Setup leaves existing files intact to preserve comments and alternate TOML layouts. Whole-file fallback for malformed syntax was deliberately excluded: it could silently discard disabled tool groups or a reserved tunnel URL. Runtime, scaffold defaults, and PM2/ngrok must share the same interpretation.
+
+## 2026-09-12 — Routine restart retains PM2; macOS recovery is explicit
+
+Recreating PM2 on every restart broke restarts requested through Shellby's own shells: shutting down the daemon also killed the CLI responsible for bringing services back. The full reset was introduced for stale macOS permission/service context, which routine app reloads cannot repair. Keep routine restart inside the surviving PM2 daemon and reserve daemon recreation for `restart -- --hard` from a healthy external Terminal session. A disposable PM2 daemon confirmed that app reload completes after its requesting CLI is killed. The initiating tool call may disconnect; preserving that call does not justify detached workers or changes to tool behavior.

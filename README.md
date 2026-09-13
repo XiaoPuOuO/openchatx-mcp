@@ -149,7 +149,8 @@ See [Browser ChatGPT Subagents](wiki/pages/subagents/browser-chatgpt-subagents.m
 | Command                | Purpose                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------ |
 | `npm start`            | Build and start or reload Shellby MCP, ngrok, and enabled supporting services. |
-| `npm run restart`      | Rebuild, recreate Shellby's PM2 daemon, clear the audit log, and start services. |
+| `npm run restart`      | Rebuild, clear the audit log, and reload services using the existing PM2 daemon. |
+| `npm run restart -- --hard` | Rebuild and recreate Shellby's PM2 daemon from a healthy Terminal.app session. |
 | `npm run status`       | Show PM2 process state.                                                        |
 | `npm run logs`         | Follow PM2 logs.                                                               |
 | `npm run pm2 -- <args>` | Run a PM2 command against Shellby's dedicated daemon.                          |
@@ -160,7 +161,9 @@ See [Browser ChatGPT Subagents](wiki/pages/subagents/browser-chatgpt-subagents.m
 
 PM2 is installed as a repository dependency. All Shellby PM2 commands use `~/.shellby/pm2` for their daemon, sockets, logs, and process state. This is separate from the default `~/.pm2` daemon used by other projects; use `npm run pm2 -- <args>` for direct access to Shellby's daemon.
 
-Run `npm run restart` from a healthy Terminal.app session. It recreates only Shellby's dedicated daemon and starts Shellby's services. Build failures leave the running services and audit log intact. The authenticated ChatGPT Chrome profile is reused.
+Use `npm run restart` for routine code or config changes, including from `shell_run`. It keeps the PM2 daemon, reloads ngrok, then reloads MCP. The initiating shell and MCP connection may close; after services return, make a fresh tool call. Build failures leave running services and the audit log intact. The authenticated ChatGPT Chrome profile is reused.
+
+For macOS permission or service-context problems, run `npm run restart -- --hard` from a healthy Terminal.app session. This also recreates Shellby's dedicated PM2 daemon. Hard restart refuses to run inside Shellby because stopping that daemon would kill the command responsible for starting its replacement.
 
 If Shellby was previously running under the default shared daemon, move it once from Terminal.app before using the new commands:
 
@@ -223,6 +226,8 @@ Shellby does not use a repository `.env` file. User-configurable Shellby setting
 
 ## Troubleshooting
 
+If the endpoint stays offline after restarting, check `npm run status` and `npm run logs` from Terminal.app. Run `npm start` if services are stopped. `npm run print-url` reports the active ngrok endpoint; an offline reserved URL does not by itself mean your config changed. Routine restart through `shell_run` may disconnect its own call while PM2 brings MCP back.
+
 <details>
 <summary><strong>Setup or startup fails</strong></summary>
 
@@ -248,7 +253,7 @@ Run `npm run setup:computer` from Terminal.app and follow Peekaboo's permission 
 <details>
 <summary><strong>The PM2 daemon needs to be recreated</strong></summary>
 
-Run `npm run restart` from a newly opened Terminal.app session. This recreates Shellby's dedicated PM2 daemon as well as Shellby MCP and ngrok. A stale macOS session inherited by PM2 can cause Chromium to abort before navigation and DNS lookups to fail even while MCP remains reachable. Restarting from inside that broken Shellby session cannot provide a healthy replacement session. Daemon isolation does not make PM2 independent of Terminal's macOS session; keep Terminal.app running until PM2 is managed through a macOS LaunchAgent.
+Run `npm run restart -- --hard` from a newly opened Terminal.app session. This recreates Shellby's dedicated PM2 daemon as well as Shellby MCP and ngrok. A stale macOS session inherited by PM2 can cause Chromium to abort before navigation and DNS lookups to fail even while MCP remains reachable. Ordinary restart retains the daemon's session and cannot repair that context. Daemon isolation does not make PM2 independent of Terminal's macOS session; keep Terminal.app running until PM2 is managed through a macOS LaunchAgent.
 
 </details>
 

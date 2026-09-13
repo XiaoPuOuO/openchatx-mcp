@@ -4,7 +4,7 @@ const url = await discoverNgrokUrl(optional ? 1 : 20)
 if (url) {
   console.log(`MCP URL: ${url}`)
 } else {
-  console.error("MCP URL unavailable. Start ngrok with `npm run tunnel`.")
+  console.error("MCP URL unavailable. Run `npm start` from Terminal.app, then check `npm run status` and `npm run logs` if it is still unavailable.")
   if (!optional) process.exitCode = 1
 }
 

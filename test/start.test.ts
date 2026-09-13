@@ -8,14 +8,17 @@ import test, { type TestContext } from "node:test"
 import { tempDir } from "./helpers/temp.js"
 
 // Run the real entrypoint in a disposable repository with fake external commands, never the live PM2 daemon.
-async function runStartup(t: TestContext, restart: boolean, failCommand = "", pm2Args?: string[]) {
+async function runStartup(
+  t: TestContext,
+  options: { restart?: boolean; hard?: boolean; failCommand?: string; pm2Args?: string[]; fromShellby?: boolean; agentsEnabled?: boolean } = {}
+) {
   const root = await realpath(await tempDir(t, "shellby-start-"))
   for (const directory of ["scripts", "src", "bin", "node_modules/.bin"]) await mkdir(join(root, directory), { recursive: true })
   await copyFile(new URL("../scripts/start.mjs", import.meta.url), join(root, "scripts", "start.mjs"))
   await copyFile(new URL("../scripts/pm2.mjs", import.meta.url), join(root, "scripts", "pm2.mjs"))
   await writeFile(
     join(root, "src", "config.ts"),
-    `export const MCP_CONFIG = ${JSON.stringify({ workspace: root, shell: { rtk: false }, tools: { clones: false, subagents: false } })}`
+    `export const MCP_CONFIG = ${JSON.stringify({ workspace: root, shell: { rtk: false }, tools: { clones: false, subagents: options.agentsEnabled ?? false } })}`
   )
   await writeFile(
     join(root, "scripts", "preflight.mjs"),
@@ -25,12 +28,17 @@ export function printPreflightErrors() {}`
   )
   await writeFile(join(root, "scripts", "print-url.mjs"), 'console.log("https://test.invalid/mcp")')
   await writeFile(join(root, "agent-commands.yaml"), "previous audit\n")
+  await writeFile(join(root, "calls.jsonl"), "")
 
-  for (const command of ["npm", "pm2"]) {
+  for (const [command, path] of [
+    ["npm", "bin/npm"],
+    ["pm2", "node_modules/.bin/pm2"],
+    ["browser", "scripts/chatgpt-browser.mjs"],
+  ]) {
     await writeFile(
-      join(root, command === "pm2" ? "node_modules/.bin" : "bin", command),
+      join(root, path!),
       `#!/usr/bin/env node
-const { appendFileSync, existsSync } = require("node:fs");
+${command === "browser" ? 'import { appendFileSync, existsSync } from "node:fs";' : 'const { appendFileSync, existsSync } = require("node:fs");'}
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({
   command: ${JSON.stringify(command)}, args, auditExists: existsSync(${JSON.stringify(join(root, "agent-commands.yaml"))}),
@@ -49,16 +57,18 @@ if (${JSON.stringify(command)} + " " + args[0] === process.env.START_TEST_FAIL) 
       "tsx",
       "--import",
       "data:text/javascript,globalThis.fetch=async()=>({ok:true})",
-      join(root, "scripts", pm2Args ? "pm2.mjs" : "start.mjs"),
-      ...(pm2Args ?? (restart ? ["--restart"] : [])),
+      join(root, "scripts", options.pm2Args ? "pm2.mjs" : "start.mjs"),
+      ...(options.pm2Args ?? [...(options.restart ? ["--restart"] : []), ...(options.hard ? ["--hard"] : [])]),
     ],
     {
       cwd: process.cwd(),
       env: {
         ...process.env,
         PATH: `${join(root, "bin")}${delimiter}${process.env.PATH}`,
-        START_TEST_FAIL: failCommand,
+        START_TEST_FAIL: options.failCommand ?? "",
         PM2_HOME: join(root, "unrelated-pm2"),
+        name: options.fromShellby ? "shellby-mcp" : undefined,
+        pm_exec_path: options.fromShellby ? join(root, "dist", "index.js") : undefined,
       },
       encoding: "utf8",
       timeout: 15_000,
@@ -68,6 +78,7 @@ if (${JSON.stringify(command)} + " " + args[0] === process.env.START_TEST_FAIL) 
   const calls = (await readFile(join(root, "calls.jsonl"), "utf8"))
     .trim()
     .split("\n")
+    .filter(Boolean)
     .map((line) => {
       const { pm2Home, cwd, ...call } = JSON.parse(line) as {
         command: string
@@ -85,30 +96,86 @@ if (${JSON.stringify(command)} + " " + args[0] === process.env.START_TEST_FAIL) 
   return { root, result, calls }
 }
 
-test("restart rebuilds before replacing PM2 and clears the audit only after shutdown", async (t) => {
-  const { result, calls } = await runStartup(t, true)
+for (const fromShellby of [false, true]) {
+  test(`ordinary restart ${fromShellby ? "inside Shellby" : "from a terminal"} keeps PM2 and reloads MCP last`, async (t) => {
+    const { result, calls } = await runStartup(t, { restart: true, fromShellby })
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(calls, [
+      { command: "npm", args: ["run", "build"], auditExists: true },
+      { command: "pm2", args: ["delete", "shellby-cursor-host"], auditExists: true },
+      { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], auditExists: false },
+      { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], auditExists: false },
+    ])
+    assert.match(result.stdout, /https:\/\/test.invalid\/mcp/)
+  })
+}
+
+test("hard restart rebuilds before replacing PM2 and clears the audit only after shutdown", async (t) => {
+  const { result, calls } = await runStartup(t, { restart: true, hard: true })
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(calls, [
     { command: "npm", args: ["run", "build"], auditExists: true },
     { command: "pm2", args: ["kill"], auditExists: true },
-    { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--update-env"], auditExists: false },
+    { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], auditExists: false },
+    { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], auditExists: false },
   ])
-  assert.match(result.stdout, /https:\/\/test.invalid\/mcp/)
+})
+
+test("hard restart inside Shellby fails before build or shutdown", async (t) => {
+  const { root, result, calls } = await runStartup(t, { restart: true, hard: true, fromShellby: true })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /healthy Terminal.app session/)
+  assert.deepEqual(calls, [])
+  assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
 })
 
 test("ordinary startup keeps the PM2 daemon and audit log", async (t) => {
-  const { result, calls } = await runStartup(t, false)
+  const { result, calls } = await runStartup(t)
   assert.equal(result.status, 0, result.stderr)
-  assert.deepEqual(calls, [
-    { command: "npm", args: ["run", "build"], auditExists: true },
-    { command: "pm2", args: ["delete", "shellby-cursor-host"], auditExists: true },
-    { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--update-env"], auditExists: true },
-  ])
+  assert.ok(calls.every(({ auditExists }) => auditExists))
+  assert.deepEqual(
+    calls.map(({ command, args }) => [command, ...args]),
+    [
+      ["npm", "run", "build"],
+      ["pm2", "delete", "shellby-cursor-host"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+    ]
+  )
+})
+
+test("browser startup finishes before reloading services can disconnect the caller", async (t) => {
+  const { result, calls } = await runStartup(t, { restart: true, fromShellby: true, agentsEnabled: true })
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(
+    calls.map(({ command, args }) => [command, ...args]),
+    [
+      ["npm", "run", "build"],
+      ["pm2", "delete", "shellby-cursor-host"],
+      ["browser", "--auto"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+    ]
+  )
+})
+
+test("an in-shell build failure leaves services and the audit intact", async (t) => {
+  const { root, result, calls } = await runStartup(t, { restart: true, failCommand: "npm run", fromShellby: true })
+  assert.equal(result.status, 7)
+  assert.deepEqual(calls, [{ command: "npm", args: ["run", "build"], auditExists: true }])
+  assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
+})
+
+test("a failed tunnel reload leaves MCP running", async (t) => {
+  const { result, calls } = await runStartup(t, { restart: true, failCommand: "pm2 startOrReload" })
+  assert.equal(result.status, 7)
+  assert.equal(calls.at(-1)?.args[3], "shellby-ngrok")
+  assert.ok(calls.every(({ args }) => !args.includes("shellby-mcp")))
 })
 
 for (const failure of ["npm run", "pm2 kill"]) {
-  test(`restart stops after ${failure} fails and preserves the audit log`, async (t) => {
-    const { root, result, calls } = await runStartup(t, true, failure)
+  test(`hard restart stops after ${failure} fails and preserves the audit log`, async (t) => {
+    const { root, result, calls } = await runStartup(t, { restart: true, hard: true, failCommand: failure })
     assert.equal(result.status, 7)
     assert.equal(calls.length, failure === "npm run" ? 1 : 2)
     assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
@@ -123,7 +190,7 @@ test("PM2 operational commands use Shellby's dedicated daemon and preserve CLI a
     const args = command.split(" ").slice(2)
     if (name === "pm2") args.push("jlist")
     if (name === "logs") args.push("--lines", "20", "--nostream")
-    const { result, calls } = await runStartup(t, false, "", args)
+    const { result, calls } = await runStartup(t, { pm2Args: args })
     assert.equal(result.status, 0, result.stderr)
     assert.deepEqual(calls, [{ command: "pm2", args, auditExists: true }])
   }

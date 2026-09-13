@@ -8,7 +8,14 @@ import { checkPublicRuntime, checkRtkRuntime, printPreflightErrors } from "./pre
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const pm2Script = join(repoRoot, "scripts", "pm2.mjs")
-const restarting = process.argv.includes("--restart")
+const hardRestart = process.argv.includes("--hard")
+const restarting = process.argv.includes("--restart") || hardRestart
+
+if (hardRestart && process.env.name === "shellby-mcp" && process.env.pm_exec_path) {
+  console.error("A hard restart must run from a healthy Terminal.app session because it replaces PM2 itself. Use `npm run restart` inside Shellby.")
+  process.exit(1)
+}
+
 const { errors } = await checkPublicRuntime()
 const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
 if (rtkError) errors.push(rtkError)
@@ -27,17 +34,19 @@ try {
 }
 
 run("npm", ["run", "build"])
-if (restarting) {
-  // Reloading apps retains the daemon's macOS session; recreate PM2 to recover stale system-service connections.
+if (hardRestart) {
+  // Only a hard restart replaces the daemon's inherited macOS service context.
   run(process.execPath, [pm2Script, "kill"])
-  await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
 } else {
   runAllowFailure(process.execPath, [pm2Script, "delete", "shellby-cursor-host"])
 }
-run(process.execPath, [pm2Script, "startOrReload", "ecosystem.config.cjs", "--update-env"], { quiet: true })
+if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
 if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
   run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "chatgpt-browser.mjs"), "--auto"])
 }
+// Reload MCP last: its shutdown can kill this CLI, but the PM2 daemon completes the app restart.
+run(process.execPath, [pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], { quiet: true })
+run(process.execPath, [pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], { quiet: true })
 
 if (!(await waitForMcp())) {
   console.error("MCP server did not become healthy at http://127.0.0.1:3333/healthz.")

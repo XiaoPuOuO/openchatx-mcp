@@ -116,7 +116,7 @@ Pass:
 
 Repeat with each returned `next_cursor` while status remains `running`, or while more retained output is needed. `shell_poll` long-polls until completion or `yield_time_ms` expiry, regardless of unread output. Batch polls return the same per-command `commands` summary. `yield_time_ms` does not stop the command.
 
-Poll `yield_time_ms`: default 40 s, max 270 s (4.5 minutes). For ordinary running commands, omit it and let the default long poll return early on completion. Use a shorter yield to inspect intermediate output sooner.
+Poll `yield_time_ms`: default 40 s, max 30 minutes. For ordinary running commands, omit it and let the default long poll return early on completion. Use a shorter yield to inspect intermediate output sooner.
 
 ## Shell Lifetime
 

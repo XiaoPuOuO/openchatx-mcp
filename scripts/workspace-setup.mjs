@@ -12,8 +12,6 @@ const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
 
 const CONFIG_HEADER = `# Shellby configuration.
 # All supported settings are shown below. Edit active values to customize this installation.
-# Settings without defaults are commented examples; uncomment and customize them to enable.
-# Missing settings use defaults. Invalid settings warn and fall back to defaults.
 
 `
 
