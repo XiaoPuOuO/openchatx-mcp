@@ -19,6 +19,7 @@ test("loads and validates Shellby TOML config", async (t) => {
   await writeFile(
     path,
     [
+      'state_dir = "~/.shellby-test"',
       'workspace = "~/Work"',
       "",
       "[shell]",
@@ -54,10 +55,12 @@ test("loads and validates Shellby TOML config", async (t) => {
   )
 
   assert.deepEqual(loadPublicConfig(path), {
+    state_dir: "~/.shellby-test",
+    port: 3333,
     workspace: "~/Work",
     shell: { path: "/bin/zsh", rtk: false },
     chatgpt: { cdp_endpoint: "http://127.0.0.1:9222", project_url: "https://chatgpt.com/", max_delegated_agents: 5 },
-    ngrok: { url: "https://shellby.ngrok.app", pooling_enabled: true },
+    ngrok: { enabled: true, api_port: 4040, url: "https://shellby.ngrok.app", pooling_enabled: true },
     mcp: { tool_output: "structured" },
     ui: { enabled: true },
     tools: {
@@ -113,6 +116,7 @@ test("ignores TOML comments and defaults omitted chatgpt.project_url", async (t)
   )
 
   const loaded = loadPublicConfig(path)
+  assert.equal(loaded.state_dir, "~/.shellby")
   assert.equal(loaded.workspace, "~/Work")
   assert.equal(loaded.chatgpt.cdp_endpoint, "http://127.0.0.1:9222")
   assert.equal(loaded.chatgpt.project_url, "https://chatgpt.com/")
@@ -189,10 +193,10 @@ test("defaults malformed sections and normalizes invalid ngrok combinations", as
 
   for (const source of ["[ngrok]\npooling_enabled = true", '[ngrok]\nurl = "file:///tmp/tunnel"\npooling_enabled = true']) {
     await writeFile(path, source)
-    assert.deepEqual(loadPublicConfig(path).ngrok, { pooling_enabled: false })
+    assert.deepEqual(loadPublicConfig(path).ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
   }
   await writeFile(path, '[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = "true"')
-  assert.deepEqual(loadPublicConfig(path).ngrok, { url: "https://custom.ngrok.app", pooling_enabled: false })
+  assert.deepEqual(loadPublicConfig(path).ngrok, { enabled: true, api_port: 4040, url: "https://custom.ngrok.app", pooling_enabled: false })
 })
 
 test("falls back for invalid delegated limits and retains positive integers", async (t) => {
@@ -231,6 +235,26 @@ test("accepts equivalent TOML formatting and leaves it untouched during setup", 
   assert.equal(warning.mock.callCount(), 0)
 })
 
+test("MCP and ngrok API ports accept overrides and default invalid values individually", async (t) => {
+  const root = await tempDir(t, "shellby-config-ports-")
+  const { configPath } = await initializeShellbyConfig(root)
+  const scaffold = await readFile(configPath, "utf8")
+  assert.match(scaffold, /^port = 3333$/m)
+  assert.match(scaffold, /^api_port = 4040$/m)
+  await writeFile(configPath, "port = 3334\n[ngrok]\napi_port = 4041\n")
+  assert.equal(loadPublicConfig(configPath).port, 3334)
+  assert.equal(loadPublicConfig(configPath).ngrok.api_port, 4041)
+  const warning = t.mock.method(console, "warn", () => undefined)
+  for (const invalid of ["0", "65536", "1.5", '"3334"']) {
+    await writeFile(configPath, `port = ${invalid}\n[ngrok]\napi_port = ${invalid}\nurl = "https://custom.ngrok.app"`)
+    const config = loadPublicConfig(configPath)
+    assert.equal(config.port, 3333)
+    assert.equal(config.ngrok.api_port, 4040)
+    assert.equal(config.ngrok.url, "https://custom.ngrok.app")
+  }
+  assert.equal(warning.mock.callCount(), 8)
+})
+
 test("reports broken TOML syntax without rewriting the file or silently replacing the whole config", async (t) => {
   const root = await tempDir(t, "shellby-config-syntax-")
   const { configPath } = await initializeShellbyConfig(root)
@@ -246,7 +270,7 @@ test("PM2 uses normalized ngrok settings from the shared loader", async (t) => {
   const root = await tempDir(t, "shellby-config-pm2-")
   const { configPath } = await initializeShellbyConfig(root)
   t.mock.method(console, "warn", () => undefined)
-  await writeFile(configPath, '[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = "false"')
+  await writeFile(configPath, 'port = 3334\n[ngrok]\napi_port = 4041\nurl = "https://custom.ngrok.app"\npooling_enabled = "false"')
   const source = await readFile(new URL("../ecosystem.config.cjs", import.meta.url), "utf8")
   const nodeRequire = createRequire(import.meta.url)
   const module = { exports: {} as { apps: Array<{ name: string; args: string[] }> } }
@@ -255,11 +279,53 @@ test("PM2 uses normalized ngrok settings from the shared loader", async (t) => {
     module,
     require(name: string) {
       if (name === "./dist/public-config.cjs") return { loadPublicConfig }
+      if (name === "./scripts/ngrok-config.cjs") return { ngrokConfigFiles: () => ["/fake/native.yml", "/fake/override.json"] }
       if (name === "node:child_process") return { execFileSync: () => "/fake/ngrok" }
       return nodeRequire(name)
     },
   })
   const ngrok = module.exports.apps.find((app) => app.name === "shellby-ngrok")!
   assert.ok(ngrok.args.includes("https://custom.ngrok.app"))
+  assert.ok(ngrok.args.includes("http://127.0.0.1:3334"))
+  assert.ok(ngrok.args.includes("/fake/override.json"))
   assert.equal(ngrok.args.includes("--pooling-enabled"), false)
+})
+
+test("ngrok enablement defaults on, accepts false, and preserves reserved settings", async (t) => {
+  const root = await tempDir(t, "shellby-config-local-")
+  const { configPath } = await initializeShellbyConfig(root)
+  assert.match(await readFile(configPath, "utf8"), /^enabled = true$/m)
+  assert.equal(loadPublicConfig(configPath).ngrok.enabled, true)
+  const source = '[ngrok]\nenabled = false\nurl = "https://custom.ngrok.app"\npooling_enabled = true\n'
+  await writeFile(configPath, source)
+  assert.deepEqual(loadPublicConfig(configPath).ngrok, { enabled: false, api_port: 4040, url: "https://custom.ngrok.app", pooling_enabled: true })
+  await initializeShellbyConfig(root)
+  assert.equal(await readFile(configPath, "utf8"), source)
+  t.mock.method(console, "warn", () => undefined)
+  await writeFile(configPath, '[ngrok]\nenabled = "false"')
+  assert.equal(loadPublicConfig(configPath).ngrok.enabled, true)
+})
+
+test("local PM2 ecosystem needs neither ngrok executable nor native configuration", async (t) => {
+  const root = await tempDir(t, "shellby-config-local-pm2-")
+  const { configPath } = await initializeShellbyConfig(root)
+  await writeFile(configPath, "[ngrok]\nenabled = false\n")
+  const source = await readFile(new URL("../ecosystem.config.cjs", import.meta.url), "utf8")
+  const nodeRequire = createRequire(import.meta.url)
+  const module = { exports: {} as { apps: Array<{ name: string }> } }
+  const unexpectedNgrok = () => {
+    throw new Error("ngrok must not be accessed when disabled")
+  }
+  runInNewContext(source, {
+    __dirname: root,
+    module,
+    require(name: string) {
+      if (name === "./dist/public-config.cjs") return { loadPublicConfig }
+      if (name === "./scripts/ngrok-config.cjs") return { ngrokConfigFiles: unexpectedNgrok }
+      if (name === "node:child_process") return { execFileSync: unexpectedNgrok }
+      return nodeRequire(name)
+    },
+  })
+  assert.equal(module.exports.apps.length, 1)
+  assert.equal(module.exports.apps[0]!.name, "shellby-mcp")
 })

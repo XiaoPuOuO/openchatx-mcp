@@ -14,6 +14,8 @@ const cdpEndpoint = httpUrl.refine((value) => {
 }, "Local CDP endpoint must include an explicit port")
 
 const publicConfigSchema = z.object({
+  state_dir: z.string().trim().min(1).default("~/.shellby"),
+  port: z.number().int().min(1).max(65535).default(3333),
   workspace: z.string().trim().min(1).default("~/Desktop/agent-workspace"),
   shell: z.object({
     path: z.string().trim().min(1).default("/bin/zsh"),
@@ -25,6 +27,8 @@ const publicConfigSchema = z.object({
     max_delegated_agents: z.number().int().positive().default(3),
   }),
   ngrok: z.object({
+    enabled: z.boolean().default(true),
+    api_port: z.number().int().min(1).max(65535).default(4040),
     url: httpUrl.optional(),
     pooling_enabled: z.boolean().default(false),
   }),

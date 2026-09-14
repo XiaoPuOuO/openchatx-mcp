@@ -21,3 +21,7 @@ Making a newly exposed setting required broke existing configurations. Public se
 ## 2026-09-12 — Routine restart retains PM2; macOS recovery is explicit
 
 Recreating PM2 on every restart broke restarts requested through Shellby's own shells: shutting down the daemon also killed the CLI responsible for bringing services back. The full reset was introduced for stale macOS permission/service context, which routine app reloads cannot repair. Keep routine restart inside the surviving PM2 daemon and reserve daemon recreation for `restart -- --hard` from a healthy external Terminal session. A disposable PM2 daemon confirmed that app reload completes after its requesting CLI is killed. The initiating tool call may disconnect; preserving that call does not justify detached workers or changes to tool behavior.
+
+## 2026-09-13 — State directory is intended for simultaneous repository copies
+
+The operator clarified that `state_dir` exists so a copied repository can run as a separate MCP alongside the original. Storage separation alone did not meet that intent: MCP, ngrok's local API, and Chrome also need separate ports, and independent remote connectors need distinct public endpoints. Keep lifecycle commands scoped to the configured PM2 home and prevent health checks or URL discovery from accepting the other copy. Local-only copies can disable ngrok entirely.

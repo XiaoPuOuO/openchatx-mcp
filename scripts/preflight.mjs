@@ -1,5 +1,5 @@
 import { access, readFile } from "node:fs/promises"
-import { constants } from "node:fs"
+import { constants, existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url"
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url))
 
-export async function checkPublicRuntime() {
+export async function checkPublicRuntime(ngrokEnabled = true) {
   const errors = []
 
   if (process.platform !== "darwin") {
@@ -27,6 +27,8 @@ export async function checkPublicRuntime() {
   } catch {
     errors.push("Local dependencies are missing. Run `npm ci` first.")
   }
+
+  if (!ngrokEnabled) return { errors, pm2Path }
 
   const ngrokExecutable = "ngrok"
   const ngrokVersion = spawnSync(ngrokExecutable, ["version"], { encoding: "utf8" })
@@ -83,7 +85,10 @@ async function hasNgrokAuth(ngrokExecutable) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { errors } = await checkPublicRuntime()
+  const { loadPublicConfig, DEFAULT_PUBLIC_CONFIG } = await import("../src/public-config.cts")
+  const configPath = join(repoRoot, ".shellby", "config.toml")
+  const config = existsSync(configPath) ? loadPublicConfig(configPath) : DEFAULT_PUBLIC_CONFIG
+  const { errors } = await checkPublicRuntime(config.ngrok.enabled)
   if (errors.length > 0) {
     printPreflightErrors(errors)
     process.exitCode = 1

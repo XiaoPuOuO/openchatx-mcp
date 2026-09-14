@@ -13,20 +13,19 @@ import { createSubagentStore } from "../src/tools/subagent/subagent-store.js"
 for (const limit of [1, 3, 5]) {
   test(`limits each main agent to ${limit} persisted delegated agents while allowing reuse`, async (t) => {
     const directory = mkdtempSync(join(tmpdir(), "shellby-agent-limit-"))
-    const previousHome = process.env.HOME
-    process.env.HOME = directory
+    const previousStateDir = MCP_CONFIG.stateDir
+    MCP_CONFIG.stateDir = directory
     const previousLimit = MCP_CONFIG.chatGpt.maxDelegatedAgents
     MCP_CONFIG.chatGpt.maxDelegatedAgents = limit
     t.after(() => {
+      MCP_CONFIG.stateDir = previousStateDir
       MCP_CONFIG.chatGpt.maxDelegatedAgents = previousLimit
-      if (previousHome === undefined) delete process.env.HOME
-      else process.env.HOME = previousHome
       rmSync(directory, { recursive: true, force: true })
     })
 
     const sessionId = "delegated-agent-limit-session"
     const parentAgent = runWithAgent(sessionId, () => getAgentIdentity()!)
-    const store = createSubagentStore()
+    const store = createSubagentStore(join(directory, "subagents.sqlite"))
     assert.ok(store)
     for (let index = 1; index <= limit; index++) {
       store.set(parentAgent, `agent-${index}`, {

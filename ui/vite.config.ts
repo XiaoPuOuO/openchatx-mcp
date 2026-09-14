@@ -1,6 +1,9 @@
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { fileURLToPath } from "node:url"
+
+import { loadPublicConfig } from "../src/public-config.cts"
 
 export default defineConfig({
   base: "/ui/",
@@ -15,7 +18,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/ui/api": {
-        target: "http://127.0.0.1:3333",
+        target: `http://127.0.0.1:${loadPublicConfig(fileURLToPath(new URL("../.shellby/config.toml", import.meta.url))).port}`,
         changeOrigin: true,
       },
     },

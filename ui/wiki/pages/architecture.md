@@ -55,3 +55,5 @@ Do not derive operational truth from pixel-room queue. Room intentionally lags f
 ## Server Boundary
 
 Backend routes and static serving live in root repo `src/server/http-server.ts`. Server configuration and local-only exposure are documented in [HTTP Transport](../../../wiki/pages/http-transport.md). Tool observation and steering delivery live in `src/server/agent-observer.ts` and `src/server/tool-registration-boundary.ts`.
+
+Production assets use the same configured port as MCP. The Vite development proxy reads root `port` from the repository's `.shellby/config.toml` through the shared public config loader, so a second repository copy points at its own backend. Run config-only setup if the file is missing before invoking Vite (`vite.config.ts`, `../src/public-config.cts`).

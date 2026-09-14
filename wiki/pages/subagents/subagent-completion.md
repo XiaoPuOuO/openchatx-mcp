@@ -36,7 +36,7 @@ This is separate from pre-submit restoration: a closed idle page or mismatched c
 
 `subagent_result(wait_ms)` only waits on the turn's local settlement promise. It never contacts ChatGPT, refreshes the browser, or performs reconciliation.
 
-Completed/failed results remain available only in the current MCP process, even after idle cleanup closes the agent's page. The agent conversation URL and turn count are persisted separately in `~/.shellby/subagents.sqlite`, so context can survive process restart even though old `turn_id` results cannot (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
+Completed/failed results remain available only in the current MCP process, even after idle cleanup closes the agent's page. The agent conversation URL and turn count are persisted separately in `<state_dir>/subagents.sqlite`, so context can survive process restart even though old `turn_id` results cannot (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
 
 ## Invariants
 

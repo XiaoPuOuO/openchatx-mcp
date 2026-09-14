@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -30,7 +31,11 @@ export const MCP_CONFIG = {
     // ],
   },
   host: "127.0.0.1",
-  port: 3333,
+  port: publicConfig.port,
+  instanceId: createHash("sha256")
+    .update(`${repositoryRoot}\0${resolveConfiguredPath(publicConfig.state_dir)}`)
+    .digest("hex"),
+  stateDir: resolveConfiguredPath(publicConfig.state_dir),
   workspace: resolveConfiguredPath(publicConfig.workspace),
   peekaboo: {
     executable: bundledPeekabooExecutable,
@@ -44,6 +49,8 @@ export const MCP_CONFIG = {
     maxPollWaitMs: 270_000,
   },
   ngrok: {
+    enabled: publicConfig.ngrok.enabled,
+    apiPort: publicConfig.ngrok.api_port,
     url: publicConfig.ngrok?.url,
     poolingEnabled: publicConfig.ngrok?.pooling_enabled ?? false,
   },

@@ -1,9 +1,7 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 
 const AUTH_STATE_VERSION = 1
-const DEFAULT_AUTH_STATE_PATH = join(homedir(), ".shellby", "auth.json")
 
 export interface ShellbyAuthState {
   version: typeof AUTH_STATE_VERSION
@@ -25,7 +23,7 @@ export class ShellbyAuthError extends Error {
 export class ShellbyAuthStore {
   private mutationTail: Promise<void> = Promise.resolve()
 
-  constructor(readonly filePath = DEFAULT_AUTH_STATE_PATH) {}
+  constructor(readonly filePath: string) {}
 
   async ensureState(): Promise<ShellbyAuthState> {
     return this.withMutation(async () => {

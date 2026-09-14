@@ -40,7 +40,7 @@ export interface McpRuntimeServices {
 }
 
 export async function startMcpHttpServer(services: McpRuntimeServices): Promise<RunningMcpServer> {
-  const { host, port } = MCP_CONFIG
+  const { host, port, instanceId } = MCP_CONFIG
   const { shellManager, peekaboo, auditLogger, chatGptSubagents, authStore, webPageOpener, agentObserver } = services
   const reviewPromptTracker = MCP_CONFIG.tools.review ? createReviewPromptTracker() : undefined
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
@@ -69,6 +69,7 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   const nodeMcpHandler = toNodeHandler(mcpHandler, { onerror: reportMcpError })
 
   app.get("/healthz", (_req, res) => {
+    res.setHeader("x-shellby-instance", instanceId)
     res.json({ ok: true })
   })
 

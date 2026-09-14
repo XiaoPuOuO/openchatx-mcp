@@ -19,5 +19,5 @@ on_http_request:
       - type: add-headers
         config:
           headers:
-            host: localhost:3333
+            host: localhost
             x-shellby-remote: "1"

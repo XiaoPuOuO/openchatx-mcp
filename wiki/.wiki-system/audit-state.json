@@ -8,7 +8,7 @@
       "fingerprint": "sha256:f09a8e4dbd4a8f22f95f64853ee2aa6c435f3893e680324aa52fe027bde90cf3"
     },
     "pages/http-transport.md": {
-      "fingerprint": "sha256:eecbddc97c8cd7cacf9b594faac983b77a9ce8ec4d66a8cdd68ff215759c26d6"
+      "fingerprint": "sha256:45f9d1e2663b723f3356e882790175b7be7a2955ffc2d534095c06a7436c5239"
     },
     "pages/mcp-tool-surface.md": {
       "fingerprint": "sha256:03ac1e30edc1f801eef5d995b2f3162e28937359458979b3a6b448c62adc02ca"
@@ -17,13 +17,13 @@
       "fingerprint": "sha256:8e44d3c8605e387caae5a3f7453b8bf5b81b6f5cfff96ab4072a3b584ad69fee"
     },
     "pages/operations/build-and-test.md": {
-      "fingerprint": "sha256:31c6f4c5f79163cb0b56794c66a0288421359b2906a5423e7729ed568a029a5f"
+      "fingerprint": "sha256:71c237876c8e96faa6aa4dc5bc269088773db79330fd9f88ec83b10e60787165"
     },
     "pages/operations/configuration-and-startup.md": {
-      "fingerprint": "sha256:e2f7dae1581f72569e668217a088394f418a30f4f79efd4aadae10beb2a0f6c2"
+      "fingerprint": "sha256:ae9426e5d2659c4d21423d640333d858739bdf41d9c2242b9693b3279e600d8a"
     },
     "pages/operations/secret-handling.md": {
-      "fingerprint": "sha256:45dea3a4f73ef57419ecc4aa7f925da8b72069960273a7a3871b790baad68fde"
+      "fingerprint": "sha256:ca62a85db76821a89f2734733eaffd8f1c8b61f072a8a99b8666d299702de988"
     },
     "pages/persistent-shell-runtime.md": {
       "fingerprint": "sha256:40c04c99284c01fe721fc09a24db30732f95ecfa91254c79699463a03e2c5e52"

@@ -1,6 +1,5 @@
 import { mkdirSync } from "node:fs"
-import { homedir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 import type { AgentIdentity } from "../../server/agent-context.js"
@@ -22,11 +21,7 @@ export interface SubagentStore {
   close(): void
 }
 
-export function subagentDatabasePath(): string {
-  return join(homedir(), ".shellby", "subagents.sqlite")
-}
-
-export function createSubagentStore(path = subagentDatabasePath()): SubagentStore | undefined {
+export function createSubagentStore(path: string): SubagentStore | undefined {
   try {
     mkdirSync(dirname(path), { recursive: true })
     const db = new DatabaseSync(path)

@@ -43,6 +43,7 @@ test("setup creates all defaults and preserves existing partial configs", async 
   assert.equal(initial.updated, false)
   assert.equal(initial.configPath, join(root, ".shellby", "config.toml"))
   const scaffold = loadPublicConfig(initial.configPath)
+  assert.equal(scaffold.state_dir, "~/.shellby")
   assert.equal(scaffold.workspace, "~/Desktop/agent-workspace")
   assert.deepEqual(scaffold.shell, { path: "/bin/zsh", rtk: false })
   assert.deepEqual(scaffold.chatgpt, {
@@ -53,7 +54,7 @@ test("setup creates all defaults and preserves existing partial configs", async 
   assert.deepEqual(scaffold.mcp, { tool_output: "compact" })
   assert.deepEqual(scaffold.ui, { enabled: false })
   assert.equal(scaffold.tools.computer, true)
-  assert.deepEqual(scaffold.ngrok, { pooling_enabled: false })
+  assert.deepEqual(scaffold.ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
 
   const scaffoldText = await readFile(initial.configPath, "utf8")
   assert.match(scaffoldText, /^# url = "https:\/\/your-reserved-domain.ngrok.app"$/m)
@@ -63,6 +64,8 @@ test("setup creates all defaults and preserves existing partial configs", async 
 
   await writeFile(initial.configPath, scaffoldText.replace(/^# url = /m, "url = ").replace("pooling_enabled = false", "pooling_enabled = true"))
   assert.deepEqual(loadPublicConfig(initial.configPath).ngrok, {
+    enabled: true,
+    api_port: 4040,
     url: "https://your-reserved-domain.ngrok.app",
     pooling_enabled: true,
   })
@@ -72,6 +75,7 @@ test("setup creates all defaults and preserves existing partial configs", async 
   assert.equal(repeated.created, false)
   assert.equal(repeated.updated, false)
   const migrated = loadPublicConfig(initial.configPath)
+  assert.equal(migrated.state_dir, "~/.shellby")
   assert.equal(migrated.workspace, "~/Custom")
   assert.equal(migrated.tools.computer, false)
   assert.equal(migrated.tools.shell, true)
@@ -80,7 +84,7 @@ test("setup creates all defaults and preserves existing partial configs", async 
   assert.equal(migrated.chatgpt.max_delegated_agents, 3)
   assert.equal(migrated.mcp.tool_output, "compact")
   assert.equal(migrated.ui.enabled, false)
-  assert.deepEqual(migrated.ngrok, { pooling_enabled: false })
+  assert.deepEqual(migrated.ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
   assert.equal(await readFile(initial.configPath, "utf8"), 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
 
   const complete = await initializeShellbyConfig(root)
@@ -95,6 +99,6 @@ test("setup preserves an active ngrok URL without adding a duplicate example", a
 
   const migrated = await initializeShellbyConfig(root)
   assert.equal(migrated.updated, false)
-  assert.deepEqual(loadPublicConfig(configPath).ngrok, { url: "https://custom.ngrok.app", pooling_enabled: true })
+  assert.deepEqual(loadPublicConfig(configPath).ngrok, { enabled: true, api_port: 4040, url: "https://custom.ngrok.app", pooling_enabled: true })
   assert.doesNotMatch(await readFile(configPath, "utf8"), /^# url = /m)
 })

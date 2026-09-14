@@ -25,7 +25,7 @@ Run the cheapest focused check that addresses the changed behavior. Broaden when
 
 | Area | Useful checks |
 | --- | --- |
-| Config and setup | `test/config.test.ts`, `test/setup-workspace.test.ts`, `test/start.test.ts`, `test/preflight.test.ts` |
+| Config and setup | `test/config.test.ts`, `test/setup-workspace.test.ts`, `test/start.test.ts`, `test/instance-isolation.test.ts`, `test/preflight.test.ts` |
 | Shell lifecycle, batches, rewriting | `test/shell-session.test.ts`, `test/shell-session-manager.test.ts`, `test/shell-parallel.test.ts`, `test/rtk.test.ts` |
 | MCP contract and transport | `test/mcp-integration.test.ts` loads cases from `test/integrations/`; registration/projection also have focused tests. |
 | Audit and dashboard observation | `test/mcp-audit-log.test.ts`, `test/agent-observer.test.ts`, `test/agent-context.test.ts` |
@@ -37,6 +37,10 @@ Run the cheapest focused check that addresses the changed behavior. Broaden when
 Integration tests cover modern MCP negotiation and legacy fallback, shared state across clients, startup gating and five-second instruction deduplication, static tool-group toggles, compact/structured results, owner binding on the first tool call, host rejection, and continued client use after an isolated server restart. Source `test/integrations/` owns exact coverage.
 
 Tests use temporary directories and real local child shells. `test/helpers/temp.ts` owns disposable-directory cleanup. Process-group and vendored binary checks require the supported macOS environment. Some adapter tests inject fake executables; real vendored `apply_patch` coverage also exercises partial application and move/edit semantics.
+
+Instance isolation tests run two disposable MCP listeners with separate auth stores, validate ngrok v2/v3 API overlays without copying credentials, exercise URL discovery against a fake ngrok API, and reject an occupied CDP endpoint belonging to another profile. Startup fixtures also reject a healthy response from a different repository/state identity. These tests do not start a public tunnel or restart the production daemon.
+
+Local-only lifecycle coverage checks fresh startup, removal of an existing managed tunnel, cleanup failures, and hard restart. A disposable setup fixture uses the real config loader and preflight with no ngrok on `PATH`, proving disabled mode skips that prerequisite while enabled mode still requires it. URL tests ensure disabled mode never queries ngrok.
 
 ## Live Browser Validation
 

@@ -108,7 +108,7 @@ curl -fsS http://127.0.0.1:3333/healthz
 npm run print-url
 ```
 
-The local MCP endpoint is `http://127.0.0.1:3333/mcp`.
+The default local MCP endpoint is `http://127.0.0.1:3333/mcp`; root `port` in `.shellby/config.toml` changes the listener and health-check port.
 
 ## Optional capabilities
 
@@ -136,7 +136,7 @@ Run the dedicated browser setup when Chrome was unavailable during initial setup
 npm run setup:chatgpt
 ```
 
-This creates a dedicated Chrome profile under `~/.shellby/chatgpt-chrome` and attaches over CDP at `127.0.0.1:9222`. Sign into ChatGPT once in that profile. Future `npm start` runs launch it automatically while clone or subagent tools are enabled.
+This creates a dedicated Chrome profile under `<state_dir>/chatgpt-chrome` and attaches over CDP at `127.0.0.1:9222`. `state_dir` defaults to `~/.shellby`. Sign into ChatGPT once in that profile. Future `npm start` runs launch it automatically while clone or subagent tools are enabled.
 
 Conversation URL and turn count are persisted for reused `agent_id` values. Use `npm run reset-agents` to forget those local mappings.
 
@@ -159,7 +159,7 @@ See [Browser ChatGPT Subagents](wiki/pages/subagents/browser-chatgpt-subagents.m
 | `npm run auth:reset`   | Clear the bound remote ChatGPT subject after confirmation.                     |
 | `npm run reset-agents` | Forget persisted subagent conversation mappings.                               |
 
-PM2 is installed as a repository dependency. All Shellby PM2 commands use `~/.shellby/pm2` for their daemon, sockets, logs, and process state. This is separate from the default `~/.pm2` daemon used by other projects; use `npm run pm2 -- <args>` for direct access to Shellby's daemon.
+PM2 is installed as a repository dependency. All Shellby PM2 commands use `<state_dir>/pm2` for their daemon, sockets, logs, and process state. `state_dir` defaults to `~/.shellby`. This is separate from the default `~/.pm2` daemon used by other projects; use `npm run pm2 -- <args>` for direct access to Shellby's daemon.
 
 Use `npm run restart` for routine code or config changes, including from `shell_run`. It keeps the PM2 daemon, reloads ngrok, then reloads MCP. The initiating shell and MCP connection may close; after services return, make a fresh tool call. Build failures leave running services and the audit log intact. The authenticated ChatGPT Chrome profile is reused.
 
@@ -187,9 +187,10 @@ npm start
 
 Shellby's public configuration is the gitignored `.shellby/config.toml`. `npm run setup` creates a config showing every supported setting for new installations, with defaults active and the optional `ngrok.url` shown as a commented example. Uncomment and customize that URL to use a reserved ngrok endpoint; leaving it commented lets ngrok assign the public URL. Existing files are left untouched, preserving their values, comments, and formatting. Missing settings use defaults automatically. Invalid values produce a warning and fall back individually; unknown keys warn and are ignored. Valid TOML formatting—including reordered sections, dotted keys, and inline tables—is accepted. Malformed TOML syntax still needs correction; errors show the location and never rewrite your file.
 
-The TOML surface currently owns the workspace, shell path, ChatGPT CDP/project routing, MCP tool-output format, and startup-static tool groups. The generated config enables every tool group and defaults tool output to `compact`. Setting a group to `false` removes those tools from `tools/list` after Shellby restarts and skips its supporting runtime service where one exists. `start_here` is always published. For example, this customization disables browser-backed agents and Computer Use:
+The TOML surface currently owns the runtime state directory, workspace, shell path, ChatGPT CDP/project routing, MCP tool-output format, and startup-static tool groups. `state_dir` controls machine-local Shellby state such as authentication, subagent persistence, the dedicated Chrome profile, and the PM2 daemon; it defaults to `~/.shellby`. The generated config enables every tool group and defaults tool output to `compact`. Setting a group to `false` removes those tools from `tools/list` after Shellby restarts and skips its supporting runtime service where one exists. `start_here` is always published. For example, this customization disables browser-backed agents and Computer Use:
 
 ```toml
+state_dir = "~/.shellby"
 workspace = "~/Desktop/agent-workspace"
 
 [shell]
@@ -222,7 +223,41 @@ computer = false
 
 `shell.rtk` defaults to `false`, so RTK is not required to install or run Shellby. To enable transparent RTK command rewriting, install RTK Token Killer with `brew install rtk`, set `shell.rtk = true`, and restart Shellby. Shellby resolves that executable from startup `PATH`, then uses the resolved absolute path for supported rewrites regardless of the shell command's cwd. Unsupported rewrites and RTK failures fall back to the original command. Shellby keeps the caller's original command for request identity, auditing, and command previews, and disables RTK's separate failure tee, telemetry, and persistent history for Shellby-launched commands while still loading normal RTK filtering/exclusion configuration.
 
-Shellby does not use a repository `.env` file. User-configurable Shellby settings come only from `.shellby/config.toml`; external tools use their normal machine-level configuration. In particular, ngrok is resolved from `PATH` and authentication is configured with `ngrok config add-authtoken`. Chrome is discovered in the normal macOS application locations, and Shellby uses its bundled Peekaboo build. Host, port, runtime limits, and other non-configurable settings remain code-owned in [`src/config.ts`](src/config.ts).
+Shellby does not use a repository `.env` file. User-configurable Shellby settings come only from `.shellby/config.toml`; external tools use their normal machine-level configuration. In particular, ngrok is resolved from `PATH` and authentication is configured with `ngrok config add-authtoken`. Chrome is discovered in the normal macOS application locations, and Shellby uses its bundled Peekaboo build. The loopback host and internal runtime limits remain code-owned in [`src/config.ts`](src/config.ts).
+
+### Running two copies
+
+Give each repository copy its own state directory, MCP port, and ChatGPT CDP port when agent tools are enabled. Copies using ngrok also need separate ngrok API ports and public URLs. Changing only `state_dir` separates saved state and PM2, but does not prevent port collisions. In the second copy's `.shellby/config.toml`, merge these values into the existing root and sections:
+
+```toml
+state_dir = "~/.shellby-second"
+port = 3334
+
+[ngrok]
+api_port = 4041
+url = "https://your-second-reserved-domain.ngrok.app"
+pooling_enabled = false
+
+[chatgpt]
+cdp_endpoint = "http://127.0.0.1:9223"
+```
+
+Use a real, distinct ngrok URL available to your account. Keep pooling disabled for independent copies. If your config is missing, run `npm run setup -- --config-only` first, then edit it before full setup or startup. Run `npm run setup` in the new copy, sign into its dedicated Chrome profile if agent tools are enabled, then run `npm start` from Terminal.app. Run `npm run print-url` in each repository to get that copy's connector URL.
+
+Each copy's PM2 commands, including hard restart, target its configured state directory. Authentication, subagent mappings, and Chrome profiles stay separate. ngrok credentials remain in its native user config; Shellby writes only an API-address overlay at `<state_dir>/ngrok-agent.json`. The dashboard uses the copy's MCP port (`http://127.0.0.1:3334/ui/` for this example); the Vite development proxy also reads that port. Workspace files and the macOS desktop are still shared unless you select a separate `workspace`; Computer Use still controls the same desktop.
+
+### Local-only MCP
+
+To run without ngrok, add or update this setting in `.shellby/config.toml`:
+
+```toml
+[ngrok]
+enabled = false
+```
+
+Then use the usual `npm start` or `npm run restart`. PM2, enabled tool services, Chrome startup, and the optional dashboard still work. Setup and preflight skip ngrok installation/authentication checks. Startup removes any existing `shellby-ngrok` process from this instance's PM2 daemon before reloading MCP; a cleanup failure stops startup. Separately managed tunnels are outside this setting's scope.
+
+`npm run print-url` prints `http://127.0.0.1:<port>/mcp` for your local MCP client. A new installation can run `npm run setup -- --config-only`, set `ngrok.enabled = false`, then run full setup without installing ngrok. The setting defaults to `true`, so existing configurations retain their behavior. Reserved URL and pooling values remain saved for later re-enabling. Local-only copies do not need a separate ngrok API port or public URL.
 
 ## Troubleshooting
 
@@ -263,7 +298,7 @@ More startup and recovery details are in [Configuration and Startup](wiki/pages/
 
 - The checked-in ngrok traffic policy exposes the local MCP endpoint to ChatGPT.
 - Direct localhost MCP access is unauthenticated. Do not expose the local endpoint through another untrusted proxy.
-- Trusted remote tool calls are bound to the first ChatGPT subject stored in `~/.shellby/auth.json`.
+- Trusted remote tool calls are bound to the first ChatGPT subject stored in `<state_dir>/auth.json`.
 - The dedicated authenticated Chrome profile is part of the trust boundary for browser subagents.
 - `agent-commands.yaml` can contain sensitive tool inputs. It is gitignored and permission-restricted and should be treated as private.
 

@@ -1,5 +1,4 @@
 import { mkdir } from "node:fs/promises"
-import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
@@ -20,8 +19,12 @@ if (configOnly) {
 
 intro()
 
+const config = await initializeShellbyConfig()
+note("Configuration", `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
+const { MCP_CONFIG } = await import("../src/config.ts")
+
 const prerequisiteStep = spinner("Checking prerequisites")
-const { errors } = await checkPublicRuntime()
+const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled)
 if (errors.length > 0) {
   prerequisiteStep.fail("Prerequisites need attention")
   failure("Setup cannot continue", errors)
@@ -29,12 +32,7 @@ if (errors.length > 0) {
 }
 prerequisiteStep.succeed("Prerequisites ready")
 
-await mkdir(join(homedir(), ".shellby"), { recursive: true })
-
-const config = await initializeShellbyConfig()
-note("Configuration", `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
-
-const { MCP_CONFIG } = await import("../src/config.ts")
+await mkdir(MCP_CONFIG.stateDir, { recursive: true })
 const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
 if (rtkError) {
   failure("Setup cannot continue", [rtkError])

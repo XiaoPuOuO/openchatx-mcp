@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url"
+import { join } from "node:path"
 
 import { ShellbyAuthStore } from "./auth/auth.js"
 import { MCP_CONFIG } from "./config.js"
@@ -15,7 +16,7 @@ import { WebPageOpener } from "./tools/web/web-open.js"
 const auditLogPath = fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
 const auditLogger = new McpAuditLogger(auditLogPath)
 const agentObserver = MCP_CONFIG.ui.enabled ? createAgentObserver() : undefined
-const authStore = new ShellbyAuthStore()
+const authStore = new ShellbyAuthStore(join(MCP_CONFIG.stateDir, "auth.json"))
 await authStore.ensureState()
 const chatGptSubagents = MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? createChatGptSubagentService() : undefined
 const peekaboo = MCP_CONFIG.tools.computer ? new PeekabooClient({ localOnly: true }) : undefined

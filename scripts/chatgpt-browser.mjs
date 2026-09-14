@@ -10,7 +10,7 @@ const setup = process.argv.includes("--setup")
 const auto = process.argv.includes("--auto")
 const optional = process.argv.includes("--optional")
 const endpoint = new URL(MCP_CONFIG.chatGpt.cdpEndpoint)
-const profileDir = join(homedir(), ".shellby", "chatgpt-chrome")
+const profileDir = join(MCP_CONFIG.stateDir, "chatgpt-chrome")
 const markerPath = join(profileDir, ".configured")
 const mobileUserAgent = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 const mobileWindowSize = "430,900"
@@ -20,6 +20,12 @@ const cdpReady = await isCdpReady(endpoint)
 if (!isLocalEndpoint(endpoint)) {
   console.log(`ChatGPT browser: using configured CDP endpoint ${endpoint.href}`)
   process.exit(0)
+}
+
+if (cdpReady && !findManagedChromePid()) {
+  fail(
+    `CDP endpoint ${endpoint.href} is already in use by another Chrome profile. Give this copy a different chatgpt.cdp_endpoint port or close that browser first.`
+  )
 }
 
 if (!setup && !configured) {
@@ -172,8 +178,11 @@ function findManagedChromePid() {
   if (result.error || result.status !== 0 || !result.stdout) return undefined
 
   const profileArg = `--user-data-dir=${profileDir}`
+  const portArg = `--remote-debugging-port=${endpoint.port}`
   for (const line of result.stdout.split("\n")) {
-    if (!line.includes("Google Chrome.app/Contents/MacOS/Google Chrome") || !line.includes(profileArg)) continue
+    const command = `${line} `
+    if (!command.includes("Google Chrome.app/Contents/MacOS/Google Chrome") || !command.includes(` ${profileArg} `) || !command.includes(` ${portArg} `))
+      continue
     const match = line.trim().match(/^(\d+)\s/)
     if (match) return Number(match[1])
   }

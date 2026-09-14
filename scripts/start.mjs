@@ -8,6 +8,7 @@ import { checkPublicRuntime, checkRtkRuntime, printPreflightErrors } from "./pre
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const pm2Script = join(repoRoot, "scripts", "pm2.mjs")
+const healthUrl = `http://${MCP_CONFIG.host}:${MCP_CONFIG.port}/healthz`
 const hardRestart = process.argv.includes("--hard")
 const restarting = process.argv.includes("--restart") || hardRestart
 
@@ -16,7 +17,7 @@ if (hardRestart && process.env.name === "shellby-mcp" && process.env.pm_exec_pat
   process.exit(1)
 }
 
-const { errors } = await checkPublicRuntime()
+const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled)
 const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
 if (rtkError) errors.push(rtkError)
 
@@ -36,26 +37,34 @@ try {
 run("npm", ["run", "build"])
 if (hardRestart) {
   // Only a hard restart replaces the daemon's inherited macOS service context.
-  run(process.execPath, [pm2Script, "kill"])
+  run(process.execPath, ["--import", "tsx", pm2Script, "kill"])
 } else {
-  runAllowFailure(process.execPath, [pm2Script, "delete", "shellby-cursor-host"])
+  runAllowFailure(process.execPath, ["--import", "tsx", pm2Script, "delete", "shellby-cursor-host"])
 }
 if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
 if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
   run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "chatgpt-browser.mjs"), "--auto"])
 }
 // Reload MCP last: its shutdown can kill this CLI, but the PM2 daemon completes the app restart.
-run(process.execPath, [pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], { quiet: true })
-run(process.execPath, [pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], { quiet: true })
+if (MCP_CONFIG.ngrok.enabled) {
+  run(process.execPath, ["--import", "tsx", pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], { quiet: true })
+} else if (!hardRestart) {
+  // Removing it from the ecosystem alone leaves an already-running tunnel alive.
+  const processes = JSON.parse(run(process.execPath, ["--import", "tsx", pm2Script, "jlist", "--silent"], { quiet: true }).stdout)
+  if (processes.some((app) => app.name === "shellby-ngrok")) {
+    run(process.execPath, ["--import", "tsx", pm2Script, "delete", "shellby-ngrok"], { quiet: true })
+  }
+}
+run(process.execPath, ["--import", "tsx", pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], { quiet: true })
 
 if (!(await waitForMcp())) {
-  console.error("MCP server did not become healthy at http://127.0.0.1:3333/healthz.")
+  console.error(`This Shellby instance did not become healthy at ${healthUrl}. Check for another instance using port ${MCP_CONFIG.port}.`)
   process.exit(1)
 }
 
 console.log("MCP server: running")
-console.log("ngrok: running")
-run(process.execPath, [join(repoRoot, "scripts", "print-url.mjs")])
+console.log(MCP_CONFIG.ngrok.enabled ? "ngrok: running" : "ngrok: disabled (local only)")
+run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "print-url.mjs")])
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { encoding: "utf8" })
@@ -69,6 +78,7 @@ function run(command, args, options = {}) {
     if (result.stdout) process.stdout.write(result.stdout)
     if (result.stderr) process.stderr.write(result.stderr)
   }
+  return result
 }
 
 function runAllowFailure(command, args) {
@@ -78,10 +88,10 @@ function runAllowFailure(command, args) {
 async function waitForMcp() {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
-      const response = await fetch("http://127.0.0.1:3333/healthz", {
+      const response = await fetch(healthUrl, {
         signal: AbortSignal.timeout(500),
       })
-      if (response.ok) return true
+      if (response.ok && response.headers.get("x-shellby-instance") === MCP_CONFIG.instanceId) return true
     } catch {
       // PM2 may still be starting the process.
     }

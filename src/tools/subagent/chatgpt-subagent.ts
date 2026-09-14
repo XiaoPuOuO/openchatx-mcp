@@ -1,4 +1,5 @@
 import type { Browser, BrowserContext, Page } from "playwright-core"
+import { join } from "node:path"
 
 import { MCP_CONFIG } from "../../config.js"
 import { getAgentIdentity, type AgentIdentity } from "../../server/agent-context.js"
@@ -91,7 +92,7 @@ interface SubagentScope {
 }
 
 export function createChatGptSubagentService(): ChatGptSubagentService {
-  const store = createSubagentStore()
+  const store = createSubagentStore(join(MCP_CONFIG.stateDir, "subagents.sqlite"))
   const scopes = new Map<AgentIdentity | undefined, SubagentScope>()
   let rateLimitedUntil = 0
   let browser: Browser | undefined
