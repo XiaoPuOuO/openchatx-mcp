@@ -423,7 +423,7 @@ test("records tools/list as one timestamped line and ignores other non-tool MCP 
   assert.equal(await readFile(file, "utf8"), "--- # tools/list - Aug 7 10:30 PM\n")
 })
 
-test("logs tool calls rejected before handler execution without buffering the response", async (t) => {
+test("logs tool calls that never reach a handler without adding a generic error notice", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -437,8 +437,8 @@ test("logs tool calls rejected before handler execution without buffering the re
   request.finishTransport({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /--- # ! shell_run - 0ms - \d+ in - Aug 28 9:00 PM/)
-  assert.match(log, /message: "tool_rejected: Tool call was rejected before execution, likely during validation or dispatch\."/)
+  assert.match(log, /--- # shell_run - 0ms - \d+ in - Aug 28 9:00 PM/)
+  assert.doesNotMatch(log, /tool_rejected|message:|note:/)
   assert.match(log, /session: "agent-\d+"/)
 })
 

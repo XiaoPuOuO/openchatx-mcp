@@ -58,11 +58,8 @@ export function createAuditRequest(
       for (const item of pending) {
         if (item.claimed) continue
         item.claimed = true
-        item.call.finish({
-          error: new Error("tool_rejected: Tool call was rejected before execution, likely during validation or dispatch."),
-          httpStatus,
-          state,
-        })
+        // SDK rejections can bypass the handler. Record transport metadata without inventing a generic error notice.
+        item.call.finish({ httpStatus, state })
       }
     },
   }

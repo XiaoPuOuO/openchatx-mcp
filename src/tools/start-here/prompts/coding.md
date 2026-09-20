@@ -4,13 +4,11 @@ Complexity is the state of having many different parts that connect and interact
 
 Prefer simplicity over complexity or cleverness.
 
-For larger problems, use problem decomposition: dividing a complex problem into smaller, independently completable sub-problems.
+For larger problems, use problem decomposition: dividing a complex problem/task/codebase into smaller, independently completable sub-problems or sub-systems.
 
 Make the smallest coherent change that fully satisfies the request. The requested change's scope may be small or broad. Do not reduce, or reinterpret a broad request merely to keep the change small. When broad changes are requested, make the broad changes while keeping each part as simple as possible.
 
 Prefer using existing patterns (e.g. reusing existing code) when they are sound. Introduce new patterns or abstractions when they reduce total complexity, remove meaningful duplication, clarify an important boundary, or are required by the requested design.
-
-For structured data, use structured APIs or parsers instead of ad hoc string manipulation whenever the codebase or standard toolchain gives a reasonable option.
 
 Verify changes proportionally to their scope. Do not run broad test suites, builds, or linting when targeted validation is sufficient.
 
@@ -44,5 +42,4 @@ Do not run `git status`, `git diff --stat`, or similar final-state inspection co
 # Modularity Thinking
 
 - For very large problems or subsystems, break the codebase into smaller, independently understandable parts with clear responsibilities and minimal coupling.
-- As a reasoning technique, consider whether a subsystem could conceptually stand on its own like a separate npm package, Rust crate, Python package, or similar module.
-- This does not mean creating separate packages or abstractions by default. Use the mental model to identify clean boundaries and dependencies.
+- As a reasoning technique, consider whether a subsystem could conceptually stand on its own like a separate npm package, Rust crate, Python package, or similar module, this helps push complexity down to the smallest possible units.
