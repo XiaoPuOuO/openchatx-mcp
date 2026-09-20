@@ -45,6 +45,7 @@ export type ChatGptSubagentErrorCode =
   | "SUBAGENT_RATE_LIMITED"
   | "AGENT_TARGET_LOST"
   | "AGENT_IDLE_EXPIRED"
+  | "TEMP_AGENT_EXPIRED"
   | "REQUEST_ABORTED"
   | "CHATGPT_UI_CHANGED"
 

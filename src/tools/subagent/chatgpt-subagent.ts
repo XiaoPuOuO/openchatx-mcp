@@ -60,6 +60,7 @@ interface BrowserAgentState {
   page?: Page
   conversationUrl?: string
   lastCompletedAt?: number
+  idleExpired?: boolean
   lastUsedAt: number
   turnCount: number
 }
@@ -465,6 +466,12 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   ): Promise<void> {
     assertNotRateLimited()
     const agent = scope.agents.get(agentId)
+    if (agent?.idleExpired) {
+      throw new ChatGptSubagentError(
+        "TEMP_AGENT_EXPIRED",
+        `Temporary agent ${agentId} was closed after 30 minutes of inactivity. Its conversation cannot be resumed.`
+      )
+    }
     if (scope.activeOperations.has(agentId)) throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} already has an active turn.`)
     if (agent?.status === "uncertain") {
       throw new ChatGptSubagentError(
@@ -689,7 +696,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
         if ((activeOperation && !activeOperation.turnId) || now - agent.lastUsedAt < AGENT_IDLE_TTL_MS) continue
         const page = agent.page
-        if (page && !page.isClosed()) await page.close().catch(() => undefined)
+        if (page && !page.isClosed()) {
+          if (!agent.memory) agent.idleExpired = true
+          await page.close().catch(() => undefined)
+        }
         if (agent.page === page) agent.page = undefined
       }
     }
