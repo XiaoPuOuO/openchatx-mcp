@@ -62,8 +62,8 @@ export const MCP_CONFIG = {
   },
   web: {
     defaultFormat: "markdown" as const,
-    defaultOutputTokens: 8_192,
-    maxOutputTokens: 32_768,
+    defaultOutputTokens: 8000,
+    maxOutputTokens: 32000,
     documentByteLimit: 2 * 1024 * 1024,
     resourceByteLimit: 16 * 1024 * 1024,
     documentTtlMs: 10 * 60 * 1_000,
@@ -84,7 +84,7 @@ export const MCP_CONFIG = {
     // Additional retained output can be retrieved with shell_poll and next_cursor.
     defaultOutputTokens: 1_024,
     // Largest model-output token budget a caller may explicitly request per call.
-    maxOutputTokens: 16_384,
+    maxOutputTokens: 18_000,
     defaultWaitMs: 10_000,
     maxWaitMs: 10_000,
     defaultPollWaitMs: 40_000,
