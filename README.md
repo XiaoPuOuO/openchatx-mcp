@@ -127,6 +127,9 @@ See [Computer Use](wiki/pages/computer-use.md) for runtime details.
 
 </details>
 
+> [!WARNING]
+> Browser-backed ChatGPT agent features (`clones` and `subagents`) automate ChatGPT Web and may conflict with [OpenAI's Terms of Use](https://openai.com/policies/terms-of-use/). Disable them with `tools.clones = false` and `tools.subagents = false` in `.shellby/config.toml`. Use these features at your own risk.
+
 <details>
 <summary><strong>Browser-backed ChatGPT subagents</strong></summary>
 
