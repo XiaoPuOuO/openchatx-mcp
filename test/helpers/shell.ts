@@ -1,3 +1,4 @@
+import process from "node:process"
 import { MCP_CONFIG } from "../../src/config.js"
 import type { ShellSession, ShellSnapshot } from "../../src/tools/shell/session.js"
 
@@ -67,7 +68,12 @@ export function isProcessAlive(pid: number): boolean {
     process.kill(pid, 0)
     return true
   } catch (error) {
-    if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ESRCH") return false
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ESRCH"
+    )
+      return false
     throw error
   }
 }

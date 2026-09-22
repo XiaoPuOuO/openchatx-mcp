@@ -2,7 +2,12 @@ import { appendFileSync, chmodSync, existsSync } from "node:fs"
 
 import { countTokens } from "../../tokenizer.js"
 import { getAgentIdentity } from "../agent-context.js"
-import { errorMessage, formatAuditEntry, formatAuditTime, summarizeToolResult } from "./audit-format.js"
+import {
+  errorMessage,
+  formatAuditEntry,
+  formatAuditTime,
+  summarizeToolResult,
+} from "./audit-format.js"
 import { createAuditRequest, type McpAuditCall, type McpAuditRequest } from "./audit-request.js"
 
 export type { McpAuditRequest } from "./audit-request.js"
@@ -30,7 +35,11 @@ export class McpAuditLogger {
 
   private startToolCall(toolName: string, argumentsValue: unknown, via?: "then_run"): McpAuditCall {
     const identity = getAgentIdentity()
-    const agentLabel = identity ? (identity.taskSlug ? `${identity.agent}/${identity.taskSlug}` : identity.agent) : undefined
+    const agentLabel = identity
+      ? identity.taskSlug
+        ? `${identity.agent}/${identity.taskSlug}`
+        : identity.agent
+      : undefined
     const startedAt = this.clock()
     const startedTime = this.now()
     const inputTokens = countTokens(JSON.stringify(argumentsValue ?? {}))
@@ -41,9 +50,14 @@ export class McpAuditLogger {
         if (finished) return
         finished = true
 
-        const toolResponse = summarizeToolResult(input.toolResult, input.modelResult ?? input.toolResult, input.error)
+        const toolResponse = summarizeToolResult(
+          input.toolResult,
+          input.modelResult ?? input.toolResult,
+          input.error
+        )
         const exitCode = toolResponse.structuredContent?.exit_code
-        const shellExitFailed = toolName === "shell_run" && typeof exitCode === "number" && exitCode !== 0
+        const shellExitFailed =
+          toolName === "shell_run" && typeof exitCode === "number" && exitCode !== 0
         const httpStatus = input.httpStatus ?? 200
         const state = input.state ?? "finished"
 
@@ -56,7 +70,10 @@ export class McpAuditLogger {
             httpStatus,
             state,
             inputTokens,
-            outputTokens: toolResponse.modelOutput !== undefined ? countTokens(toolResponse.modelOutput) : undefined,
+            outputTokens:
+              toolResponse.modelOutput !== undefined
+                ? countTokens(toolResponse.modelOutput)
+                : undefined,
             toolFailed: toolResponse.failed || shellExitFailed,
             failureMessage: toolResponse.failureMessage,
             responseSummary: toolResponse,

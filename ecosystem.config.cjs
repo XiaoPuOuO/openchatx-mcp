@@ -20,7 +20,8 @@ const apps = [
 if (shellbyConfig.ngrok.enabled) {
   const ngrokExecutable = execFileSync("/usr/bin/which", ["ngrok"], { encoding: "utf8" }).trim()
   const ngrokArgs = ["http", `http://127.0.0.1:${shellbyConfig.port}`]
-  for (const path of ngrokConfigFiles(shellbyConfig, __dirname, ngrokExecutable)) ngrokArgs.push("--config", path)
+  for (const path of ngrokConfigFiles(shellbyConfig, __dirname, ngrokExecutable))
+    ngrokArgs.push("--config", path)
   if (shellbyConfig.ngrok.url) ngrokArgs.push("--url", shellbyConfig.ngrok.url)
   if (shellbyConfig.ngrok.pooling_enabled) ngrokArgs.push("--pooling-enabled")
   ngrokArgs.push("--traffic-policy-file=./ngrok-traffic-policy.yml", "--inspect=false")

@@ -1,6 +1,6 @@
-import { createInterface } from "node:readline/promises"
 import { join } from "node:path"
-
+import process from "node:process"
+import { createInterface } from "node:readline/promises"
 import { MCP_CONFIG } from "../config.js"
 import { ShellbyAuthStore } from "./auth.js"
 
@@ -16,7 +16,9 @@ console.warn(
 )
 
 try {
-  const answer = (await input.question("Reset Shellby MCP authentication? [y/N] ")).trim().toLowerCase()
+  const answer = (await input.question("Reset Shellby MCP authentication? [y/N] "))
+    .trim()
+    .toLowerCase()
   if (answer !== "y" && answer !== "yes") {
     console.log("Authentication unchanged.")
     process.exitCode = 0

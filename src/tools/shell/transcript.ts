@@ -32,7 +32,11 @@ export function createTranscriptBuffer(maxLength: number): TranscriptBuffer {
     const overflow = value.length - retainedStart - maxLength
     if (overflow > 0) {
       let nextStart = retainedStart + overflow
-      if (nextStart < value.length && isHighSurrogate(value.charCodeAt(nextStart - 1)) && isLowSurrogate(value.charCodeAt(nextStart))) {
+      if (
+        nextStart < value.length &&
+        isHighSurrogate(value.charCodeAt(nextStart - 1)) &&
+        isLowSurrogate(value.charCodeAt(nextStart))
+      ) {
         nextStart += 1
       }
       retainedStart = nextStart

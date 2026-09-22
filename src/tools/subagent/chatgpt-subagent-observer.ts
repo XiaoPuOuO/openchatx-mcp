@@ -1,7 +1,7 @@
 import type { CDPSession, Page } from "playwright-core"
 
 import type { ChatGptSubagentActivity } from "./chatgpt-subagent-contracts.js"
-import { ChatGptTurnTracker, type ChatGptTurnCompletion } from "./chatgpt-subagent-protocol.js"
+import { type ChatGptTurnCompletion, ChatGptTurnTracker } from "./chatgpt-subagent-protocol.js"
 
 export interface AssistantResponseObservation {
   response: Promise<ChatGptTurnCompletion>
@@ -17,7 +17,11 @@ export async function observeAssistantResponse(
     onConversationId?: (conversationId: string) => void
   }
 ): Promise<AssistantResponseObservation> {
-  const webSocketTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
+  const webSocketTracker = new ChatGptTurnTracker(
+    input.prompt,
+    input.onActivity,
+    input.onConversationId
+  )
   const httpTracker = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
   const requestIds = new Set<string>()
   const buffers = new Map<string, string>()
@@ -47,7 +51,7 @@ export async function observeAssistantResponse(
     if (settled || !text) return
     let buffer = (buffers.get(requestId) ?? "") + text
     while (true) {
-      const match = /\r?\n\r?\n/.exec(buffer)
+      const match = /\r?\n\r?\n/u.exec(buffer)
       if (!match || match.index === undefined) break
       const end = match.index + match[0].length
       const block = buffer.slice(0, end)
@@ -68,8 +72,12 @@ export async function observeAssistantResponse(
     }
   }
 
-  const requestHandler = (event: { requestId: string; request?: { url?: string; method?: string } }): void => {
-    if (settled || event.request?.method !== "POST" || !isConversationEndpoint(event.request.url)) return
+  const requestHandler = (event: {
+    requestId: string
+    request?: { url?: string; method?: string }
+  }): void => {
+    if (settled || event.request?.method !== "POST" || !isConversationEndpoint(event.request.url))
+      return
     requestIds.add(event.requestId)
     buffers.set(event.requestId, "")
   }
@@ -80,7 +88,8 @@ export async function observeAssistantResponse(
       .send("Network.streamResourceContent", { requestId: event.requestId })
       .then((result) => {
         const bufferedData = typeof result.bufferedData === "string" ? result.bufferedData : ""
-        if (bufferedData) feedHttp(event.requestId, Buffer.from(bufferedData, "base64").toString("utf8"))
+        if (bufferedData)
+          feedHttp(event.requestId, Buffer.from(bufferedData, "base64").toString("utf8"))
       })
       .catch(() => undefined)
   }
@@ -96,8 +105,14 @@ export async function observeAssistantResponse(
       .send("Network.getResponseBody", { requestId: event.requestId })
       .then((result) => {
         if (settled || typeof result.body !== "string") return
-        const body = result.base64Encoded ? Buffer.from(result.body, "base64").toString("utf8") : result.body
-        const fallback = new ChatGptTurnTracker(input.prompt, input.onActivity, input.onConversationId)
+        const body = result.base64Encoded
+          ? Buffer.from(result.body, "base64").toString("utf8")
+          : result.body
+        const fallback = new ChatGptTurnTracker(
+          input.prompt,
+          input.onActivity,
+          input.onConversationId
+        )
         finish(fallback.ingestSse(body))
       })
       .catch(() => undefined)

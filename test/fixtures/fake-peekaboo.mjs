@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { appendFileSync, writeFileSync } from "node:fs"
+import process from "node:process"
 
 const args = process.argv.slice(2)
 const command = args[0] ?? "unknown"
@@ -22,7 +23,13 @@ let screenshotPath
 if (command === "see") {
   screenshotPath = optionValue("--path")
   if (screenshotPath) {
-    writeFileSync(screenshotPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"))
+    writeFileSync(
+      screenshotPath,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64"
+      )
+    )
   }
 }
 
@@ -53,7 +60,8 @@ if (exitCode > 0) {
 
 if (
   process.env.FAKE_PEEKABOO_FAIL_COMMAND === command &&
-  (!process.env.FAKE_PEEKABOO_FAIL_SUBCOMMAND || process.env.FAKE_PEEKABOO_FAIL_SUBCOMMAND === args[1])
+  (!process.env.FAKE_PEEKABOO_FAIL_SUBCOMMAND ||
+    process.env.FAKE_PEEKABOO_FAIL_SUBCOMMAND === args[1])
 ) {
   respond({
     success: false,
@@ -70,13 +78,19 @@ if (
   respond({
     success: true,
     data: {
-      snapshot_id: screenCapture ? "snapshot-screen" : treeCapture ? "snapshot-inspect" : "snapshot-42",
+      snapshot_id: screenCapture
+        ? "snapshot-screen"
+        : treeCapture
+          ? "snapshot-inspect"
+          : "snapshot-42",
       ui_elements: [
         {
           id: "B1",
           role: "AXButton",
           label: "Continue",
-          bounds: screenCapture ? { x: 1090, y: 1620, width: 100, height: 40 } : { x: 60, y: 95, width: 100, height: 40 },
+          bounds: screenCapture
+            ? { x: 1090, y: 1620, width: 100, height: 40 }
+            : { x: 60, y: 95, width: 100, height: 40 },
         },
       ],
       screenshot_raw: screenshotPath,

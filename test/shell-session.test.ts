@@ -2,12 +2,22 @@ import assert from "node:assert/strict"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import process from "node:process"
 import test from "node:test"
-
 import { MCP_CONFIG } from "../src/config.js"
 import { countTokens } from "../src/tokenizer.js"
-import { createShellSession, ShellSessionError, type ShellSnapshot } from "../src/tools/shell/session.js"
-import { isProcessAlive, pollToCompletion, quote, runToCompletion, waitForProcessExit } from "./helpers/shell.js"
+import {
+  createShellSession,
+  ShellSessionError,
+  type ShellSnapshot,
+} from "../src/tools/shell/session.js"
+import {
+  isProcessAlive,
+  pollToCompletion,
+  quote,
+  runToCompletion,
+  waitForProcessExit,
+} from "./helpers/shell.js"
 import { tempDir } from "./helpers/temp.js"
 
 test("retains cwd and environment across commands", { timeout: 10_000 }, async (t) => {
@@ -18,7 +28,11 @@ test("retains cwd and environment across commands", { timeout: 10_000 }, async (
     await rm(directory, { recursive: true, force: true })
   })
 
-  const first = await runToCompletion(shell, "state-1", `cd ${quote(directory)}; export MCP_RETAINED=present`)
+  const first = await runToCompletion(
+    shell,
+    "state-1",
+    `cd ${quote(directory)}; export MCP_RETAINED=present`
+  )
   assert.equal(first.snapshot.exit_code, 0)
 
   const second = await runToCompletion(shell, "state-2", `printf '%s|%s' "$PWD" "$MCP_RETAINED"`)
@@ -26,19 +40,25 @@ test("retains cwd and environment across commands", { timeout: 10_000 }, async (
   assert.equal(second.snapshot.exit_code, 0)
 })
 
-test("preserves the parent PATH without login-shell startup rewriting it", { timeout: 10_000 }, async (t) => {
+test("preserves the parent PATH without login-shell startup rewriting it", {
+  timeout: 10_000,
+}, async (t) => {
   const zdotdir = await tempDir(t, "shellby-zdotdir-")
   const expectedPath = `/tmp/shellby-path-${Date.now()}`
   await writeFile(join(zdotdir, ".zshenv"), 'export PATH="/tmp/zsh-startup:$PATH"\n')
-  const shell = createShellSession({ env: { ...process.env, PATH: expectedPath, ZDOTDIR: zdotdir } })
+  const shell = createShellSession({
+    env: { ...process.env, PATH: expectedPath, ZDOTDIR: zdotdir },
+  })
   t.after(() => shell.close())
 
   const result = await runToCompletion(shell, "preserve-parent-path", `printf '%s' "$PATH"`)
   assert.equal(result.output, expectedPath)
 
-  const parallel = await runToCompletion(shell, "preserve-parent-path-parallel", [{ command: `printf '%s' "$PATH"` }])
+  const parallel = await runToCompletion(shell, "preserve-parent-path-parallel", [
+    { command: `printf '%s' "$PATH"` },
+  ])
   assert.match(parallel.output, new RegExp(expectedPath))
-  assert.doesNotMatch(parallel.output, /zsh-startup/)
+  assert.doesNotMatch(parallel.output, /zsh-startup/u)
 })
 
 test("starts in an explicit cwd, reports it, and retains it", { timeout: 10_000 }, async (t) => {
@@ -60,7 +80,9 @@ test("starts in an explicit cwd, reports it, and retains it", { timeout: 10_000 
   assert.equal(second.snapshot.cwd, directory)
 })
 
-test("resolves relative explicit cwd from the retained shell cwd", { timeout: 10_000 }, async (t) => {
+test("resolves relative explicit cwd from the retained shell cwd", {
+  timeout: 10_000,
+}, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "shell-mcp-relative-cwd-"))
   const childDirectory = join(directory, "child")
   await mkdir(childDirectory)
@@ -70,11 +92,15 @@ test("resolves relative explicit cwd from the retained shell cwd", { timeout: 10
     await rm(directory, { recursive: true, force: true })
   })
 
-  const child = await runToCompletion(shell, "relative-child", `printf '%s' "$PWD"`, { cwd: "./child" })
+  const child = await runToCompletion(shell, "relative-child", `printf '%s' "$PWD"`, {
+    cwd: "./child",
+  })
   assert.equal(child.output, childDirectory)
   assert.equal(child.snapshot.cwd, childDirectory)
 
-  const parent = await runToCompletion(shell, "relative-parent", `printf '%s' "$PWD"`, { cwd: ".." })
+  const parent = await runToCompletion(shell, "relative-parent", `printf '%s' "$PWD"`, {
+    cwd: "..",
+  })
   assert.equal(parent.output, directory)
   assert.equal(parent.snapshot.cwd, directory)
 })
@@ -97,7 +123,10 @@ test("rejects invalid explicit working directories", { timeout: 10_000 }, async 
       yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     }),
-    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /not accessible/.test(error.message)
+    (error: unknown) =>
+      error instanceof ShellSessionError &&
+      error.code === "invalid_command" &&
+      /not accessible/u.test(error.message)
   )
 
   await assert.rejects(
@@ -108,11 +137,16 @@ test("rejects invalid explicit working directories", { timeout: 10_000 }, async 
       yield_time_ms: 0,
       max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
     }),
-    (error: unknown) => error instanceof ShellSessionError && error.code === "invalid_command" && /not a directory/.test(error.message)
+    (error: unknown) =>
+      error instanceof ShellSessionError &&
+      error.code === "invalid_command" &&
+      /not a directory/u.test(error.message)
   )
 })
 
-test("isolates protocol stdin and restores redirected descriptors", { timeout: 10_000 }, async (t) => {
+test("isolates protocol stdin and restores redirected descriptors", {
+  timeout: 10_000,
+}, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "shell-mcp-fds-"))
   const redirected = join(directory, "redirected.txt")
   const shell = createShellSession()
@@ -124,7 +158,11 @@ test("isolates protocol stdin and restores redirected descriptors", { timeout: 1
   const catResult = await runToCompletion(shell, "stdin", "cat; printf protocol-safe")
   assert.equal(catResult.output, "protocol-safe")
 
-  const redirectResult = await runToCompletion(shell, "redirect", `exec >${quote(redirected)}; printf hidden`)
+  const redirectResult = await runToCompletion(
+    shell,
+    "redirect",
+    `exec >${quote(redirected)}; printf hidden`
+  )
   assert.equal(redirectResult.output, "")
   assert.equal(await readFile(redirected, "utf8"), "hidden")
 
@@ -186,7 +224,9 @@ test("keeps a completed retry bounded after later commands", { timeout: 10_000 }
   assert.equal(retry.output_truncated, false)
 })
 
-test("admits only one concurrent command without corrupting the active record", { timeout: 10_000 }, async (t) => {
+test("admits only one concurrent command without corrupting the active record", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
@@ -196,11 +236,20 @@ test("admits only one concurrent command without corrupting the active record", 
   ])
   const attempts = await Promise.allSettled(
     [...commands].map(([requestId, command]) =>
-      shell.runCommand({ request_id: requestId, command, yield_time_ms: 0, max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens })
+      shell.runCommand({
+        request_id: requestId,
+        command,
+        yield_time_ms: 0,
+        max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
+      })
     )
   )
-  const admitted = attempts.filter((result): result is PromiseFulfilledResult<ShellSnapshot> => result.status === "fulfilled")
-  const rejected = attempts.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+  const admitted = attempts.filter(
+    (result): result is PromiseFulfilledResult<ShellSnapshot> => result.status === "fulfilled"
+  )
+  const rejected = attempts.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  )
 
   assert.equal(admitted.length, 1)
   assert.equal(rejected.length, 1)
@@ -208,7 +257,9 @@ test("admits only one concurrent command without corrupting the active record", 
   const rejectedAttempt = rejected[0]
   assert.ok(admittedAttempt)
   assert.ok(rejectedAttempt)
-  assert.ok(rejectedAttempt.reason instanceof ShellSessionError && rejectedAttempt.reason.code === "busy")
+  assert.ok(
+    rejectedAttempt.reason instanceof ShellSessionError && rejectedAttempt.reason.code === "busy"
+  )
 
   const completed = await pollToCompletion(shell, admittedAttempt.value)
   const expectedOutput = admittedAttempt.value.request_id === "concurrent-a" ? "A" : "B"
@@ -224,13 +275,17 @@ test("polls bounded output without duplicates", { timeout: 10_000 }, async (t) =
   t.after(() => shell.close())
 
   const expected = "0".repeat(2_000)
-  const result = await runToCompletion(shell, "chunks", "printf '%02000d' 0", { maxOutputTokens: 64 })
+  const result = await runToCompletion(shell, "chunks", "printf '%02000d' 0", {
+    maxOutputTokens: 64,
+  })
   assert.equal(result.output, expected)
   assert.equal(result.snapshot.status, "completed")
   assert.equal(result.snapshot.exit_code, 0)
 })
 
-test("caps o200k tokens without splitting characters and allows an override", { timeout: 10_000 }, async (t) => {
+test("caps o200k tokens without splitting characters and allows an override", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
@@ -250,7 +305,11 @@ test("caps o200k tokens without splitting characters and allows an override", { 
 
   let output = first.output
   let snapshot = first
-  for (let attempt = 0; attempt < 10 && (snapshot.status === "running" || snapshot.output_truncated); attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < 10 && (snapshot.status === "running" || snapshot.output_truncated);
+    attempt += 1
+  ) {
     snapshot = await shell.pollCommand({
       request_id: "token-cap",
       cursor: snapshot.next_cursor,
@@ -267,7 +326,9 @@ test("caps o200k tokens without splitting characters and allows an override", { 
   assert.equal(snapshot.output_truncated, false)
 })
 
-test("single-command retries and polls honor the wait even with a full output page", { timeout: 10_000 }, async (t) => {
+test("single-command retries and polls honor the wait even with a full output page", {
+  timeout: 10_000,
+}, async (t) => {
   const directory = await tempDir(t, "shell-mcp-output-wait-")
   const releaseFile = join(directory, "release")
   const shell = createShellSession()
@@ -330,20 +391,28 @@ test("drops output beyond the per-command transcript ceiling", { timeout: 10_000
   assert.equal(after.snapshot.dropped_output_bytes, 0)
 })
 
-test("keeps surrogate pairs intact while scanning for a delayed marker", { timeout: 10_000 }, async (t) => {
+test("keeps surrogate pairs intact while scanning for a delayed marker", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession({
     commandTranscriptBytes: 4,
   })
   t.after(() => shell.close())
 
-  const result = await runToCompletion(shell, "surrogate-marker-boundary", `printf '${"🙂"}${"a".repeat(45)}'; sleep 0.1`)
+  const result = await runToCompletion(
+    shell,
+    "surrogate-marker-boundary",
+    `printf '${"🙂"}${"a".repeat(45)}'; sleep 0.1`
+  )
 
   assert.equal(result.output, "🙂")
   assert.equal(result.snapshot.output_dropped, true)
   assert.equal(result.snapshot.dropped_output_bytes, 45)
 })
 
-test("drops a whole surrogate pair at the rolling transcript boundary", { timeout: 10_000 }, async (t) => {
+test("drops a whole surrogate pair at the rolling transcript boundary", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession({
     transcriptLimit: 1,
   })
@@ -357,7 +426,9 @@ test("drops a whole surrogate pair at the rolling transcript boundary", { timeou
   assert.equal(after.output, "A")
 })
 
-test("preserves rolling transcript cursors across repeated overflow", { timeout: 10_000 }, async (t) => {
+test("preserves rolling transcript cursors across repeated overflow", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession({
     transcriptLimit: 64,
     commandTranscriptBytes: 512,
@@ -368,7 +439,11 @@ test("preserves rolling transcript cursors across repeated overflow", { timeout:
   const firstCursor = first.snapshot.next_cursor
 
   for (let index = 1; index < 20; index += 1) {
-    await runToCompletion(shell, `overflow-${index}`, `printf '${String(index).padStart(2, "0")}:${"x".repeat(12)}'`)
+    await runToCompletion(
+      shell,
+      `overflow-${index}`,
+      `printf '${String(index).padStart(2, "0")}:${"x".repeat(12)}'`
+    )
   }
 
   const latest = await runToCompletion(shell, "overflow-latest", "printf latest")
@@ -388,7 +463,11 @@ test("contains readonly wrapper variables to one command", { timeout: 10_000 }, 
   const shell = createShellSession()
   t.after(() => shell.close())
 
-  const poisoned = await runToCompletion(shell, "readonly-wrapper-variable", "readonly __mcp_command; printf contained")
+  const poisoned = await runToCompletion(
+    shell,
+    "readonly-wrapper-variable",
+    "readonly __mcp_command; printf contained"
+  )
   assert.equal(poisoned.output, "contained")
   assert.equal(poisoned.snapshot.status, "completed")
 
@@ -396,7 +475,9 @@ test("contains readonly wrapper variables to one command", { timeout: 10_000 }, 
   assert.equal(after.output, "healthy")
 })
 
-test("waits for a quick command to complete instead of returning on its first output", { timeout: 10_000 }, async (t) => {
+test("waits for a quick command to complete instead of returning on its first output", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
@@ -412,7 +493,9 @@ test("waits for a quick command to complete instead of returning on its first ou
   assert.equal(result.exit_code, 0)
 })
 
-test("keeps completed command polling bounded after later commands", { timeout: 10_000 }, async (t) => {
+test("keeps completed command polling bounded after later commands", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
@@ -448,7 +531,9 @@ test("rejects poll cursors before the requested command", { timeout: 10_000 }, a
   )
 })
 
-test("coalesces foreground output while a command is still running", { timeout: 10_000 }, async (t) => {
+test("coalesces foreground output while a command is still running", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
@@ -468,16 +553,25 @@ test("coalesces foreground output while a command is still running", { timeout: 
     yield_time_ms: 1_000,
     max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
   })
-  assert.ok(Date.now() - startedAt >= 50, "poll should not return immediately just because unread output exists")
+  assert.ok(
+    Date.now() - startedAt >= 50,
+    "poll should not return immediately just because unread output exists"
+  )
   assert.equal(completed.status, "completed")
   assert.equal(completed.output, "firstsecond")
 })
 
-test("handles multiline commands, quotes, and redirected background output", { timeout: 10_000 }, async (t) => {
+test("handles multiline commands, quotes, and redirected background output", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
-  const quoted = await runToCompletion(shell, "quoted", ["value=$(cat <<'VALUE_EOF'", "a'b", "VALUE_EOF", ")", `printf '%s' "$value"`].join("\n"))
+  const quoted = await runToCompletion(
+    shell,
+    "quoted",
+    ["value=$(cat <<'VALUE_EOF'", "a'b", "VALUE_EOF", ")", `printf '%s' "$value"`].join("\n")
+  )
   assert.equal(quoted.output, "a'b")
 
   const backgroundFile = `/tmp/chatgpt-shell-background-${process.pid}`
@@ -496,7 +590,9 @@ test("handles multiline commands, quotes, and redirected background output", { t
   assert.equal(readBackground.output, "background-finished")
 })
 
-test("reports shell loss and automatically starts a clean generation", { timeout: 10_000 }, async (t) => {
+test("reports shell loss and automatically starts a clean generation", {
+  timeout: 10_000,
+}, async (t) => {
   const shell = createShellSession()
   t.after(() => shell.close())
 
@@ -561,7 +657,11 @@ test("reset cancels a stuck command and creates a clean shell", { timeout: 10_00
   })
   assert.equal(old.status, "reset")
 
-  const recovered = await runToCompletion(shell, "after-reset", "printf '%s' \"${SHOULD_DISAPPEAR-unset}\"")
+  const recovered = await runToCompletion(
+    shell,
+    "after-reset",
+    "printf '%s' \"${SHOULD_DISAPPEAR-unset}\""
+  )
   assert.equal(recovered.output, "unset")
 })
 
@@ -574,8 +674,9 @@ test("reset kills a TERM-resistant background descendant", { timeout: 10_000 }, 
   const directory = await mkdtemp(join(tmpdir(), "shell-mcp-resistant-"))
   const readyFile = join(directory, "ready")
   const shell = createShellSession()
+  // biome-ignore lint/style/useConst: assigned after cleanup registration so early failures can still clean up the old process group.
   let descendantPid: number | undefined
-  // eslint-disable-next-line prefer-const -- assigned after cleanup registration so early failures can still clean up the old process group.
+  // biome-ignore lint/style/useConst: assigned after cleanup registration so early failures can still clean up the old process group.
   let oldProcessGroup: number | undefined
   t.after(async () => {
     await shell.close()
@@ -599,8 +700,9 @@ test("reset kills a TERM-resistant background descendant", { timeout: 10_000 }, 
       `printf '%s|%s' "$descendant" "$$"`,
     ].join("; ")
   )
-  // eslint-disable-next-line prefer-const -- destructured assignment happens after cleanup registration.
-  ;[descendantPid, oldProcessGroup] = started.output.split("|").map((value) => Number.parseInt(value, 10))
+  ;[descendantPid, oldProcessGroup] = started.output
+    .split("|")
+    .map((value) => Number.parseInt(value, 10))
   assert.ok(descendantPid !== undefined && Number.isSafeInteger(descendantPid))
   assert.ok(oldProcessGroup !== undefined && Number.isSafeInteger(oldProcessGroup))
   assert.equal(isProcessAlive(descendantPid), true)
@@ -613,5 +715,7 @@ test("reset kills a TERM-resistant background descendant", { timeout: 10_000 }, 
 })
 
 function isMissingProcess(error: unknown): boolean {
-  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ESRCH"
+  return (
+    error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ESRCH"
+  )
 }

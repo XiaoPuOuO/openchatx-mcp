@@ -1,8 +1,8 @@
+import { spawnSync } from "node:child_process"
 import { access, rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { spawnSync } from "node:child_process"
+import process from "node:process"
 import { fileURLToPath } from "node:url"
-
 import { MCP_CONFIG } from "../src/config.ts"
 import { checkPublicRuntime, checkRtkRuntime, printPreflightErrors } from "./preflight.mjs"
 
@@ -13,7 +13,9 @@ const hardRestart = process.argv.includes("--hard")
 const restarting = process.argv.includes("--restart") || hardRestart
 
 if (hardRestart && process.env.name === "shellby-mcp" && process.env.pm_exec_path) {
-  console.error("A hard restart must run from a healthy Terminal.app session because it replaces PM2 itself. Use `npm run restart` inside Shellby.")
+  console.error(
+    "A hard restart must run from a healthy Terminal.app session because it replaces PM2 itself. Use `npm run restart` inside Shellby."
+  )
   process.exit(1)
 }
 
@@ -43,22 +45,60 @@ if (hardRestart) {
 }
 if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
 if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
-  run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "chatgpt-browser.mjs"), "--auto"])
+  run(process.execPath, [
+    "--import",
+    "tsx",
+    join(repoRoot, "scripts", "chatgpt-browser.mjs"),
+    "--auto",
+  ])
 }
 // Reload MCP last: its shutdown can kill this CLI, but the PM2 daemon completes the app restart.
 if (MCP_CONFIG.ngrok.enabled) {
-  run(process.execPath, ["--import", "tsx", pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], { quiet: true })
+  run(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      pm2Script,
+      "startOrReload",
+      "ecosystem.config.cjs",
+      "--only",
+      "shellby-ngrok",
+      "--update-env",
+    ],
+    { quiet: true }
+  )
 } else if (!hardRestart) {
   // Removing it from the ecosystem alone leaves an already-running tunnel alive.
-  const processes = JSON.parse(run(process.execPath, ["--import", "tsx", pm2Script, "jlist", "--silent"], { quiet: true }).stdout)
+  const processes = JSON.parse(
+    run(process.execPath, ["--import", "tsx", pm2Script, "jlist", "--silent"], { quiet: true })
+      .stdout
+  )
   if (processes.some((app) => app.name === "shellby-ngrok")) {
-    run(process.execPath, ["--import", "tsx", pm2Script, "delete", "shellby-ngrok"], { quiet: true })
+    run(process.execPath, ["--import", "tsx", pm2Script, "delete", "shellby-ngrok"], {
+      quiet: true,
+    })
   }
 }
-run(process.execPath, ["--import", "tsx", pm2Script, "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], { quiet: true })
+run(
+  process.execPath,
+  [
+    "--import",
+    "tsx",
+    pm2Script,
+    "startOrReload",
+    "ecosystem.config.cjs",
+    "--only",
+    "shellby-mcp",
+    "--update-env",
+  ],
+  { quiet: true }
+)
 
 if (!(await waitForMcp())) {
-  console.error(`This Shellby instance did not become healthy at ${healthUrl}. Check for another instance using port ${MCP_CONFIG.port}.`)
+  console.error(
+    `This Shellby instance did not become healthy at ${healthUrl}. Check for another instance using port ${MCP_CONFIG.port}.`
+  )
   process.exit(1)
 }
 
@@ -91,7 +131,8 @@ async function waitForMcp() {
       const response = await fetch(healthUrl, {
         signal: AbortSignal.timeout(500),
       })
-      if (response.ok && response.headers.get("x-shellby-instance") === MCP_CONFIG.instanceId) return true
+      if (response.ok && response.headers.get("x-shellby-instance") === MCP_CONFIG.instanceId)
+        return true
     } catch {
       // PM2 may still be starting the process.
     }

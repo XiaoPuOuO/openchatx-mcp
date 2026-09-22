@@ -7,7 +7,10 @@ export async function fetchAgents(): Promise<Agent[]> {
   return body.agents ?? []
 }
 
-export function subscribeToAgents(onEvent: (event: AgentChangedEvent) => void, onConnection: (connected: boolean) => void): () => void {
+export function subscribeToAgents(
+  onEvent: (event: AgentChangedEvent) => void,
+  onConnection: (connected: boolean) => void
+): () => void {
   const source = new EventSource("/ui/api/events")
   source.onopen = () => onConnection(true)
   source.onerror = () => onConnection(false)

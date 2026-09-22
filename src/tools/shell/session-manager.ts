@@ -1,7 +1,12 @@
 import { MCP_CONFIG } from "../../config.js"
 import { nonNegativeInteger, positiveInteger } from "../../utils.js"
+import {
+  createShellSession,
+  type ShellRecoverableState,
+  type ShellSession,
+  ShellSessionError,
+} from "./session.js"
 import { DEFAULT_SHELL_ID, type ShellListOutput } from "./shell-contracts.js"
-import { createShellSession, ShellSessionError, type ShellRecoverableState, type ShellSession } from "./session.js"
 
 export { DEFAULT_SHELL_ID } from "./shell-contracts.js"
 
@@ -31,7 +36,11 @@ export interface ShellSessionManager {
   readonly defaultShell: ShellSession
   getOrCreate(shellId: string, options?: { restoreCached?: boolean }): Promise<ShellSession>
   getExisting(shellId: string): ShellSession
-  withShell<T>(shellId: string, operation: (shell: ShellSession) => Promise<T>, options?: { restoreCached?: boolean }): Promise<T>
+  withShell<T>(
+    shellId: string,
+    operation: (shell: ShellSession) => Promise<T>,
+    options?: { restoreCached?: boolean }
+  ): Promise<T>
   withExistingShell<T>(shellId: string, operation: (shell: ShellSession) => Promise<T>): Promise<T>
   listShellIds(): string[]
   listCachedShellIds(now?: number): string[]
@@ -42,13 +51,18 @@ export interface ShellSessionManager {
   close(): Promise<void>
 }
 
-export function createShellSessionManager(options: ShellSessionManagerOptions = {}): ShellSessionManager {
+export function createShellSessionManager(
+  options: ShellSessionManagerOptions = {}
+): ShellSessionManager {
   const maxShells = positiveInteger(options.maxShells, MCP_CONFIG.shell.maxShells)
   const idleTimeoutMs = nonNegativeInteger(options.idleTimeoutMs, MCP_CONFIG.shell.idleTimeoutMs)
   const cacheTimeoutMs = positiveInteger(options.cacheTimeoutMs, MCP_CONFIG.shell.cacheTimeoutMs)
   const now = options.now ?? Date.now
   const defaultShell = options.defaultShell ?? options.createShell?.() ?? createShellSession()
-  const createShell = options.createShell ?? ((initialState?: ShellRecoverableState) => createShellSession({ cwd: defaultShell.initialCwd, initialState }))
+  const createShell =
+    options.createShell ??
+    ((initialState?: ShellRecoverableState) =>
+      createShellSession({ cwd: defaultShell.initialCwd, initialState }))
 
   const sessions = new Map<string, ShellSession>([[DEFAULT_SHELL_ID, defaultShell]])
   const lastUsedAt = new Map<string, number>([[DEFAULT_SHELL_ID, now()]])
@@ -80,8 +94,13 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
     return sessions.get(DEFAULT_SHELL_ID)!
   }
 
-  async function getOrCreate(shellId: string, operationOptions: { restoreCached?: boolean } = {}): Promise<ShellSession> {
-    return withLifecycleLock(() => getOrCreateUnlocked(shellId, operationOptions.restoreCached !== false))
+  async function getOrCreate(
+    shellId: string,
+    operationOptions: { restoreCached?: boolean } = {}
+  ): Promise<ShellSession> {
+    return withLifecycleLock(() =>
+      getOrCreateUnlocked(shellId, operationOptions.restoreCached !== false)
+    )
   }
 
   function getExisting(shellId: string): ShellSession {
@@ -97,7 +116,11 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
     return existing
   }
 
-  async function withShell<T>(shellId: string, operation: (shell: ShellSession) => Promise<T>, operationOptions: { restoreCached?: boolean } = {}): Promise<T> {
+  async function withShell<T>(
+    shellId: string,
+    operation: (shell: ShellSession) => Promise<T>,
+    operationOptions: { restoreCached?: boolean } = {}
+  ): Promise<T> {
     const shell = await withLifecycleLock(async () => {
       const acquired = await getOrCreateUnlocked(shellId, operationOptions.restoreCached !== false)
       leases.set(shellId, (leases.get(shellId) ?? 0) + 1)
@@ -110,7 +133,10 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
     }
   }
 
-  async function withExistingShell<T>(shellId: string, operation: (shell: ShellSession) => Promise<T>): Promise<T> {
+  async function withExistingShell<T>(
+    shellId: string,
+    operation: (shell: ShellSession) => Promise<T>
+  ): Promise<T> {
     const shell = await withLifecycleLock(async () => {
       assertOpen()
       const existing = sessions.get(shellId)
@@ -161,7 +187,11 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
       }
 
       const shell = sessions.get(shellId)
-      if (!shell) throw new ShellSessionError("request_not_found", `No live shell exists for shell_id ${JSON.stringify(shellId)}.`)
+      if (!shell)
+        throw new ShellSessionError(
+          "request_not_found",
+          `No live shell exists for shell_id ${JSON.stringify(shellId)}.`
+        )
 
       cachedStates.delete(shellId)
       sessions.delete(shellId)
@@ -195,7 +225,10 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
     lastUsedAt.clear()
     leases.clear()
     cachedStates.clear()
-    await Promise.allSettled([...(cleanup ? [cleanup] : []), ...shells.map((shell) => shell.close())])
+    await Promise.allSettled([
+      ...(cleanup ? [cleanup] : []),
+      ...shells.map((shell) => shell.close()),
+    ])
   }
 
   function releaseLease(shellId: string, shell: ShellSession): void {
@@ -205,7 +238,10 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
     if (sessions.get(shellId) === shell) touch(shellId)
   }
 
-  async function getOrCreateUnlocked(shellId: string, restoreCached: boolean): Promise<ShellSession> {
+  async function getOrCreateUnlocked(
+    shellId: string,
+    restoreCached: boolean
+  ): Promise<ShellSession> {
     assertOpen()
 
     const existing = sessions.get(shellId)
@@ -236,7 +272,10 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
 
   async function evictLeastRecentlyUsedShell(): Promise<boolean> {
     const candidates = [...sessions.entries()]
-      .filter(([shellId, shell]) => shellId !== DEFAULT_SHELL_ID && !shell.hasActiveWork && (leases.get(shellId) ?? 0) === 0)
+      .filter(
+        ([shellId, shell]) =>
+          shellId !== DEFAULT_SHELL_ID && !shell.hasActiveWork && (leases.get(shellId) ?? 0) === 0
+      )
       .sort(([leftId], [rightId]) => (lastUsedAt.get(leftId) ?? 0) - (lastUsedAt.get(rightId) ?? 0))
 
     for (const [shellId, shell] of candidates) {
@@ -265,7 +304,11 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
     return evicted
   }
 
-  async function hibernateShell(shellId: string, shell: ShellSession, lastUsed: number): Promise<boolean> {
+  async function hibernateShell(
+    shellId: string,
+    shell: ShellSession,
+    lastUsed: number
+  ): Promise<boolean> {
     let state: ShellRecoverableState
     try {
       state = await shell.captureRecoverableState()
@@ -273,7 +316,8 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
       return false
     }
 
-    if (sessions.get(shellId) !== shell || shell.hasActiveWork || (leases.get(shellId) ?? 0) > 0) return false
+    if (sessions.get(shellId) !== shell || shell.hasActiveWork || (leases.get(shellId) ?? 0) > 0)
+      return false
     cachedStates.set(shellId, { state, lastUsedAt: lastUsed })
     sessions.delete(shellId)
     lastUsedAt.delete(shellId)
@@ -336,6 +380,7 @@ export function createShellSessionManager(options: ShellSessionManagerOptions = 
 }
 
 function cleanupInterval(idleTimeoutMs: number, cacheTimeoutMs: number): number {
-  const shortestTimeout = idleTimeoutMs === 0 ? cacheTimeoutMs : Math.min(idleTimeoutMs, cacheTimeoutMs)
+  const shortestTimeout =
+    idleTimeoutMs === 0 ? cacheTimeoutMs : Math.min(idleTimeoutMs, cacheTimeoutMs)
   return Math.max(1_000, Math.min(DEFAULT_CLEANUP_INTERVAL_MS, Math.floor(shortestTimeout / 2)))
 }

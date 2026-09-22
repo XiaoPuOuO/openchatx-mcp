@@ -30,7 +30,10 @@ test("returns image_view as native MCP image content", { timeout: 20_000 }, asyn
   const connected = await connectClient(running.url, "image-view-integration-client")
   t.after(() => connected.client.close())
 
-  const result = await connected.client.callTool({ name: "image_view", arguments: { path: imagePath } })
+  const result = await connected.client.callTool({
+    name: "image_view",
+    arguments: { path: imagePath },
+  })
   assert.equal(result.isError, undefined)
   assert.equal(result.structuredContent, undefined)
   assert.deepEqual(
@@ -38,6 +41,9 @@ test("returns image_view as native MCP image content", { timeout: 20_000 }, asyn
     ["text", "image"]
   )
   assert.equal(result.content[1]?.type, "image")
-  assert.equal(result.content[1]?.type === "image" ? result.content[1].mimeType : undefined, "image/jpeg")
+  assert.equal(
+    result.content[1]?.type === "image" ? result.content[1].mimeType : undefined,
+    "image/jpeg"
+  )
   assert.ok(result.content[1]?.type === "image" && result.content[1].data.length > 0)
 })

@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server"
-import { z } from "zod"
+import type { z } from "zod"
 
 import { MCP_CONFIG } from "../config.js"
 import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
@@ -8,7 +8,13 @@ import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import { getAgentIdentity } from "./agent-context.js"
 import type { AgentObserver } from "./agent-observer.js"
 import type { McpAuditRequest } from "./audit/audit-log.js"
-import { mergeThenRunResult, parseThenRun, shouldStopThenRun, splitThenRun, withThenRunSchema } from "./then-run.js"
+import {
+  mergeThenRunResult,
+  parseThenRun,
+  shouldStopThenRun,
+  splitThenRun,
+  withThenRunSchema,
+} from "./then-run.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
 const SCHEMA_KEY_ORDER = [
@@ -60,7 +66,13 @@ const SCHEMA_KEY_ORDER = [
 ] as const
 
 const SCHEMA_KEY_RANK = new Map<string, number>(SCHEMA_KEY_ORDER.map((key, index) => [key, index]))
-const SCHEMA_MAP_KEYS = new Set(["properties", "patternProperties", "dependentSchemas", "$defs", "definitions"])
+const SCHEMA_MAP_KEYS = new Set([
+  "properties",
+  "patternProperties",
+  "dependentSchemas",
+  "$defs",
+  "definitions",
+])
 const SCHEMA_VALUE_KEYS = new Set([
   "additionalProperties",
   "propertyNames",
@@ -74,7 +86,15 @@ const SCHEMA_VALUE_KEYS = new Set([
   "unevaluatedItems",
 ])
 const SCHEMA_ARRAY_KEYS = new Set(["prefixItems", "allOf", "anyOf", "oneOf"])
-const MODEL_SCHEMA_STRIP_KEYS = new Set(["$schema", "examples", "title", "format", "multipleOf", "maxLength", "minItems"])
+const MODEL_SCHEMA_STRIP_KEYS = new Set([
+  "$schema",
+  "examples",
+  "title",
+  "format",
+  "multipleOf",
+  "maxLength",
+  "minItems",
+])
 const canonicalizedSchemas = new WeakSet<object>()
 
 interface ToolRegistrationConfig {
@@ -113,12 +133,24 @@ interface RegisteredTool {
   nativeContent: boolean
 }
 
-export function installToolRegistrationBoundary(server: McpServer, options: ToolRegistrationBoundaryOptions): void {
-  const registerTool = server.registerTool.bind(server) as unknown as (name: string, config: ToolRegistrationConfig, callback: unknown) => unknown
+export function installToolRegistrationBoundary(
+  server: McpServer,
+  options: ToolRegistrationBoundaryOptions
+): void {
+  const registerTool = server.registerTool.bind(server) as unknown as (
+    name: string,
+    config: ToolRegistrationConfig,
+    callback: unknown
+  ) => unknown
   const structuredOutput = MCP_CONFIG.mcp.toolOutput === "structured"
   const tools = new Map<string, RegisteredTool>()
 
-  const dispatchTool = async (name: string, inputValue: unknown, context: unknown, nested = false): Promise<unknown> => {
+  const dispatchTool = async (
+    name: string,
+    inputValue: unknown,
+    context: unknown,
+    nested = false
+  ): Promise<unknown> => {
     const tool = tools.get(name)
     if (!tool) return toolError(`Tool ${name} not found.`)
 
@@ -131,7 +163,9 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
       if (nested && tool.inputSchema) {
         const parsed = await tool.inputSchema.safeParseAsync(parsedInput)
         if (!parsed.success) {
-          const result = toolError(`Input validation error: Invalid arguments for tool ${name}: ${parsed.error.issues[0]?.message ?? "validation failed"}`)
+          const result = toolError(
+            `Input validation error: Invalid arguments for tool ${name}: ${parsed.error.issues[0]?.message ?? "validation failed"}`
+          )
           auditCall?.finish({ toolResult: result, modelResult: result })
           return result
         }
@@ -148,11 +182,16 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
       }
 
       observedCallId = options.agentObserver?.startTool(agent, name, input)
-      const result = await (tool.acceptsInput ? tool.callback(callbackInput, context) : tool.callback(context))
+      const result = await (tool.acceptsInput
+        ? tool.callback(callbackInput, context)
+        : tool.callback(context))
       if (nested) await validateToolOutput(name, tool.outputSchema, result)
       options.agentObserver?.finishTool(agent, observedCallId)
 
-      const projected = nested || (!tool.nativeContent && !structuredOutput) ? compactToolResult(name, result) : result
+      const projected =
+        nested || (!tool.nativeContent && !structuredOutput)
+          ? compactToolResult(name, result)
+          : result
       const events = [
         ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
         ...(options.drainPendingEvents?.() ?? []),
@@ -168,9 +207,15 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
       try {
         next = parseThenRun(thenRun, (toolName) => tools.has(toolName))
       } catch (error) {
-        return mergeThenRunResult(finalResult, toolError(`then_run_error: ${error instanceof Error ? error.message : String(error)}`))
+        return mergeThenRunResult(
+          finalResult,
+          toolError(`then_run_error: ${error instanceof Error ? error.message : String(error)}`)
+        )
       }
-      return mergeThenRunResult(finalResult, await dispatchTool(next.name, next.arguments, context, true))
+      return mergeThenRunResult(
+        finalResult,
+        await dispatchTool(next.name, next.arguments, context, true)
+      )
     } catch (error) {
       const agent = getAgentIdentity()
       options.agentObserver?.failTool(agent, observedCallId)
@@ -206,13 +251,22 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
   }) as typeof server.registerTool
 }
 
-async function validateToolOutput(toolName: string, schema: z.ZodType | undefined, result: unknown): Promise<void> {
+async function validateToolOutput(
+  toolName: string,
+  schema: z.ZodType | undefined,
+  result: unknown
+): Promise<void> {
   if (!schema || isToolError(result)) return
   if (!isRecord(result) || result.structuredContent === undefined) {
-    throw new Error(`Output validation error: Tool ${toolName} has an output schema but no structured content was provided`)
+    throw new Error(
+      `Output validation error: Tool ${toolName} has an output schema but no structured content was provided`
+    )
   }
   const parsed = await schema.safeParseAsync(result.structuredContent)
-  if (!parsed.success) throw new Error(`Output validation error: Invalid structured content for tool ${toolName}: ${parsed.error.issues[0]?.message ?? "validation failed"}`)
+  if (!parsed.success)
+    throw new Error(
+      `Output validation error: Invalid structured content for tool ${toolName}: ${parsed.error.issues[0]?.message ?? "validation failed"}`
+    )
 }
 
 function toolError(text: string) {
@@ -229,14 +283,23 @@ function isToolError(value: unknown): boolean {
 function startupRequiredResult() {
   return {
     isError: true,
-    content: [{ type: "text" as const, text: "Shellby has not been initialized for this conversation. Call `start_here` first, and follow the instructions." }],
+    content: [
+      {
+        type: "text" as const,
+        text: "Shellby has not been initialized for this conversation. Call `start_here` first, and follow the instructions.",
+      },
+    ],
   }
 }
 
 export function compactToolAnnotations(value: unknown): unknown {
   if (!isRecord(value)) return value
 
-  const annotations = Object.fromEntries(Object.entries(value).filter(([key, annotation]) => TOOL_ANNOTATION_DEFAULTS[key] !== annotation))
+  const annotations = Object.fromEntries(
+    Object.entries(value).filter(
+      ([key, annotation]) => TOOL_ANNOTATION_DEFAULTS[key] !== annotation
+    )
+  )
   if (annotations.readOnlyHint === true) {
     delete annotations.destructiveHint
     delete annotations.idempotentHint
@@ -265,7 +328,9 @@ export function canonicalizeJsonSchema(value: unknown): unknown {
     if (isIntegerSchema && key === "maximum" && child === Number.MAX_SAFE_INTEGER) continue
 
     if (SCHEMA_MAP_KEYS.has(key) && isRecord(child)) {
-      result[key] = Object.fromEntries(Object.entries(child).map(([name, schema]) => [name, canonicalizeJsonSchema(schema)]))
+      result[key] = Object.fromEntries(
+        Object.entries(child).map(([name, schema]) => [name, canonicalizeJsonSchema(schema)])
+      )
     } else if (SCHEMA_VALUE_KEYS.has(key)) {
       result[key] = canonicalizeJsonSchema(child)
     } else if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(child)) {

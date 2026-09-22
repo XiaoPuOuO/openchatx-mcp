@@ -35,8 +35,12 @@ export function createSubagentStore(path: string): SubagentStore | undefined {
         PRIMARY KEY (parent_session_id, agent_id)
       )
     `)
-    const get = db.prepare("SELECT conversation_url, turn_count, kind FROM agents WHERE parent_session_id = ? AND agent_id = ?")
-    const list = db.prepare("SELECT agent_id, conversation_url, turn_count, kind FROM agents WHERE parent_session_id = ? ORDER BY agent_id")
+    const get = db.prepare(
+      "SELECT conversation_url, turn_count, kind FROM agents WHERE parent_session_id = ? AND agent_id = ?"
+    )
+    const list = db.prepare(
+      "SELECT agent_id, conversation_url, turn_count, kind FROM agents WHERE parent_session_id = ? ORDER BY agent_id"
+    )
     const set = db.prepare(`
       INSERT INTO agents (parent_session_id, agent_id, conversation_url, turn_count, kind)
       VALUES (?, ?, ?, ?, ?)
@@ -49,16 +53,21 @@ export function createSubagentStore(path: string): SubagentStore | undefined {
     return {
       get(parentAgent, agentId) {
         try {
-          const row = get.get(parentAgent?.sessionId ?? "", agentId) as { conversation_url?: unknown; turn_count?: unknown; kind?: unknown } | undefined
-          if (!row || typeof row.conversation_url !== "string" || typeof row.turn_count !== "number") return undefined
+          const row = get.get(parentAgent?.sessionId ?? "", agentId) as
+            | { conversation_url?: unknown; turn_count?: unknown; kind?: unknown }
+            | undefined
+          if (
+            !row ||
+            typeof row.conversation_url !== "string" ||
+            typeof row.turn_count !== "number"
+          )
+            return
           return {
             conversationUrl: row.conversation_url,
             turnCount: row.turn_count,
             kind: row.kind === "clone" ? "clone" : "subagent",
           }
-        } catch {
-          return undefined
-        }
+        } catch {}
       },
       list(parentAgent) {
         try {
@@ -69,7 +78,12 @@ export function createSubagentStore(path: string): SubagentStore | undefined {
             kind?: unknown
           }>
           return rows.flatMap((row) => {
-            if (typeof row.agent_id !== "string" || typeof row.conversation_url !== "string" || typeof row.turn_count !== "number") return []
+            if (
+              typeof row.agent_id !== "string" ||
+              typeof row.conversation_url !== "string" ||
+              typeof row.turn_count !== "number"
+            )
+              return []
             return [
               {
                 agentId: row.agent_id,
@@ -85,7 +99,13 @@ export function createSubagentStore(path: string): SubagentStore | undefined {
       },
       set(parentAgent, agentId, value) {
         try {
-          set.run(parentAgent?.sessionId ?? "", agentId, value.conversationUrl, value.turnCount, value.kind)
+          set.run(
+            parentAgent?.sessionId ?? "",
+            agentId,
+            value.conversationUrl,
+            value.turnCount,
+            value.kind
+          )
         } catch {
           // Persistence is best effort. Runtime behavior should continue normally.
         }

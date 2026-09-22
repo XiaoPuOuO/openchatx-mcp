@@ -4,11 +4,14 @@ import { request as httpRequest } from "node:http"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 
 import { MCP_CONFIG } from "../../src/config.js"
+import {
+  type McpRuntimeServices,
+  startMcpHttpServer as startMcpHttpServerRaw,
+} from "../../src/server/http-server.js"
 import { PeekabooClient } from "../../src/tools/computer/peekaboo.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
 import { createChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent.js"
 import { WebPageOpener } from "../../src/tools/web/web-open.js"
-import { startMcpHttpServer as startMcpHttpServerRaw, type McpRuntimeServices } from "../../src/server/http-server.js"
 
 type TestMcpServerOptions = Partial<McpRuntimeServices> & {
   port?: number
@@ -30,19 +33,32 @@ Object.assign(MCP_CONFIG.tools, {
 export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
   const { port = 0, ...services } = options
   MCP_CONFIG.port = port
-  const shellManager = MCP_CONFIG.tools.shell ? (services.shellManager ?? createShellSessionManager()) : undefined
-  const peekaboo = MCP_CONFIG.tools.computer ? (services.peekaboo ?? new PeekabooClient({ localOnly: true })) : undefined
-  const chatGptSubagents = MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? (services.chatGptSubagents ?? createChatGptSubagentService()) : undefined
+  const shellManager = MCP_CONFIG.tools.shell
+    ? (services.shellManager ?? createShellSessionManager())
+    : undefined
+  const peekaboo = MCP_CONFIG.tools.computer
+    ? (services.peekaboo ?? new PeekabooClient({ localOnly: true }))
+    : undefined
+  const chatGptSubagents =
+    MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents
+      ? (services.chatGptSubagents ?? createChatGptSubagentService())
+      : undefined
   const runtime = {
     shellManager,
     peekaboo,
     chatGptSubagents,
-    webPageOpener: MCP_CONFIG.tools.web ? (services.webPageOpener ?? new WebPageOpener()) : undefined,
+    webPageOpener: MCP_CONFIG.tools.web
+      ? (services.webPageOpener ?? new WebPageOpener())
+      : undefined,
     auditLogger: services.auditLogger,
     authStore: services.authStore,
   }
   const closeRuntime = () =>
-    Promise.allSettled([shellManager?.close() ?? Promise.resolve(), peekaboo?.close() ?? Promise.resolve(), chatGptSubagents?.dispose() ?? Promise.resolve()])
+    Promise.allSettled([
+      shellManager?.close() ?? Promise.resolve(),
+      peekaboo?.close() ?? Promise.resolve(),
+      chatGptSubagents?.dispose() ?? Promise.resolve(),
+    ])
 
   try {
     await shellManager?.startDefault()
@@ -60,7 +76,13 @@ export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
   }
 }
 
-export async function connectClient(url: string, name: string, openAiSubject?: string, trustedRemote = false, openAiSession?: string) {
+export async function connectClient(
+  url: string,
+  name: string,
+  openAiSubject?: string,
+  trustedRemote = false,
+  openAiSession?: string
+) {
   return connectClientWithMode(url, name, "auto", openAiSubject, trustedRemote, openAiSession)
 }
 
@@ -190,7 +212,12 @@ export function snapshotFromResult(result: Awaited<ReturnType<Client["callTool"]
   const status = compactField(text, "status")
   const cwd = compactField(text, "cwd")
   const output = compactField(text, "output")
-  assert.ok(status === "running" || status === "completed" || status === "shell_exited" || status === "reset")
+  assert.ok(
+    status === "running" ||
+      status === "completed" ||
+      status === "shell_exited" ||
+      status === "reset"
+  )
   assert.ok(cwd !== undefined)
   assert.ok(output !== undefined)
 
@@ -219,8 +246,10 @@ export function toolText(result: Awaited<ReturnType<Client["callTool"]>>): strin
 }
 
 export function compactField(text: string, key: string): string | undefined {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const inline = text.match(new RegExp(`(?:^|\\s)${escapedKey}=("(?:\\\\.|[^"\\\\])*"|[^\\s]+)`))?.[1]
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
+  const inline = text.match(
+    new RegExp(`(?:^|\\s)${escapedKey}=("(?:\\\\.|[^"\\\\])*"|[^\\s]+)`)
+  )?.[1]
   if (inline !== undefined) return decodeCompactScalar(inline)
 
   const section = text.match(new RegExp(`(?:^|\\n\\n)${escapedKey}:\\n`))
@@ -228,7 +257,7 @@ export function compactField(text: string, key: string): string | undefined {
   let start = section.index + section[0].length
   if (text[start] === "\n") start += 1
   const rest = text.slice(start)
-  const nextSection = rest.search(/\n\n[a-z][a-z0-9_]*:\n/)
+  const nextSection = rest.search(/\n\n[a-z][a-z0-9_]*:\n/u)
   return nextSection >= 0 ? rest.slice(0, nextSection) : rest
 }
 

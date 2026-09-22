@@ -9,7 +9,11 @@ const shellIdInput = z.string().min(3).max(128).default(DEFAULT_SHELL_ID)
 
 const closableShellIdInput = z.string().min(3).max(128)
 
-const maxOutputTokensInput = z.int().min(1).max(MCP_CONFIG.shell.maxOutputTokens).default(MCP_CONFIG.shell.defaultOutputTokens)
+const maxOutputTokensInput = z
+  .int()
+  .min(1)
+  .max(MCP_CONFIG.shell.maxOutputTokens)
+  .default(MCP_CONFIG.shell.defaultOutputTokens)
 
 const shellBatchCommandInputSchema = z.object({
   command: z.string().min(1),
@@ -19,16 +23,24 @@ const shellBatchCommandInputSchema = z.object({
 export const shellRunInputSchema = z
   .object({
     shell_id: shellIdInput.describe("Reuse for command(s) that should share cwd or environment."),
-    request_id: requestIdInput.describe("Concise descriptive slug for the immediate purpose of this command. Unique within this shell_id."),
+    request_id: requestIdInput.describe(
+      "Concise descriptive slug for the immediate purpose of this command. Unique within this shell_id."
+    ),
     cwd: z.string().min(1).optional().describe("Omit to keep cwd"),
     command: z.string().min(1).optional(),
-    commands: z.array(shellBatchCommandInputSchema).min(1).optional().describe("Runs independently in parallel. Each may override cwd."),
+    commands: z
+      .array(shellBatchCommandInputSchema)
+      .min(1)
+      .optional()
+      .describe("Runs independently in parallel. Each may override cwd."),
     yield_time_ms: z
       .int()
       .min(0)
       .max(MCP_CONFIG.shell.maxWaitMs)
       .default(MCP_CONFIG.shell.defaultWaitMs)
-      .describe("Wait before yielding a still-running command. Commands that finish sooner return immediately."),
+      .describe(
+        "Wait before yielding a still-running command. Commands that finish sooner return immediately."
+      ),
     max_output_tokens: maxOutputTokensInput,
   })
   .refine((input) => (input.command === undefined) !== (input.commands === undefined), {
@@ -46,7 +58,9 @@ export const shellPollInputSchema = z.object({
     .min(0)
     .max(MCP_CONFIG.shell.maxPollWaitMs)
     .default(MCP_CONFIG.shell.defaultPollWaitMs)
-    .describe("Long-poll duration. Usually omit. Returns early on completion. Avoid repeated short polls."),
+    .describe(
+      "Long-poll duration. Usually omit. Returns early on completion. Avoid repeated short polls."
+    ),
   max_output_tokens: maxOutputTokensInput,
 })
 
@@ -64,7 +78,14 @@ export const shellCloseInputSchema = z.object({
 })
 
 const shellCommandStatusSchema = z.enum(["running", "completed", "shell_exited", "reset"])
-const parallelCommandStatusSchema = z.enum(["queued", "running", "completed", "timed_out", "failed", "reset"])
+const parallelCommandStatusSchema = z.enum([
+  "queued",
+  "running",
+  "completed",
+  "timed_out",
+  "failed",
+  "reset",
+])
 
 export type ShellCommandStatus = z.infer<typeof shellCommandStatusSchema>
 export type ParallelCommandStatus = z.infer<typeof parallelCommandStatusSchema>
@@ -74,7 +95,10 @@ const exitCodeSchema = z.int().min(0).max(255)
 const shellBatchCommandOutputSchema = z.object({
   run: z.int().positive(),
   command: z.string().describe("First command line, truncated to 20 characters."),
-  path: z.string().optional().describe("Present only when this command overrides the inherited cwd."),
+  path: z
+    .string()
+    .optional()
+    .describe("Present only when this command overrides the inherited cwd."),
   status: parallelCommandStatusSchema,
   exit_code: exitCodeSchema.nullable(),
   dropped_output_bytes: z.int().positive().optional(),
@@ -85,15 +109,23 @@ export type ShellBatchCommandOutput = z.infer<typeof shellBatchCommandOutputSche
 export const shellRunOutputSchema = z.object({
   shell_id: z.string().optional(),
   status: shellCommandStatusSchema,
-  exit_code: exitCodeSchema.optional().describe("0 only when every command succeeded; otherwise 1."),
+  exit_code: exitCodeSchema
+    .optional()
+    .describe("0 only when every command succeeded; otherwise 1."),
   cwd: z.string(),
   output: z.string(),
   request_id: z.string().optional(),
   next_cursor: z.int().nonnegative().optional().describe("Pass to shell_poll to continue."),
   cursor_expired: z.literal(true).optional(),
-  output_truncated: z.literal(true).optional().describe("More retained output is available through shell_poll."),
+  output_truncated: z
+    .literal(true)
+    .optional()
+    .describe("More retained output is available through shell_poll."),
   dropped_output_bytes: z.int().positive().optional().describe("Output permanently discarded."),
-  commands: z.array(shellBatchCommandOutputSchema).optional().describe("Per-command results for a parallel run"),
+  commands: z
+    .array(shellBatchCommandOutputSchema)
+    .optional()
+    .describe("Per-command results for a parallel run"),
 })
 
 export type ShellRunOutput = z.infer<typeof shellRunOutputSchema>

@@ -14,7 +14,10 @@ test("saves Shellby reviews with the agent audit alias and task slug", async (t)
 
   const agent = await runWithAgent("review-session", async () => {
     setAgentTaskSlug("first-name-parser-release-dry-run")
-    await saveReview(path, { rating: 8.7, review: "Fast local tools; shell polling was easy to follow." })
+    await saveReview(path, {
+      rating: 8.7,
+      review: "Fast local tools; shell polling was easy to follow.",
+    })
     return getAgentIdentity()!.agent
   })
 

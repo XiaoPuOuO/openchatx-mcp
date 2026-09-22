@@ -1,3 +1,4 @@
+import process from "node:process"
 import { MCP_CONFIG } from "../src/config.ts"
 
 const optional = process.argv.includes("--optional")
@@ -10,7 +11,9 @@ const url = await discoverNgrokUrl(optional ? 1 : 20)
 if (url) {
   console.log(`MCP URL: ${url}`)
 } else {
-  console.error("MCP URL unavailable. Run `npm start` from Terminal.app, then check `npm run status` and `npm run logs` if it is still unavailable.")
+  console.error(
+    "MCP URL unavailable. Run `npm start` from Terminal.app, then check `npm run status` and `npm run logs` if it is still unavailable."
+  )
   if (!optional) process.exitCode = 1
 }
 
@@ -26,17 +29,17 @@ async function discoverNgrokUrl(attempts) {
           if (candidate.proto !== "https" || !candidate.public_url) return false
           try {
             const upstream = new URL(candidate.config.addr)
-            const expectedUrl = MCP_CONFIG.ngrok.url?.replace(/\/+$/, "")
+            const expectedUrl = MCP_CONFIG.ngrok.url?.replace(/\/+$/u, "")
             return (
               ["localhost", "127.0.0.1"].includes(upstream.hostname) &&
               Number(upstream.port || 80) === MCP_CONFIG.port &&
-              (!expectedUrl || candidate.public_url.replace(/\/+$/, "") === expectedUrl)
+              (!expectedUrl || candidate.public_url.replace(/\/+$/u, "") === expectedUrl)
             )
           } catch {
             return false
           }
         })
-        if (tunnel) return `${tunnel.public_url.replace(/\/+$/, "")}/mcp`
+        if (tunnel) return `${tunnel.public_url.replace(/\/+$/u, "")}/mcp`
       }
     } catch {
       // ngrok may still be starting.
@@ -44,6 +47,4 @@ async function discoverNgrokUrl(attempts) {
 
     if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 250))
   }
-
-  return undefined
 }

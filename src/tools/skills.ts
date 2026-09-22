@@ -1,16 +1,19 @@
 import { readdir, readFile, stat } from "node:fs/promises"
 import { join } from "node:path"
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../config.js"
-import { getAgentIdentity, type AgentIdentity } from "../server/agent-context.js"
+import { type AgentIdentity, getAgentIdentity } from "../server/agent-context.js"
 
 export const MAX_SKILL_BYTES = 256 * 1024
 
-const SKILL_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
+const SKILL_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/u
 const SKILL_LOAD_COOLDOWN_MS = 5_000
-const recentSkillLoads = new Map<AgentIdentity, Map<string, { startedAt: number; load: Promise<LoadedSkill> }>>()
+const recentSkillLoads = new Map<
+  AgentIdentity,
+  Map<string, { startedAt: number; load: Promise<LoadedSkill> }>
+>()
 
 export interface SkillSummary {
   name: string
@@ -62,7 +65,10 @@ export class SkillCatalog {
               ...(description ? { description } : {}),
             }
           } catch (error) {
-            if (error instanceof SkillCatalogError && (error.code === "unknown_skill" || error.code === "skill_too_large")) {
+            if (
+              error instanceof SkillCatalogError &&
+              (error.code === "unknown_skill" || error.code === "skill_too_large")
+            ) {
               return undefined
             }
             throw error
@@ -82,21 +88,34 @@ export class SkillCatalog {
       fileStat = await stat(path)
     } catch (error) {
       if (isFsError(error, "ENOENT") || isFsError(error, "ENOTDIR")) {
-        throw new SkillCatalogError("unknown_skill", `Unknown skill ${JSON.stringify(name)}. Call skill_list to discover available skills.`, { cause: error })
+        throw new SkillCatalogError(
+          "unknown_skill",
+          `Unknown skill ${JSON.stringify(name)}. Call skill_list to discover available skills.`,
+          { cause: error }
+        )
       }
       throw error
     }
 
     if (!fileStat.isFile()) {
-      throw new SkillCatalogError("unknown_skill", `Unknown skill ${JSON.stringify(name)}. Call skill_list to discover available skills.`)
+      throw new SkillCatalogError(
+        "unknown_skill",
+        `Unknown skill ${JSON.stringify(name)}. Call skill_list to discover available skills.`
+      )
     }
     if (fileStat.size > MAX_SKILL_BYTES) {
-      throw new SkillCatalogError("skill_too_large", `Skill ${JSON.stringify(name)} exceeds the ${MAX_SKILL_BYTES}-byte SKILL.md limit.`)
+      throw new SkillCatalogError(
+        "skill_too_large",
+        `Skill ${JSON.stringify(name)} exceeds the ${MAX_SKILL_BYTES}-byte SKILL.md limit.`
+      )
     }
 
     const content = await readFile(path, { encoding: "utf8", signal })
     if (Buffer.byteLength(content, "utf8") > MAX_SKILL_BYTES) {
-      throw new SkillCatalogError("skill_too_large", `Skill ${JSON.stringify(name)} exceeds the ${MAX_SKILL_BYTES}-byte SKILL.md limit.`)
+      throw new SkillCatalogError(
+        "skill_too_large",
+        `Skill ${JSON.stringify(name)} exceeds the ${MAX_SKILL_BYTES}-byte SKILL.md limit.`
+      )
     }
 
     return { name, path, content }
@@ -148,7 +167,11 @@ export function registerSkillTools(server: McpServer): void {
     {
       description: "Load a skill's instructions, then follow them using the appropriate tools.",
       inputSchema: z.object({
-        name: z.string().min(1).refine(isValidSkillName, "Invalid skill name.").describe("Skill name returned by skill_list."),
+        name: z
+          .string()
+          .min(1)
+          .refine(isValidSkillName, "Invalid skill name.")
+          .describe("Skill name returned by skill_list."),
       }),
       outputSchema: z.object({
         path: z.string(),
@@ -205,7 +228,7 @@ export function registerSkillTools(server: McpServer): void {
 }
 
 function frontmatterValue(markdown: string, key: string): string | undefined {
-  const lines = markdown.split(/\r?\n/)
+  const lines = markdown.split(/\r?\n/u)
   if (lines[0]?.trim() !== "---") return undefined
 
   for (let index = 1; index < lines.length; index += 1) {
@@ -236,7 +259,9 @@ function isFsError(error: unknown, code: string): boolean {
 
 function skillToolError(error: unknown) {
   const text =
-    error instanceof SkillCatalogError ? `${error.code}: ${error.message}` : `skill_failed: ${error instanceof Error ? error.message : String(error)}`
+    error instanceof SkillCatalogError
+      ? `${error.code}: ${error.message}`
+      : `skill_failed: ${error instanceof Error ? error.message : String(error)}`
   return {
     isError: true,
     content: [{ type: "text" as const, text }],

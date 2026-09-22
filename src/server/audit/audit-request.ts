@@ -9,7 +9,13 @@ interface JsonRpcToolCall {
 }
 
 export interface McpAuditCall {
-  finish(input?: { toolResult?: unknown; modelResult?: unknown; error?: unknown; httpStatus?: number; state?: "finished" | "closed" }): void
+  finish(input?: {
+    toolResult?: unknown
+    modelResult?: unknown
+    error?: unknown
+    httpStatus?: number
+    state?: "finished" | "closed"
+  }): void
 }
 
 export interface McpAuditRequest {
@@ -48,8 +54,12 @@ export function createAuditRequest(
   return {
     claimTool(toolName, argumentsValue) {
       const match =
-        pending.find((item) => !item.claimed && item.name === toolName && inputMatches(item.argumentsValue, argumentsValue)) ??
-        pending.find((item) => !item.claimed && item.name === toolName)
+        pending.find(
+          (item) =>
+            !item.claimed &&
+            item.name === toolName &&
+            inputMatches(item.argumentsValue, argumentsValue)
+        ) ?? pending.find((item) => !item.claimed && item.name === toolName)
       // Top-level MCP calls are preloaded into pending. An unmatched execution is created internally by then_run.
       if (!match) return startToolCall(toolName, argumentsValue, "then_run")
       match.claimed = true
@@ -82,16 +92,27 @@ function parseToolCall(value: unknown): { name: string; arguments?: unknown } | 
 function inputMatches(expected: unknown, actual: unknown): boolean {
   if (Object.is(expected, actual)) return true
   if (Array.isArray(expected)) {
-    return Array.isArray(actual) && expected.length === actual.length && expected.every((item, index) => inputMatches(item, actual[index]))
+    return (
+      Array.isArray(actual) &&
+      expected.length === actual.length &&
+      expected.every((item, index) => inputMatches(item, actual[index]))
+    )
   }
   const expectedRecord = asRecord(expected)
   const actualRecord = asRecord(actual)
   if (expectedRecord && actualRecord) {
-    return Object.entries(expectedRecord).every(([key, value]) => Object.hasOwn(actualRecord, key) && inputMatches(value, actualRecord[key]))
+    return Object.entries(expectedRecord).every(
+      ([key, value]) => Object.hasOwn(actualRecord, key) && inputMatches(value, actualRecord[key])
+    )
   }
   return false
 }
 
 function isToolListRequest(value: unknown): boolean {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value) && (value as JsonRpcToolCall).method === "tools/list")
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      (value as JsonRpcToolCall).method === "tools/list"
+  )
 }

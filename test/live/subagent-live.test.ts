@@ -2,9 +2,9 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import process from "node:process"
 import test from "node:test"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
-
 import { MCP_CONFIG } from "../../src/config.js"
 import { startMcpHttpServer } from "../integrations/helpers.js"
 
@@ -48,120 +48,140 @@ interface PollDiagnostic {
   model_text_excerpt?: string
 }
 
-test(
-  "live MCP subagent_run/subagent_result preserves response and context across two turns",
-  { skip: !LIVE_TEST_ENABLED, timeout: LIVE_TIMEOUT_MS },
-  async (t) => {
-    const contextKey = `LIVE_CTX_${randomUUID().replaceAll("-", "").slice(0, 12)}`
-    const firstPrompt = [
-      "This is a live subagent lifecycle test. Do not use tools.",
-      `Remember this exact context key for the next turn: ${contextKey}`,
-      "Reply briefly and include the context key in your response.",
-    ].join("\n")
-    const artifact: Record<string, unknown> = {
-      generated_at: new Date().toISOString(),
-      agent_id: LIVE_AGENT_ID,
-      context_key: contextKey,
-    }
-    const pollTimeline: Record<string, PollDiagnostic[]> = {}
-    artifact.poll_timeline = pollTimeline
-
-    t.after(async () => {
-      await writeLiveArtifact(artifact).catch(() => undefined)
-    })
-
-    try {
-      Object.assign(MCP_CONFIG.tools, {
-        review: false,
-        shell: false,
-        applyPatch: false,
-        clones: false,
-        subagents: true,
-        web: false,
-        skills: false,
-        image: false,
-        computer: false,
-      })
-      const running = await startMcpHttpServer()
-      t.after(() => running.close().catch(() => undefined))
-
-      const client = new Client({ name: "live-subagent-integration-test", version: "1.0.0" }, { versionNegotiation: { mode: "auto" } })
-      t.after(() => client.close().catch(() => undefined))
-      await client.connect(new StreamableHTTPClientTransport(new URL(running.url)))
-
-      t.diagnostic("Production MCP server started")
-
-      const firstRun = await client.callTool({
-        name: "subagent_run",
-        arguments: {
-          agents: [{ agent_id: LIVE_AGENT_ID, prompt: firstPrompt }],
-        },
-      })
-      const firstRunTurn = getRunTurn(toolText(firstRun.content))
-      assert.equal(firstRunTurn.agent_id, LIVE_AGENT_ID)
-      assert.equal(firstRunTurn.status, "running", firstRunTurn.error ?? "subagent_run did not start turn 1")
-      assert.ok(firstRunTurn.turn_id)
-      t.diagnostic(`Turn 1 submitted: ${firstRunTurn.turn_id}`)
-
-      const firstCompletion = await waitForCompletedTurn(client, firstRunTurn.turn_id, (entry) => {
-        ;(pollTimeline.turn_1 ??= []).push(entry)
-        t.diagnostic(formatPollDiagnostic("Turn 1", entry))
-      })
-      const firstResponse = firstCompletion.turn.response ?? ""
-      assert.ok(firstResponse.trim(), "Turn 1 must return a non-empty response")
-      assert.ok(firstResponse.includes(contextKey), "Turn 1 must include the supplied context key")
-      t.diagnostic("Turn 1 completed with a non-empty response containing the supplied context key")
-
-      artifact.turn_1 = {
-        turn_id: firstRunTurn.turn_id,
-        mcp_response: firstResponse,
-      }
-
-      const secondPrompt = "What exact context key did I ask you to remember in my immediately previous message? Include that key in your response."
-      const secondRun = await client.callTool({
-        name: "subagent_run",
-        arguments: {
-          agents: [{ agent_id: LIVE_AGENT_ID, prompt: secondPrompt }],
-        },
-      })
-      const secondRunTurn = getRunTurn(toolText(secondRun.content))
-      assert.equal(secondRunTurn.agent_id, LIVE_AGENT_ID)
-      assert.equal(secondRunTurn.status, "running", secondRunTurn.error ?? "subagent_run did not start turn 2")
-      assert.ok(secondRunTurn.turn_id)
-      t.diagnostic(`Turn 2 submitted on same agent: ${secondRunTurn.turn_id}`)
-
-      const secondCompletion = await waitForCompletedTurn(client, secondRunTurn.turn_id, (entry) => {
-        ;(pollTimeline.turn_2 ??= []).push(entry)
-        t.diagnostic(formatPollDiagnostic("Turn 2", entry))
-      })
-      const secondResponse = secondCompletion.turn.response?.trim()
-      assert.ok(secondResponse, "Turn 2 must return a non-empty response")
-      assert.ok(secondResponse.includes(contextKey), "Turn 2 must recover context that was only supplied in Turn 1")
-
-      t.diagnostic("Turn 2 recovered context supplied only through Turn 1 using the same public agent_id")
-
-      artifact.turn_2 = {
-        turn_id: secondRunTurn.turn_id,
-        mcp_response: secondResponse,
-        recovered_turn_1_context: true,
-      }
-      artifact.result = "pass"
-
-      t.diagnostic("LIVE SUBAGENT INTEGRATION: PASS")
-      t.diagnostic(`Sanitized evidence: ${join(new URL(ARTIFACT_DIR).pathname, "subagent-live-last.json")}`)
-    } catch (error) {
-      artifact.result = "fail"
-      artifact.failure = serializeError(error)
-      artifact.failed_at = new Date().toISOString()
-      t.diagnostic(`LIVE SUBAGENT INTEGRATION: FAIL ${error instanceof Error ? error.message : String(error)}`)
-      throw error
-    }
+test("live MCP subagent_run/subagent_result preserves response and context across two turns", {
+  skip: !LIVE_TEST_ENABLED,
+  timeout: LIVE_TIMEOUT_MS,
+}, async (t) => {
+  const contextKey = `LIVE_CTX_${randomUUID().replaceAll("-", "").slice(0, 12)}`
+  const firstPrompt = [
+    "This is a live subagent lifecycle test. Do not use tools.",
+    `Remember this exact context key for the next turn: ${contextKey}`,
+    "Reply briefly and include the context key in your response.",
+  ].join("\n")
+  const artifact: Record<string, unknown> = {
+    generated_at: new Date().toISOString(),
+    agent_id: LIVE_AGENT_ID,
+    context_key: contextKey,
   }
-)
+  const pollTimeline: Record<string, PollDiagnostic[]> = {}
+  artifact.poll_timeline = pollTimeline
+
+  t.after(async () => {
+    await writeLiveArtifact(artifact).catch(() => undefined)
+  })
+
+  try {
+    Object.assign(MCP_CONFIG.tools, {
+      review: false,
+      shell: false,
+      applyPatch: false,
+      clones: false,
+      subagents: true,
+      web: false,
+      skills: false,
+      image: false,
+      computer: false,
+    })
+    const running = await startMcpHttpServer()
+    t.after(() => running.close().catch(() => undefined))
+
+    const client = new Client(
+      { name: "live-subagent-integration-test", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } }
+    )
+    t.after(() => client.close().catch(() => undefined))
+    await client.connect(new StreamableHTTPClientTransport(new URL(running.url)))
+
+    t.diagnostic("Production MCP server started")
+
+    const firstRun = await client.callTool({
+      name: "subagent_run",
+      arguments: {
+        agents: [{ agent_id: LIVE_AGENT_ID, prompt: firstPrompt }],
+      },
+    })
+    const firstRunTurn = getRunTurn(toolText(firstRun.content))
+    assert.equal(firstRunTurn.agent_id, LIVE_AGENT_ID)
+    assert.equal(
+      firstRunTurn.status,
+      "running",
+      firstRunTurn.error ?? "subagent_run did not start turn 1"
+    )
+    assert.ok(firstRunTurn.turn_id)
+    t.diagnostic(`Turn 1 submitted: ${firstRunTurn.turn_id}`)
+
+    const firstCompletion = await waitForCompletedTurn(client, firstRunTurn.turn_id, (entry) => {
+      ;(pollTimeline.turn_1 ??= []).push(entry)
+      t.diagnostic(formatPollDiagnostic("Turn 1", entry))
+    })
+    const firstResponse = firstCompletion.turn.response ?? ""
+    assert.ok(firstResponse.trim(), "Turn 1 must return a non-empty response")
+    assert.ok(firstResponse.includes(contextKey), "Turn 1 must include the supplied context key")
+    t.diagnostic("Turn 1 completed with a non-empty response containing the supplied context key")
+
+    artifact.turn_1 = {
+      turn_id: firstRunTurn.turn_id,
+      mcp_response: firstResponse,
+    }
+
+    const secondPrompt =
+      "What exact context key did I ask you to remember in my immediately previous message? Include that key in your response."
+    const secondRun = await client.callTool({
+      name: "subagent_run",
+      arguments: {
+        agents: [{ agent_id: LIVE_AGENT_ID, prompt: secondPrompt }],
+      },
+    })
+    const secondRunTurn = getRunTurn(toolText(secondRun.content))
+    assert.equal(secondRunTurn.agent_id, LIVE_AGENT_ID)
+    assert.equal(
+      secondRunTurn.status,
+      "running",
+      secondRunTurn.error ?? "subagent_run did not start turn 2"
+    )
+    assert.ok(secondRunTurn.turn_id)
+    t.diagnostic(`Turn 2 submitted on same agent: ${secondRunTurn.turn_id}`)
+
+    const secondCompletion = await waitForCompletedTurn(client, secondRunTurn.turn_id, (entry) => {
+      ;(pollTimeline.turn_2 ??= []).push(entry)
+      t.diagnostic(formatPollDiagnostic("Turn 2", entry))
+    })
+    const secondResponse = secondCompletion.turn.response?.trim()
+    assert.ok(secondResponse, "Turn 2 must return a non-empty response")
+    assert.ok(
+      secondResponse.includes(contextKey),
+      "Turn 2 must recover context that was only supplied in Turn 1"
+    )
+
+    t.diagnostic(
+      "Turn 2 recovered context supplied only through Turn 1 using the same public agent_id"
+    )
+
+    artifact.turn_2 = {
+      turn_id: secondRunTurn.turn_id,
+      mcp_response: secondResponse,
+      recovered_turn_1_context: true,
+    }
+    artifact.result = "pass"
+
+    t.diagnostic("LIVE SUBAGENT INTEGRATION: PASS")
+    t.diagnostic(
+      `Sanitized evidence: ${join(new URL(ARTIFACT_DIR).pathname, "subagent-live-last.json")}`
+    )
+  } catch (error) {
+    artifact.result = "fail"
+    artifact.failure = serializeError(error)
+    artifact.failed_at = new Date().toISOString()
+    t.diagnostic(
+      `LIVE SUBAGENT INTEGRATION: FAIL ${error instanceof Error ? error.message : String(error)}`
+    )
+    throw error
+  }
+})
 
 function getRunTurn(text: string): StructuredRunTurn {
   const match = text.match(
-    /^- agent_id=("(?:\\.|[^"\\])*"|\S+)(?: turn_id=("(?:\\.|[^"\\])*"|\S+))? status=(running|failed)(?: error=("(?:\\.|[^"\\])*"|\S+))?$/m
+    /^- agent_id=("(?:\\.|[^"\\])*"|\S+)(?: turn_id=("(?:\\.|[^"\\])*"|\S+))? status=(running|failed)(?: error=("(?:\\.|[^"\\])*"|\S+))?$/mu
   )
   assert.ok(match, "subagent_run must return exactly one live turn")
   return {
@@ -202,7 +222,8 @@ async function waitForCompletedTurn(
       model_text_excerpt: excerpt(observedTexts.at(-1) ?? ""),
     })
     if (turn.status === "completed") return { turn, observedTexts }
-    if (turn.status === "failed") throw new Error(`Live subagent turn failed: ${turn.error ?? turnId}`)
+    if (turn.status === "failed")
+      throw new Error(`Live subagent turn failed: ${turn.error ?? turnId}`)
   }
 
   throw new Error(`Timed out waiting for live subagent turn ${turnId}`)
@@ -232,7 +253,10 @@ function toolText(content: unknown): string {
   if (!Array.isArray(content)) return ""
   return content
     .map((item) => {
-      const record = item !== null && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : undefined
+      const record =
+        item !== null && typeof item === "object" && !Array.isArray(item)
+          ? (item as Record<string, unknown>)
+          : undefined
       return record?.type === "text" && typeof record.text === "string" ? record.text : ""
     })
     .filter(Boolean)
@@ -242,12 +266,16 @@ function toolText(content: unknown): string {
 async function writeLiveArtifact(artifact: Record<string, unknown>): Promise<void> {
   const directory = new URL(ARTIFACT_DIR)
   await mkdir(directory, { recursive: true })
-  await writeFile(new URL("subagent-live-last.json", directory), `${JSON.stringify(artifact, null, 2)}\n`, "utf8")
+  await writeFile(
+    new URL("subagent-live-last.json", directory),
+    `${JSON.stringify(artifact, null, 2)}\n`,
+    "utf8"
+  )
 }
 
 function parseResultTurn(text: string): StructuredResultTurn {
   const match = text.match(
-    /^---- turn_id=("(?:\\.|[^"\\])*"|\S+) status=(running|completed|failed)(?: activity=("(?:\\.|[^"\\])*"|\S+))?(?: activity_age_ms=(\d+))? ----(?:\n\n([\s\S]*))?$/
+    /^---- turn_id=("(?:\\.|[^"\\])*"|\S+) status=(running|completed|failed)(?: activity=("(?:\\.|[^"\\])*"|\S+))?(?: activity_age_ms=(\d+))? ----(?:\n\n([\s\S]*))?$/u
   )
   assert.ok(match, "subagent_result must return exactly one live turn")
   const status = match[2] as StructuredResultTurn["status"]

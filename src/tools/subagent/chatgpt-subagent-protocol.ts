@@ -39,7 +39,11 @@ export class ChatGptTurnTracker {
     visitObjects(parsed, (record) => {
       const topicId = stringValue(record.topic_id)
       const envelope = asRecord(record.payload)
-      if (!topicId?.startsWith("conversation-turn-") || envelope?.type !== "conversation-turn-stream") return
+      if (
+        !topicId?.startsWith("conversation-turn-") ||
+        envelope?.type !== "conversation-turn-stream"
+      )
+        return
       const payload = asRecord(envelope.payload)
       if (!payload) return
 
@@ -54,7 +58,9 @@ export class ChatGptTurnTracker {
 
       const encodedItem = stringValue(payload.encoded_item)
       if (!encodedItem) return
-      completion = this.ingestStream(encodedItem, topicId, topicId.slice("conversation-turn-".length)) ?? completion
+      completion =
+        this.ingestStream(encodedItem, topicId, topicId.slice("conversation-turn-".length)) ??
+        completion
     })
 
     return completion
@@ -64,18 +70,24 @@ export class ChatGptTurnTracker {
     return this.ingestStream(text, "http")
   }
 
-  private ingestStream(text: string, sourceId: string, turnId?: string): ChatGptTurnCompletion | undefined {
+  private ingestStream(
+    text: string,
+    sourceId: string,
+    turnId?: string
+  ): ChatGptTurnCompletion | undefined {
     for (const item of parseResponsePayloads(text)) {
       const record = asRecord(item)
       if (!record) continue
 
       const value = asRecord(record.v)
       const message = value ? normalizeMessage(value) : undefined
-      if (message?.role === "user" && promptsMatch(message.text, this.prompt)) this.bind(sourceId, turnId)
+      if (message?.role === "user" && promptsMatch(message.text, this.prompt))
+        this.bind(sourceId, turnId)
 
       const inputMessage = asRecord(record.input_message)
       const input = inputMessage ? normalizeMessage({ message: inputMessage }) : undefined
-      if (input?.role === "user" && promptsMatch(input.text, this.prompt)) this.bind(sourceId, turnId)
+      if (input?.role === "user" && promptsMatch(input.text, this.prompt))
+        this.bind(sourceId, turnId)
 
       if (this.sourceId !== sourceId) continue
       this.captureConversationId(record)
@@ -127,24 +139,45 @@ export class ChatGptTurnTracker {
     if (explicitOperation) this.lastDeltaOperation = explicitOperation
     if (!path) return
 
-    if (operation === "append" && path === "/message/content/parts/0" && typeof delta.v === "string") {
+    if (
+      operation === "append" &&
+      path === "/message/content/parts/0" &&
+      typeof delta.v === "string"
+    ) {
       this.assistant.text += delta.v
       this.onActivity?.("Generating response")
-    } else if (operation === "replace" && path === "/message/status" && typeof delta.v === "string") {
+    } else if (
+      operation === "replace" &&
+      path === "/message/status" &&
+      typeof delta.v === "string"
+    ) {
       this.assistant.status = delta.v
-    } else if (operation === "replace" && path === "/message/end_turn" && typeof delta.v === "boolean") {
+    } else if (
+      operation === "replace" &&
+      path === "/message/end_turn" &&
+      typeof delta.v === "boolean"
+    ) {
       this.assistant.endTurn = delta.v
-    } else if (operation === "replace" && path === "/message/recipient" && (typeof delta.v === "string" || delta.v === null)) {
+    } else if (
+      operation === "replace" &&
+      path === "/message/recipient" &&
+      (typeof delta.v === "string" || delta.v === null)
+    ) {
       this.assistant.recipient = delta.v as string | null
     }
   }
 
   private result(): ChatGptTurnCompletion | undefined {
     if (!this.complete || !this.sourceId || !this.assistant) return undefined
-    if (this.assistant.status !== "finished_successfully" || this.assistant.endTurn !== true) return undefined
+    if (this.assistant.status !== "finished_successfully" || this.assistant.endTurn !== true)
+      return undefined
     if (this.assistant.recipient && this.assistant.recipient !== "all") return undefined
     if (!this.assistant.text) return undefined
-    return { text: this.assistant.text, conversationId: this.conversationId, turnId: this.sourceTurnId }
+    return {
+      text: this.assistant.text,
+      conversationId: this.conversationId,
+      turnId: this.sourceTurnId,
+    }
   }
 }
 
@@ -153,7 +186,7 @@ function promptsMatch(observed: string, submitted: string): boolean {
 }
 
 function normalizePrompt(text: string): string {
-  return text.normalize("NFKC").replace(/\s+/g, " ").trim()
+  return text.normalize("NFKC").replace(/\s+/gu, " ").trim()
 }
 
 function normalizeMessage(record: Record<string, unknown>): NormalizedMessage | undefined {
@@ -164,27 +197,37 @@ function normalizeMessage(record: Record<string, unknown>): NormalizedMessage | 
   return {
     role: stringValue(author.role),
     status: stringValue(message.status),
-    endTurn: typeof message.end_turn === "boolean" || message.end_turn === null ? (message.end_turn as boolean | null) : undefined,
-    recipient: typeof message.recipient === "string" || message.recipient === null ? (message.recipient as string | null) : undefined,
+    endTurn:
+      typeof message.end_turn === "boolean" || message.end_turn === null
+        ? (message.end_turn as boolean | null)
+        : undefined,
+    recipient:
+      typeof message.recipient === "string" || message.recipient === null
+        ? (message.recipient as string | null)
+        : undefined,
     text: extractMessageText(asRecord(message.content)),
   }
 }
 
 function extractMessageText(content?: Record<string, unknown>): string {
   if (!content) return ""
-  if (Array.isArray(content.parts)) return content.parts.filter((part): part is string => typeof part === "string").join("\n")
+  if (Array.isArray(content.parts))
+    return content.parts.filter((part): part is string => typeof part === "string").join("\n")
   return stringValue(content.text) ?? ""
 }
 
 function classifyActivity(message: NormalizedMessage): ChatGptSubagentActivity {
   const recipient = message.recipient?.toLowerCase()
-  if (recipient && recipient !== "all") return recipient.includes("web") || recipient.includes("search") ? "Searching the web" : "Using tools"
+  if (recipient && recipient !== "all")
+    return recipient.includes("web") || recipient.includes("search")
+      ? "Searching the web"
+      : "Using tools"
   return message.role === "assistant" ? "Generating response" : "Working"
 }
 
 function parseResponsePayloads(text: string): unknown[] {
   const payloads: unknown[] = []
-  for (const rawLine of text.split(/\r?\n/)) {
+  for (const rawLine of text.split(/\r?\n/u)) {
     const line = rawLine.trim()
     if (!line || line === "data: [DONE]") continue
     const candidate = line.startsWith("data:") ? line.slice(5).trim() : line
@@ -202,7 +245,11 @@ function tryParseJson(text: string): unknown | undefined {
   }
 }
 
-function visitObjects(value: unknown, visitor: (record: Record<string, unknown>) => void, seen = new Set<object>()): void {
+function visitObjects(
+  value: unknown,
+  visitor: (record: Record<string, unknown>) => void,
+  seen = new Set<object>()
+): void {
   if (!value || typeof value !== "object" || seen.has(value)) return
   seen.add(value)
   if (Array.isArray(value)) {
@@ -251,7 +298,10 @@ export function findLatestAssistantAfterPrompt(
 /** Normalize conversation history for the one-shot recovery check and frozen fixtures. */
 export function extractConversationMessages(payload: unknown): ConversationMessage[] {
   const root = asRecord(payload)
-  if (Array.isArray(root?.messages)) return root.messages.map(messageFromRaw).filter((value): value is ConversationMessage => value !== undefined)
+  if (Array.isArray(root?.messages))
+    return root.messages
+      .map(messageFromRaw)
+      .filter((value): value is ConversationMessage => value !== undefined)
   const current = stringValue(root?.current_node)
   const mapping = asRecord(root?.mapping)
   if (!current || !mapping) return []

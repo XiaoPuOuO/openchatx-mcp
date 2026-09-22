@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 const optional = process.argv.includes("--optional")
@@ -8,7 +9,8 @@ const args = statusOnly ? ["permissions", "status", "--all-sources"] : ["permiss
 const result = spawnSync(executable, args, { stdio: "inherit" })
 
 if (result.error?.code === "ENOENT") {
-  const message = "The bundled Peekaboo executable is missing. Run `npm install`, then run `npm run setup:computer`."
+  const message =
+    "The bundled Peekaboo executable is missing. Run `npm install`, then run `npm run setup:computer`."
   if (optional) console.log(`Computer Use: ${message}`)
   else console.error(message)
   process.exit(optional ? 0 : 1)
@@ -17,7 +19,9 @@ if (result.error?.code === "ENOENT") {
 if (result.error) throw result.error
 if (result.status !== 0) {
   if (optional) {
-    console.warn("Computer Use: Peekaboo permission status could not be read. Run `npm run setup:computer` for Peekaboo's permission guide.")
+    console.warn(
+      "Computer Use: Peekaboo permission status could not be read. Run `npm run setup:computer` for Peekaboo's permission guide."
+    )
     process.exit(0)
   }
   process.exit(result.status ?? 1)

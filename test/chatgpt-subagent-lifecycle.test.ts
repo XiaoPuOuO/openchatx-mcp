@@ -3,9 +3,9 @@ import { EventEmitter } from "node:events"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { setImmediate } from "node:timers/promises"
 import test from "node:test"
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core"
+import { setImmediate } from "node:timers/promises"
+import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core"
 
 import { MCP_CONFIG } from "../src/config.js"
 import { createChatGptSubagentService } from "../src/tools/subagent/chatgpt-subagent.js"
@@ -44,15 +44,19 @@ for (const memory of [false, true]) {
       const nextTurnId = await service.ask({ ...request, prompt: "Follow up" }, {})
       assert.equal((await service.poll(nextTurnId, 0)).status, "completed")
       assert.equal(fixture.pages.length, 2)
-      assert.match(fixture.pages[1]!.url(), /\/c\/lifecycle-conversation$/)
+      assert.match(fixture.pages[1]!.url(), /\/c\/lifecycle-conversation$/u)
     } else {
       // Expiration stays specific even without Chrome, or if the caller changes memory.
       await fixture.browser.close()
       for (const requestedMemory of [false, true]) {
-        await assert.rejects(service.ask({ ...request, prompt: "Follow up", memory: requestedMemory }, {}), {
-          code: "TEMP_AGENT_EXPIRED",
-          message: "Temporary agent researcher was closed after 30 minutes of inactivity. Its conversation cannot be resumed.",
-        })
+        await assert.rejects(
+          service.ask({ ...request, prompt: "Follow up", memory: requestedMemory }, {}),
+          {
+            code: "TEMP_AGENT_EXPIRED",
+            message:
+              "Temporary agent researcher was closed after 30 minutes of inactivity. Its conversation cannot be resumed.",
+          }
+        )
       }
       assert.equal(connect.mock.callCount(), 1)
       assert.equal(fixture.pages.length, 1)
@@ -64,13 +68,20 @@ for (const memory of [false, true]) {
     const other = { agentId: "closed-externally", prompt: "Review this", memory: false }
     await service.ask(other, {})
     await fixture.pages.at(-1)!.close()
-    await assert.rejects(service.ask(other, {}), (error: unknown) => error instanceof ChatGptSubagentError && error.code === "AGENT_TARGET_LOST")
+    await assert.rejects(
+      service.ask(other, {}),
+      (error: unknown) =>
+        error instanceof ChatGptSubagentError && error.code === "AGENT_TARGET_LOST"
+    )
   })
 }
 
 function browserFixture(): { browser: Browser; pages: Page[]; readonly submissions: number } {
   const pages: Page[] = []
-  const sessions = new Map<Page, EventEmitter & { send(method: string): Promise<unknown>; detach(): Promise<void> }>()
+  const sessions = new Map<
+    Page,
+    EventEmitter & { send(method: string): Promise<unknown>; detach(): Promise<void> }
+  >()
   let connected = true
   let submissions = 0
   const context = {
@@ -111,7 +122,8 @@ function browserFixture(): { browser: Browser; pages: Page[]; readonly submissio
             },
           },
           locator: (selector: string) => {
-            const visible = selector === "#prompt-textarea" || selector === 'button[data-testid="send-button"]'
+            const visible =
+              selector === "#prompt-textarea" || selector === 'button[data-testid="send-button"]'
             const locator = {
               first: () => locator,
               count: async () => Number(visible),
@@ -123,13 +135,31 @@ function browserFixture(): { browser: Browser; pages: Page[]; readonly submissio
                 submissions += 1
                 const body = [
                   { v: { message: { author: { role: "user" }, content: { parts: [prompt] } } } },
-                  { v: { message: { author: { role: "assistant" }, content: { parts: ["Reviewed"] }, status: "finished_successfully", end_turn: true } } },
+                  {
+                    v: {
+                      message: {
+                        author: { role: "assistant" },
+                        content: { parts: ["Reviewed"] },
+                        status: "finished_successfully",
+                        end_turn: true,
+                      },
+                    },
+                  },
                   { type: "message_stream_complete", conversation_id: "lifecycle-conversation" },
                 ]
                   .map((item) => `data: ${JSON.stringify(item)}\n\n`)
                   .join("")
-                cdp.emit("Network.requestWillBeSent", { requestId: "turn", request: { method: "POST", url: "https://chatgpt.com/backend-api/f/conversation" } })
-                cdp.emit("Network.dataReceived", { requestId: "turn", data: Buffer.from(body).toString("base64") })
+                cdp.emit("Network.requestWillBeSent", {
+                  requestId: "turn",
+                  request: {
+                    method: "POST",
+                    url: "https://chatgpt.com/backend-api/f/conversation",
+                  },
+                })
+                cdp.emit("Network.dataReceived", {
+                  requestId: "turn",
+                  data: Buffer.from(body).toString("base64"),
+                })
               },
             }
             return locator

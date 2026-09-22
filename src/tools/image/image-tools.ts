@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { basename, isAbsolute, resolve } from "node:path"
 
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
@@ -13,7 +13,10 @@ export function registerImageTools(server: McpServer): void {
     {
       description: "View a local image file.",
       inputSchema: z.object({
-        path: z.string().min(1).describe("Local image path. Relative paths resolve from the workspace."),
+        path: z
+          .string()
+          .min(1)
+          .describe("Local image path. Relative paths resolve from the workspace."),
       }),
       annotations: {
         readOnlyHint: true,
@@ -25,7 +28,9 @@ export function registerImageTools(server: McpServer): void {
     async ({ path }, ctx) => {
       const imagePath = isAbsolute(path) ? path : resolve(MCP_CONFIG.workspace, path)
       try {
-        const encoded = await encodeImageForMcp(await readFile(imagePath, { signal: ctx.mcpReq.signal }))
+        const encoded = await encodeImageForMcp(
+          await readFile(imagePath, { signal: ctx.mcpReq.signal })
+        )
         return {
           content: [
             {

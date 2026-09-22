@@ -95,10 +95,17 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   }
 
   function emitAgent(agent: AgentState): void {
-    events.emit("event", { type: "agent_changed", agent: toSnapshot(agent) } satisfies AgentObserverEvent)
+    events.emit("event", {
+      type: "agent_changed",
+      agent: toSnapshot(agent),
+    } satisfies AgentObserverEvent)
   }
 
-  function startTool(identity: AgentIdentity | undefined, tool: string, input: unknown): string | undefined {
+  function startTool(
+    identity: AgentIdentity | undefined,
+    tool: string,
+    input: unknown
+  ): string | undefined {
     const agent = ensureAgent(identity)
     if (!agent) return undefined
     const timestamp = now()
@@ -117,7 +124,11 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     return call.id
   }
 
-  function settleTool(identity: AgentIdentity | undefined, callId: string | undefined, status: "completed" | "failed"): void {
+  function settleTool(
+    identity: AgentIdentity | undefined,
+    callId: string | undefined,
+    status: "completed" | "failed"
+  ): void {
     if (!identity || !callId) return
     const agent = agentsBySession.get(identity.sessionId)
     const activeCall = agent?.activeCalls.get(callId)
@@ -132,7 +143,10 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     emitAgent(agent)
   }
 
-  function queueInstruction(agentId: string, message: string): AgentInstructionSnapshot | undefined {
+  function queueInstruction(
+    agentId: string,
+    message: string
+  ): AgentInstructionSnapshot | undefined {
     const sessionId = sessionsByAgentId.get(agentId)
     const agent = sessionId ? agentsBySession.get(sessionId) : undefined
     const trimmed = message.trim()
@@ -163,7 +177,9 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     const agent = agentsBySession.get(identity.sessionId)
     if (!agent) return []
     const timestamp = now()
-    const pending = agent.instructions.filter((instruction) => instruction.deliveredAt === undefined)
+    const pending = agent.instructions.filter(
+      (instruction) => instruction.deliveredAt === undefined
+    )
     if (pending.length === 0) return []
     const pendingIds = new Set(pending.map((instruction) => instruction.id))
     agent.instructions = agent.instructions.map((instruction) =>
@@ -228,7 +244,8 @@ function summarizeTool(tool: string, input: unknown): string {
   }
   if (tool === "fetch_url" && typeof record.url === "string") return singleLine(record.url, 140)
   if (tool === "image_view" && typeof record.path === "string") return singleLine(record.path, 140)
-  if (tool === "subagent_run" && Array.isArray(record.agents)) return `${record.agents.length} agents`
+  if (tool === "subagent_run" && Array.isArray(record.agents))
+    return `${record.agents.length} agents`
 
   const preferred = ["path", "cwd", "request_id", "query", "name", "task_id"]
   for (const key of preferred) {
@@ -237,10 +254,14 @@ function summarizeTool(tool: string, input: unknown): string {
   return ""
 }
 
-function formatToolDetail(tool: string, input: unknown): Pick<AgentCallSnapshot, "detail" | "detailLanguage"> {
+function formatToolDetail(
+  tool: string,
+  input: unknown
+): Pick<AgentCallSnapshot, "detail" | "detailLanguage"> {
   const record = asRecord(input)
   if (tool === "shell_run" && record) {
-    if (typeof record.command === "string") return { detail: record.command, detailLanguage: "bash" }
+    if (typeof record.command === "string")
+      return { detail: record.command, detailLanguage: "bash" }
     if (Array.isArray(record.commands)) {
       const commands = record.commands
         .map((item) => asRecord(item)?.command)
@@ -260,10 +281,12 @@ function formatToolDetail(tool: string, input: unknown): Pick<AgentCallSnapshot,
 }
 
 function singleLine(value: string, maxLength: number): string {
-  const compact = value.replace(/\s+/g, " ").trim()
+  const compact = value.replace(/\s+/gu, " ").trim()
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 1)}…`
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
 }

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process"
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 const PIXEL_AGENTS_REPOSITORY = "https://github.com/pablodelucca/pixel-agents.git"
@@ -63,7 +64,9 @@ async function fetchPinnedSource() {
   await mkdir(source)
   execFileSync("git", ["init", "-q"], { cwd: source })
   execFileSync("git", ["remote", "add", "origin", PIXEL_AGENTS_REPOSITORY], { cwd: source })
-  execFileSync("git", ["fetch", "-q", "--depth", "1", "origin", PIXEL_AGENTS_COMMIT], { cwd: source })
+  execFileSync("git", ["fetch", "-q", "--depth", "1", "origin", PIXEL_AGENTS_COMMIT], {
+    cwd: source,
+  })
   execFileSync("git", ["checkout", "-q", "FETCH_HEAD"], { cwd: source })
   return source
 }
@@ -94,16 +97,28 @@ async function buildCatalog(sourceAssets) {
 
   const floors = images
     .filter((image) => image.kind === "floors")
-    .map((image, index) => ({ id: `floor_${index}`, label: `Floor ${index + 1}`, path: image.path }))
+    .map((image, index) => ({
+      id: `floor_${index}`,
+      label: `Floor ${index + 1}`,
+      path: image.path,
+    }))
   const walls = images
     .filter((image) => image.kind === "walls")
     .map((image, index) => ({ id: `wall_${index}`, label: `Wall ${index + 1}`, path: image.path }))
   const carpets = images
     .filter((image) => image.kind === "carpets")
-    .map((image, index) => ({ id: `carpet_${index}`, label: `Carpet ${index + 1}`, path: image.path }))
+    .map((image, index) => ({
+      id: `carpet_${index}`,
+      label: `Carpet ${index + 1}`,
+      path: image.path,
+    }))
   const characters = images
     .filter((image) => image.kind === "characters")
-    .map((image, index) => ({ id: `char_${index}`, label: `Character ${index + 1}`, path: image.path }))
+    .map((image, index) => ({
+      id: `char_${index}`,
+      label: `Character ${index + 1}`,
+      path: image.path,
+    }))
   const pets = []
   const petsRoot = path.join(sourceAssets, "pets")
   if (await exists(petsRoot)) {
@@ -127,7 +142,9 @@ async function buildCatalog(sourceAssets) {
       commit: PIXEL_AGENTS_COMMIT,
     },
     furniture: furniture.sort((left, right) =>
-      `${left.category}:${left.label}:${left.id}`.localeCompare(`${right.category}:${right.label}:${right.id}`)
+      `${left.category}:${left.label}:${left.id}`.localeCompare(
+        `${right.category}:${right.label}:${right.id}`
+      )
     ),
     floors,
     walls,
@@ -181,7 +198,9 @@ function catalogFurnitureEntry(asset, base, directory, file, context) {
   const orientation = asset.orientation ?? context.orientation
   const state = asset.state ?? context.state
   const mirrorSide = asset.mirrorSide ?? context.mirrorSide ?? false
-  const suffix = [orientation && titleCase(orientation), state && titleCase(state)].filter(Boolean).join(" · ")
+  const suffix = [orientation && titleCase(orientation), state && titleCase(state)]
+    .filter(Boolean)
+    .join(" · ")
   return {
     id: asset.id,
     label: suffix ? `${base.baseName} · ${suffix}` : base.baseName,
@@ -210,15 +229,20 @@ async function inferAssetFile(directoryPath, id) {
 
 async function checkVendorSnapshot() {
   const commit = (await readFile(path.join(vendorRoot, "UPSTREAM_COMMIT"), "utf8")).trim()
-  if (commit !== PIXEL_AGENTS_COMMIT) throw new Error(`Vendored commit is ${commit}; expected ${PIXEL_AGENTS_COMMIT}`)
+  if (commit !== PIXEL_AGENTS_COMMIT)
+    throw new Error(`Vendored commit is ${commit}; expected ${PIXEL_AGENTS_COMMIT}`)
 
   const catalog = JSON.parse(await readFile(catalogTarget, "utf8"))
-  if (catalog.upstream?.commit !== PIXEL_AGENTS_COMMIT) throw new Error("catalog.json commit does not match pinned commit")
-  if (!Array.isArray(catalog.furniture) || catalog.furniture.length === 0) throw new Error("catalog.json has no furniture entries")
+  if (catalog.upstream?.commit !== PIXEL_AGENTS_COMMIT)
+    throw new Error("catalog.json commit does not match pinned commit")
+  if (!Array.isArray(catalog.furniture) || catalog.furniture.length === 0)
+    throw new Error("catalog.json has no furniture entries")
   for (const key of ["floors", "walls", "carpets", "characters", "pets"]) {
-    if (!Array.isArray(catalog[key]) || catalog[key].length === 0) throw new Error(`catalog.json has no ${key} entries`)
+    if (!Array.isArray(catalog[key]) || catalog[key].length === 0)
+      throw new Error(`catalog.json has no ${key} entries`)
   }
-  if (!Array.isArray(catalog.images) || catalog.images.length === 0) throw new Error("catalog.json has no image entries")
+  if (!Array.isArray(catalog.images) || catalog.images.length === 0)
+    throw new Error("catalog.json has no image entries")
 
   for (const entry of [
     ...catalog.furniture,
@@ -232,11 +256,14 @@ async function checkVendorSnapshot() {
     const prefix = "/ui/pixel-agents/assets/"
     if (!entry.path.startsWith(prefix)) throw new Error(`Unexpected catalog path: ${entry.path}`)
     const relative = entry.path.slice(prefix.length)
-    if (!(await exists(path.join(assetsTarget, relative)))) throw new Error(`Missing vendored asset: ${relative}`)
+    if (!(await exists(path.join(assetsTarget, relative))))
+      throw new Error(`Missing vendored asset: ${relative}`)
   }
 
   console.log(`Pixel Agents vendor snapshot OK: ${commit}`)
-  console.log(`Furniture variants: ${catalog.furniture.length}; PNG assets: ${catalog.images.length}`)
+  console.log(
+    `Furniture variants: ${catalog.furniture.length}; PNG assets: ${catalog.images.length}`
+  )
 }
 
 async function walkFiles(root, predicate) {

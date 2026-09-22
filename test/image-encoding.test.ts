@@ -54,13 +54,21 @@ test("reduces JPEG quality when needed to stay under the response budget", async
   const input = await sharp(pixels, { raw: { width, height, channels: 3 } })
     .png()
     .toBuffer()
-  const quality65 = await sharp(input).jpeg({ quality: 65, progressive: true, chromaSubsampling: "4:4:4" }).toBuffer()
-  const quality55 = await sharp(input).jpeg({ quality: 55, progressive: true, chromaSubsampling: "4:4:4" }).toBuffer()
+  const quality65 = await sharp(input)
+    .jpeg({ quality: 65, progressive: true, chromaSubsampling: "4:4:4" })
+    .toBuffer()
+  const quality55 = await sharp(input)
+    .jpeg({ quality: 55, progressive: true, chromaSubsampling: "4:4:4" })
+    .toBuffer()
   assert.ok(quality55.length < quality65.length)
 
   const headroomBytes = 64 * 1024
-  const maxBase64Bytes = Math.floor((base64Size(quality65.length) + base64Size(quality55.length)) / 2)
-  const result = await encodeImageForMcp(input, { maxResponseBytes: headroomBytes + maxBase64Bytes })
+  const maxBase64Bytes = Math.floor(
+    (base64Size(quality65.length) + base64Size(quality55.length)) / 2
+  )
+  const result = await encodeImageForMcp(input, {
+    maxResponseBytes: headroomBytes + maxBase64Bytes,
+  })
 
   assert.ok(Buffer.byteLength(result.data, "ascii") <= maxBase64Bytes)
   assert.equal(result.width, width)
@@ -77,7 +85,10 @@ test("fails instead of resizing when an image cannot fit", async () => {
 
   await assert.rejects(
     encodeImageForMcp(input, { maxResponseBytes: 66 * 1024 }),
-    (error: unknown) => error instanceof ImageEncodingError && error.code === "IMAGE_TOO_LARGE" && /without resizing/.test(error.message)
+    (error: unknown) =>
+      error instanceof ImageEncodingError &&
+      error.code === "IMAGE_TOO_LARGE" &&
+      /without resizing/u.test(error.message)
   )
 })
 

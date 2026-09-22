@@ -10,7 +10,10 @@ test("keeps one process-wide identity per OpenAI session and adds task context",
 
   assert.equal(same, first)
   assert.equal(same.agent, first.agent)
-  assert.equal(Number(second.agent.slice("agent-".length)), Number(first.agent.slice("agent-".length)) + 1)
+  assert.equal(
+    Number(second.agent.slice("agent-".length)),
+    Number(first.agent.slice("agent-".length)) + 1
+  )
 
   runWithAgent("agent-context-a", () => setAgentTaskSlug("identity-context-test"))
   const updated = runWithAgent("agent-context-a", () => getAgentIdentity()!)

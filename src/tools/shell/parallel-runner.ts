@@ -1,9 +1,9 @@
-import { spawn, type ChildProcess } from "node:child_process"
+import { type ChildProcess, spawn } from "node:child_process"
+import process from "node:process"
 import { StringDecoder } from "node:string_decoder"
-
 import { utf8Chunk } from "../../utils.js"
-import type { ParallelCommandStatus } from "./shell-contracts.js"
 import { prepareShellCommand } from "./rtk.js"
+import type { ParallelCommandStatus } from "./shell-contracts.js"
 
 export type { ParallelCommandStatus } from "./shell-contracts.js"
 
@@ -100,7 +100,9 @@ export class ParallelCommandAbortedError extends Error {
   }
 }
 
-export function executeParallelCommand(input: ExecuteParallelCommandInput): Promise<ParallelCommandExecutionResult> {
+export function executeParallelCommand(
+  input: ExecuteParallelCommandInput
+): Promise<ParallelCommandExecutionResult> {
   if (input.signal.aborted) {
     return Promise.resolve({ status: "reset", exitCode: null, output: "", droppedOutputBytes: 0 })
   }
@@ -175,7 +177,10 @@ export function executeParallelCommand(input: ExecuteParallelCommandInput): Prom
       killProcessGroup(child, "SIGKILL")
     })
     child.once("close", (code) => {
-      finish(resetRequested ? "reset" : timeoutRequested ? "timed_out" : "completed", resetRequested || timeoutRequested ? null : code)
+      finish(
+        resetRequested ? "reset" : timeoutRequested ? "timed_out" : "completed",
+        resetRequested || timeoutRequested ? null : code
+      )
     })
 
     input.signal.addEventListener("abort", onAbort, { once: true })
@@ -204,7 +209,10 @@ function createBoundedOutput(maxBytes: number) {
       capturedBytes += Buffer.byteLength(captured, "utf8")
     }
     if (dropped.length > 0) {
-      droppedBytes = Math.min(Number.MAX_SAFE_INTEGER, droppedBytes + Buffer.byteLength(dropped, "utf8"))
+      droppedBytes = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        droppedBytes + Buffer.byteLength(dropped, "utf8")
+      )
     }
   }
 

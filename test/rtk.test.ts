@@ -3,14 +3,16 @@ import { spawnSync } from "node:child_process"
 import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import process from "node:process"
 import test, { type TestContext } from "node:test"
-
 import { MCP_CONFIG } from "../src/config.js"
 import { prepareShellCommand } from "../src/tools/shell/rtk.js"
 import { createShellSession } from "../src/tools/shell/session.js"
 import { runToCompletion } from "./helpers/shell.js"
 
-test("installed RTK default reads preserve source bytes exactly", { skip: !MCP_CONFIG.shell.rtkExecutable }, async (t) => {
+test("installed RTK default reads preserve source bytes exactly", {
+  skip: !MCP_CONFIG.shell.rtkExecutable,
+}, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-rtk-read-"))
   t.after(() => rm(root, { recursive: true, force: true }))
   const path = join(root, "fixture.ts")
@@ -42,9 +44,13 @@ test("prepares supported commands through RTK without changing the caller comman
 
   const prepared = prepareShellCommand(command, root, env)
   assert.notEqual(prepared, command)
-  assert.match(prepared, /eval/)
+  assert.match(prepared, /eval/u)
 
-  const result = spawnSync(MCP_CONFIG.shell.path, ["-c", prepared], { cwd: root, env, encoding: "utf8" })
+  const result = spawnSync(MCP_CONFIG.shell.path, ["-c", prepared], {
+    cwd: root,
+    env,
+    encoding: "utf8",
+  })
   assert.equal(result.status, 0)
   assert.equal(result.stdout, source)
 })
@@ -68,7 +74,11 @@ test("rewritten commands export the RTK path to child processes", async (t) => {
 
   const env = { ...process.env, PATH: "/usr/bin:/bin" }
   const prepared = prepareShellCommand("child-tool", root, env)
-  const result = spawnSync(MCP_CONFIG.shell.path, ["-c", prepared], { cwd: root, env, encoding: "utf8" })
+  const result = spawnSync(MCP_CONFIG.shell.path, ["-c", prepared], {
+    cwd: root,
+    env,
+    encoding: "utf8",
+  })
 
   assert.equal(result.status, 0)
   assert.equal(result.stdout, "0|1|/dev/null")
@@ -93,11 +103,16 @@ test("RTK rewriting fails open when disabled, unavailable, unsupported, or opted
   assert.equal(prepareShellCommand("git status", root, process.env), "git status")
 
   MCP_CONFIG.shell.rtkExecutable = executable
-  assert.equal(prepareShellCommand("RTK_DISABLED=1 git status", root, process.env), "RTK_DISABLED=1 git status")
+  assert.equal(
+    prepareShellCommand("RTK_DISABLED=1 git status", root, process.env),
+    "RTK_DISABLED=1 git status"
+  )
   assert.equal(prepareShellCommand("printf hello", root, process.env), "printf hello")
 })
 
-test("rewritten commands preserve persistent shell cwd and exported environment", { timeout: 10_000 }, async (t) => {
+test("rewritten commands preserve persistent shell cwd and exported environment", {
+  timeout: 10_000,
+}, async (t) => {
   const root = await fakeRtkRoot(t)
   const child = join(root, "child")
   const init = spawnSync("git", ["init", "-q", child], { encoding: "utf8" })
@@ -109,14 +124,24 @@ test("rewritten commands preserve persistent shell cwd and exported environment"
     await shell.close()
   })
 
-  const first = await runToCompletion(shell, "rtk-state-1", "cd child && export SHELLBY_RTK_STATE=present && git status --short")
+  const first = await runToCompletion(
+    shell,
+    "rtk-state-1",
+    "cd child && export SHELLBY_RTK_STATE=present && git status --short"
+  )
   assert.equal(first.snapshot.exit_code, 0)
 
-  const second = await runToCompletion(shell, "rtk-state-2", `printf '%s|%s' "$PWD" "$SHELLBY_RTK_STATE"`)
+  const second = await runToCompletion(
+    shell,
+    "rtk-state-2",
+    `printf '%s|%s' "$PWD" "$SHELLBY_RTK_STATE"`
+  )
   assert.equal(second.output, `${await realpath(child)}|present`)
 })
 
-test("parallel RTK execution keeps the original command in caller-visible run metadata", { timeout: 10_000 }, async (t) => {
+test("parallel RTK execution keeps the original command in caller-visible run metadata", {
+  timeout: 10_000,
+}, async (t) => {
   const root = await fakeRtkRoot(t)
   const child = join(root, "child")
   const init = spawnSync("git", ["init", "-q", child], { encoding: "utf8" })

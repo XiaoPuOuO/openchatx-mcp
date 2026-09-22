@@ -2,9 +2,9 @@ import assert from "node:assert/strict"
 import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import process from "node:process"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
-
 import { PeekabooClient, PeekabooError } from "../src/tools/computer/peekaboo.js"
 
 const fixture = join(dirname(fileURLToPath(import.meta.url)), "fixtures/fake-peekaboo.mjs")
@@ -40,7 +40,14 @@ test("can force Peekaboo operations to the local runtime", async (t) => {
   await client.run(["click", "--at", "10,20", "--no-remote"])
 
   const starts = startEvents(await readLog(logPath))
-  assert.deepEqual(starts[0]?.args, ["window", "focus", "--window-id", "42", "--no-remote", "--json"])
+  assert.deepEqual(starts[0]?.args, [
+    "window",
+    "focus",
+    "--window-id",
+    "42",
+    "--no-remote",
+    "--json",
+  ])
   assert.deepEqual(starts[1]?.args, ["click", "--at", "10,20", "--no-remote", "--json"])
 })
 
@@ -53,7 +60,7 @@ test("reports a missing Peekaboo executable", async (t) => {
 
   const error = await peekabooRejection(client.run(["app", "list"]))
   assert.equal(error.code, "PEEKABOO_NOT_FOUND")
-  assert.match(error.message, /Run npm install/)
+  assert.match(error.message, /Run npm install/u)
 })
 
 test("passes literal values as exact argv without invoking a shell", async (t) => {
@@ -100,7 +107,9 @@ test("uses the JSON success field even when Peekaboo exits zero", async (t) => {
   })
   t.after(() => client.close())
 
-  const error = await peekabooRejection(client.run(["click", "--on", "B1", "--snapshot", "snapshot-42"]))
+  const error = await peekabooRejection(
+    client.run(["click", "--on", "B1", "--snapshot", "snapshot-42"])
+  )
   assert.equal(error.code, "FAKE_COMMAND_FAILED")
   assert.equal(error.message, "Fake Peekaboo failure for click")
   assert.equal(error.details, "fixture requested failure")
@@ -279,7 +288,10 @@ interface FakeEvent {
   signal?: string
 }
 
-function fakeClient(env: Record<string, string>, options: { timeoutMs?: number; maxOutputBytes?: number; localOnly?: boolean } = {}): PeekabooClient {
+function fakeClient(
+  env: Record<string, string>,
+  options: { timeoutMs?: number; maxOutputBytes?: number; localOnly?: boolean } = {}
+): PeekabooClient {
   return new PeekabooClient({
     executable: process.execPath,
     baseArgs: [fixture],

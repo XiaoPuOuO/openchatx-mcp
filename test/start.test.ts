@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import { copyFile, mkdir, readFile, realpath, writeFile } from "node:fs/promises"
 import { delimiter, join } from "node:path"
+import process from "node:process"
 import test, { type TestContext } from "node:test"
-
 import { tempDir } from "./helpers/temp.js"
 
 // Run the real entrypoint in a disposable repository with fake external commands, never the live PM2 daemon.
@@ -22,8 +22,12 @@ async function runStartup(
   } = {}
 ) {
   const root = await realpath(await tempDir(t, "shellby-start-"))
-  for (const directory of ["scripts", "src", "bin", "node_modules/.bin"]) await mkdir(join(root, directory), { recursive: true })
-  await copyFile(new URL("../scripts/start.mjs", import.meta.url), join(root, "scripts", "start.mjs"))
+  for (const directory of ["scripts", "src", "bin", "node_modules/.bin"])
+    await mkdir(join(root, directory), { recursive: true })
+  await copyFile(
+    new URL("../scripts/start.mjs", import.meta.url),
+    join(root, "scripts", "start.mjs")
+  )
   await copyFile(new URL("../scripts/pm2.mjs", import.meta.url), join(root, "scripts", "pm2.mjs"))
   await writeFile(
     join(root, "src", "config.ts"),
@@ -37,7 +41,9 @@ export function printPreflightErrors() {}`
   )
   await writeFile(
     join(root, "scripts", "print-url.mjs"),
-    options.ngrokEnabled === false ? 'console.log("http://127.0.0.1:3334/mcp")' : 'console.log("https://test.invalid/mcp")'
+    options.ngrokEnabled === false
+      ? 'console.log("http://127.0.0.1:3334/mcp")'
+      : 'console.log("https://test.invalid/mcp")'
   )
   await writeFile(join(root, "agent-commands.yaml"), "previous audit\n")
   await writeFile(join(root, "calls.jsonl"), "")
@@ -71,7 +77,10 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
       "--import",
       `data:text/javascript,globalThis.fetch=async(url)=>{if(url!=="http://127.0.0.1:3334/healthz")throw new Error("wrong health port");return {ok:true,headers:new Headers({"x-shellby-instance":${JSON.stringify(options.healthInstance ?? "fixture")}})}}`,
       join(root, "scripts", options.pm2Args ? "pm2.mjs" : "start.mjs"),
-      ...(options.pm2Args ?? [...(options.restart ? ["--restart"] : []), ...(options.hard ? ["--hard"] : [])]),
+      ...(options.pm2Args ?? [
+        ...(options.restart ? ["--restart"] : []),
+        ...(options.hard ? ["--hard"] : []),
+      ]),
     ],
     {
       cwd: process.cwd(),
@@ -101,7 +110,11 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
         cwd: string
       }
       if (call.command === "pm2") {
-        assert.equal(pm2Home, join(root, "state", "pm2"), "every PM2 call must use the configured Shellby state directory")
+        assert.equal(
+          pm2Home,
+          join(root, "state", "pm2"),
+          "every PM2 call must use the configured Shellby state directory"
+        )
         assert.equal(cwd, root, "PM2 resolves ecosystem paths from the repository")
       }
       return call
@@ -116,16 +129,29 @@ for (const fromShellby of [false, true]) {
     assert.deepEqual(calls, [
       { command: "npm", args: ["run", "build"], auditExists: true },
       { command: "pm2", args: ["delete", "shellby-cursor-host"], auditExists: true },
-      { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], auditExists: false },
-      { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], auditExists: false },
+      {
+        command: "pm2",
+        args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
+        auditExists: false,
+      },
+      {
+        command: "pm2",
+        args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+        auditExists: false,
+      },
     ])
-    assert.match(result.stdout, /https:\/\/test.invalid\/mcp/)
+    assert.match(result.stdout, /https:\/\/test.invalid\/mcp/u)
   })
 }
 
 for (const existingTunnel of [false, true]) {
   test(`local restart ${existingTunnel ? "removes an existing tunnel" : "works without a tunnel"} before reloading MCP`, async (t) => {
-    const { result, calls } = await runStartup(t, { restart: true, ngrokEnabled: false, existingTunnel, agentsEnabled: true })
+    const { result, calls } = await runStartup(t, {
+      restart: true,
+      ngrokEnabled: false,
+      existingTunnel,
+      agentsEnabled: true,
+    })
     assert.equal(result.status, 0, result.stderr)
     assert.deepEqual(
       calls.map(({ command, args }) => [command, ...args]),
@@ -138,14 +164,18 @@ for (const existingTunnel of [false, true]) {
         ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
       ]
     )
-    assert.match(result.stdout, /ngrok: disabled \(local only\)/)
-    assert.match(result.stdout, /http:\/\/127.0.0.1:3334\/mcp/)
+    assert.match(result.stdout, /ngrok: disabled \(local only\)/u)
+    assert.match(result.stdout, /http:\/\/127.0.0.1:3334\/mcp/u)
   })
 }
 
 for (const failCommand of ["pm2 jlist", "pm2 delete shellby-ngrok"]) {
   test(`local startup stops when tunnel cleanup fails at ${failCommand}`, async (t) => {
-    const { result, calls } = await runStartup(t, { ngrokEnabled: false, existingTunnel: true, failCommand })
+    const { result, calls } = await runStartup(t, {
+      ngrokEnabled: false,
+      existingTunnel: true,
+      failCommand,
+    })
     assert.equal(result.status, 7)
     assert.ok(!calls.some(({ args }) => args.includes("startOrReload")))
     assert.ok(!result.stdout.includes("local only"))
@@ -153,7 +183,11 @@ for (const failCommand of ["pm2 jlist", "pm2 delete shellby-ngrok"]) {
 }
 
 test("hard restart with ngrok disabled recreates only MCP", async (t) => {
-  const { result, calls } = await runStartup(t, { hard: true, ngrokEnabled: false, existingTunnel: true })
+  const { result, calls } = await runStartup(t, {
+    hard: true,
+    ngrokEnabled: false,
+    existingTunnel: true,
+  })
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(
     calls.map(({ command, args }) => [command, ...args]),
@@ -171,15 +205,27 @@ test("hard restart rebuilds before replacing PM2 and clears the audit only after
   assert.deepEqual(calls, [
     { command: "npm", args: ["run", "build"], auditExists: true },
     { command: "pm2", args: ["kill"], auditExists: true },
-    { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"], auditExists: false },
-    { command: "pm2", args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"], auditExists: false },
+    {
+      command: "pm2",
+      args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
+      auditExists: false,
+    },
+    {
+      command: "pm2",
+      args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+      auditExists: false,
+    },
   ])
 })
 
 test("hard restart inside Shellby fails before build or shutdown", async (t) => {
-  const { root, result, calls } = await runStartup(t, { restart: true, hard: true, fromShellby: true })
+  const { root, result, calls } = await runStartup(t, {
+    restart: true,
+    hard: true,
+    fromShellby: true,
+  })
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /healthy Terminal.app session/)
+  assert.match(result.stderr, /healthy Terminal.app session/u)
   assert.deepEqual(calls, [])
   assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
 })
@@ -202,12 +248,16 @@ test("ordinary startup keeps the PM2 daemon and audit log", async (t) => {
 test("startup does not report success for another copy on the configured port", async (t) => {
   const { result } = await runStartup(t, { healthInstance: "other-copy" })
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /another instance using port 3334/)
+  assert.match(result.stderr, /another instance using port 3334/u)
   assert.ok(!result.stdout.includes("https://test.invalid/mcp"))
 })
 
 test("browser startup finishes before reloading services can disconnect the caller", async (t) => {
-  const { result, calls } = await runStartup(t, { restart: true, fromShellby: true, agentsEnabled: true })
+  const { result, calls } = await runStartup(t, {
+    restart: true,
+    fromShellby: true,
+    agentsEnabled: true,
+  })
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(
     calls.map(({ command, args }) => [command, ...args]),
@@ -222,7 +272,11 @@ test("browser startup finishes before reloading services can disconnect the call
 })
 
 test("an in-shell build failure leaves services and the audit intact", async (t) => {
-  const { root, result, calls } = await runStartup(t, { restart: true, failCommand: "npm run", fromShellby: true })
+  const { root, result, calls } = await runStartup(t, {
+    restart: true,
+    failCommand: "npm run",
+    fromShellby: true,
+  })
   assert.equal(result.status, 7)
   assert.deepEqual(calls, [{ command: "npm", args: ["run", "build"], auditExists: true }])
   assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
@@ -237,7 +291,11 @@ test("a failed tunnel reload leaves MCP running", async (t) => {
 
 for (const failure of ["npm run", "pm2 kill"]) {
   test(`hard restart stops after ${failure} fails and preserves the audit log`, async (t) => {
-    const { root, result, calls } = await runStartup(t, { restart: true, hard: true, failCommand: failure })
+    const { root, result, calls } = await runStartup(t, {
+      restart: true,
+      hard: true,
+      failCommand: failure,
+    })
     assert.equal(result.status, 7)
     assert.equal(calls.length, failure === "npm run" ? 1 : 2)
     assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
@@ -245,7 +303,9 @@ for (const failure of ["npm run", "pm2 kill"]) {
 }
 
 test("PM2 operational commands use Shellby's dedicated daemon and preserve CLI arguments", async (t) => {
-  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> }
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8")
+  ) as { scripts: Record<string, string> }
   for (const name of ["stop", "status", "logs", "pm2"]) {
     const command = packageJson.scripts[name]!
     assert.ok(command.startsWith("node --import tsx scripts/pm2.mjs"))

@@ -1,8 +1,9 @@
-import { access, readFile } from "node:fs/promises"
+import { spawnSync } from "node:child_process"
 import { constants, existsSync } from "node:fs"
+import { access, readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { spawnSync } from "node:child_process"
+import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url))
@@ -35,7 +36,9 @@ export async function checkPublicRuntime(ngrokEnabled = true) {
   if (ngrokVersion.error?.code === "ENOENT") {
     errors.push("ngrok is not installed. Install it with `brew install --cask ngrok`.")
   } else if (ngrokVersion.status !== 0) {
-    errors.push(`ngrok could not run${ngrokVersion.stderr?.trim() ? `: ${ngrokVersion.stderr.trim()}` : "."}`)
+    errors.push(
+      `ngrok could not run${ngrokVersion.stderr?.trim() ? `: ${ngrokVersion.stderr.trim()}` : "."}`
+    )
   } else if (!(await hasNgrokAuth(ngrokExecutable))) {
     errors.push("ngrok is not authenticated. Run `ngrok config add-authtoken <your-token>`.")
   }
@@ -53,14 +56,18 @@ export function isSupportedArchitecture(arch) {
 }
 
 export function checkRtkRuntime(enabled, executable) {
-  if (!enabled) return undefined
-  if (!executable) return "RTK is enabled but not installed. Install it with `brew install rtk`, then restart Shellby."
+  if (!enabled) return
+  if (!executable)
+    return "RTK is enabled but not installed. Install it with `brew install rtk`, then restart Shellby."
 
   const result = spawnSync(executable, ["rewrite", "--help"], { encoding: "utf8" })
-  if (result.error || result.status !== 0 || !result.stdout.includes("Rewrite a raw command to its RTK equivalent")) {
+  if (
+    result.error ||
+    result.status !== 0 ||
+    !result.stdout.includes("Rewrite a raw command to its RTK equivalent")
+  ) {
     return `shell.rtk points to an incompatible \`rtk\` executable at ${executable}. Install RTK Token Killer with \`brew install rtk\`.`
   }
-  return undefined
 }
 
 export function printPreflightErrors(errors) {
@@ -73,12 +80,12 @@ async function hasNgrokAuth(ngrokExecutable) {
   if (check.status !== 0) return false
 
   const output = `${check.stdout ?? ""}\n${check.stderr ?? ""}`
-  const match = output.match(/Valid configuration file at (.+)$/m)
+  const match = output.match(/Valid configuration file at (.+)$/mu)
   if (!match?.[1]) return false
 
   try {
     const config = await readFile(expandHome(match[1].trim()), "utf8")
-    return /^\s*authtoken\s*:\s*\S+/m.test(config)
+    return /^\s*authtoken\s*:\s*\S+/mu.test(config)
   } catch {
     return false
   }

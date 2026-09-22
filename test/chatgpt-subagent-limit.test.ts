@@ -39,36 +39,72 @@ for (const limit of [1, 3, 5]) {
     const service = createChatGptSubagentService()
     const controller = new AbortController()
     controller.abort()
-    const existing = Array.from({ length: limit }, (_, index) => `agent-${index + 1} (latest_turn_id=agent-${index + 1}_turn_${index + 1})`).join(", ")
+    const existing = Array.from(
+      { length: limit },
+      (_, index) => `agent-${index + 1} (latest_turn_id=agent-${index + 1}_turn_${index + 1})`
+    ).join(", ")
     const expectedMessage = `This main agent already has the maximum ${limit} delegated agents. Reuse one of these agent IDs: ${existing}.`
 
     try {
       await assert.rejects(
-        runWithAgent(sessionId, () => service.ask({ agentId: "extra", prompt: "New work", memory: true }, { signal: controller.signal })),
-        (error: unknown) => error instanceof ChatGptSubagentError && error.code === "AGENT_LIMIT_REACHED" && error.message === expectedMessage
+        runWithAgent(sessionId, () =>
+          service.ask(
+            { agentId: "extra", prompt: "New work", memory: true },
+            { signal: controller.signal }
+          )
+        ),
+        (error: unknown) =>
+          error instanceof ChatGptSubagentError &&
+          error.code === "AGENT_LIMIT_REACHED" &&
+          error.message === expectedMessage
       )
       await assert.rejects(
         runWithAgent(sessionId, () =>
           service.cloneSelf(
-            { cloneId: "extra-clone", sourceConversationUrl: "https://chatgpt.com/c/source", prompt: "New clone work" },
+            {
+              cloneId: "extra-clone",
+              sourceConversationUrl: "https://chatgpt.com/c/source",
+              prompt: "New clone work",
+            },
             { signal: controller.signal }
           )
         ),
-        (error: unknown) => error instanceof ChatGptSubagentError && error.code === "AGENT_LIMIT_REACHED" && error.message === expectedMessage
+        (error: unknown) =>
+          error instanceof ChatGptSubagentError &&
+          error.code === "AGENT_LIMIT_REACHED" &&
+          error.message === expectedMessage
       )
       await assert.rejects(
-        runWithAgent(sessionId, () => service.ask({ agentId: "agent-1", prompt: "Follow up", memory: true }, { signal: controller.signal })),
-        (error: unknown) => error instanceof ChatGptSubagentError && error.code === "REQUEST_ABORTED"
+        runWithAgent(sessionId, () =>
+          service.ask(
+            { agentId: "agent-1", prompt: "Follow up", memory: true },
+            { signal: controller.signal }
+          )
+        ),
+        (error: unknown) =>
+          error instanceof ChatGptSubagentError && error.code === "REQUEST_ABORTED"
       )
       // Other sessions have their own quota, and raising the configured limit opens another slot.
       await assert.rejects(
-        runWithAgent("other-session", () => service.ask({ agentId: "extra", prompt: "New work", memory: true }, { signal: controller.signal })),
-        (error: unknown) => error instanceof ChatGptSubagentError && error.code === "REQUEST_ABORTED"
+        runWithAgent("other-session", () =>
+          service.ask(
+            { agentId: "extra", prompt: "New work", memory: true },
+            { signal: controller.signal }
+          )
+        ),
+        (error: unknown) =>
+          error instanceof ChatGptSubagentError && error.code === "REQUEST_ABORTED"
       )
       MCP_CONFIG.chatGpt.maxDelegatedAgents = limit + 1
       await assert.rejects(
-        runWithAgent(sessionId, () => service.ask({ agentId: "extra", prompt: "New work", memory: true }, { signal: controller.signal })),
-        (error: unknown) => error instanceof ChatGptSubagentError && error.code === "REQUEST_ABORTED"
+        runWithAgent(sessionId, () =>
+          service.ask(
+            { agentId: "extra", prompt: "New work", memory: true },
+            { signal: controller.signal }
+          )
+        ),
+        (error: unknown) =>
+          error instanceof ChatGptSubagentError && error.code === "REQUEST_ABORTED"
       )
     } finally {
       await service.dispose()
@@ -89,17 +125,31 @@ test("drains persisted delegated agents once after service restart", async (t) =
   const parentAgent = runWithAgent(sessionId, () => getAgentIdentity()!)
   const store = createSubagentStore(join(directory, "subagents.sqlite"))
   assert.ok(store)
-  store.set(parentAgent, "reviewer", { conversationUrl: "https://chatgpt.com/c/reviewer", turnCount: 1, kind: "subagent" })
-  store.set(parentAgent, "tester", { conversationUrl: "https://chatgpt.com/c/tester", turnCount: 3, kind: "subagent" })
+  store.set(parentAgent, "reviewer", {
+    conversationUrl: "https://chatgpt.com/c/reviewer",
+    turnCount: 1,
+    kind: "subagent",
+  })
+  store.set(parentAgent, "tester", {
+    conversationUrl: "https://chatgpt.com/c/tester",
+    turnCount: 3,
+    kind: "subagent",
+  })
   store.close()
 
   const service = createChatGptSubagentService()
   try {
-    assert.deepEqual(runWithAgent(sessionId, () => service.drainEvents()), [
-      "existing_agent agent_id=reviewer latest_turn_id=reviewer_turn_1",
-      "existing_agent agent_id=tester latest_turn_id=tester_turn_3",
-    ])
-    assert.deepEqual(runWithAgent(sessionId, () => service.drainEvents()), [])
+    assert.deepEqual(
+      runWithAgent(sessionId, () => service.drainEvents()),
+      [
+        "existing_agent agent_id=reviewer latest_turn_id=reviewer_turn_1",
+        "existing_agent agent_id=tester latest_turn_id=tester_turn_3",
+      ]
+    )
+    assert.deepEqual(
+      runWithAgent(sessionId, () => service.drainEvents()),
+      []
+    )
   } finally {
     await service.dispose()
   }

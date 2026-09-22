@@ -14,7 +14,10 @@ export function countTokens(value: string): number {
   return getEncoder().encode_ordinary(value).length
 }
 
-export function tokenPrefix(value: string, maxTokens: number): { value: string; tokenCount: number; truncated: boolean } {
+export function tokenPrefix(
+  value: string,
+  maxTokens: number
+): { value: string; tokenCount: number; truncated: boolean } {
   if (!Number.isSafeInteger(maxTokens) || maxTokens < 0) {
     throw new Error(`Expected a non-negative token limit, received ${maxTokens}.`)
   }

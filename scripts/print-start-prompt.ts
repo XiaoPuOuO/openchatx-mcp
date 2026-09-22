@@ -1,5 +1,9 @@
+import process from "node:process"
 import { MCP_CONFIG } from "../src/config.js"
-import { buildStartHereInstructions, discoverPromptModes } from "../src/tools/start-here/start-here.js"
+import {
+  buildStartHereInstructions,
+  discoverPromptModes,
+} from "../src/tools/start-here/start-here.js"
 
 const mode = process.argv[2]
 const modes = discoverPromptModes()

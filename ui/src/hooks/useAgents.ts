@@ -14,21 +14,20 @@ export function useAgents() {
       .then((snapshot) => {
         setAgents((current) => mergeInitialSnapshot(current, snapshot))
       })
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)))
+      .catch((loadError) =>
+        setError(loadError instanceof Error ? loadError.message : String(loadError))
+      )
       .finally(() => setLoading(false))
 
-    return subscribeToAgents(
-      ({ agent }) => {
-        setAgents((current) => {
-          const index = current.findIndex((item) => item.id === agent.id)
-          if (index === -1) return [...current, agent]
-          const next = [...current]
-          next[index] = agent
-          return next
-        })
-      },
-      setConnected
-    )
+    return subscribeToAgents(({ agent }) => {
+      setAgents((current) => {
+        const index = current.findIndex((item) => item.id === agent.id)
+        if (index === -1) return [...current, agent]
+        const next = [...current]
+        next[index] = agent
+        return next
+      })
+    }, setConnected)
   }, [])
 
   return { agents, connected, loading, error }

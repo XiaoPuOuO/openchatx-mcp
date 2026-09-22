@@ -1,9 +1,9 @@
-import { access, mkdir, writeFile } from "node:fs/promises"
+import { spawn, spawnSync } from "node:child_process"
 import { constants } from "node:fs"
+import { access, mkdir, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { spawn, spawnSync } from "node:child_process"
-
+import process from "node:process"
 import { MCP_CONFIG } from "../src/config.ts"
 
 const setup = process.argv.includes("--setup")
@@ -12,7 +12,8 @@ const optional = process.argv.includes("--optional")
 const endpoint = new URL(MCP_CONFIG.chatGpt.cdpEndpoint)
 const profileDir = join(MCP_CONFIG.stateDir, "chatgpt-chrome")
 const markerPath = join(profileDir, ".configured")
-const mobileUserAgent = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+const mobileUserAgent =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 const mobileWindowSize = "430,900"
 const configured = await exists(markerPath)
 const cdpReady = await isCdpReady(endpoint)
@@ -41,7 +42,9 @@ if (!setup && !configured) {
 
 if (cdpReady) {
   if (setup && !configured) {
-    fail(`${endpoint.host} is already serving a Chrome DevTools session. Close that debug Chrome or configure a different chatgpt.cdp_endpoint before setup.`)
+    fail(
+      `${endpoint.host} is already serving a Chrome DevTools session. Close that debug Chrome or configure a different chatgpt.cdp_endpoint before setup.`
+    )
   }
   if (auto) hideManagedChrome()
   else showManagedChrome()
@@ -100,7 +103,9 @@ await writeFile(markerPath, "configured\n", "utf8")
 if (auto) hideManagedChrome()
 console.log("ChatGPT browser: running")
 if (setup) {
-  console.log("Sign into ChatGPT in the dedicated Chrome window. Future `npm start` runs will launch this profile automatically.")
+  console.log(
+    "Sign into ChatGPT in the dedicated Chrome window. Future `npm start` runs will launch this profile automatically."
+  )
 }
 
 async function findChrome() {
@@ -117,7 +122,6 @@ async function findChrome() {
       // Try the next normal macOS Chrome location.
     }
   }
-  return undefined
 }
 
 async function waitForCdp(url) {
@@ -175,18 +179,21 @@ function findManagedChromePid() {
     encoding: "utf8",
     maxBuffer: 4 * 1024 * 1024,
   })
-  if (result.error || result.status !== 0 || !result.stdout) return undefined
+  if (result.error || result.status !== 0 || !result.stdout) return
 
   const profileArg = `--user-data-dir=${profileDir}`
   const portArg = `--remote-debugging-port=${endpoint.port}`
   for (const line of result.stdout.split("\n")) {
     const command = `${line} `
-    if (!command.includes("Google Chrome.app/Contents/MacOS/Google Chrome") || !command.includes(` ${profileArg} `) || !command.includes(` ${portArg} `))
+    if (
+      !command.includes("Google Chrome.app/Contents/MacOS/Google Chrome") ||
+      !command.includes(` ${profileArg} `) ||
+      !command.includes(` ${portArg} `)
+    )
       continue
-    const match = line.trim().match(/^(\d+)\s/)
+    const match = line.trim().match(/^(\d+)\s/u)
     if (match) return Number(match[1])
   }
-  return undefined
 }
 
 function fail(message) {

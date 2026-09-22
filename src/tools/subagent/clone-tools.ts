@@ -1,8 +1,13 @@
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
-import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
+import {
+  ChatGptSubagentError,
+  type ChatGptSubagentService,
+  chatGptSubagentActivitySchema,
+  chatGptSubagentStatusSchema,
+} from "./chatgpt-subagent-contracts.js"
 
 const cloneSelfResultSchema = z.object({
   clone_id: z.string(),
@@ -31,11 +36,16 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
   server.registerTool(
     "clone_self",
     {
-      description: "Create an independent copy of yourself with equivalent reasoning capability. Returns a detached turn_id.",
+      description:
+        "Create an independent copy of yourself with equivalent reasoning capability. Returns a detached turn_id.",
       inputSchema: z.object({
         // TODO: Consider making this optional by persisting X-OpenAI-Session -> conversation URL after the first call,
         // so later clones from the same ChatGPT conversation can reuse the remembered source automatically.
-        conversation_url: z.url().describe("User provided conversation URL to clone. Ask the user for it if not provided."),
+        conversation_url: z
+          .url()
+          .describe(
+            "User provided conversation URL to clone. Ask the user for it if not provided."
+          ),
         clone_id: z
           .string()
           .min(1)
@@ -116,7 +126,10 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
     },
     async ({ clone_id, prompt }, ctx) => {
       try {
-        const turnId = await chatGptAgents.cloneRun({ cloneId: clone_id, prompt }, { signal: ctx.mcpReq.signal })
+        const turnId = await chatGptAgents.cloneRun(
+          { cloneId: clone_id, prompt },
+          { signal: ctx.mcpReq.signal }
+        )
         return {
           structuredContent: {
             clone_id,
@@ -141,7 +154,8 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
   server.registerTool(
     "clone_result",
     {
-      description: "Get the status or result of turns returned by clone_self or clone_run. Multiple turn_ids can be retrieved concurrently.",
+      description:
+        "Get the status or result of turns returned by clone_self or clone_run. Multiple turn_ids can be retrieved concurrently.",
       inputSchema: z.object({
         turn_ids: z
           .array(
@@ -179,7 +193,10 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
               activity: result.activity,
               activity_age_ms: result.activityAgeMs,
               response: result.response,
-              error: result.status === "failed" ? `${result.errorCode ?? "clone_failed"}: ${result.errorMessage ?? "ChatGPT clone turn failed."}` : undefined,
+              error:
+                result.status === "failed"
+                  ? `${result.errorCode ?? "clone_failed"}: ${result.errorMessage ?? "ChatGPT clone turn failed."}`
+                  : undefined,
             }
           } catch (error) {
             return {
@@ -200,5 +217,7 @@ export function registerCloneTools(server: McpServer, chatGptAgents: ChatGptSuba
 }
 
 function cloneErrorText(error: unknown): string {
-  return error instanceof ChatGptSubagentError ? `${error.code}: ${error.message}` : `clone_failed: ${error instanceof Error ? error.message : String(error)}`
+  return error instanceof ChatGptSubagentError
+    ? `${error.code}: ${error.message}`
+    : `clone_failed: ${error instanceof Error ? error.message : String(error)}`
 }

@@ -13,7 +13,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react"
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react"
 
 import {
   cloneDefaultRoomLayout,
@@ -23,14 +23,13 @@ import {
   ROOM_GRID_SIZE,
   ROOM_HEIGHT,
   ROOM_WIDTH,
-  resolveRoomAssetPath,
   type RoomDirection,
   type RoomFurnitureItem,
   type RoomLayout,
   type RoomPet,
   type RoomStation,
+  resolveRoomAssetPath,
 } from "../game/agentRoomLayout"
-import { fetchPixelAgentsCatalog, type PixelAgentsCatalog } from "../game/pixelAgentsCatalog"
 import {
   drawRoomBorder,
   drawRoomFurnitureItems,
@@ -40,6 +39,7 @@ import {
   roomFurnitureBounds,
   roomPetBounds,
 } from "../game/agentRoomRenderer"
+import { fetchPixelAgentsCatalog, type PixelAgentsCatalog } from "../game/pixelAgentsCatalog"
 import { loadRoomLayout, saveRoomLayout } from "../game/roomLayoutStorage"
 import { Button } from "./ui/button"
 
@@ -85,17 +85,22 @@ const DEFAULT_CARPET = "/ui/pixel-agents/assets/carpets/carpet_0.png"
 
 export function RoomEditor() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const dragRef = useRef<{
-    selection: Selection
-    pointerX: number
-    pointerY: number
-    originX: number
-    originY: number
-    hits: Selection[]
-    cycleOnClick: boolean
-    moved: boolean
-  } | undefined>(undefined)
-  const paintRef = useRef<{ tool: EditorTool; erase: boolean; lastCell?: string } | undefined>(undefined)
+  const dragRef = useRef<
+    | {
+        selection: Selection
+        pointerX: number
+        pointerY: number
+        originX: number
+        originY: number
+        hits: Selection[]
+        cycleOnClick: boolean
+        moved: boolean
+      }
+    | undefined
+  >(undefined)
+  const paintRef = useRef<{ tool: EditorTool; erase: boolean; lastCell?: string } | undefined>(
+    undefined
+  )
 
   const [layout, setLayout] = useState<RoomLayout>(loadRoomLayout)
   const [selection, setSelection] = useState<Selection>()
@@ -131,7 +136,11 @@ export function RoomEditor() {
             list: entry.category === "wall" || entry.canPlaceOnWalls ? "wallDecor" : "furniture",
           }))
         )
-        setFloorAsset(nextCatalog.floors.find((entry) => entry.path.endsWith("floor_5.png"))?.path ?? nextCatalog.floors[0]?.path ?? DEFAULT_FLOOR)
+        setFloorAsset(
+          nextCatalog.floors.find((entry) => entry.path.endsWith("floor_5.png"))?.path ??
+            nextCatalog.floors[0]?.path ??
+            DEFAULT_FLOOR
+        )
         setWallAsset(nextCatalog.walls[0]?.path ?? DEFAULT_WALL)
         setCarpetAsset(nextCatalog.carpets[0]?.path ?? DEFAULT_CARPET)
       })
@@ -247,11 +256,20 @@ export function RoomEditor() {
         y: snap(point.y / ROOM_GRID_SIZE),
       }
       mutateLayout((next) => next[placingFurniture.list].push(item))
-      setSelection({ kind: "furniture", list: placingFurniture.list, index: layout[placingFurniture.list].length })
+      setSelection({
+        kind: "furniture",
+        list: placingFurniture.list,
+        index: layout[placingFurniture.list].length,
+      })
       return
     }
     if (tool === "entities" && placingPet) {
-      const pet: RoomPet = { id: crypto.randomUUID(), asset: placingPet, x: snap(point.x / ROOM_GRID_SIZE), y: snap(point.y / ROOM_GRID_SIZE) }
+      const pet: RoomPet = {
+        id: crypto.randomUUID(),
+        asset: placingPet,
+        x: snap(point.x / ROOM_GRID_SIZE),
+        y: snap(point.y / ROOM_GRID_SIZE),
+      }
       mutateLayout((next) => next.pets.push(pet))
       setSelection({ kind: "pet", index: layout.pets.length })
       return
@@ -263,7 +281,9 @@ export function RoomEditor() {
       setSelection(undefined)
       return
     }
-    const selectedAlreadyHit = Boolean(selection && hits.some((hit) => sameSelection(hit, selection)))
+    const selectedAlreadyHit = Boolean(
+      selection && hits.some((hit) => sameSelection(hit, selection))
+    )
     const selectedHit = selectedAlreadyHit && selection ? selection : hits[0]
     setSelection(selectedHit)
     const position = selectionPosition(layout, selectedHit)
@@ -308,7 +328,8 @@ export function RoomEditor() {
       setSelection(drag.hits[(index + 1) % drag.hits.length])
     }
     dragRef.current = undefined
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
   function paintAt(x: number, y: number) {
@@ -324,7 +345,9 @@ export function RoomEditor() {
     mutateLayout((next) => {
       const index = row * next.cols + col
       if (paint.tool === "floor") {
-        next.tiles[index] = paint.erase ? { type: "void" } : { type: "floor", asset: floorAsset, tint: floorTint }
+        next.tiles[index] = paint.erase
+          ? { type: "void" }
+          : { type: "floor", asset: floorAsset, tint: floorTint }
         if (paint.erase) next.carpetTiles[index] = null
       } else if (paint.tool === "wall") {
         next.tiles[index] = paint.erase
@@ -333,7 +356,8 @@ export function RoomEditor() {
         next.carpetTiles[index] = null
       } else if (paint.tool === "carpet") {
         if (paint.erase) next.carpetTiles[index] = null
-        else if (next.tiles[index]?.type === "floor") next.carpetTiles[index] = { asset: carpetAsset }
+        else if (next.tiles[index]?.type === "floor")
+          next.carpetTiles[index] = { asset: carpetAsset }
       }
     })
   }
@@ -354,28 +378,52 @@ export function RoomEditor() {
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-5 py-3 lg:px-8">
           <div className="flex items-center gap-3">
-            <Button type="button" variant="ghost" size="icon" aria-label="Back to Shellby Control" onClick={() => (window.location.href = "/ui/")}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Back to Shellby Control"
+              onClick={() => (window.location.href = "/ui/")}
+            >
               <ArrowLeft className="size-4" />
             </Button>
             <div>
               <h1 className="text-base font-semibold tracking-tight">Room Editor</h1>
-              <p className="text-xs text-muted-foreground">8px object grid · 32px tile map · right-click erases paint</p>
+              <p className="text-xs text-muted-foreground">
+                8px object grid · 32px tile map · right-click erases paint
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`hidden text-xs sm:inline ${dirty ? "text-amber-700" : "text-muted-foreground"}`}>{dirty ? "Unsaved changes" : "Saved"}</span>
-            <Button type="button" variant="outline" size="sm" onClick={resetDraft}><RotateCcw className="size-3.5" /> Reset draft</Button>
-            <Button type="button" size="sm" onClick={save} disabled={!dirty}><Save className="size-3.5" /> Save layout</Button>
+            <span
+              className={`hidden text-xs sm:inline ${dirty ? "text-amber-700" : "text-muted-foreground"}`}
+            >
+              {dirty ? "Unsaved changes" : "Saved"}
+            </span>
+            <Button type="button" variant="outline" size="sm" onClick={resetDraft}>
+              <RotateCcw className="size-3.5" /> Reset draft
+            </Button>
+            <Button type="button" size="sm" onClick={save} disabled={!dirty}>
+              <Save className="size-3.5" /> Save layout
+            </Button>
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-[1600px] gap-4 px-5 py-5 lg:grid-cols-[270px_minmax(0,1fr)_280px] lg:px-8">
         <aside className="rounded-xl border bg-card p-3 shadow-sm">
-          <div className="mb-3 flex items-center gap-2"><Grid2X2 className="size-4" /><h2 className="text-sm font-semibold">Editor tools</h2></div>
+          <div className="mb-3 flex items-center gap-2">
+            <Grid2X2 className="size-4" />
+            <h2 className="text-sm font-semibold">Editor tools</h2>
+          </div>
           <div className="grid grid-cols-2 gap-1.5">
             {TOOL_BUTTONS.map(({ id, label, icon: Icon }) => (
-              <button key={id} type="button" onClick={() => setTool(id)} className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs ${tool === id ? "border-blue-500 bg-blue-50 text-blue-800" : "bg-background hover:bg-muted"}`}>
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTool(id)}
+                className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs ${tool === id ? "border-blue-500 bg-blue-50 text-blue-800" : "bg-background hover:bg-muted"}`}
+              >
                 <Icon className="size-3.5" /> {label}
               </button>
             ))}
@@ -403,7 +451,11 @@ export function RoomEditor() {
               placingPet={placingPet}
               onPlacePet={setPlacingPet}
               characterAsset={layout.characterAsset}
-              onCharacterAsset={(asset) => mutateLayout((next) => { next.characterAsset = asset })}
+              onCharacterAsset={(asset) =>
+                mutateLayout((next) => {
+                  next.characterAsset = asset
+                })
+              }
             />
           </div>
         </aside>
@@ -423,7 +475,8 @@ export function RoomEditor() {
             />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Select: click/drag objects · repeated clicks cycle overlaps · paint tools drag across 32px cells · right-click erases · Shift+arrow nudges objects 0.5
+            Select: click/drag objects · repeated clicks cycle overlaps · paint tools drag across
+            32px cells · right-click erases · Shift+arrow nudges objects 0.5
           </p>
         </section>
 
@@ -431,9 +484,19 @@ export function RoomEditor() {
           <div className="rounded-xl border bg-card p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold">Inspector</h2>
             {selection ? (
-              <SelectionInspector layout={layout} selection={selection} assetChoices={assetChoices} pets={catalog?.pets ?? []} onChange={mutateLayout} onDelete={() => deleteSelection(selection)} onDuplicate={() => duplicateSelection(selection)} />
+              <SelectionInspector
+                layout={layout}
+                selection={selection}
+                assetChoices={assetChoices}
+                pets={catalog?.pets ?? []}
+                onChange={mutateLayout}
+                onDelete={() => deleteSelection(selection)}
+                onDuplicate={() => duplicateSelection(selection)}
+              />
             ) : (
-              <p className="text-xs leading-5 text-muted-foreground">Select furniture, a rug, a pet, or a station marker in the room.</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Select furniture, a rug, a pet, or a station marker in the room.
+              </p>
             )}
           </div>
           {itemsHere.length > 1 ? (
@@ -441,7 +504,12 @@ export function RoomEditor() {
               <h2 className="mb-2 text-sm font-semibold">Items here</h2>
               <div className="space-y-1">
                 {itemsHere.map((item) => (
-                  <button key={selectionKey(item)} type="button" className={`w-full rounded-md px-2 py-1.5 text-left text-xs ${selection && sameSelection(item, selection) ? "bg-blue-50 text-blue-800" : "hover:bg-muted"}`} onClick={() => setSelection(item)}>
+                  <button
+                    key={selectionKey(item)}
+                    type="button"
+                    className={`w-full rounded-md px-2 py-1.5 text-left text-xs ${selection && sameSelection(item, selection) ? "bg-blue-50 text-blue-800" : "hover:bg-muted"}`}
+                    onClick={() => setSelection(item)}
+                  >
                     {selectionLabel(layout, item)}
                   </button>
                 ))}
@@ -478,19 +546,44 @@ function ToolPalette(props: {
   characterAsset: string | null
   onCharacterAsset: (asset: string | null) => void
 }) {
-  if (props.tool === "select") return <p className="text-xs leading-5 text-muted-foreground">Click objects, pets, rugs, or station markers. Drag to move. Use the inspector for exact coordinates.</p>
+  if (props.tool === "select")
+    return (
+      <p className="text-xs leading-5 text-muted-foreground">
+        Click objects, pets, rugs, or station markers. Drag to move. Use the inspector for exact
+        coordinates.
+      </p>
+    )
 
   if (props.tool === "furniture") {
     return (
       <div className="space-y-4">
-        <input value={props.assetFilter} onChange={(event) => props.onAssetFilter(event.target.value)} placeholder="Filter furniture..." className="h-8 w-full rounded-md border bg-background px-2 text-xs" />
+        <input
+          value={props.assetFilter}
+          onChange={(event) => props.onAssetFilter(event.target.value)}
+          placeholder="Filter furniture..."
+          className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+        />
         {props.categories.map((category) => (
           <section key={category}>
-            <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{category}</h3>
+            <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {category}
+            </h3>
             <div className="grid grid-cols-2 gap-1.5">
-              {props.assetChoices.filter((choice) => choice.category === category).map((choice) => (
-                <AssetButton key={choice.asset} asset={choice.asset} label={choice.label} active={props.placingFurniture?.asset === choice.asset} onClick={() => props.onPlaceFurniture(props.placingFurniture?.asset === choice.asset ? undefined : choice)} />
-              ))}
+              {props.assetChoices
+                .filter((choice) => choice.category === category)
+                .map((choice) => (
+                  <AssetButton
+                    key={choice.asset}
+                    asset={choice.asset}
+                    label={choice.label}
+                    active={props.placingFurniture?.asset === choice.asset}
+                    onClick={() =>
+                      props.onPlaceFurniture(
+                        props.placingFurniture?.asset === choice.asset ? undefined : choice
+                      )
+                    }
+                  />
+                ))}
             </div>
           </section>
         ))}
@@ -498,54 +591,174 @@ function ToolPalette(props: {
     )
   }
 
-  if (props.tool === "floor") return <><SimpleAssetPalette title="Floor patterns" items={props.catalog?.floors ?? []} selected={props.floorAsset} onSelect={props.onFloorAsset} /><TintField label="Floor tint" value={props.floorTint} onChange={props.onFloorTint} /></>
-  if (props.tool === "wall") return <><SimpleAssetPalette title="Wall sets" items={props.catalog?.walls ?? []} selected={props.wallAsset} onSelect={props.onWallAsset} /><TintField label="Wall tint" value={props.wallTint} onChange={props.onWallTint} /></>
-  if (props.tool === "carpet") return <SimpleAssetPalette title="Carpet variants" items={props.catalog?.carpets ?? []} selected={props.carpetAsset} onSelect={props.onCarpetAsset} />
+  if (props.tool === "floor")
+    return (
+      <>
+        <SimpleAssetPalette
+          title="Floor patterns"
+          items={props.catalog?.floors ?? []}
+          selected={props.floorAsset}
+          onSelect={props.onFloorAsset}
+        />
+        <TintField label="Floor tint" value={props.floorTint} onChange={props.onFloorTint} />
+      </>
+    )
+  if (props.tool === "wall")
+    return (
+      <>
+        <SimpleAssetPalette
+          title="Wall sets"
+          items={props.catalog?.walls ?? []}
+          selected={props.wallAsset}
+          onSelect={props.onWallAsset}
+        />
+        <TintField label="Wall tint" value={props.wallTint} onChange={props.onWallTint} />
+      </>
+    )
+  if (props.tool === "carpet")
+    return (
+      <SimpleAssetPalette
+        title="Carpet variants"
+        items={props.catalog?.carpets ?? []}
+        selected={props.carpetAsset}
+        onSelect={props.onCarpetAsset}
+      />
+    )
 
   return (
     <div className="space-y-5">
       <section>
-        <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pets</h3>
+        <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Pets
+        </h3>
         <div className="grid grid-cols-2 gap-1.5">
-          {(props.catalog?.pets ?? []).map((pet) => <AssetButton key={pet.id} asset={pet.path} label={pet.label} active={props.placingPet === pet.path} onClick={() => props.onPlacePet(props.placingPet === pet.path ? undefined : pet.path)} />)}
+          {(props.catalog?.pets ?? []).map((pet) => (
+            <AssetButton
+              key={pet.id}
+              asset={pet.path}
+              label={pet.label}
+              active={props.placingPet === pet.path}
+              onClick={() => props.onPlacePet(props.placingPet === pet.path ? undefined : pet.path)}
+            />
+          ))}
         </div>
       </section>
       <section>
-        <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agent appearance</h3>
-        <button type="button" className={`mb-1.5 h-8 w-full rounded-md border text-xs ${props.characterAsset === null ? "border-blue-500 bg-blue-50" : "bg-background"}`} onClick={() => props.onCharacterAsset(null)}>Automatic by agent</button>
+        <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Agent appearance
+        </h3>
+        <button
+          type="button"
+          className={`mb-1.5 h-8 w-full rounded-md border text-xs ${props.characterAsset === null ? "border-blue-500 bg-blue-50" : "bg-background"}`}
+          onClick={() => props.onCharacterAsset(null)}
+        >
+          Automatic by agent
+        </button>
         <div className="grid grid-cols-2 gap-1.5">
-          {(props.catalog?.characters ?? []).map((character) => <AssetButton key={character.id} asset={character.path} label={character.label} active={props.characterAsset === character.path} onClick={() => props.onCharacterAsset(character.path)} />)}
+          {(props.catalog?.characters ?? []).map((character) => (
+            <AssetButton
+              key={character.id}
+              asset={character.path}
+              label={character.label}
+              active={props.characterAsset === character.path}
+              onClick={() => props.onCharacterAsset(character.path)}
+            />
+          ))}
         </div>
       </section>
     </div>
   )
 }
 
-function SimpleAssetPalette({ title, items, selected, onSelect }: { title: string; items: Array<{ id: string; label: string; path: string }>; selected: string; onSelect: (asset: string) => void }) {
+function SimpleAssetPalette({
+  title,
+  items,
+  selected,
+  onSelect,
+}: {
+  title: string
+  items: Array<{ id: string; label: string; path: string }>
+  selected: string
+  onSelect: (asset: string) => void
+}) {
   return (
     <section>
-      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h3>
       <div className="grid grid-cols-2 gap-1.5">
-        {items.map((item) => <AssetButton key={item.id} asset={item.path} label={item.label} active={selected === item.path} onClick={() => onSelect(item.path)} />)}
+        {items.map((item) => (
+          <AssetButton
+            key={item.id}
+            asset={item.path}
+            label={item.label}
+            active={selected === item.path}
+            onClick={() => onSelect(item.path)}
+          />
+        ))}
       </div>
     </section>
   )
 }
 
-function AssetButton({ asset, label, active, onClick }: { asset: string; label: string; active: boolean; onClick: () => void }) {
+function AssetButton({
+  asset,
+  label,
+  active,
+  onClick,
+}: {
+  asset: string
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
   return (
-    <button type="button" className={`flex min-h-20 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center text-[11px] ${active ? "border-blue-500 bg-blue-50" : "bg-background hover:bg-muted"}`} onClick={onClick}>
-      <img src={resolveRoomAssetPath(asset)} alt="" className="max-h-12 max-w-16 [image-rendering:pixelated]" />
+    <button
+      type="button"
+      className={`flex min-h-20 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center text-[11px] ${active ? "border-blue-500 bg-blue-50" : "bg-background hover:bg-muted"}`}
+      onClick={onClick}
+    >
+      <img
+        src={resolveRoomAssetPath(asset)}
+        alt=""
+        className="max-h-12 max-w-16 [image-rendering:pixelated]"
+      />
       <span>{label}</span>
     </button>
   )
 }
 
-function TintField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="mt-3 block text-xs"><span className="mb-1 block text-muted-foreground">{label}</span><input type="color" value={value} onChange={(event) => onChange(event.target.value)} className="h-8 w-full rounded-md border bg-background p-1" /></label>
+function TintField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="mt-3 block text-xs">
+      <span className="mb-1 block text-muted-foreground">{label}</span>
+      <input
+        type="color"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-8 w-full rounded-md border bg-background p-1"
+      />
+    </label>
+  )
 }
 
-function SelectionInspector({ layout, selection, assetChoices, pets, onChange, onDelete, onDuplicate }: {
+function SelectionInspector({
+  layout,
+  selection,
+  assetChoices,
+  pets,
+  onChange,
+  onDelete,
+  onDuplicate,
+}: {
   layout: RoomLayout
   selection: Selection
   assetChoices: AssetChoice[]
@@ -559,8 +772,31 @@ function SelectionInspector({ layout, selection, assetChoices, pets, onChange, o
     return (
       <div className="space-y-3">
         <p className="text-xs font-medium">{station.label} station</p>
-        <CoordinateInputs x={station.x} y={station.y} onChange={(axis, value) => onChange((next) => { next.stations[selection.station][axis] = value })} />
-        <label className="block text-xs"><span className="mb-1 block text-muted-foreground">Facing</span><select value={station.facing} onChange={(event) => onChange((next) => { next.stations[selection.station].facing = event.target.value as RoomDirection })} className="h-8 w-full rounded-md border bg-background px-2">{DIRECTIONS.map((direction) => <option key={direction}>{direction}</option>)}</select></label>
+        <CoordinateInputs
+          x={station.x}
+          y={station.y}
+          onChange={(axis, value) =>
+            onChange((next) => {
+              next.stations[selection.station][axis] = value
+            })
+          }
+        />
+        <label className="block text-xs">
+          <span className="mb-1 block text-muted-foreground">Facing</span>
+          <select
+            value={station.facing}
+            onChange={(event) =>
+              onChange((next) => {
+                next.stations[selection.station].facing = event.target.value as RoomDirection
+              })
+            }
+            className="h-8 w-full rounded-md border bg-background px-2"
+          >
+            {DIRECTIONS.map((direction) => (
+              <option key={direction}>{direction}</option>
+            ))}
+          </select>
+        </label>
       </div>
     )
   }
@@ -570,8 +806,35 @@ function SelectionInspector({ layout, selection, assetChoices, pets, onChange, o
     return (
       <div className="space-y-3">
         <p className="text-xs font-medium">Rug {selection.index + 1}</p>
-        <CoordinateInputs x={rug.x} y={rug.y} onChange={(axis, value) => onChange((next) => { next.rugs[selection.index][axis] = value })} />
-        <div className="grid grid-cols-2 gap-2"><NumberField label="Width" value={rug.width} onChange={(value) => onChange((next) => { next.rugs[selection.index].width = value })} /><NumberField label="Height" value={rug.height} onChange={(value) => onChange((next) => { next.rugs[selection.index].height = value })} /></div>
+        <CoordinateInputs
+          x={rug.x}
+          y={rug.y}
+          onChange={(axis, value) =>
+            onChange((next) => {
+              next.rugs[selection.index][axis] = value
+            })
+          }
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <NumberField
+            label="Width"
+            value={rug.width}
+            onChange={(value) =>
+              onChange((next) => {
+                next.rugs[selection.index].width = value
+              })
+            }
+          />
+          <NumberField
+            label="Height"
+            value={rug.height}
+            onChange={(value) =>
+              onChange((next) => {
+                next.rugs[selection.index].height = value
+              })
+            }
+          />
+        </div>
         <InspectorActions onDuplicate={onDuplicate} onDelete={onDelete} />
       </div>
     )
@@ -582,8 +845,33 @@ function SelectionInspector({ layout, selection, assetChoices, pets, onChange, o
     return (
       <div className="space-y-3">
         <p className="text-xs font-medium">Pet</p>
-        <label className="block text-xs"><span className="mb-1 block text-muted-foreground">Type</span><select value={pet.asset} onChange={(event) => onChange((next) => { next.pets[selection.index].asset = event.target.value })} className="h-8 w-full rounded-md border bg-background px-2">{pets.map((item) => <option key={item.id} value={item.path}>{item.label}</option>)}</select></label>
-        <CoordinateInputs x={pet.x} y={pet.y} onChange={(axis, value) => onChange((next) => { next.pets[selection.index][axis] = value })} />
+        <label className="block text-xs">
+          <span className="mb-1 block text-muted-foreground">Type</span>
+          <select
+            value={pet.asset}
+            onChange={(event) =>
+              onChange((next) => {
+                next.pets[selection.index].asset = event.target.value
+              })
+            }
+            className="h-8 w-full rounded-md border bg-background px-2"
+          >
+            {pets.map((item) => (
+              <option key={item.id} value={item.path}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <CoordinateInputs
+          x={pet.x}
+          y={pet.y}
+          onChange={(axis, value) =>
+            onChange((next) => {
+              next.pets[selection.index][axis] = value
+            })
+          }
+        />
         <InspectorActions onDuplicate={onDuplicate} onDelete={onDelete} />
       </div>
     )
@@ -593,30 +881,143 @@ function SelectionInspector({ layout, selection, assetChoices, pets, onChange, o
   if (!item) return null
   return (
     <div className="space-y-3">
-      <label className="block text-xs"><span className="mb-1 block text-muted-foreground">Asset</span><select value={item.asset} onChange={(event) => onChange((next) => { next[selection.list][selection.index].asset = event.target.value })} className="h-8 w-full rounded-md border bg-background px-2">{assetChoices.map((choice) => <option key={choice.asset} value={choice.asset}>{choice.label}</option>)}</select></label>
-      <CoordinateInputs x={item.x} y={item.y} onChange={(axis, value) => onChange((next) => { next[selection.list][selection.index][axis] = value })} />
-      <button type="button" className={`flex h-8 w-full items-center justify-center gap-2 rounded-md border text-xs ${item.mirror ? "bg-muted" : "bg-background"}`} onClick={() => onChange((next) => { next[selection.list][selection.index].mirror = !next[selection.list][selection.index].mirror })}><FlipHorizontal2 className="size-3.5" /> Mirror horizontally</button>
+      <label className="block text-xs">
+        <span className="mb-1 block text-muted-foreground">Asset</span>
+        <select
+          value={item.asset}
+          onChange={(event) =>
+            onChange((next) => {
+              next[selection.list][selection.index].asset = event.target.value
+            })
+          }
+          className="h-8 w-full rounded-md border bg-background px-2"
+        >
+          {assetChoices.map((choice) => (
+            <option key={choice.asset} value={choice.asset}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <CoordinateInputs
+        x={item.x}
+        y={item.y}
+        onChange={(axis, value) =>
+          onChange((next) => {
+            next[selection.list][selection.index][axis] = value
+          })
+        }
+      />
+      <button
+        type="button"
+        className={`flex h-8 w-full items-center justify-center gap-2 rounded-md border text-xs ${item.mirror ? "bg-muted" : "bg-background"}`}
+        onClick={() =>
+          onChange((next) => {
+            next[selection.list][selection.index].mirror =
+              !next[selection.list][selection.index].mirror
+          })
+        }
+      >
+        <FlipHorizontal2 className="size-3.5" /> Mirror horizontally
+      </button>
       {selection.list === "furniture" ? (
-        <label className="block text-xs"><span className="mb-1 block text-muted-foreground">Foreground while working at</span><select value={item.foregroundWhenWorkingAt ?? ""} onChange={(event) => onChange((next) => { next.furniture[selection.index].foregroundWhenWorkingAt = event.target.value ? event.target.value as RoomStation : undefined })} className="h-8 w-full rounded-md border bg-background px-2"><option value="">Never</option>{STATION_KEYS.map((station) => <option key={station} value={station}>{layout.stations[station].label}</option>)}</select></label>
+        <label className="block text-xs">
+          <span className="mb-1 block text-muted-foreground">Foreground while working at</span>
+          <select
+            value={item.foregroundWhenWorkingAt ?? ""}
+            onChange={(event) =>
+              onChange((next) => {
+                next.furniture[selection.index].foregroundWhenWorkingAt = event.target.value
+                  ? (event.target.value as RoomStation)
+                  : undefined
+              })
+            }
+            className="h-8 w-full rounded-md border bg-background px-2"
+          >
+            <option value="">Never</option>
+            {STATION_KEYS.map((station) => (
+              <option key={station} value={station}>
+                {layout.stations[station].label}
+              </option>
+            ))}
+          </select>
+        </label>
       ) : null}
       <InspectorActions onDuplicate={onDuplicate} onDelete={onDelete} />
     </div>
   )
 }
 
-function CoordinateInputs({ x, y, onChange }: { x: number; y: number; onChange: (axis: "x" | "y", value: number) => void }) {
-  return <div className="grid grid-cols-2 gap-2"><NumberField label="X" value={x} onChange={(value) => onChange("x", value)} /><NumberField label="Y" value={y} onChange={(value) => onChange("y", value)} /></div>
+function CoordinateInputs({
+  x,
+  y,
+  onChange,
+}: {
+  x: number
+  y: number
+  onChange: (axis: "x" | "y", value: number) => void
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <NumberField label="X" value={x} onChange={(value) => onChange("x", value)} />
+      <NumberField label="Y" value={y} onChange={(value) => onChange("y", value)} />
+    </div>
+  )
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <label className="block text-xs"><span className="mb-1 block text-muted-foreground">{label}</span><input type="number" step="0.5" value={value} onChange={(event) => onChange(Number(event.target.value))} className="h-8 w-full rounded-md border bg-background px-2 font-mono" /></label>
+function NumberField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="block text-xs">
+      <span className="mb-1 block text-muted-foreground">{label}</span>
+      <input
+        type="number"
+        step="0.5"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-8 w-full rounded-md border bg-background px-2 font-mono"
+      />
+    </label>
+  )
 }
 
-function InspectorActions({ onDuplicate, onDelete }: { onDuplicate: () => void; onDelete: () => void }) {
-  return <div className="grid grid-cols-2 gap-2 border-t pt-3"><Button type="button" variant="outline" size="sm" onClick={onDuplicate}><Copy className="size-3.5" /> Duplicate</Button><Button type="button" variant="outline" size="sm" className="text-destructive" onClick={onDelete}><Trash2 className="size-3.5" /> Delete</Button></div>
+function InspectorActions({
+  onDuplicate,
+  onDelete,
+}: {
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 border-t pt-3">
+      <Button type="button" variant="outline" size="sm" onClick={onDuplicate}>
+        <Copy className="size-3.5" /> Duplicate
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="text-destructive"
+        onClick={onDelete}
+      >
+        <Trash2 className="size-3.5" /> Delete
+      </Button>
+    </div>
+  )
 }
 
-function renderEditor(ctx: CanvasRenderingContext2D, layout: RoomLayout, selection?: Selection): void {
+function renderEditor(
+  ctx: CanvasRenderingContext2D,
+  layout: RoomLayout,
+  selection?: Selection
+): void {
   ctx.clearRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT)
   drawRoomSurface(ctx, layout)
   drawGrid(ctx)
@@ -633,32 +1034,55 @@ function drawGrid(ctx: CanvasRenderingContext2D): void {
   ctx.save()
   ctx.lineWidth = 1
   for (let x = ROOM_GRID_SIZE; x < ROOM_WIDTH; x += ROOM_GRID_SIZE) {
-    ctx.strokeStyle = x % (ROOM_GRID_SIZE * 4) === 0 ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.06)"
-    ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, ROOM_HEIGHT); ctx.stroke()
+    ctx.strokeStyle =
+      x % (ROOM_GRID_SIZE * 4) === 0 ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.06)"
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, 0)
+    ctx.lineTo(x + 0.5, ROOM_HEIGHT)
+    ctx.stroke()
   }
   for (let y = ROOM_GRID_SIZE; y < ROOM_HEIGHT; y += ROOM_GRID_SIZE) {
-    ctx.strokeStyle = y % (ROOM_GRID_SIZE * 4) === 0 ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.06)"
-    ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(ROOM_WIDTH, y + 0.5); ctx.stroke()
+    ctx.strokeStyle =
+      y % (ROOM_GRID_SIZE * 4) === 0 ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.06)"
+    ctx.beginPath()
+    ctx.moveTo(0, y + 0.5)
+    ctx.lineTo(ROOM_WIDTH, y + 0.5)
+    ctx.stroke()
   }
   ctx.restore()
 }
 
 function drawStations(ctx: CanvasRenderingContext2D, layout: RoomLayout): void {
-  ctx.save(); ctx.font = "8px ui-monospace, SFMono-Regular, Menlo, monospace"; ctx.textAlign = "center"
+  ctx.save()
+  ctx.font = "8px ui-monospace, SFMono-Regular, Menlo, monospace"
+  ctx.textAlign = "center"
   for (const key of STATION_KEYS) {
     const station = layout.stations[key]
-    const x = gridToPixel(station.x); const y = gridToPixel(station.y)
-    ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.fillRect(x - 5, y - 5, 10, 10)
-    ctx.strokeStyle = "#111827"; ctx.strokeRect(x - 5.5, y - 5.5, 11, 11)
-    ctx.fillStyle = "#111827"; ctx.fillText(station.label, x, y - 9)
+    const x = gridToPixel(station.x)
+    const y = gridToPixel(station.y)
+    ctx.fillStyle = "rgba(255,255,255,0.88)"
+    ctx.fillRect(x - 5, y - 5, 10, 10)
+    ctx.strokeStyle = "#111827"
+    ctx.strokeRect(x - 5.5, y - 5.5, 11, 11)
+    ctx.fillStyle = "#111827"
+    ctx.fillText(station.label, x, y - 9)
   }
   ctx.restore()
 }
 
-function drawSelection(ctx: CanvasRenderingContext2D, layout: RoomLayout, selection: Selection): void {
+function drawSelection(
+  ctx: CanvasRenderingContext2D,
+  layout: RoomLayout,
+  selection: Selection
+): void {
   const bounds = selectionBounds(layout, selection)
   if (!bounds) return
-  ctx.save(); ctx.strokeStyle = "#2563eb"; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.strokeRect(bounds.x - 2, bounds.y - 2, bounds.width + 4, bounds.height + 4); ctx.restore()
+  ctx.save()
+  ctx.strokeStyle = "#2563eb"
+  ctx.lineWidth = 2
+  ctx.setLineDash([4, 3])
+  ctx.strokeRect(bounds.x - 2, bounds.y - 2, bounds.width + 4, bounds.height + 4)
+  ctx.restore()
 }
 
 function hitSelections(layout: RoomLayout, x: number, y: number): Selection[] {
@@ -668,9 +1092,14 @@ function hitSelections(layout: RoomLayout, x: number, y: number): Selection[] {
     const bounds = selectionBounds(layout, selection)
     if (bounds && contains(bounds, x, y)) hits.push(selection)
   }
-  for (let index = layout.pets.length - 1; index >= 0; index -= 1) if (contains(roomPetBounds(layout.pets[index]), x, y)) hits.push({ kind: "pet", index })
-  for (let index = layout.furniture.length - 1; index >= 0; index -= 1) if (contains(roomFurnitureBounds(layout.furniture[index]), x, y)) hits.push({ kind: "furniture", list: "furniture", index })
-  for (let index = layout.wallDecor.length - 1; index >= 0; index -= 1) if (contains(roomFurnitureBounds(layout.wallDecor[index]), x, y)) hits.push({ kind: "furniture", list: "wallDecor", index })
+  for (let index = layout.pets.length - 1; index >= 0; index -= 1)
+    if (contains(roomPetBounds(layout.pets[index]), x, y)) hits.push({ kind: "pet", index })
+  for (let index = layout.furniture.length - 1; index >= 0; index -= 1)
+    if (contains(roomFurnitureBounds(layout.furniture[index]), x, y))
+      hits.push({ kind: "furniture", list: "furniture", index })
+  for (let index = layout.wallDecor.length - 1; index >= 0; index -= 1)
+    if (contains(roomFurnitureBounds(layout.wallDecor[index]), x, y))
+      hits.push({ kind: "furniture", list: "wallDecor", index })
   for (let index = layout.rugs.length - 1; index >= 0; index -= 1) {
     const selection: Selection = { kind: "rug", index }
     const bounds = selectionBounds(layout, selection)
@@ -684,17 +1113,29 @@ function selectionBounds(layout: RoomLayout, selection: Selection) {
     const item = layout[selection.list][selection.index]
     return item ? roomFurnitureBounds(item) : undefined
   }
-  if (selection.kind === "pet") return layout.pets[selection.index] ? roomPetBounds(layout.pets[selection.index]) : undefined
+  if (selection.kind === "pet")
+    return layout.pets[selection.index] ? roomPetBounds(layout.pets[selection.index]) : undefined
   if (selection.kind === "rug") {
     const rug = layout.rugs[selection.index]
-    return rug ? { x: gridToPixel(rug.x), y: gridToPixel(rug.y), width: gridToPixel(rug.width), height: gridToPixel(rug.height) } : undefined
+    return rug
+      ? {
+          x: gridToPixel(rug.x),
+          y: gridToPixel(rug.y),
+          width: gridToPixel(rug.width),
+          height: gridToPixel(rug.height),
+        }
+      : undefined
   }
   const station = layout.stations[selection.station]
-  const x = gridToPixel(station.x); const y = gridToPixel(station.y)
+  const x = gridToPixel(station.x)
+  const y = gridToPixel(station.y)
   return { x: x - 8, y: y - 8, width: 16, height: 16 }
 }
 
-function selectionPosition(layout: RoomLayout, selection: Selection): { x: number; y: number } | undefined {
+function selectionPosition(
+  layout: RoomLayout,
+  selection: Selection
+): { x: number; y: number } | undefined {
   if (selection.kind === "station") return layout.stations[selection.station]
   if (selection.kind === "rug") return layout.rugs[selection.index]
   if (selection.kind === "pet") return layout.pets[selection.index]
@@ -704,7 +1145,8 @@ function selectionPosition(layout: RoomLayout, selection: Selection): { x: numbe
 function selectionLabel(layout: RoomLayout, selection: Selection): string {
   if (selection.kind === "station") return `${layout.stations[selection.station].label} station`
   if (selection.kind === "rug") return `Rug ${selection.index + 1}`
-  if (selection.kind === "pet") return `Pet · ${layout.pets[selection.index]?.asset.split("/").at(-2) ?? "unknown"}`
+  if (selection.kind === "pet")
+    return `Pet · ${layout.pets[selection.index]?.asset.split("/").at(-2) ?? "unknown"}`
   const item = layout[selection.list][selection.index]
   return `${item?.asset.split("/").at(-1) ?? "Item"} · ${selection.list === "wallDecor" ? "wall" : "furniture"}`
 }
@@ -715,14 +1157,41 @@ function selectionKey(selection: Selection): string {
   return `${selection.kind}:${"list" in selection ? `${selection.list}:` : ""}${selection.index}`
 }
 
-function sameSelection(left: Selection, right: Selection): boolean { return selectionKey(left) === selectionKey(right) }
-function contains(bounds: { x: number; y: number; width: number; height: number }, x: number, y: number): boolean { return x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height }
-
-function canvasPoint(event: { currentTarget: HTMLCanvasElement; clientX: number; clientY: number }) {
-  const rect = event.currentTarget.getBoundingClientRect()
-  return { x: ((event.clientX - rect.left) / rect.width) * ROOM_WIDTH, y: ((event.clientY - rect.top) / rect.height) * ROOM_HEIGHT }
+function sameSelection(left: Selection, right: Selection): boolean {
+  return selectionKey(left) === selectionKey(right)
+}
+function contains(
+  bounds: { x: number; y: number; width: number; height: number },
+  x: number,
+  y: number
+): boolean {
+  return (
+    x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height
+  )
 }
 
-function snap(value: number): number { return Math.round(value * 2) / 2 }
-function isTypingTarget(target: EventTarget | null): boolean { return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement }
-function categoryLabel(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1) }
+function canvasPoint(event: {
+  currentTarget: HTMLCanvasElement
+  clientX: number
+  clientY: number
+}) {
+  const rect = event.currentTarget.getBoundingClientRect()
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * ROOM_WIDTH,
+    y: ((event.clientY - rect.top) / rect.height) * ROOM_HEIGHT,
+  }
+}
+
+function snap(value: number): number {
+  return Math.round(value * 2) / 2
+}
+function isTypingTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  )
+}
+function categoryLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}

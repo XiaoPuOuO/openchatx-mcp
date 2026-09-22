@@ -7,7 +7,9 @@ import { stringify } from "smol-toml"
 
 import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cts"
 
-const STARTER_SKILL_SOURCE = fileURLToPath(new URL("../skills/create-skill/SKILL.md", import.meta.url))
+const STARTER_SKILL_SOURCE = fileURLToPath(
+  new URL("../skills/create-skill/SKILL.md", import.meta.url)
+)
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
 
 const CONFIG_HEADER = `# Shellby configuration.
@@ -56,7 +58,10 @@ export async function initializeShellbyConfig(repositoryRoot = REPOSITORY_ROOT) 
   await mkdir(dirname(configPath), { recursive: true })
 
   try {
-    await writeFile(configPath, serializeConfig(DEFAULT_PUBLIC_CONFIG), { encoding: "utf8", flag: "wx" })
+    await writeFile(configPath, serializeConfig(DEFAULT_PUBLIC_CONFIG), {
+      encoding: "utf8",
+      flag: "wx",
+    })
     return { configPath, created: true, updated: false }
   } catch (error) {
     if (error?.code !== "EEXIST") throw error

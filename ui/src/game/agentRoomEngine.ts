@@ -2,7 +2,13 @@
 // See ui/THIRD_PARTY_NOTICES.md.
 
 import type { Agent, AgentCall } from "../types"
-import { gridToPixel, ROOM_LAYOUT, type RoomDirection, type RoomLayout, type RoomStation } from "./agentRoomLayout"
+import {
+  gridToPixel,
+  ROOM_LAYOUT,
+  type RoomDirection,
+  type RoomLayout,
+  type RoomStation,
+} from "./agentRoomLayout"
 
 export type AgentStation = RoomStation
 export type AgentDirection = RoomDirection
@@ -38,7 +44,10 @@ function station(layout: { x: number; y: number; label: string; facing: AgentDir
   return { ...layout, x: gridToPixel(layout.x), y: gridToPixel(layout.y) }
 }
 
-export type AgentStationMap = Record<AgentStation, { x: number; y: number; label: string; facing: AgentDirection }>
+export type AgentStationMap = Record<
+  AgentStation,
+  { x: number; y: number; label: string; facing: AgentDirection }
+>
 
 export function stationsForLayout(layout: RoomLayout): AgentStationMap {
   return {
@@ -88,12 +97,19 @@ export function syncAgentActivities(state: AgentRoomState, agent: Agent): void {
     return
   }
 
-  const unseen = calls.filter((call) => !state.seenCallIds.has(call.id)).sort((a, b) => a.startedAt - b.startedAt)
+  const unseen = calls
+    .filter((call) => !state.seenCallIds.has(call.id))
+    .sort((a, b) => a.startedAt - b.startedAt)
 
   for (const call of unseen) enqueueActivity(state, call)
 }
 
-export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion = false, stations: AgentStationMap = STATIONS): void {
+export function updateAgentRoom(
+  state: AgentRoomState,
+  dt: number,
+  reducedMotion = false,
+  stations: AgentStationMap = STATIONS
+): void {
   const clampedDt = Math.min(dt, MAX_DELTA_TIME_SEC)
 
   if (!state.activeActivity && state.queue.length > 0 && state.station === "home") {
@@ -104,7 +120,12 @@ export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion
     if (!state.returningHome) {
       const target = stations[state.targetStation]
       if (state.mode === "walking") {
-        moveToward(state, target.x, target.y, reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt)
+        moveToward(
+          state,
+          target.x,
+          target.y,
+          reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt
+        )
         state.walkFrame += clampedDt * 8
         if (distance(state.x, state.y, target.x, target.y) < 0.5) {
           state.x = target.x
@@ -133,7 +154,12 @@ export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion
     }
 
     const home = stations.home
-    moveToward(state, home.x, home.y, reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt)
+    moveToward(
+      state,
+      home.x,
+      home.y,
+      reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt
+    )
     state.walkFrame += clampedDt * 8
     if (distance(state.x, state.y, home.x, home.y) < 0.5) finishActivity(state, stations)
     return
@@ -144,7 +170,12 @@ export function updateAgentRoom(state: AgentRoomState, dt: number, reducedMotion
   if (distance(state.x, state.y, home.x, home.y) > 0.5) {
     state.mode = "walking"
     state.targetStation = "home"
-    moveToward(state, home.x, home.y, reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt)
+    moveToward(
+      state,
+      home.x,
+      home.y,
+      reducedMotion ? Number.POSITIVE_INFINITY : WALK_SPEED * clampedDt
+    )
     state.walkFrame += clampedDt * 8
     if (distance(state.x, state.y, home.x, home.y) < 0.5) {
       state.x = home.x
@@ -256,7 +287,12 @@ export function bubbleForTool(tool: string): string {
   return tool.replaceAll("_", " ")
 }
 
-function moveToward(state: AgentRoomState, targetX: number, targetY: number, maxDistance: number): void {
+function moveToward(
+  state: AgentRoomState,
+  targetX: number,
+  targetY: number,
+  maxDistance: number
+): void {
   const dx = targetX - state.x
   const dy = targetY - state.y
   const length = Math.hypot(dx, dy)

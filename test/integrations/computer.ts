@@ -2,13 +2,15 @@ import assert from "node:assert/strict"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import process from "node:process"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
-
 import { PeekabooClient } from "../../src/tools/computer/peekaboo.js"
 import { connectClient, startMcpHttpServer } from "./helpers.js"
 
-test("routes Computer Use through Peekaboo and preserves semantic errors", { timeout: 30_000 }, async (t) => {
+test("routes Computer Use through Peekaboo and preserves semantic errors", {
+  timeout: 30_000,
+}, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "peekaboo-mcp-integration-"))
   const logPath = join(root, "peekaboo.jsonl")
   const fixture = fileURLToPath(new URL("../fixtures/fake-peekaboo.mjs", import.meta.url))
@@ -46,9 +48,15 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
     arguments: { kind: "windows" },
   })
   assert.equal(missingWindowApp.isError, true)
-  assert.match(missingWindowApp.content[0]?.type === "text" ? missingWindowApp.content[0].text : "", /app is required/)
+  assert.match(
+    missingWindowApp.content[0]?.type === "text" ? missingWindowApp.content[0].text : "",
+    /app is required/u
+  )
 
-  const observed = await connected.client.callTool({ name: "computer_observe", arguments: { app: "Finder" } })
+  const observed = await connected.client.callTool({
+    name: "computer_observe",
+    arguments: { app: "Finder" },
+  })
   assert.equal(observed.isError, undefined)
   assert.deepEqual(
     observed.content.map((block) => block.type),
@@ -60,8 +68,13 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
     name: "computer_inspect",
     arguments: { snapshot_id: "snapshot-42", max_depth: 4, max_elements: 20, max_children: 10 },
   })
-  assert.deepEqual(inspected.content, [{ type: "text", text: 'snapshot_id=snapshot-inspect\n[B1] AXButton "Continue"' }])
-  assert.deepEqual(inspected.structuredContent, { snapshot_id: "snapshot-inspect", text: '[B1] AXButton "Continue"' })
+  assert.deepEqual(inspected.content, [
+    { type: "text", text: 'snapshot_id=snapshot-inspect\n[B1] AXButton "Continue"' },
+  ])
+  assert.deepEqual(inspected.structuredContent, {
+    snapshot_id: "snapshot-inspect",
+    text: '[B1] AXButton "Continue"',
+  })
 
   const clicked = await connected.client.callTool({
     name: "computer_click",
@@ -79,7 +92,17 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(coordinateClick.structuredContent, {
     command: "click",
-    args: ["click", "--at", "10,20", "--window-id", "4242", "--snapshot", "snapshot-42", "--no-remote", "--json"],
+    args: [
+      "click",
+      "--at",
+      "10,20",
+      "--window-id",
+      "4242",
+      "--snapshot",
+      "snapshot-42",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const backgroundLongPress = await connected.client.callTool({
@@ -88,7 +111,18 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(backgroundLongPress.structuredContent, {
     command: "click",
-    args: ["click", "--at", "10,20", "--window-id", "4242", "--long-press", "--snapshot", "snapshot-42", "--no-remote", "--json"],
+    args: [
+      "click",
+      "--at",
+      "10,20",
+      "--window-id",
+      "4242",
+      "--long-press",
+      "--snapshot",
+      "snapshot-42",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const middleClick = await connected.client.callTool({
@@ -97,7 +131,16 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(middleClick.structuredContent, {
     command: "click",
-    args: ["click", "--on", "B1", "--snapshot", "snapshot-inspect", "--middle", "--no-remote", "--json"],
+    args: [
+      "click",
+      "--on",
+      "B1",
+      "--snapshot",
+      "snapshot-inspect",
+      "--middle",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const tripleClick = await connected.client.callTool({
@@ -106,7 +149,16 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(tripleClick.structuredContent, {
     command: "click",
-    args: ["click", "--on", "B1", "--snapshot", "snapshot-inspect", "--triple", "--no-remote", "--json"],
+    args: [
+      "click",
+      "--on",
+      "B1",
+      "--snapshot",
+      "snapshot-inspect",
+      "--triple",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const targetedScroll = await connected.client.callTool({
@@ -115,7 +167,19 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(targetedScroll.structuredContent, {
     command: "scroll",
-    args: ["scroll", "--direction", "down", "--amount", "4", "--on", "B1", "--snapshot", "snapshot-inspect", "--no-remote", "--json"],
+    args: [
+      "scroll",
+      "--direction",
+      "down",
+      "--amount",
+      "4",
+      "--on",
+      "B1",
+      "--snapshot",
+      "snapshot-inspect",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const coordinateScroll = await connected.client.callTool({
@@ -124,7 +188,21 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(coordinateScroll.structuredContent, {
     command: "scroll",
-    args: ["scroll", "--direction", "down", "--amount", "4", "--at", "10,20", "--window-id", "4242", "--snapshot", "snapshot-42", "--no-remote", "--json"],
+    args: [
+      "scroll",
+      "--direction",
+      "down",
+      "--amount",
+      "4",
+      "--at",
+      "10,20",
+      "--window-id",
+      "4242",
+      "--snapshot",
+      "snapshot-42",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const pointerScroll = await connected.client.callTool({
@@ -177,7 +255,10 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
     },
   })
   assert.equal(unsupportedDrag.isError, true)
-  assert.match(unsupportedDrag.content[0]?.type === "text" ? unsupportedDrag.content[0].text : "", /modifiers|unrecognized|invalid/i)
+  assert.match(
+    unsupportedDrag.content[0]?.type === "text" ? unsupportedDrag.content[0].text : "",
+    /modifiers|unrecognized|invalid/iu
+  )
 
   const typed = await connected.client.callTool({
     name: "computer_type",
@@ -217,7 +298,13 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
     .map((line) => JSON.parse(line) as { event: string; command: string; args: string[] })
   const exactObserve = [...events]
     .reverse()
-    .find((event) => event.event === "start" && event.command === "see" && event.args.includes("--app") && event.args.includes("--window-id"))
+    .find(
+      (event) =>
+        event.event === "start" &&
+        event.command === "see" &&
+        event.args.includes("--app") &&
+        event.args.includes("--window-id")
+    )
   assert.ok(exactObserve)
   assert.deepEqual(exactObserve.args.slice(0, 5), ["see", "--app", "Finder", "--window-id", "4242"])
   assert.equal(exactObserve.args.includes("--no-remote"), true)
@@ -228,7 +315,17 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(launched.structuredContent, {
     command: "app",
-    args: ["app", "launch", "TextEdit", "--wait-ready", "--foreground", "--open", "/tmp/example.txt", "--no-remote", "--json"],
+    args: [
+      "app",
+      "launch",
+      "TextEdit",
+      "--wait-ready",
+      "--foreground",
+      "--open",
+      "/tmp/example.txt",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const relaunched = await connected.client.callTool({
@@ -237,7 +334,16 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", { tim
   })
   assert.deepEqual(relaunched.structuredContent, {
     command: "app",
-    args: ["app", "relaunch", "TextEdit", "--wait-until-ready", "--foreground", "--force", "--no-remote", "--json"],
+    args: [
+      "app",
+      "relaunch",
+      "TextEdit",
+      "--wait-until-ready",
+      "--foreground",
+      "--force",
+      "--no-remote",
+      "--json",
+    ],
   })
 
   const unhidden = await connected.client.callTool({

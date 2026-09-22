@@ -39,23 +39,35 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     await rm(root, { recursive: true, force: true })
   })
 
-  const connected = await connectClient(running.url, "audit-integration-client", undefined, false, "child-session")
+  const connected = await connectClient(
+    running.url,
+    "audit-integration-client",
+    undefined,
+    false,
+    "child-session"
+  )
   t.after(() => connected.client.close())
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "audit-integration" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "audit-integration" },
+  })
   await connected.client.callTool({ name: "shell_list", arguments: {} })
   await connected.client.callTool({
     name: "subagent_run",
     arguments: { agents: [{ agent_id: "audit-check", prompt: "Inspect the audit path." }] },
   })
-  await connected.client.callTool({ name: "shell_list", arguments: { then_run: { skill_list: {} } } })
+  await connected.client.callTool({
+    name: "shell_list",
+    arguments: { then_run: { skill_list: {} } },
+  })
 
   const log = await readFile(auditPath, "utf8")
-  assert.match(log, /shell_list/)
-  assert.match(log, /args: \{\}/)
-  assert.match(log, /subagent_run/)
-  assert.match(log, /audit-check/)
-  assert.match(log, /Inspect the audit path\./)
-  assert.match(log, /--- # skill_list [\s\S]*?via: then_run/)
-  assert.match(log, /session: "agent-1"/)
-  assert.doesNotMatch(log, /child-session/)
+  assert.match(log, /shell_list/u)
+  assert.match(log, /args: \{\}/u)
+  assert.match(log, /subagent_run/u)
+  assert.match(log, /audit-check/u)
+  assert.match(log, /Inspect the audit path\./u)
+  assert.match(log, /--- # skill_list [\s\S]*?via: then_run/u)
+  assert.match(log, /session: "agent-1"/u)
+  assert.doesNotMatch(log, /child-session/u)
 })

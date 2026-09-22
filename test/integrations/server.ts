@@ -9,10 +9,21 @@ import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 import { MCP_CONFIG } from "../../src/config.js"
 import { getAgentIdentity, runWithAgent } from "../../src/server/agent-context.js"
 import { REVIEW_PROMPT_TOOL_CALLS } from "../../src/tools/review/review-tool.js"
-import { buildStartHereInstructions, discoverPromptModes, readStartPrompt } from "../../src/tools/start-here/start-here.js"
 import { createShellSession } from "../../src/tools/shell/session.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
-import { callUntilComplete, connectClient, connectLegacyClient, postWithHost, startMcpHttpServer, toolText } from "./helpers.js"
+import {
+  buildStartHereInstructions,
+  discoverPromptModes,
+  readStartPrompt,
+} from "../../src/tools/start-here/start-here.js"
+import {
+  callUntilComplete,
+  connectClient,
+  connectLegacyClient,
+  postWithHost,
+  startMcpHttpServer,
+  toolText,
+} from "./helpers.js"
 
 test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer()
@@ -65,11 +76,19 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
 
   const startHere = tools.tools.find((tool) => tool.name === "start_here")
   assert.ok(startHere)
-  assert.deepEqual((startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum, ["code-review", "coding", "general"])
+  assert.deepEqual(
+    (startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum,
+    ["code-review", "coding", "general"]
+  )
   assert.equal("then_run" in (startHere.inputSchema.properties as Record<string, unknown>), false)
   for (const tool of tools.tools.filter((tool) => tool.name !== "start_here")) {
-    const thenRun = (tool.inputSchema.properties as Record<string, Record<string, unknown>>).then_run
-    assert.equal(thenRun?.description, "Next sequential tool call. May nest additional calls.", tool.name)
+    const thenRun = (tool.inputSchema.properties as Record<string, Record<string, unknown>>)
+      .then_run
+    assert.equal(
+      thenRun?.description,
+      "Next sequential tool call. May nest additional calls.",
+      tool.name
+    )
   }
 
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
@@ -79,13 +98,19 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const computerDrag = tools.tools.find((tool) => tool.name === "computer_drag")
   assert.ok(shellRun && shellPoll && fetchUrl && subagentResult && computerDrag)
 
-  const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)["yield_time_ms"]
-  const pollYield = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>)["yield_time_ms"]
+  const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)[
+    "yield_time_ms"
+  ]
+  const pollYield = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>)[
+    "yield_time_ms"
+  ]
   const webProperties = fetchUrl.inputSchema.properties as Record<string, Record<string, unknown>>
   const webTokens = webProperties.max_output_tokens
   const webCompact = webProperties.compact
   const webFormat = webProperties.format
-  const subagentWait = (subagentResult.inputSchema.properties as Record<string, Record<string, unknown>>).wait_ms
+  const subagentWait = (
+    subagentResult.inputSchema.properties as Record<string, Record<string, unknown>>
+  ).wait_ms
   assert.equal(runYield?.default, MCP_CONFIG.shell.defaultWaitMs)
   assert.equal(runYield?.maximum, MCP_CONFIG.shell.maxWaitMs)
   assert.equal(pollYield?.default, MCP_CONFIG.shell.defaultPollWaitMs)
@@ -97,7 +122,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.equal(fetchUrl.outputSchema, undefined)
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
-  const dragProperties = computerDrag.inputSchema.properties as Record<string, Record<string, unknown>>
+  const dragProperties = computerDrag.inputSchema.properties as Record<
+    string,
+    Record<string, unknown>
+  >
   assert.equal("modifiers" in dragProperties, false)
   assert.equal(dragProperties.from?.anyOf, undefined)
   assert.equal(dragProperties.to?.anyOf, undefined)
@@ -106,10 +134,19 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
 test("runs nested then_run calls through one compact response", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "then-run-client", undefined, false, "then-run-session")
+  const connected = await connectClient(
+    running.url,
+    "then-run-client",
+    undefined,
+    false,
+    "then-run-session"
+  )
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "then-run" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "then-run" },
+  })
   const result = await connected.client.callTool({
     name: "shell_list",
     arguments: {
@@ -127,34 +164,52 @@ test("runs nested then_run calls through one compact response", { timeout: 10_00
   const textItems = result.content.filter((item) => item.type === "text")
   assert.equal(textItems.length, 1)
   const text = toolText(result)
-  assert.equal((text.match(/count=/g) ?? []).length, 2)
-  assert.match(text, /skills:/)
-  assert.doesNotMatch(text, /then_run/)
+  assert.equal((text.match(/count=/gu) ?? []).length, 2)
+  assert.match(text, /skills:/u)
+  assert.doesNotMatch(text, /then_run/u)
 })
 
 test("rejects start_here as a then_run target", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "then-run-start-client", undefined, false, "then-run-start-session")
+  const connected = await connectClient(
+    running.url,
+    "then-run-start-client",
+    undefined,
+    false,
+    "then-run-start-session"
+  )
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "then-run-start" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "then-run-start" },
+  })
   const result = await connected.client.callTool({
     name: "shell_list",
     arguments: { then_run: { start_here: { mode: "general", task_id: "nested-start" } } },
   })
 
   assert.equal(result.isError, true)
-  assert.match(toolText(result), /Unknown then_run tool: start_here/)
+  assert.match(toolText(result), /Unknown then_run tool: start_here/u)
 })
 
 test("stops then_run after a nonzero shell exit", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "then-run-shell-failure-client", undefined, false, "then-run-shell-failure-session")
+  const connected = await connectClient(
+    running.url,
+    "then-run-shell-failure-client",
+    undefined,
+    false,
+    "then-run-shell-failure-session"
+  )
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "then-run-shell-failure" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "then-run-shell-failure" },
+  })
   const result = await connected.client.callTool({
     name: "shell_run",
     arguments: {
@@ -166,11 +221,13 @@ test("stops then_run after a nonzero shell exit", { timeout: 10_000 }, async (t)
 
   assert.equal(result.isError, undefined)
   const text = toolText(result)
-  assert.match(text, /exit_code=1/)
-  assert.doesNotMatch(text, /skills:/)
+  assert.match(text, /exit_code=1/u)
+  assert.doesNotMatch(text, /skills:/u)
 })
 
-test("publishes only start_here when every optional tool group is disabled", { timeout: 10_000 }, async (t) => {
+test("publishes only start_here when every optional tool group is disabled", {
+  timeout: 10_000,
+}, async (t) => {
   const previousTools = { ...MCP_CONFIG.tools }
   Object.assign(MCP_CONFIG.tools, {
     review: false,
@@ -199,47 +256,84 @@ test("publishes only start_here when every optional tool group is disabled", { t
 test("asks once for a Shellby review after sustained tool use", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "review-client", undefined, false, "review-session")
+  const connected = await connectClient(
+    running.url,
+    "review-client",
+    undefined,
+    false,
+    "review-session"
+  )
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "review-feedback" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "review-feedback" },
+  })
 
   let beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
   for (let call = 1; call < REVIEW_PROMPT_TOOL_CALLS - 2; call += 1) {
     beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
   }
-  assert.doesNotMatch(beforeThreshold.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
+  assert.doesNotMatch(
+    beforeThreshold.content.find((item) => item.type === "text")?.text ?? "",
+    /submit_review/u
+  )
 
   const prompted = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  assert.match(prompted.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
+  assert.match(prompted.content.find((item) => item.type === "text")?.text ?? "", /submit_review/u)
 
   const noRepeat = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  assert.doesNotMatch(noRepeat.content.find((item) => item.type === "text")?.text ?? "", /submit_review/)
+  assert.doesNotMatch(
+    noRepeat.content.find((item) => item.type === "text")?.text ?? "",
+    /submit_review/u
+  )
 })
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-"))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const running = await startMcpHttpServer({
-    shellManager: createShellSessionManager({ defaultShell: createShellSession({ cwd: workspace }) }),
+    shellManager: createShellSessionManager({
+      defaultShell: createShellSession({ cwd: workspace }),
+    }),
   })
   t.after(() => running.close())
 
-  const first = await connectClient(running.url, "startup-first", undefined, false, "startup-session-a")
-  const second = await connectClient(running.url, "startup-second", undefined, false, "startup-session-b")
+  const first = await connectClient(
+    running.url,
+    "startup-first",
+    undefined,
+    false,
+    "startup-session-a"
+  )
+  const second = await connectClient(
+    running.url,
+    "startup-second",
+    undefined,
+    false,
+    "startup-session-b"
+  )
   t.after(() => Promise.all([first.client.close(), second.client.close()]))
 
   const blocked = await first.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(blocked.isError, true)
-  assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
+  assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/u)
 
-  const started = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "startup-session" } })
+  const started = await first.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "startup-session" },
+  })
   assert.equal(started.isError, undefined)
   const startInstructions = toolText(started)
-  const [sharedPrompt, codingPrompt] = await Promise.all([readStartPrompt("shared"), readStartPrompt("coding")])
-  assert.ok(startInstructions.indexOf(sharedPrompt.prompt.trim()) < startInstructions.indexOf(codingPrompt.prompt.trim()))
+  const [sharedPrompt, codingPrompt] = await Promise.all([
+    readStartPrompt("shared"),
+    readStartPrompt("coding"),
+  ])
+  assert.ok(
+    startInstructions.indexOf(sharedPrompt.prompt.trim()) <
+      startInstructions.indexOf(codingPrompt.prompt.trim())
+  )
   assert.equal(startInstructions, await buildStartHereInstructions("coding"))
-
 
   const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(allowed.isError, undefined)
@@ -248,41 +342,81 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   assert.equal(stillBlocked.isError, true)
 })
 
-test("suppresses duplicate start_here modes for five seconds per agent", { timeout: 10_000 }, async (t) => {
+test("suppresses duplicate start_here modes for five seconds per agent", {
+  timeout: 10_000,
+}, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
-  const first = await connectClient(running.url, "start-cooldown-first", undefined, false, "start-cooldown-session-a")
-  const second = await connectClient(running.url, "start-cooldown-second", undefined, false, "start-cooldown-session-b")
+  const first = await connectClient(
+    running.url,
+    "start-cooldown-first",
+    undefined,
+    false,
+    "start-cooldown-session-a"
+  )
+  const second = await connectClient(
+    running.url,
+    "start-cooldown-second",
+    undefined,
+    false,
+    "start-cooldown-session-b"
+  )
   t.after(() => Promise.all([first.client.close(), second.client.close()]))
 
   let now = Date.now()
   t.mock.method(Date, "now", () => now)
   const codingInstructions = await buildStartHereInstructions("coding")
   const simultaneous = await Promise.all([
-    first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "initial-task" } }),
-    first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "renamed-task" } }),
+    first.client.callTool({
+      name: "start_here",
+      arguments: { mode: "coding", task_id: "initial-task" },
+    }),
+    first.client.callTool({
+      name: "start_here",
+      arguments: { mode: "coding", task_id: "renamed-task" },
+    }),
   ])
   assert.ok(simultaneous.every((result) => !result.isError))
   const simultaneousText = simultaneous.map(toolText)
   assert.equal(simultaneousText.filter((text) => text === codingInstructions).length, 1)
-  assert.equal(simultaneousText.filter((text) => /loaded recently by this agent/.test(text)).length, 1)
+  assert.equal(
+    simultaneousText.filter((text) => /loaded recently by this agent/u.test(text)).length,
+    1
+  )
 
   now += 4_999
-  const duplicate = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "updated-task" } })
-  assert.match(toolText(duplicate), /loaded recently by this agent/)
-  assert.equal(runWithAgent("start-cooldown-session-a", () => getAgentIdentity()?.taskSlug), "updated-task")
+  const duplicate = await first.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "updated-task" },
+  })
+  assert.match(toolText(duplicate), /loaded recently by this agent/u)
+  assert.equal(
+    runWithAgent("start-cooldown-session-a", () => getAgentIdentity()?.taskSlug),
+    "updated-task"
+  )
 
-  const otherMode = await first.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "general-task" } })
+  const otherMode = await first.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "general-task" },
+  })
   assert.equal(toolText(otherMode), await buildStartHereInstructions("general"))
-  const otherAgent = await second.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "other-task" } })
+  const otherAgent = await second.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "other-task" },
+  })
   assert.equal(toolText(otherAgent), codingInstructions)
 
   now += 1
-  const expired = await first.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "after-cooldown" } })
+  const expired = await first.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "after-cooldown" },
+  })
   assert.equal(toolText(expired), codingInstructions)
 })
 
-test("suppresses rapid duplicate skill loads for the same agent", { timeout: 10_000 }, async (t) => {
+test("suppresses rapid duplicate skill loads for the same agent", {
+  timeout: 10_000,
+}, async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), "shellby-skill-cooldown-"))
   const previousWorkspace = MCP_CONFIG.workspace
   MCP_CONFIG.workspace = workspace
@@ -300,26 +434,47 @@ test("suppresses rapid duplicate skill loads for the same agent", { timeout: 10_
 
   const running = await startMcpHttpServer()
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "skill-cooldown-client", undefined, false, "skill-cooldown-session")
+  const connected = await connectClient(
+    running.url,
+    "skill-cooldown-client",
+    undefined,
+    false,
+    "skill-cooldown-session"
+  )
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "skill-cooldown" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-cooldown" },
+  })
 
   const simultaneous = await Promise.all([
     connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
     connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
   ])
   const simultaneousText = simultaneous.map(toolText)
-  assert.equal(simultaneousText.filter((text) => /Full instructions\./.test(text)).length, 1)
-  assert.equal(simultaneousText.filter((text) => /loaded recently by this agent/.test(text)).length, 1)
+  assert.equal(simultaneousText.filter((text) => /Full instructions\./u.test(text)).length, 1)
+  assert.equal(
+    simultaneousText.filter((text) => /loaded recently by this agent/u.test(text)).length,
+    1
+  )
 
-  const duplicate = await connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } })
-  assert.match(toolText(duplicate), /loaded recently by this agent/)
+  const duplicate = await connected.client.callTool({
+    name: "skill_load",
+    arguments: { name: "cooldown-skill" },
+  })
+  assert.match(toolText(duplicate), /loaded recently by this agent/u)
 
-  const firstMissing = await connected.client.callTool({ name: "skill_load", arguments: { name: "missing-skill" } })
-  const retryMissing = await connected.client.callTool({ name: "skill_load", arguments: { name: "missing-skill" } })
-  assert.match(toolText(firstMissing), /unknown_skill/)
-  assert.match(toolText(retryMissing), /unknown_skill/)
+  const firstMissing = await connected.client.callTool({
+    name: "skill_load",
+    arguments: { name: "missing-skill" },
+  })
+  const retryMissing = await connected.client.callTool({
+    name: "skill_load",
+    arguments: { name: "missing-skill" },
+  })
+  assert.match(toolText(firstMissing), /unknown_skill/u)
+  assert.match(toolText(retryMissing), /unknown_skill/u)
 })
 
 test("prefers repo-local .shellby prompt overrides and falls back to bundled prompts", async (t) => {
@@ -333,7 +488,10 @@ test("prefers repo-local .shellby prompt overrides and falls back to bundled pro
   await writeFile(bundledPath, "bundled")
   await writeFile(overridePath, "override")
 
-  assert.deepEqual(await readStartPrompt("coding", root), { path: overridePath, prompt: "override" })
+  assert.deepEqual(await readStartPrompt("coding", root), {
+    path: overridePath,
+    prompt: "override",
+  })
 
   await rm(overridePath)
   assert.deepEqual(await readStartPrompt("coding", root), { path: bundledPath, prompt: "bundled" })
@@ -358,33 +516,49 @@ test("derives start_here modes from bundled and local prompt filename slugs", as
   assert.deepEqual(discoverPromptModes(root), ["coding", "deep-research", "general"])
 
   await writeFile(join(localDirectory, "Not-A-Mode.md"), "invalid")
-  assert.throws(() => discoverPromptModes(root), /lowercase kebab-case/)
+  assert.throws(() => discoverPromptModes(root), /lowercase kebab-case/u)
 })
 
 test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }, async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-missing-"))
   t.after(() => rm(workspace, { recursive: true, force: true }))
   const running = await startMcpHttpServer({
-    shellManager: createShellSessionManager({ defaultShell: createShellSession({ cwd: workspace }) }),
+    shellManager: createShellSessionManager({
+      defaultShell: createShellSession({ cwd: workspace }),
+    }),
   })
   t.after(() => running.close())
-  const connected = await connectClient(running.url, "startup-failure", undefined, false, "startup-session-failure")
+  const connected = await connectClient(
+    running.url,
+    "startup-failure",
+    undefined,
+    false,
+    "startup-session-failure"
+  )
   t.after(() => connected.client.close())
 
-  const failed = await connected.client.callTool({ name: "start_here", arguments: { mode: "invalid", task_id: "invalid-mode" } })
+  const failed = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "invalid", task_id: "invalid-mode" },
+  })
   assert.equal(failed.isError, true)
 
   const blocked = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(blocked.isError, true)
-  assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/)
+  assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/u)
 
-  const retry = await connected.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "retry-startup" } })
+  const retry = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "retry-startup" },
+  })
   assert.equal(toolText(retry), await buildStartHereInstructions("coding"))
   const allowed = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(allowed.isError, undefined)
 })
 
-test("does not require start_here when no ChatGPT session is provided", { timeout: 10_000 }, async (t) => {
+test("does not require start_here when no ChatGPT session is provided", {
+  timeout: 10_000,
+}, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "startup-local-client")
@@ -395,7 +569,10 @@ test("does not require start_here when no ChatGPT session is provided", { timeou
 
   const instructions = await buildStartHereInstructions("coding")
   for (let call = 0; call < 2; call += 1) {
-    const started = await connected.client.callTool({ name: "start_here", arguments: { mode: "coding", task_id: "local-startup" } })
+    const started = await connected.client.callTool({
+      name: "start_here",
+      arguments: { mode: "coding", task_id: "local-startup" },
+    })
     assert.equal(toolText(started), instructions)
   }
 })
@@ -411,20 +588,24 @@ test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, asy
   assert.ok((await connected.client.listTools()).tools.length > 0)
 })
 
-test("publishes ordinary tool results only through the compact MCP surface", { timeout: 10_000 }, async (t) => {
+test("publishes ordinary tool results only through the compact MCP surface", {
+  timeout: 10_000,
+}, async (t) => {
   const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(running.url, "compact-output-client")
   t.after(() => connected.client.close())
 
-  const shellList = (await connected.client.listTools()).tools.find((tool) => tool.name === "shell_list")
+  const shellList = (await connected.client.listTools()).tools.find(
+    (tool) => tool.name === "shell_list"
+  )
   assert.ok(shellList)
   assert.equal(shellList.outputSchema, undefined)
   assert.equal("structured" in (shellList.inputSchema.properties as Record<string, unknown>), false)
 
   const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
   assert.equal(result.structuredContent, undefined)
-  assert.match(toolText(result), /count=\d+ limit=\d+/)
+  assert.match(toolText(result), /count=\d+ limit=\d+/u)
 })
 
 test("preserves structured tool output when configured", { timeout: 10_000 }, async (t) => {
@@ -439,15 +620,22 @@ test("preserves structured tool output when configured", { timeout: 10_000 }, as
   const connected = await connectClient(running.url, "structured-output-client")
   t.after(() => connected.client.close())
 
-  const shellList = (await connected.client.listTools()).tools.find((tool) => tool.name === "shell_list")
+  const shellList = (await connected.client.listTools()).tools.find(
+    (tool) => tool.name === "shell_list"
+  )
   assert.ok(shellList?.outputSchema)
 
-  const result = await connected.client.callTool({ name: "shell_list", arguments: { then_run: { skill_list: {} } } })
+  const result = await connected.client.callTool({
+    name: "shell_list",
+    arguments: { then_run: { skill_list: {} } },
+  })
   assert.ok(result.structuredContent)
-  assert.match(toolText(result), /skills:/)
+  assert.match(toolText(result), /skills:/u)
 })
 
-test("continues serving an existing client after an HTTP server restart", { timeout: 20_000 }, async (t) => {
+test("continues serving an existing client after an HTTP server restart", {
+  timeout: 20_000,
+}, async (t) => {
   const firstServer = await startMcpHttpServer()
   const { port, url } = firstServer
   const connection = await connectClient(url, "restart-client")
@@ -458,10 +646,16 @@ test("continues serving an existing client after an HTTP server restart", { time
     await activeServer.close()
   })
 
-  assert.equal((await callUntilComplete(connection.client, "before-restart", "printf before")).output, "before")
+  assert.equal(
+    (await callUntilComplete(connection.client, "before-restart", "printf before")).output,
+    "before"
+  )
   await firstServer.close()
   activeServer = await startMcpHttpServer({ port })
-  assert.equal((await callUntilComplete(connection.client, "after-restart", "printf after")).output, "after")
+  assert.equal(
+    (await callUntilComplete(connection.client, "after-restart", "printf after")).output,
+    "after"
+  )
 })
 
 test("rejects a mismatched HTTP Host", { timeout: 10_000 }, async (t) => {

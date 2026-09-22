@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs"
-import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -9,12 +9,17 @@ import { loadPublicConfig } from "./public-config.cjs"
 
 export { loadPublicConfig, type ToolOutputFormat } from "./public-config.cjs"
 
-const packageMetadata = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
-const packageVersion = typeof packageMetadata.version === "string" ? packageMetadata.version : undefined
+const packageMetadata = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+)
+const packageVersion =
+  typeof packageMetadata.version === "string" ? packageMetadata.version : undefined
 if (!packageVersion) throw new Error("package.json is missing a valid version.")
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
-const bundledPeekabooExecutable = fileURLToPath(new URL("../vendor/peekaboo/peekaboo", import.meta.url))
+const bundledPeekabooExecutable = fileURLToPath(
+  new URL("../vendor/peekaboo/peekaboo", import.meta.url)
+)
 const publicConfig = loadPublicConfig()
 const rtkExecutable = resolvePathExecutable("rtk")
 

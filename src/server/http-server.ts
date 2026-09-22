@@ -8,15 +8,15 @@ import { static as expressStatic, type Request, type Response } from "express"
 
 import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/auth.js"
 import { MCP_CONFIG } from "../config.js"
-import { createReviewPromptTracker } from "../tools/review/review-tool.js"
-import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
-import type { AgentObserver } from "./agent-observer.js"
-import { runWithAgent } from "./agent-context.js"
-import { createMcpServer } from "./mcp-server.js"
-import { McpAuditLogger, type McpAuditRequest } from "./audit/audit-log.js"
 import type { PeekabooClient } from "../tools/computer/peekaboo.js"
+import { createReviewPromptTracker } from "../tools/review/review-tool.js"
 import type { ShellSessionManager } from "../tools/shell/session-manager.js"
+import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
+import { runWithAgent } from "./agent-context.js"
+import type { AgentObserver } from "./agent-observer.js"
+import type { McpAuditLogger, McpAuditRequest } from "./audit/audit-log.js"
+import { createMcpServer } from "./mcp-server.js"
 
 interface RequestRuntimeContext {
   auditRequest?: McpAuditRequest
@@ -41,12 +41,20 @@ export interface McpRuntimeServices {
 
 export async function startMcpHttpServer(services: McpRuntimeServices): Promise<RunningMcpServer> {
   const { host, port, instanceId } = MCP_CONFIG
-  const { shellManager, peekaboo, auditLogger, chatGptSubagents, authStore, webPageOpener, agentObserver } = services
+  const {
+    shellManager,
+    peekaboo,
+    auditLogger,
+    chatGptSubagents,
+    authStore,
+    webPageOpener,
+    agentObserver,
+  } = services
   const reviewPromptTracker = MCP_CONFIG.tools.review ? createReviewPromptTracker() : undefined
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
-  const mcpRoute = /^\/mcp$/
+  const mcpRoute = /^\/mcp$/u
 
   const mcpHandler = createMcpHandler(
     () => {
@@ -111,7 +119,10 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
     })
 
     app.delete("/ui/api/agents/:agentId/instructions/:instructionId", (req, res) => {
-      const cancelled = agentObserver.cancelInstruction(req.params.agentId, req.params.instructionId)
+      const cancelled = agentObserver.cancelInstruction(
+        req.params.agentId,
+        req.params.instructionId
+      )
       if (!cancelled) {
         res.status(404).json({ error: "queued instruction not found" })
         return
@@ -146,7 +157,12 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   }
 
   app.all(mcpRoute, async (req: Request, res: Response) => {
-    if (req.method === "POST" && authStore && isTrustedRemoteRequest(req) && containsToolCall(req.body)) {
+    if (
+      req.method === "POST" &&
+      authStore &&
+      isTrustedRemoteRequest(req) &&
+      containsToolCall(req.body)
+    ) {
       try {
         await authStore.authorizeToolCall(req.get("x-openai-subject"))
       } catch (error) {
@@ -191,7 +207,11 @@ function containsToolCall(payload: unknown): boolean {
   return requests.some((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false
     const request = value as { method?: unknown; params?: { name?: unknown } }
-    return request.method === "tools/call" && typeof request.params?.name === "string" && request.params.name.length > 0
+    return (
+      request.method === "tools/call" &&
+      typeof request.params?.name === "string" &&
+      request.params.name.length > 0
+    )
   })
 }
 

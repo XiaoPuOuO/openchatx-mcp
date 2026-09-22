@@ -1,21 +1,14 @@
 import { useEffect, useRef } from "react"
-
-import type { Agent } from "../types"
 import {
+  type AgentRoomState,
+  type AgentStationMap,
   createAgentRoomState,
   startAgentRoomLoop,
   stationsForLayout,
   syncAgentActivities,
   updateAgentRoom,
-  type AgentRoomState,
-  type AgentStationMap,
 } from "../game/agentRoomEngine"
-import {
-  gridToPixel,
-  ROOM_HEIGHT,
-  ROOM_WIDTH,
-  type RoomLayout,
-} from "../game/agentRoomLayout"
+import { gridToPixel, ROOM_HEIGHT, ROOM_WIDTH, type RoomLayout } from "../game/agentRoomLayout"
 import {
   drawRoomBorder,
   drawRoomForeground,
@@ -27,6 +20,7 @@ import {
   ROOM_PIXEL_SCALE,
 } from "../game/agentRoomRenderer"
 import { useRoomLayout } from "../game/roomLayoutStorage"
+import type { Agent } from "../types"
 
 const CHAR_FRAME_WIDTH = 16
 const CHAR_FRAME_HEIGHT = 32
@@ -70,7 +64,13 @@ export function AgentRoom({ agent }: { agent: Agent }) {
   )
 }
 
-function renderRoom(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string, layout: RoomLayout, stations: AgentStationMap): void {
+function renderRoom(
+  ctx: CanvasRenderingContext2D,
+  state: AgentRoomState,
+  agentId: string,
+  layout: RoomLayout,
+  stations: AgentStationMap
+): void {
   ctx.clearRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT)
   drawRoomSurface(ctx, layout)
   drawRoomWalls(ctx, layout)
@@ -86,8 +86,16 @@ function renderRoom(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentI
   drawRoomBorder(ctx)
 }
 
-function drawCharacter(ctx: CanvasRenderingContext2D, state: AgentRoomState, agentId: string, layout: RoomLayout): void {
-  const character = getRoomImage(layout.characterAsset ?? `/ui/pixel-agents/assets/characters/char_${characterIndex(agentId)}.png`)
+function drawCharacter(
+  ctx: CanvasRenderingContext2D,
+  state: AgentRoomState,
+  agentId: string,
+  layout: RoomLayout
+): void {
+  const character = getRoomImage(
+    layout.characterAsset ??
+      `/ui/pixel-agents/assets/characters/char_${characterIndex(agentId)}.png`
+  )
   if (!isReady(character)) return
 
   const row = state.direction === "down" ? 0 : state.direction === "up" ? 1 : 2
@@ -107,7 +115,10 @@ function drawCharacter(ctx: CanvasRenderingContext2D, state: AgentRoomState, age
 
   const x = Math.round(state.x)
   const sittingOffset =
-    state.station === "home" || (state.mode === "working" && (state.station === "terminal" || state.station === "agents")) ? SITTING_OFFSET : 0
+    state.station === "home" ||
+    (state.mode === "working" && (state.station === "terminal" || state.station === "agents"))
+      ? SITTING_OFFSET
+      : 0
   const y = Math.round(state.y) + sittingOffset
   drawCharacterFrame(ctx, character, frame, row, x, y, state.direction)
 }
@@ -119,7 +130,9 @@ function drawSubagentConversation(
   layout: RoomLayout,
   stations: AgentStationMap
 ): void {
-  const subagent = getRoomImage(`/ui/pixel-agents/assets/characters/char_${(characterIndex(agentId) + 1) % 6}.png`)
+  const subagent = getRoomImage(
+    `/ui/pixel-agents/assets/characters/char_${(characterIndex(agentId) + 1) % 6}.png`
+  )
   if (!isReady(subagent)) return
 
   const x = gridToPixel(layout.subagentSeat.x)
@@ -178,7 +191,12 @@ const CONVERSATION_BUBBLE = [
   "___________",
 ] as const
 
-function drawConversationBubble(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
+function drawConversationBubble(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  scale: number
+): void {
   const palette: Record<string, string> = {
     B: "#555566",
     F: "#eeeeff",
@@ -219,15 +237,30 @@ function characterIndex(agentId: string): number {
 }
 
 function isReadingTool(tool: string): boolean {
-  return tool === "fetch_url" || tool.startsWith("web_") || tool === "image_view" || tool.startsWith("image_")
+  return (
+    tool === "fetch_url" ||
+    tool.startsWith("web_") ||
+    tool === "image_view" ||
+    tool.startsWith("image_")
+  )
 }
 
 function isDelegating(state: AgentRoomState): boolean {
   const tool = state.currentTool
-  return Boolean(tool && (tool.startsWith("subagent_") || tool.startsWith("clone_")) && state.station === "agents" && state.mode === "working")
+  return Boolean(
+    tool &&
+      (tool.startsWith("subagent_") || tool.startsWith("clone_")) &&
+      state.station === "agents" &&
+      state.mode === "working"
+  )
 }
 
-function drawStationFocus(ctx: CanvasRenderingContext2D, state: AgentRoomState, layout: RoomLayout, stations: AgentStationMap): void {
+function drawStationFocus(
+  ctx: CanvasRenderingContext2D,
+  state: AgentRoomState,
+  layout: RoomLayout,
+  stations: AgentStationMap
+): void {
   if (!state.currentTool) return
   const station = stations[state.targetStation]
   const size = gridToPixel(layout.stationFocusSize)

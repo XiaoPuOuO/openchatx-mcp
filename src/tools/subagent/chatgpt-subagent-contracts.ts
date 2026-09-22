@@ -1,7 +1,12 @@
 import { z } from "zod"
 
 export const chatGptSubagentStatusSchema = z.enum(["running", "completed", "failed"])
-export const chatGptSubagentActivitySchema = z.enum(["Working", "Searching the web", "Using tools", "Generating response"])
+export const chatGptSubagentActivitySchema = z.enum([
+  "Working",
+  "Searching the web",
+  "Using tools",
+  "Generating response",
+])
 
 export type ChatGptSubagentStatus = z.infer<typeof chatGptSubagentStatusSchema>
 export type ChatGptSubagentActivity = z.infer<typeof chatGptSubagentActivitySchema>

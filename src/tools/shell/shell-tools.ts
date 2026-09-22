@@ -1,8 +1,13 @@
-import { McpServer } from "@modelcontextprotocol/server"
 import { resolve } from "node:path"
-
+import type { McpServer } from "@modelcontextprotocol/server"
+import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
+import { ShellSessionError, type ShellSnapshot } from "./session.js"
+import type { ShellSessionManager } from "./session-manager.js"
 import {
   DEFAULT_SHELL_ID,
+  type ShellBatchCommandOutput,
+  type ShellPollOutput,
+  type ShellRunOutput,
   shellCloseInputSchema,
   shellCloseOutputSchema,
   shellListOutputSchema,
@@ -12,13 +17,7 @@ import {
   shellResetOutputSchema,
   shellRunInputSchema,
   shellRunOutputSchema,
-  type ShellBatchCommandOutput,
-  type ShellPollOutput,
-  type ShellRunOutput,
 } from "./shell-contracts.js"
-import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
-import { ShellSessionError, type ShellSnapshot } from "./session.js"
-import type { ShellSessionManager } from "./session-manager.js"
 
 export function registerShellExecutionTools(server: McpServer, shells: ShellSessionManager): void {
   const workspaceDescription = JSON.stringify(shells.initialCwd)
@@ -39,7 +38,9 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
     async (input, ctx) => {
       try {
         const { shell_id, ...commandInput } = input
-        const snapshot = await shells.withShell(shell_id, (shell) => shell.runCommand({ ...commandInput, signal: ctx.mcpReq.signal }))
+        const snapshot = await shells.withShell(shell_id, (shell) =>
+          shell.runCommand({ ...commandInput, signal: ctx.mcpReq.signal })
+        )
         return snapshotResult(snapshot, shell_id)
       } catch (error) {
         return toolError(error)
@@ -64,7 +65,9 @@ export function registerShellExecutionTools(server: McpServer, shells: ShellSess
     async (input, ctx) => {
       try {
         const { shell_id, ...pollInput } = input
-        const snapshot = await shells.withExistingShell(shell_id, (shell) => shell.pollCommand({ ...pollInput, signal: ctx.mcpReq.signal }))
+        const snapshot = await shells.withExistingShell(shell_id, (shell) =>
+          shell.pollCommand({ ...pollInput, signal: ctx.mcpReq.signal })
+        )
         return pollSnapshotResult(snapshot)
       } catch (error) {
         return toolError(error)
@@ -90,7 +93,9 @@ export function registerShellManagementTools(server: McpServer, shells: ShellSes
     async (input) => {
       try {
         const { shell_id, ...resetInput } = input
-        const result = await shells.withShell(shell_id, (shell) => shell.reset(resetInput), { restoreCached: false })
+        const result = await shells.withShell(shell_id, (shell) => shell.reset(resetInput), {
+          restoreCached: false,
+        })
         return {
           structuredContent: result,
           content: [],
@@ -185,9 +190,12 @@ function pollSnapshotResult(snapshot: ShellSnapshot) {
     ...(snapshot.exit_code !== null ? { exit_code: snapshot.exit_code } : {}),
     output: withApplyPatchToolHint(snapshot.output),
   }
-  if (snapshot.status === "running" || snapshot.output_truncated) structuredContent.next_cursor = snapshot.next_cursor
-  if (snapshot.dropped_output_bytes > 0) structuredContent.dropped_output_bytes = snapshot.dropped_output_bytes
-  if (snapshot.commands) structuredContent.commands = compactBatchCommands(snapshot.commands, snapshot.cwd)
+  if (snapshot.status === "running" || snapshot.output_truncated)
+    structuredContent.next_cursor = snapshot.next_cursor
+  if (snapshot.dropped_output_bytes > 0)
+    structuredContent.dropped_output_bytes = snapshot.dropped_output_bytes
+  if (snapshot.commands)
+    structuredContent.commands = compactBatchCommands(snapshot.commands, snapshot.cwd)
 
   return {
     structuredContent,
@@ -195,7 +203,10 @@ function pollSnapshotResult(snapshot: ShellSnapshot) {
   }
 }
 
-function compactBatchCommands(commands: NonNullable<ShellSnapshot["commands"]>, cwd: string): ShellBatchCommandOutput[] {
+function compactBatchCommands(
+  commands: NonNullable<ShellSnapshot["commands"]>,
+  cwd: string
+): ShellBatchCommandOutput[] {
   return commands.map((command) => ({
     run: command.run,
     command: command.command,
@@ -220,14 +231,17 @@ function compactShellSnapshot(snapshot: ShellSnapshot, shellId: string): ShellRu
   }
   if (snapshot.cursor_expired) compact.cursor_expired = true
   if (snapshot.output_truncated) compact.output_truncated = true
-  if (snapshot.dropped_output_bytes > 0) compact.dropped_output_bytes = snapshot.dropped_output_bytes
+  if (snapshot.dropped_output_bytes > 0)
+    compact.dropped_output_bytes = snapshot.dropped_output_bytes
   if (snapshot.commands) compact.commands = compactBatchCommands(snapshot.commands, snapshot.cwd)
   return compact
 }
 
 function toolError(error: unknown) {
   const text =
-    error instanceof ShellSessionError ? `${error.code}: ${error.message}` : `internal_error: ${error instanceof Error ? error.message : String(error)}`
+    error instanceof ShellSessionError
+      ? `${error.code}: ${error.message}`
+      : `internal_error: ${error instanceof Error ? error.message : String(error)}`
   return {
     isError: true,
     content: [{ type: "text" as const, text }],

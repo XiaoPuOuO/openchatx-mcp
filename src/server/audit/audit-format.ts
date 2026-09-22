@@ -28,7 +28,10 @@ export function formatAuditEntry(input: {
   agentLabel?: string
   via?: "then_run"
 }): string {
-  const abnormal = input.httpStatus >= 400 || input.state !== "finished" ? ` - HTTP ${input.httpStatus} ${input.state}` : ""
+  const abnormal =
+    input.httpStatus >= 400 || input.state !== "finished"
+      ? ` - HTTP ${input.httpStatus} ${input.state}`
+      : ""
   const tokenCounts = ` - ${input.inputTokens} in${input.outputTokens !== undefined ? ` / ${input.outputTokens} out` : ""}`
   const tag = auditTag(input)
   const tagPrefix = tag ? `${tag} ` : ""
@@ -44,7 +47,11 @@ export function formatAuditEntry(input: {
   return details ? `${heading}\n${details}\n\n` : `${heading}\n\n`
 }
 
-export function summarizeToolResult(toolResult: unknown, modelResult: unknown, error?: unknown): ToolResponseSummary {
+export function summarizeToolResult(
+  toolResult: unknown,
+  modelResult: unknown,
+  error?: unknown
+): ToolResponseSummary {
   if (error !== undefined) return { failed: true, failureMessage: errorMessage(error) }
 
   const toolRecord = asRecord(toolResult)
@@ -55,8 +62,12 @@ export function summarizeToolResult(toolResult: unknown, modelResult: unknown, e
   const structuredContent = asRecord(toolRecord.structuredContent)
   if (toolRecord.isError !== true) return { failed: false, modelOutput, structuredContent }
 
-  const resultOutput = structuredContent && typeof structuredContent.output === "string" ? structuredContent.output : undefined
-  if (resultOutput) return { failed: true, failureMessage: resultOutput, modelOutput, structuredContent }
+  const resultOutput =
+    structuredContent && typeof structuredContent.output === "string"
+      ? structuredContent.output
+      : undefined
+  if (resultOutput)
+    return { failed: true, failureMessage: resultOutput, modelOutput, structuredContent }
 
   const content = toolRecord.content
   if (Array.isArray(content)) {
@@ -90,13 +101,23 @@ function formatAgentLabel(agentLabel: string | undefined): string {
   return agentLabel ? `session: ${yamlString(agentLabel)}` : ""
 }
 
-function auditTag(input: { durationMs: number; httpStatus: number; state: "finished" | "closed"; toolFailed: boolean }): string {
+function auditTag(input: {
+  durationMs: number
+  httpStatus: number
+  state: "finished" | "closed"
+  toolFailed: boolean
+}): string {
   if (input.toolFailed || input.httpStatus >= 400 || input.state !== "finished") return "!"
   if (input.durationMs >= SLOW_CALL_MS) return "~"
   return ""
 }
 
-function formatArguments(toolName: string, value: unknown, toolFailed: boolean, failureMessage?: string): string {
+function formatArguments(
+  toolName: string,
+  value: unknown,
+  toolFailed: boolean,
+  failureMessage?: string
+): string {
   const argumentsRecord = asRecord(value)
   if (!argumentsRecord) return formatGenericArguments(value)
 
@@ -112,41 +133,74 @@ function formatArguments(toolName: string, value: unknown, toolFailed: boolean, 
   }
 }
 
-function formatApplyPatchArguments(argumentsRecord: Record<string, unknown>, toolFailed: boolean, failureMessage?: string): string {
+function formatApplyPatchArguments(
+  argumentsRecord: Record<string, unknown>,
+  toolFailed: boolean,
+  failureMessage?: string
+): string {
   const patch = typeof argumentsRecord.patch === "string" ? argumentsRecord.patch : ""
   const cwd = typeof argumentsRecord.cwd === "string" ? argumentsRecord.cwd : ""
   const summary = `cwd: ${yamlString(cwd)}\npatch_chars: ${characterCount(patch)}`
   if (!toolFailed) return summary
-  const message = failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
+  const message = failureMessage
+    ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`
+    : ""
   return `${summary}${message}\npatch: |-\n${indentBlock(truncate(patch, MAX_FAILED_PATCH_CHARS))}`
 }
 
-function formatShellRunArguments(argumentsRecord: Record<string, unknown>, toolFailed: boolean, failureMessage?: string): string {
+function formatShellRunArguments(
+  argumentsRecord: Record<string, unknown>,
+  toolFailed: boolean,
+  failureMessage?: string
+): string {
   const hasCommand = Object.hasOwn(argumentsRecord, "command")
   const hasCommands = Object.hasOwn(argumentsRecord, "commands")
-  const inputShape = hasCommand ? (hasCommands ? "both" : "command") : hasCommands ? "commands" : "neither"
+  const inputShape = hasCommand
+    ? hasCommands
+      ? "both"
+      : "command"
+    : hasCommands
+      ? "commands"
+      : "neither"
   const command = typeof argumentsRecord.command === "string" ? argumentsRecord.command : ""
   const commands = Array.isArray(argumentsRecord.commands) ? argumentsRecord.commands : null
-  const shellId = typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
+  const shellId =
+    typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
   const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
-  const cwd = typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
-  const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
+  const cwd =
+    typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
+  const message =
+    toolFailed && failureMessage
+      ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`
+      : ""
   const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`]
   pushExplicitNumberArgument(fields, argumentsRecord, "yield_time_ms")
   pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
   if (inputShape === "both" || inputShape === "neither") fields.push(`input: ${inputShape}`)
   if (cwd) fields.push(cwd.slice(1))
   if (message) fields.push(message.slice(1))
-  if (hasCommand) fields.push(`command: |-\n${indentBlock(truncate(command, MAX_SHELL_COMMAND_CHARS))}`)
-  if (hasCommands) fields.push(`commands: |-\n${indentBlock(truncate(JSON.stringify(commands ?? argumentsRecord.commands, null, 2), MAX_SHELL_COMMAND_CHARS))}`)
+  if (hasCommand)
+    fields.push(`command: |-\n${indentBlock(truncate(command, MAX_SHELL_COMMAND_CHARS))}`)
+  if (hasCommands)
+    fields.push(
+      `commands: |-\n${indentBlock(truncate(JSON.stringify(commands ?? argumentsRecord.commands, null, 2), MAX_SHELL_COMMAND_CHARS))}`
+    )
   return fields.join("\n")
 }
 
-function formatShellPollArguments(argumentsRecord: Record<string, unknown>, toolFailed: boolean, failureMessage?: string): string {
-  const shellId = typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
+function formatShellPollArguments(
+  argumentsRecord: Record<string, unknown>,
+  toolFailed: boolean,
+  failureMessage?: string
+): string {
+  const shellId =
+    typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
   const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
   const cursor = typeof argumentsRecord.cursor === "number" ? argumentsRecord.cursor : 0
-  const message = toolFailed && failureMessage ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}` : ""
+  const message =
+    toolFailed && failureMessage
+      ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`
+      : ""
   const fields = [`shell: ${yamlString(`${shellId}/${requestId}`)}`, `cursor: ${cursor}`]
   pushExplicitNumberArgument(fields, argumentsRecord, "yield_time_ms")
   pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
@@ -154,9 +208,14 @@ function formatShellPollArguments(argumentsRecord: Record<string, unknown>, tool
   return fields.join("\n")
 }
 
-function pushExplicitNumberArgument(fields: string[], argumentsRecord: Record<string, unknown>, key: string): void {
+function pushExplicitNumberArgument(
+  fields: string[],
+  argumentsRecord: Record<string, unknown>,
+  key: string
+): void {
   const value = argumentsRecord[key]
-  if (Object.hasOwn(argumentsRecord, key) && typeof value === "number" && Number.isFinite(value)) fields.push(`${key}: ${value}`)
+  if (Object.hasOwn(argumentsRecord, key) && typeof value === "number" && Number.isFinite(value))
+    fields.push(`${key}: ${value}`)
 }
 
 function formatGenericArguments(value: unknown): string {
@@ -181,12 +240,16 @@ function formatResponseSummary(toolName: string, summary: ToolResponseSummary): 
 function formatShellResponseSummary(value: Record<string, unknown>): string {
   const parts = [
     typeof value.status === "string" ? `status=${yamlString(value.status)}` : "",
-    typeof value.exit_code === "number" || value.exit_code === null ? `exit_code=${value.exit_code}` : "",
+    typeof value.exit_code === "number" || value.exit_code === null
+      ? `exit_code=${value.exit_code}`
+      : "",
     typeof value.cwd === "string" ? `cwd=${yamlString(value.cwd)}` : "",
     typeof value.next_cursor === "number" ? `next_cursor=${value.next_cursor}` : "",
     typeof value.output_truncated === "boolean" ? `output_truncated=${value.output_truncated}` : "",
     typeof value.output_dropped === "boolean" ? `output_dropped=${value.output_dropped}` : "",
-    typeof value.dropped_output_bytes === "number" ? `dropped_output_bytes=${value.dropped_output_bytes}` : "",
+    typeof value.dropped_output_bytes === "number"
+      ? `dropped_output_bytes=${value.dropped_output_bytes}`
+      : "",
   ].filter(Boolean)
   return parts.length ? `result: ${parts.join(" ")}` : ""
 }
@@ -243,4 +306,17 @@ function twoDigits(value: number): string {
   return String(value).padStart(2, "0")
 }
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const

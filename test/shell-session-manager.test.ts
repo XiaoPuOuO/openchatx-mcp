@@ -6,7 +6,7 @@ import test from "node:test"
 
 import { MCP_CONFIG } from "../src/config.js"
 import { createShellSession, type ShellSession } from "../src/tools/shell/session.js"
-import { DEFAULT_SHELL_ID, createShellSessionManager } from "../src/tools/shell/session-manager.js"
+import { createShellSessionManager, DEFAULT_SHELL_ID } from "../src/tools/shell/session-manager.js"
 import { runToCompletion, waitForProcessExit } from "./helpers/shell.js"
 
 test("creates named shells lazily and keeps their state isolated", async (t) => {
@@ -41,7 +41,7 @@ test("creates named shells lazily and keeps their state isolated", async (t) => 
   })
 
   assert.equal(alphaState.output, "/tmp|alpha")
-  assert.match(betaState.output, /\|unset$/)
+  assert.match(betaState.output, /\|unset$/u)
 })
 
 test("pressure-evicts the least recently used non-busy named shell", async (t) => {
@@ -112,7 +112,10 @@ test("protects the default shell from close while allowing reset", async (t) => 
 
   await assert.rejects(
     () => manager.closeShell(DEFAULT_SHELL_ID),
-    (error: unknown) => error instanceof Error && error.message.includes("cannot be closed") && error.message.includes("shell_reset")
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message.includes("cannot be closed") &&
+      error.message.includes("shell_reset")
   )
 
   const reset = await manager.defaultShell.reset({ reason: "test default reset" })
@@ -225,7 +228,11 @@ test("closes every created shell", async () => {
 
 test("restores cwd and exported environment after idle hibernation", async (t) => {
   let now = 0
-  const manager = createShellSessionManager({ idleTimeoutMs: 100, cacheTimeoutMs: 10_000, now: () => now })
+  const manager = createShellSessionManager({
+    idleTimeoutMs: 100,
+    cacheTimeoutMs: 10_000,
+    now: () => now,
+  })
   t.after(() => manager.close())
 
   const first = await manager.getOrCreate("alpha")
@@ -249,14 +256,22 @@ test("shell_close discards live and cached state", async (t) => {
 
   assert.deepEqual(manager.listCachedShellIds(), [])
   const fresh = await manager.getOrCreate("alpha")
-  const state = await runToCompletion(fresh, "after-close", `printf '%s|%s' "$PWD" "\${CLOSE_VALUE-unset}"`)
-  assert.match(state.output, /\|unset$/)
+  const state = await runToCompletion(
+    fresh,
+    "after-close",
+    `printf '%s|%s' "$PWD" "\${CLOSE_VALUE-unset}"`
+  )
+  assert.match(state.output, /\|unset$/u)
   assert.notEqual(state.output, "/tmp|kept")
 })
 
 test("expires cached logical shell state after cache TTL", async (t) => {
   let now = 0
-  const manager = createShellSessionManager({ idleTimeoutMs: 100, cacheTimeoutMs: 1_000, now: () => now })
+  const manager = createShellSessionManager({
+    idleTimeoutMs: 100,
+    cacheTimeoutMs: 1_000,
+    now: () => now,
+  })
   t.after(() => manager.close())
 
   const alpha = await manager.getOrCreate("alpha")
@@ -268,8 +283,12 @@ test("expires cached logical shell state after cache TTL", async (t) => {
   assert.deepEqual(manager.listCachedShellIds(now), [])
 
   const fresh = await manager.getOrCreate("alpha")
-  const state = await runToCompletion(fresh, "fresh-state", `printf '%s|%s' "$PWD" "\${EXPIRES-unset}"`)
-  assert.match(state.output, /\|unset$/)
+  const state = await runToCompletion(
+    fresh,
+    "fresh-state",
+    `printf '%s|%s' "$PWD" "\${EXPIRES-unset}"`
+  )
+  assert.match(state.output, /\|unset$/u)
   assert.notEqual(state.output, "/tmp|yes")
 })
 
@@ -287,7 +306,10 @@ test("never pressure-evicts busy shells and blocks when no evictable slot exists
 
   await assert.rejects(
     () => manager.getOrCreate("beta"),
-    (error: unknown) => error instanceof Error && error.message.includes("shell slots are unavailable") && error.message.includes("never pressure-evicted")
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message.includes("shell slots are unavailable") &&
+      error.message.includes("never pressure-evicted")
   )
   assert.deepEqual(manager.listShellIds(), [DEFAULT_SHELL_ID, "alpha"])
 })
@@ -315,7 +337,11 @@ test("pressure eviction skips a busy older shell and evicts the next LRU shell",
 
 test("hibernation restores only cwd and exported environment and terminates background processes", async (t) => {
   let now = 0
-  const manager = createShellSessionManager({ idleTimeoutMs: 100, cacheTimeoutMs: 10_000, now: () => now })
+  const manager = createShellSessionManager({
+    idleTimeoutMs: 100,
+    cacheTimeoutMs: 10_000,
+    now: () => now,
+  })
   t.after(() => manager.close())
   const alpha = await manager.getOrCreate("alpha")
   const prepared = await runToCompletion(
@@ -341,7 +367,11 @@ test("hibernation restores only cwd and exported environment and terminates back
 
 test("resetting a cached shell discards cached cwd and environment", async (t) => {
   let now = 0
-  const manager = createShellSessionManager({ idleTimeoutMs: 100, cacheTimeoutMs: 10_000, now: () => now })
+  const manager = createShellSessionManager({
+    idleTimeoutMs: 100,
+    cacheTimeoutMs: 10_000,
+    now: () => now,
+  })
   t.after(() => manager.close())
   const alpha = await manager.getOrCreate("alpha")
   await runToCompletion(alpha, "prepare-reset-cache", "cd /tmp && export RESET_CACHE_VALUE=kept")
@@ -349,27 +379,45 @@ test("resetting a cached shell discards cached cwd and environment", async (t) =
   await manager.cleanupIdle()
   assert.deepEqual(manager.listCachedShellIds(), ["alpha"])
 
-  await manager.withShell("alpha", (shell) => shell.reset({ reason: "test cached reset" }), { restoreCached: false })
+  await manager.withShell("alpha", (shell) => shell.reset({ reason: "test cached reset" }), {
+    restoreCached: false,
+  })
   const live = manager.getExisting("alpha")
-  const state = await runToCompletion(live, "after-reset-cache", `printf '%s|%s' "$PWD" "\${RESET_CACHE_VALUE-unset}"`)
-  assert.match(state.output, /\|unset$/)
+  const state = await runToCompletion(
+    live,
+    "after-reset-cache",
+    `printf '%s|%s' "$PWD" "\${RESET_CACHE_VALUE-unset}"`
+  )
+  assert.match(state.output, /\|unset$/u)
   assert.notEqual(state.output, "/tmp|kept")
 })
 
 test("invalid cached cwd falls back to a clean baseline instead of restart-looping", async (t) => {
   let now = 0
   const temporaryCwd = await mkdtemp(join(tmpdir(), "mcp-cached-cwd-"))
-  const manager = createShellSessionManager({ idleTimeoutMs: 100, cacheTimeoutMs: 10_000, now: () => now })
+  const manager = createShellSessionManager({
+    idleTimeoutMs: 100,
+    cacheTimeoutMs: 10_000,
+    now: () => now,
+  })
   t.after(() => manager.close())
   const alpha = await manager.getOrCreate("alpha")
-  await runToCompletion(alpha, "prepare-missing-cwd", `cd ${JSON.stringify(temporaryCwd)} && export MISSING_CWD_VALUE=kept`)
+  await runToCompletion(
+    alpha,
+    "prepare-missing-cwd",
+    `cd ${JSON.stringify(temporaryCwd)} && export MISSING_CWD_VALUE=kept`
+  )
   now = 100
   await manager.cleanupIdle()
   await rm(temporaryCwd, { recursive: true, force: true })
 
   const restored = await manager.getOrCreate("alpha")
-  const state = await runToCompletion(restored, "missing-cwd-fallback", `printf '%s|%s' "$PWD" "\${MISSING_CWD_VALUE-unset}"`)
-  assert.match(state.output, /\|unset$/)
+  const state = await runToCompletion(
+    restored,
+    "missing-cwd-fallback",
+    `printf '%s|%s' "$PWD" "\${MISSING_CWD_VALUE-unset}"`
+  )
+  assert.match(state.output, /\|unset$/u)
   assert.notEqual(state.output, `${temporaryCwd}|kept`)
 })
 
@@ -389,7 +437,8 @@ test("keeps a live shell when recoverable-state capture fails during pressure ev
   const alpha = await manager.getOrCreate("alpha")
   await assert.rejects(
     () => manager.getOrCreate("beta"),
-    (error: unknown) => error instanceof Error && error.message.includes("shell slots are unavailable")
+    (error: unknown) =>
+      error instanceof Error && error.message.includes("shell slots are unavailable")
   )
   assert.equal(await manager.getOrCreate("alpha"), alpha)
   assert.deepEqual(manager.listShellIds(), [DEFAULT_SHELL_ID, "alpha"])

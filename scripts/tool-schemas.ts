@@ -1,5 +1,5 @@
+import process from "node:process"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
-
 import { MCP_CONFIG } from "../src/config.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
 import { countTokens, OUTPUT_TOKEN_ENCODING } from "../src/tokenizer.js"
@@ -17,7 +17,8 @@ const shells = MCP_CONFIG.tools.shell
     })
   : undefined
 const peekaboo = MCP_CONFIG.tools.computer ? new PeekabooClient({ localOnly: true }) : undefined
-const chatGptSubagents = MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? createChatGptSubagentService() : undefined
+const chatGptSubagents =
+  MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? createChatGptSubagentService() : undefined
 const webPageOpener = MCP_CONFIG.tools.web ? new WebPageOpener() : undefined
 const running = await startMcpHttpServer({
   shellManager: shells,
@@ -25,13 +26,17 @@ const running = await startMcpHttpServer({
   chatGptSubagents,
   webPageOpener,
 })
-const client = new Client({ name: "shellby-mcp-schema-viewer", version: MCP_CONFIG.server.version }, { versionNegotiation: { mode: "auto" } })
+const client = new Client(
+  { name: "shellby-mcp-schema-viewer", version: MCP_CONFIG.server.version },
+  { versionNegotiation: { mode: "auto" } }
+)
 const transport = new StreamableHTTPClientTransport(new URL(running.url))
 
 try {
   await client.connect(transport)
   const { tools } = await client.listTools()
-  const selected = requestedNames.size === 0 ? tools : tools.filter((tool) => requestedNames.has(tool.name))
+  const selected =
+    requestedNames.size === 0 ? tools : tools.filter((tool) => requestedNames.has(tool.name))
 
   if (requestedNames.size > 0) {
     const foundNames = new Set(selected.map((tool) => tool.name))
@@ -42,9 +47,15 @@ try {
   }
 
   const compactSchema = JSON.stringify(selected)
-  process.stdout.write(`Token count (${OUTPUT_TOKEN_ENCODING}): ${countTokens(compactSchema)}\n\n${JSON.stringify(selected, null, 2)}\n`)
+  process.stdout.write(
+    `Token count (${OUTPUT_TOKEN_ENCODING}): ${countTokens(compactSchema)}\n\n${JSON.stringify(selected, null, 2)}\n`
+  )
 } finally {
   await client.close().catch(() => undefined)
   await running.close()
-  await Promise.allSettled([shells?.close() ?? Promise.resolve(), peekaboo?.close() ?? Promise.resolve(), chatGptSubagents?.dispose() ?? Promise.resolve()])
+  await Promise.allSettled([
+    shells?.close() ?? Promise.resolve(),
+    peekaboo?.close() ?? Promise.resolve(),
+    chatGptSubagents?.dispose() ?? Promise.resolve(),
+  ])
 }

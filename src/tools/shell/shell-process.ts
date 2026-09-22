@@ -1,9 +1,9 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { statSync } from "node:fs"
 import { isAbsolute } from "node:path"
+import process from "node:process"
 import { StringDecoder } from "node:string_decoder"
-
 import { MCP_CONFIG } from "../../config.js"
 import { prepareShellCommand } from "./rtk.js"
 
@@ -47,7 +47,11 @@ export interface ShellProcess {
   readonly closed: boolean
   readonly hasActiveOperation: boolean
   start(): Promise<void>
-  beginCommand(command: string, cwd: string | undefined, onOutput: (chunk: string) => void): Promise<RunningShellCommand>
+  beginCommand(
+    command: string,
+    cwd: string | undefined,
+    onOutput: (chunk: string) => void
+  ): Promise<RunningShellCommand>
   captureContext(cwd?: string): Promise<ShellProcessContext>
   captureRecoverableState(): Promise<ShellRecoverableState>
   reset(reason?: string): Promise<number>
@@ -112,9 +116,14 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     return startPromise
   }
 
-  async function beginCommand(command: string, commandCwd: string | undefined, onOutput: (chunk: string) => void): Promise<RunningShellCommand> {
+  async function beginCommand(
+    command: string,
+    commandCwd: string | undefined,
+    onOutput: (chunk: string) => void
+  ): Promise<RunningShellCommand> {
     if (!child || !ready) throw new Error("The shell process is not ready.")
-    if (activeCommand || contextCaptureState) throw new Error("The shell process already has an active operation.")
+    if (activeCommand || contextCaptureState)
+      throw new Error("The shell process already has an active operation.")
 
     const commandChild = child
     const token = randomUUID().replaceAll("-", "")
@@ -152,7 +161,8 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
 
   async function captureContext(captureCwd?: string): Promise<ShellProcessContext> {
     if (!child || !ready) throw new Error("The shell process is not ready.")
-    if (activeCommand || contextCaptureState) throw new Error("The shell process already has an active operation.")
+    if (activeCommand || contextCaptureState)
+      throw new Error("The shell process already has an active operation.")
 
     const captureChild = child
     const token = randomUUID().replaceAll("-", "")
@@ -163,7 +173,11 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       const timer = setTimeout(() => {
         if (contextCaptureState?.child === captureChild) contextCaptureState = null
         killProcessGroup(captureChild, "SIGKILL")
-        rejectContext(new Error(`Shell context capture did not complete within ${MCP_CONFIG.shell.readyTimeoutMs}ms.`))
+        rejectContext(
+          new Error(
+            `Shell context capture did not complete within ${MCP_CONFIG.shell.readyTimeoutMs}ms.`
+          )
+        )
       }, MCP_CONFIG.shell.readyTimeoutMs)
       contextCaptureState = {
         child: captureChild,
@@ -178,16 +192,19 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
         reject: rejectContext,
         timer,
       }
-      void writeToStdin(captureChild, buildContextCaptureScript(token, captureCwd)).catch((error) => {
-        clearTimeout(timer)
-        if (contextCaptureState?.child === captureChild) contextCaptureState = null
-        rejectContext(error instanceof Error ? error : new Error(String(error)))
-      })
+      void writeToStdin(captureChild, buildContextCaptureScript(token, captureCwd)).catch(
+        (error) => {
+          clearTimeout(timer)
+          if (contextCaptureState?.child === captureChild) contextCaptureState = null
+          rejectContext(error instanceof Error ? error : new Error(String(error)))
+        }
+      )
     })
   }
 
   async function captureRecoverableState(): Promise<ShellRecoverableState> {
-    if (activeCommand || contextCaptureState || startPromise) throw new Error("The shell process is busy.")
+    if (activeCommand || contextCaptureState || startPromise)
+      throw new Error("The shell process is busy.")
     if (!child || !ready) return cloneRecoverableState(initialState ?? { cwd: currentCwd, env })
     return cloneRecoverableState(await captureContext())
   }
@@ -263,7 +280,10 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     const scheduleForcedFinalization = (description: string) => {
       terminationDescription = description
       if (finalizeTimer) return
-      finalizeTimer = setTimeout(() => finalizeChild(spawned, terminationDescription), MCP_CONFIG.shell.stopGraceMs)
+      finalizeTimer = setTimeout(
+        () => finalizeChild(spawned, terminationDescription),
+        MCP_CONFIG.shell.stopGraceMs
+      )
     }
 
     spawned.once("error", (error) => scheduleForcedFinalization(`spawn error: ${error.message}`))
@@ -274,7 +294,11 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     spawned.once("close", (code, signal) => {
       if (finalizeTimer) clearTimeout(finalizeTimer)
       const description =
-        terminationDescription === "unknown termination" ? (signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`) : terminationDescription
+        terminationDescription === "unknown termination"
+          ? signal
+            ? `signal ${signal}`
+            : `exit code ${code ?? "unknown"}`
+          : terminationDescription
       finalizeChild(spawned, description)
     })
 
@@ -288,7 +312,10 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       }, MCP_CONFIG.shell.readyTimeoutMs)
 
       readyState = { child: spawned, marker, resolve, reject, timer }
-      writeToStdin(spawned, [`builtin printf '\\036__MCP_READY_${token}__\\037'`, ""].join("\n")).catch((error) => {
+      writeToStdin(
+        spawned,
+        [`builtin printf '\\036__MCP_READY_${token}__\\037'`, ""].join("\n")
+      ).catch((error) => {
         clearTimeout(timer)
         readyState = null
         reject(error instanceof Error ? error : new Error(String(error)))
@@ -378,7 +405,12 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       const statusText = markerPayload.slice(0, cwdSeparator)
       const parsedCwd = markerPayload.slice(cwdSeparator + 1)
       const parsedStatus = Number.parseInt(statusText, 10)
-      if (cwdSeparator < 1 || !/^-?\d+$/.test(statusText) || !Number.isSafeInteger(parsedStatus) || !isAbsolute(parsedCwd)) {
+      if (
+        cwdSeparator < 1 ||
+        !/^-?\d+$/u.test(statusText) ||
+        !Number.isSafeInteger(parsedStatus) ||
+        !isAbsolute(parsedCwd)
+      ) {
         const falsePrefixEnd = markerIndex + command.markerPrefix.length
         command.onOutput(parserBuffer.slice(0, falsePrefixEnd))
         parserBuffer = parserBuffer.slice(falsePrefixEnd)
@@ -425,7 +457,10 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     parserBuffer = parserBuffer.slice(safeLength)
   }
 
-  function finalizeChild(finalizedChild: ChildProcessWithoutNullStreams, description: string): void {
+  function finalizeChild(
+    finalizedChild: ChildProcessWithoutNullStreams,
+    description: string
+  ): void {
     if (handledChildren.has(finalizedChild)) return
     handledChildren.add(finalizedChild)
 
@@ -454,7 +489,9 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
 
       if (contextCaptureState?.child === finalizedChild) {
         clearTimeout(contextCaptureState.timer)
-        contextCaptureState.reject(new Error(`Shell exited during context capture (${description}).`))
+        contextCaptureState.reject(
+          new Error(`Shell exited during context capture (${description}).`)
+        )
         contextCaptureState = null
       }
 
@@ -465,7 +502,9 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       if (reason !== "close") {
         generation += 1
         if (reason !== "reset") currentCwd = cwd
-        options.onIdleOutput(`\n[mcp] Shell state lost (${reason ?? "unexpected"}: ${description}). Starting generation ${generation}.\n`)
+        options.onIdleOutput(
+          `\n[mcp] Shell state lost (${reason ?? "unexpected"}: ${description}). Starting generation ${generation}.\n`
+        )
       }
       options.onUpdate()
     }
@@ -475,13 +514,19 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       if (!closed) {
         queueMicrotask(() => {
           if (closed) return
-          void start().catch((error) => options.onIdleOutput(`\n[mcp] Shell restart failed: ${errorMessage(error)}\n`))
+          void start().catch((error) =>
+            options.onIdleOutput(`\n[mcp] Shell restart failed: ${errorMessage(error)}\n`)
+          )
         })
       }
     }
   }
 
-  function finishActiveCommand(status: ShellProcessCommandResult["status"], exitCode: number | null, resultCwd: string): void {
+  function finishActiveCommand(
+    status: ShellProcessCommandResult["status"],
+    exitCode: number | null,
+    resultCwd: string
+  ): void {
     const command = activeCommand
     if (!command) return
     activeCommand = null
@@ -492,10 +537,14 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     killProcessGroup(stoppedChild, "SIGTERM")
     await waitForExit(stoppedChild, MCP_CONFIG.shell.stopGraceMs)
     killProcessGroup(stoppedChild, "SIGKILL")
-    if (!(await waitForChildClose(stoppedChild, MCP_CONFIG.shell.stopGraceMs))) finalizeChild(stoppedChild, "forced shutdown timeout")
+    if (!(await waitForChildClose(stoppedChild, MCP_CONFIG.shell.stopGraceMs)))
+      finalizeChild(stoppedChild, "forced shutdown timeout")
   }
 
-  function waitForChildClose(waitChild: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+  function waitForChildClose(
+    waitChild: ChildProcessWithoutNullStreams,
+    timeoutMs: number
+  ): Promise<boolean> {
     if (handledChildren.has(waitChild)) return Promise.resolve(true)
 
     return new Promise((resolve) => {
@@ -575,7 +624,8 @@ function parseShellContext(value: string): ShellProcessContext {
   const cwdEnd = value.indexOf("\0")
   if (cwdEnd < 1) throw new Error("Shell context did not include a working directory.")
   const cwd = value.slice(0, cwdEnd)
-  if (!isAbsolute(cwd)) throw new Error(`Shell context returned a non-absolute cwd: ${JSON.stringify(cwd)}.`)
+  if (!isAbsolute(cwd))
+    throw new Error(`Shell context returned a non-absolute cwd: ${JSON.stringify(cwd)}.`)
 
   const env: NodeJS.ProcessEnv = {}
   for (const entry of value.slice(cwdEnd + 1).split("\0")) {

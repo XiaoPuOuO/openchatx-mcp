@@ -2,8 +2,8 @@ import { execFile } from "node:child_process"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import process from "node:process"
 import { promisify } from "node:util"
-
 import { MCP_CONFIG } from "../../config.js"
 import { asRecord, finiteNumber as numberValue } from "../../utils.js"
 import { encodeImageForMcp, ImageEncodingError } from "../image/image-encoding.js"
@@ -96,14 +96,25 @@ export class PeekabooClient {
     return this.enqueue((requestSignal) => this.runNow(args, requestSignal), signal)
   }
 
-  observe(args: string[], options: { annotate: boolean }, signal?: AbortSignal): Promise<PeekabooObservation> {
+  observe(
+    args: string[],
+    options: { annotate: boolean },
+    signal?: AbortSignal
+  ): Promise<PeekabooObservation> {
     return this.enqueue((requestSignal) => this.observeNow(args, options, requestSignal), signal)
   }
 
-  runWithFreshLocalWindowSnapshot(target: Pick<PeekabooSnapshotTarget, "app" | "windowId">, args: string[], signal?: AbortSignal): Promise<PeekabooResult> {
+  runWithFreshLocalWindowSnapshot(
+    target: Pick<PeekabooSnapshotTarget, "app" | "windowId">,
+    args: string[],
+    signal?: AbortSignal
+  ): Promise<PeekabooResult> {
     return this.enqueue(async (requestSignal) => {
       if (target.windowId === undefined) {
-        throw new PeekabooError("SNAPSHOT_TARGET_MISSING", "An exact window is required for this action.")
+        throw new PeekabooError(
+          "SNAPSHOT_TARGET_MISSING",
+          "An exact window is required for this action."
+        )
       }
 
       const directory = await mkdtemp(join(tmpdir(), "peekaboo-mcp-receipt-"))
@@ -112,11 +123,21 @@ export class PeekabooClient {
       try {
         const seeArgs = ["see"]
         if (target.app) seeArgs.push("--app", target.app)
-        seeArgs.push("--window-id", String(target.windowId), "--no-elements", "--path", requestedPath, "--no-remote")
+        seeArgs.push(
+          "--window-id",
+          String(target.windowId),
+          "--no-elements",
+          "--path",
+          requestedPath,
+          "--no-remote"
+        )
         const observation = await this.runNow(seeArgs, requestSignal)
         const snapshotId = stringValue(asRecord(observation.data)?.snapshot_id)
         if (!snapshotId) {
-          throw new PeekabooError("SNAPSHOT_MISSING", "Peekaboo did not return a snapshot ID for the exact window.")
+          throw new PeekabooError(
+            "SNAPSHOT_MISSING",
+            "Peekaboo did not return a snapshot ID for the exact window."
+          )
         }
         return this.runNow([...args, "--snapshot", snapshotId, "--no-remote"], requestSignal)
       } finally {
@@ -140,12 +161,17 @@ export class PeekabooClient {
     await this.queue
   }
 
-  private enqueue<T>(operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  private enqueue<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    signal?: AbortSignal
+  ): Promise<T> {
     const queued = async () => {
       if (this.closed) {
         throw new PeekabooError("PEEKABOO_CLOSED", "Computer Use is closed.")
       }
-      const requestSignal = signal ? AbortSignal.any([signal, this.shutdownController.signal]) : this.shutdownController.signal
+      const requestSignal = signal
+        ? AbortSignal.any([signal, this.shutdownController.signal])
+        : this.shutdownController.signal
       requestSignal.throwIfAborted()
       return operation(requestSignal)
     }
@@ -158,17 +184,24 @@ export class PeekabooClient {
     return result
   }
 
-  private async observeNow(args: string[], options: { annotate: boolean }, signal: AbortSignal): Promise<PeekabooObservation> {
+  private async observeNow(
+    args: string[],
+    options: { annotate: boolean },
+    signal: AbortSignal
+  ): Promise<PeekabooObservation> {
     const directory = await mkdtemp(join(tmpdir(), "peekaboo-mcp-"))
     const requestedPath = join(directory, "capture.png")
 
     try {
-      const result = await this.runNow(["see", ...args, "--path", requestedPath, ...(options.annotate ? ["--annotate"] : [])], signal)
+      const result = await this.runNow(
+        ["see", ...args, "--path", requestedPath, ...(options.annotate ? ["--annotate"] : [])],
+        signal
+      )
       const data = asRecord(result.data)
       const snapshotId = stringValue(data?.snapshot_id)
       let target = observationTarget(data)
       const requestedApp = optionValue(args, "--app")
-      if (requestedApp !== undefined && /^PID:\d+$/.test(requestedApp)) {
+      if (requestedApp !== undefined && /^PID:\d+$/u.test(requestedApp)) {
         target = {
           ...target,
           app: requestedApp,
@@ -183,7 +216,8 @@ export class PeekabooClient {
         }
       }
 
-      const screenCapture = target?.kind?.toLowerCase().includes("screen") || optionValue(args, "--mode") === "screen"
+      const screenCapture =
+        target?.kind?.toLowerCase().includes("screen") || optionValue(args, "--mode") === "screen"
       if (screenCapture) {
         const screenIndex = integerOption(args, "--screen-index") ?? 0
         target = { ...target, kind: target?.kind ?? "screen", screenIndex }
@@ -197,7 +231,9 @@ export class PeekabooClient {
       }
       if (snapshotId && target) this.rememberSnapshot(snapshotId, target)
       const imagePath =
-        options.annotate && typeof data?.screenshot_annotated === "string" && data.screenshot_annotated
+        options.annotate &&
+        typeof data?.screenshot_annotated === "string" &&
+        data.screenshot_annotated
           ? data.screenshot_annotated
           : typeof data?.screenshot_raw === "string" && data.screenshot_raw
             ? data.screenshot_raw
@@ -239,7 +275,8 @@ export class PeekabooClient {
   }
 
   private async runNow(args: string[], signal: AbortSignal): Promise<PeekabooResult> {
-    const runtimeArgs = this.localOnly && !args.includes("--no-remote") ? [...args, "--no-remote"] : args
+    const runtimeArgs =
+      this.localOnly && !args.includes("--no-remote") ? [...args, "--no-remote"] : args
     const commandArgs = [...this.baseArgs, ...runtimeArgs, "--json"]
     let stdout: string
     let stderr: string
@@ -262,13 +299,23 @@ export class PeekabooClient {
 
       const processError = error as NodeJS.ErrnoException
       if (processError.code === "ENOENT") {
-        throw new PeekabooError("PEEKABOO_NOT_FOUND", `Peekaboo executable ${JSON.stringify(this.executable)} was not found. Run npm install.`, undefined, {
-          cause: error,
-        })
+        throw new PeekabooError(
+          "PEEKABOO_NOT_FOUND",
+          `Peekaboo executable ${JSON.stringify(this.executable)} was not found. Run npm install.`,
+          undefined,
+          {
+            cause: error,
+          }
+        )
       }
 
       const detail = error instanceof Error ? error.message : String(error)
-      throw new PeekabooError("PEEKABOO_PROCESS_FAILED", `Peekaboo command failed: ${detail}`, stderr.trim().slice(-4096) || undefined, { cause: error })
+      throw new PeekabooError(
+        "PEEKABOO_PROCESS_FAILED",
+        `Peekaboo command failed: ${detail}`,
+        stderr.trim().slice(-4096) || undefined,
+        { cause: error }
+      )
     }
 
     const envelope = parseEnvelope(stdout, stderr)
@@ -310,8 +357,12 @@ function tryParseEnvelope(stdout: string): PeekabooEnvelope | null {
 }
 
 function envelopeError(envelope: PeekabooEnvelope, cause?: unknown): PeekabooError {
-  const code = typeof envelope.error?.code === "string" ? envelope.error.code : "PEEKABOO_COMMAND_FAILED"
-  const message = typeof envelope.error?.message === "string" ? envelope.error.message : "Peekaboo reported a command failure."
+  const code =
+    typeof envelope.error?.code === "string" ? envelope.error.code : "PEEKABOO_COMMAND_FAILED"
+  const message =
+    typeof envelope.error?.message === "string"
+      ? envelope.error.message
+      : "Peekaboo reported a command failure."
   const details = typeof envelope.error?.details === "string" ? envelope.error.details : undefined
   return new PeekabooError(code, message, details, { cause })
 }
@@ -322,7 +373,9 @@ function processOutput(error: unknown, field: "stdout" | "stderr"): string {
   return typeof value === "string" ? value : Buffer.isBuffer(value) ? value.toString("utf8") : ""
 }
 
-function observationTarget(data: Record<string, unknown> | undefined): PeekabooSnapshotTarget | undefined {
+function observationTarget(
+  data: Record<string, unknown> | undefined
+): PeekabooSnapshotTarget | undefined {
   if (!data) return undefined
   const observation = asRecord(data.observation)
   const target = asRecord(observation?.target)
@@ -333,7 +386,8 @@ function observationTarget(data: Record<string, unknown> | undefined): PeekabooS
     stringValue(target?.requestedKind) ??
     stringValue(target?.requested_kind) ??
     stringValue(data.capture_mode)
-  const stateSnapshot = asRecord(observation?.stateSnapshot) ?? asRecord(observation?.state_snapshot)
+  const stateSnapshot =
+    asRecord(observation?.stateSnapshot) ?? asRecord(observation?.state_snapshot)
   const windowId =
     numberValue(target?.windowID) ??
     numberValue(target?.window_id) ??
@@ -360,7 +414,9 @@ function rectangle(value: unknown): PeekabooSnapshotTarget["bounds"] | undefined
     const y = numberValue(origin[1])
     const width = numberValue(size[0])
     const height = numberValue(size[1])
-    return x !== undefined && y !== undefined && width !== undefined && height !== undefined ? { x, y, width, height } : undefined
+    return x !== undefined && y !== undefined && width !== undefined && height !== undefined
+      ? { x, y, width, height }
+      : undefined
   }
   const record = asRecord(value)
   if (!record) return undefined
@@ -370,10 +426,15 @@ function rectangle(value: unknown): PeekabooSnapshotTarget["bounds"] | undefined
   const y = numberValue(record.y) ?? numberValue(origin?.y)
   const width = numberValue(record.width) ?? numberValue(size?.width)
   const height = numberValue(record.height) ?? numberValue(size?.height)
-  return x !== undefined && y !== undefined && width !== undefined && height !== undefined ? { x, y, width, height } : undefined
+  return x !== undefined && y !== undefined && width !== undefined && height !== undefined
+    ? { x, y, width, height }
+    : undefined
 }
 
-function screenBounds(data: unknown, screenIndex: number): PeekabooSnapshotTarget["bounds"] | undefined {
+function screenBounds(
+  data: unknown,
+  screenIndex: number
+): PeekabooSnapshotTarget["bounds"] | undefined {
   const screens = asRecord(data)?.screens
   if (!Array.isArray(screens)) return undefined
   const screen = screens.map(asRecord).find((item) => numberValue(item?.index) === screenIndex)

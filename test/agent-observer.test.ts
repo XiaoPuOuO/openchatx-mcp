@@ -1,8 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-
-import { createAgentObserver } from "../src/server/agent-observer.js"
 import type { AgentIdentity } from "../src/server/agent-context.js"
+import { createAgentObserver } from "../src/server/agent-observer.js"
 
 test("tracks current and recent tool activity for one agent", () => {
   let timestamp = 1_000
@@ -39,7 +38,9 @@ test("queues and delivers steering instructions once", () => {
   assert.equal(instruction?.message, "Focus only on the dashboard.")
 
   timestamp = 2_500
-  assert.deepEqual(observer.drainInstructions(agent), ["Human instruction: Focus only on the dashboard."])
+  assert.deepEqual(observer.drainInstructions(agent), [
+    "Human instruction: Focus only on the dashboard.",
+  ])
   assert.deepEqual(observer.drainInstructions(agent), [])
   assert.equal(observer.listAgents()[0]?.instructions[0]?.deliveredAt, 2_500)
 })

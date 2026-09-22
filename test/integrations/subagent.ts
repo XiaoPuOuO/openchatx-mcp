@@ -1,11 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { getAgentIdentity, type AgentIdentity } from "../../src/server/agent-context.js"
+import { type AgentIdentity, getAgentIdentity } from "../../src/server/agent-context.js"
 import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
-test("delivers a completed subagent event on the next MCP response exactly once", { timeout: 10_000 }, async (t) => {
+test("delivers a completed subagent event on the next MCP response exactly once", {
+  timeout: 10_000,
+}, async (t) => {
   const events = new Map<string, string[]>()
   const chatGptSubagents: ChatGptSubagentService = {
     async ask() {
@@ -30,31 +32,54 @@ test("delivers a completed subagent event on the next MCP response exactly once"
   }
   const running = await startMcpHttpServer({ chatGptSubagents })
   t.after(() => running.close())
-  const other = await connectClient(running.url, "other-subagent-event-client", undefined, false, "other-session")
+  const other = await connectClient(
+    running.url,
+    "other-subagent-event-client",
+    undefined,
+    false,
+    "other-session"
+  )
   t.after(() => other.client.close())
-  await other.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "other-subagent-session" } })
+  await other.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "other-subagent-session" },
+  })
   const unrelated = await other.client.callTool({ name: "shell_list", arguments: {} })
   const unrelatedText = unrelated.content.find((item) => item.type === "text")
   assert.ok(unrelatedText?.type === "text")
-  assert.doesNotMatch(unrelatedText.text, /agent_finished/)
+  assert.doesNotMatch(unrelatedText.text, /agent_finished/u)
 
-  const connected = await connectClient(running.url, "subagent-event-client", undefined, false, "launch-session")
+  const connected = await connectClient(
+    running.url,
+    "subagent-event-client",
+    undefined,
+    false,
+    "launch-session"
+  )
   t.after(() => connected.client.close())
-  await connected.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "subagent-events" } })
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "subagent-events" },
+  })
   events.set("subagent-events", ["agent_finished agent_id=reviewer turn_id=reviewer_turn_1"])
 
   const first = await connected.client.callTool({ name: "shell_list", arguments: {} })
   const firstText = first.content.find((item) => item.type === "text")
   assert.ok(firstText?.type === "text")
-  assert.match(firstText.text, /\*\*Notice:\*\* agent_finished agent_id=reviewer turn_id=reviewer_turn_1/)
+  assert.match(
+    firstText.text,
+    /\*\*Notice:\*\* agent_finished agent_id=reviewer turn_id=reviewer_turn_1/u
+  )
 
   const second = await connected.client.callTool({ name: "shell_list", arguments: {} })
   const secondText = second.content.find((item) => item.type === "text")
   assert.ok(secondText?.type === "text")
-  assert.doesNotMatch(secondText.text, /agent_finished/)
+  assert.doesNotMatch(secondText.text, /agent_finished/u)
 })
 
-test("runs staggered subagents and retrieves turns across MCP client sessions", { timeout: 15_000 }, async (t) => {
+test("runs staggered subagents and retrieves turns across MCP client sessions", {
+  timeout: 15_000,
+}, async (t) => {
   const histories = new Map<string, string[]>()
   const completed = new Map<string, string>()
   const starts: Array<{ agentId: string; at: number; parentAgent?: AgentIdentity }> = []
@@ -108,8 +133,17 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
   const running = await startMcpHttpServer({ chatGptSubagents })
   t.after(() => running.close())
 
-  const first = await connectClient(running.url, "subagent-client-1", undefined, false, "launch-session-1")
-  await first.client.callTool({ name: "start_here", arguments: { mode: "general", task_id: "subagent-state" } })
+  const first = await connectClient(
+    running.url,
+    "subagent-client-1",
+    undefined,
+    false,
+    "launch-session-1"
+  )
+  await first.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "subagent-state" },
+  })
   const started = await first.client.callTool({
     name: "subagent_run",
     arguments: {
@@ -171,18 +205,32 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
     ].join("\n")
   )
 
-  const heartbeat = await second.client.callTool({ name: "subagent_result", arguments: { turn_ids: ["heartbeat-fixture"] } })
-  assert.equal(toolText(heartbeat), '---- turn_id=heartbeat-fixture status=running activity="Searching the web" activity_age_ms=2750 ----')
+  const heartbeat = await second.client.callTool({
+    name: "subagent_result",
+    arguments: { turn_ids: ["heartbeat-fixture"] },
+  })
+  assert.equal(
+    toolText(heartbeat),
+    '---- turn_id=heartbeat-fixture status=running activity="Searching the web" activity_age_ms=2750 ----'
+  )
 
   const followUp = await second.client.callTool({
     name: "subagent_run",
-    arguments: { agents: [{ agent_id: "architecture-reviewer", prompt: "Now critique your answer." }] },
+    arguments: {
+      agents: [{ agent_id: "architecture-reviewer", prompt: "Now critique your answer." }],
+    },
   })
-  assert.equal(toolText(followUp), "turns:\n\n- agent_id=architecture-reviewer turn_id=turn-architecture-reviewer-2 status=running")
+  assert.equal(
+    toolText(followUp),
+    "turns:\n\n- agent_id=architecture-reviewer turn_id=turn-architecture-reviewer-2 status=running"
+  )
 
   const failedStart = await second.client.callTool({
     name: "subagent_run",
     arguments: { agents: [{ agent_id: "unavailable-agent", prompt: "Try to start." }] },
   })
-  assert.equal(toolText(failedStart), 'turns:\n\n- agent_id=unavailable-agent status=failed error="subagent_failed: browser unavailable"')
+  assert.equal(
+    toolText(failedStart),
+    'turns:\n\n- agent_id=unavailable-agent status=failed error="subagent_failed: browser unavailable"'
+  )
 })

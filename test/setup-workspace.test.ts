@@ -16,9 +16,9 @@ test("workspace setup creates starter instructions and create-skill without over
   assert.equal(initial.created, true)
   assert.equal(initial.starterSkillCreated, true)
   const agentsPath = join(workspace, "AGENTS.md")
-  assert.match(await readFile(agentsPath, "utf8"), /# Workspace Instructions/)
+  assert.match(await readFile(agentsPath, "utf8"), /# Workspace Instructions/u)
   const skillPath = join(workspace, "skills", "create-skill", "SKILL.md")
-  assert.match(await readFile(skillPath, "utf8"), /name: create-skill/)
+  assert.match(await readFile(skillPath, "utf8"), /name: create-skill/u)
 
   const catalog = new SkillCatalog(join(workspace, "skills"))
   assert.deepEqual(
@@ -27,12 +27,16 @@ test("workspace setup creates starter instructions and create-skill without over
   )
 
   await writeFile(agentsPath, "# My Instructions\n", "utf8")
-  await writeFile(skillPath, "---\nname: create-skill\ndescription: My custom skill.\n---\n", "utf8")
+  await writeFile(
+    skillPath,
+    "---\nname: create-skill\ndescription: My custom skill.\n---\n",
+    "utf8"
+  )
   const repeated = await initializeWorkspace(workspace)
   assert.equal(repeated.created, false)
   assert.equal(repeated.starterSkillCreated, false)
   assert.equal(await readFile(agentsPath, "utf8"), "# My Instructions\n")
-  assert.match(await readFile(skillPath, "utf8"), /My custom skill/)
+  assert.match(await readFile(skillPath, "utf8"), /My custom skill/u)
 })
 
 test("setup creates all defaults and preserves existing partial configs", async (t) => {
@@ -57,12 +61,17 @@ test("setup creates all defaults and preserves existing partial configs", async 
   assert.deepEqual(scaffold.ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
 
   const scaffoldText = await readFile(initial.configPath, "utf8")
-  assert.match(scaffoldText, /^# url = "https:\/\/your-reserved-domain.ngrok.app"$/m)
+  assert.match(scaffoldText, /^# url = "https:\/\/your-reserved-domain.ngrok.app"$/mu)
   const unchanged = await initializeShellbyConfig(root)
   assert.equal(unchanged.updated, false)
   assert.equal(await readFile(initial.configPath, "utf8"), scaffoldText)
 
-  await writeFile(initial.configPath, scaffoldText.replace(/^# url = /m, "url = ").replace("pooling_enabled = false", "pooling_enabled = true"))
+  await writeFile(
+    initial.configPath,
+    scaffoldText
+      .replace(/^# url = /mu, "url = ")
+      .replace("pooling_enabled = false", "pooling_enabled = true")
+  )
   assert.deepEqual(loadPublicConfig(initial.configPath).ngrok, {
     enabled: true,
     api_port: 4040,
@@ -85,7 +94,10 @@ test("setup creates all defaults and preserves existing partial configs", async 
   assert.equal(migrated.mcp.tool_output, "compact")
   assert.equal(migrated.ui.enabled, false)
   assert.deepEqual(migrated.ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
-  assert.equal(await readFile(initial.configPath, "utf8"), 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
+  assert.equal(
+    await readFile(initial.configPath, "utf8"),
+    'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n'
+  )
 
   const complete = await initializeShellbyConfig(root)
   assert.equal(complete.created, false)
@@ -95,10 +107,18 @@ test("setup creates all defaults and preserves existing partial configs", async 
 test("setup preserves an active ngrok URL without adding a duplicate example", async (t) => {
   const root = await tempDir(t, "shellby-config-ngrok-")
   const { configPath } = await initializeShellbyConfig(root)
-  await writeFile(configPath, 'workspace = "~/Custom"\n\n[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = true\n')
+  await writeFile(
+    configPath,
+    'workspace = "~/Custom"\n\n[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = true\n'
+  )
 
   const migrated = await initializeShellbyConfig(root)
   assert.equal(migrated.updated, false)
-  assert.deepEqual(loadPublicConfig(configPath).ngrok, { enabled: true, api_port: 4040, url: "https://custom.ngrok.app", pooling_enabled: true })
-  assert.doesNotMatch(await readFile(configPath, "utf8"), /^# url = /m)
+  assert.deepEqual(loadPublicConfig(configPath).ngrok, {
+    enabled: true,
+    api_port: 4040,
+    url: "https://custom.ngrok.app",
+    pooling_enabled: true,
+  })
+  assert.doesNotMatch(await readFile(configPath, "utf8"), /^# url = /mu)
 })

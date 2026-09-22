@@ -2,11 +2,10 @@ import { randomUUID } from "node:crypto"
 import { stripVTControlCharacters } from "node:util"
 
 import type { CDPSession } from "playwright-core"
-
-import { tokenChunk } from "../../tokenizer.js"
 import { MCP_CONFIG } from "../../config.js"
+import { tokenChunk } from "../../tokenizer.js"
 import { utf8Prefix } from "../../utils.js"
-import { encodeImageForMcp, type EncodedMcpImage } from "../image/image-encoding.js"
+import { type EncodedMcpImage, encodeImageForMcp } from "../image/image-encoding.js"
 
 type WebsiteContentFormat = "markdown" | "html"
 
@@ -56,7 +55,13 @@ interface FetchedImageResource {
 type FetchedResource = FetchedTextResource | FetchedImageResource
 
 export interface WebPageOpenerOptions {
-  renderPage?: (url: string, format: WebsiteContentFormat, compact: boolean, signal?: AbortSignal, resourceByteLimit?: number) => Promise<FetchedResource>
+  renderPage?: (
+    url: string,
+    format: WebsiteContentFormat,
+    compact: boolean,
+    signal?: AbortSignal,
+    resourceByteLimit?: number
+  ) => Promise<FetchedResource>
   defaultOutputTokens?: number
   maxOutputTokens?: number
   documentByteLimit?: number
@@ -122,17 +127,29 @@ export class WebPageOpener {
         throw new WebOpenError("invalid_cursor", "The cursor does not belong to the requested URL.")
       }
       if (format !== document.format) {
-        throw new WebOpenError("invalid_cursor", `The cursor belongs to format ${document.format}; continue with the same format.`)
+        throw new WebOpenError(
+          "invalid_cursor",
+          `The cursor belongs to format ${document.format}; continue with the same format.`
+        )
       }
       if (compact !== document.compact) {
-        throw new WebOpenError("invalid_cursor", `The cursor belongs to compact=${document.compact}; continue with the same compact setting.`)
+        throw new WebOpenError(
+          "invalid_cursor",
+          `The cursor belongs to compact=${document.compact}; continue with the same compact setting.`
+        )
       }
       offset = cursor.offset
       if (offset < 0 || offset > document.content.length) {
         throw new WebOpenError("invalid_cursor", "The cursor offset is invalid.")
       }
     } else {
-      const rendered = await this.renderPage(requestedUrl, format, compact, input.signal, this.resourceByteLimit)
+      const rendered = await this.renderPage(
+        requestedUrl,
+        format,
+        compact,
+        input.signal,
+        this.resourceByteLimit
+      )
       if (rendered.kind === "image") {
         return {
           kind: "image",
@@ -194,7 +211,10 @@ export class WebPageOpener {
     const document = this.documents.get(id)
     if (!document || document.expiresAt <= this.now()) {
       if (document) this.documents.delete(id)
-      throw new WebOpenError("cursor_expired", "The cursor has expired. Open the page again without a cursor.")
+      throw new WebOpenError(
+        "cursor_expired",
+        "The cursor has expired. Open the page again without a cursor."
+      )
     }
 
     this.documents.delete(id)
@@ -221,7 +241,13 @@ export class WebPageOpener {
 
 export class WebOpenError extends Error {
   constructor(
-    readonly code: "invalid_url" | "invalid_cursor" | "cursor_expired" | "open_failed" | "resource_too_large" | "unsupported_content_type",
+    readonly code:
+      | "invalid_url"
+      | "invalid_cursor"
+      | "cursor_expired"
+      | "open_failed"
+      | "resource_too_large"
+      | "unsupported_content_type",
     message: string
   ) {
     super(message)
@@ -315,12 +341,18 @@ async function renderWithCloakBrowser(
             ...(contentType ? { contentType } : {}),
             body: Buffer.alloc(0),
           }
-          await cdp.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Aborted" })
+          await cdp.send("Fetch.failRequest", {
+            requestId: event.requestId,
+            errorReason: "Aborted",
+          })
           return
         }
 
         if (Number.isFinite(declaredLength) && declaredLength > resourceByteLimit) {
-          throw new WebOpenError("resource_too_large", `Resource is ${declaredLength} bytes; the fetch limit is ${resourceByteLimit} bytes.`)
+          throw new WebOpenError(
+            "resource_too_large",
+            `Resource is ${declaredLength} bytes; the fetch limit is ${resourceByteLimit} bytes.`
+          )
         }
 
         const mediaKind = classifyMediaType(normalizedMediaType(contentType))
@@ -336,7 +368,10 @@ async function renderWithCloakBrowser(
             ...(contentType ? { contentType } : {}),
             body: Buffer.alloc(0),
           }
-          await cdp.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Aborted" })
+          await cdp.send("Fetch.failRequest", {
+            requestId: event.requestId,
+            errorReason: "Aborted",
+          })
           return
         }
 
@@ -363,7 +398,10 @@ async function renderWithCloakBrowser(
       } catch (error) {
         capturedError = error
         try {
-          await cdp.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Aborted" })
+          await cdp.send("Fetch.failRequest", {
+            requestId: event.requestId,
+            errorReason: "Aborted",
+          })
         } catch {
           // The request may already be resolved after a streaming failure.
         }
@@ -430,7 +468,10 @@ async function renderWithCloakBrowser(
     }
   } catch (error) {
     if (error instanceof WebOpenError) throw error
-    throw new WebOpenError("open_failed", stripVTControlCharacters(error instanceof Error ? error.message : String(error)))
+    throw new WebOpenError(
+      "open_failed",
+      stripVTControlCharacters(error instanceof Error ? error.message : String(error))
+    )
   } finally {
     await browser.close()
   }
@@ -440,7 +481,12 @@ function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308
 }
 
-async function readBoundedCdpBody(cdp: CDPSession, requestId: string, resourceByteLimit: number, signal?: AbortSignal): Promise<Buffer> {
+async function readBoundedCdpBody(
+  cdp: CDPSession,
+  requestId: string,
+  resourceByteLimit: number,
+  signal?: AbortSignal
+): Promise<Buffer> {
   const { stream } = await cdp.send("Fetch.takeResponseBodyAsStream", { requestId })
   const chunks: Buffer[] = []
   let totalBytes = 0
@@ -451,7 +497,10 @@ async function readBoundedCdpBody(cdp: CDPSession, requestId: string, resourceBy
       const chunk = Buffer.from(result.data, result.base64Encoded ? "base64" : "utf8")
       totalBytes += chunk.byteLength
       if (totalBytes > resourceByteLimit) {
-        throw new WebOpenError("resource_too_large", `Resource exceeds the ${resourceByteLimit} byte fetch limit.`)
+        throw new WebOpenError(
+          "resource_too_large",
+          `Resource exceeds the ${resourceByteLimit} byte fetch limit.`
+        )
       }
       if (chunk.length > 0) chunks.push(chunk)
       if (result.eof) break
@@ -481,7 +530,13 @@ function classifyMediaType(mediaType: string): MediaKind {
   if (mediaType === "application/pdf") return "pdf"
   if (mediaType.startsWith("image/")) return "image"
   if (isTextMediaType(mediaType)) return "text"
-  if (!mediaType || mediaType === "application/octet-stream" || mediaType === "binary/octet-stream" || mediaType === "application/download") return "generic"
+  if (
+    !mediaType ||
+    mediaType === "application/octet-stream" ||
+    mediaType === "binary/octet-stream" ||
+    mediaType === "application/download"
+  )
+    return "generic"
   return "unsupported"
 }
 
@@ -494,10 +549,23 @@ function sniffGenericResource(body: Buffer): CapturedResourceKind | "html" {
 }
 
 function hasImageSignature(body: Buffer): boolean {
-  if (body.length >= 8 && body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return true
+  if (
+    body.length >= 8 &&
+    body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return true
   if (body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) return true
-  if (body.length >= 6 && (body.subarray(0, 6).toString("ascii") === "GIF87a" || body.subarray(0, 6).toString("ascii") === "GIF89a")) return true
-  return body.length >= 12 && body.subarray(0, 4).toString("ascii") === "RIFF" && body.subarray(8, 12).toString("ascii") === "WEBP"
+  if (
+    body.length >= 6 &&
+    (body.subarray(0, 6).toString("ascii") === "GIF87a" ||
+      body.subarray(0, 6).toString("ascii") === "GIF89a")
+  )
+    return true
+  return (
+    body.length >= 12 &&
+    body.subarray(0, 4).toString("ascii") === "RIFF" &&
+    body.subarray(8, 12).toString("ascii") === "WEBP"
+  )
 }
 
 function isTextMediaType(mediaType: string): boolean {
@@ -536,7 +604,8 @@ function looksLikeText(body: Buffer): boolean {
 }
 
 function decodeTextResource(body: Buffer, contentType?: string): string {
-  const charset = /(?:^|;)\s*charset\s*=\s*["']?([^;"']+)/i.exec(contentType ?? "")?.[1]?.trim() || "utf-8"
+  const charset =
+    /(?:^|;)\s*charset\s*=\s*["']?([^;"']+)/iu.exec(contentType ?? "")?.[1]?.trim() || "utf-8"
   try {
     return new TextDecoder(charset).decode(body)
   } catch {
@@ -590,10 +659,16 @@ async function extractPdf(body: Buffer): Promise<{ title: string; content: strin
   const pdf = await getDocumentProxy(new Uint8Array(body))
   try {
     if (pdf.numPages > PDF_PAGE_LIMIT) {
-      throw new WebOpenError("resource_too_large", `PDF has ${pdf.numPages} pages; the fetch limit is ${PDF_PAGE_LIMIT} pages.`)
+      throw new WebOpenError(
+        "resource_too_large",
+        `PDF has ${pdf.numPages} pages; the fetch limit is ${PDF_PAGE_LIMIT} pages.`
+      )
     }
 
-    const [{ text }, meta] = await Promise.all([extractText(pdf, { mergePages: false }), getMeta(pdf)])
+    const [{ text }, meta] = await Promise.all([
+      extractText(pdf, { mergePages: false }),
+      getMeta(pdf),
+    ])
     const title = typeof meta.info["Title"] === "string" ? meta.info["Title"].trim() : ""
     const content = text.map((page, index) => `## Page ${index + 1}\n\n${page.trim()}`).join("\n\n")
     return { title, content }
@@ -613,7 +688,9 @@ function titleFromUrl(value: string): string {
   }
 }
 
-async function waitForRenderedPageToSettle(page: { evaluate: (expression: string) => Promise<unknown> }): Promise<void> {
+async function waitForRenderedPageToSettle(page: {
+  evaluate: (expression: string) => Promise<unknown>
+}): Promise<void> {
   await page.evaluate(`new Promise((resolve) => {
     const startedAt = performance.now();
     let lastMutationAt = startedAt;
@@ -637,10 +714,25 @@ async function compactRenderedHtml(html: string): Promise<string> {
   if (!body) return ""
 
   document.querySelector("head")?.remove()
-  body.querySelectorAll('script, style, noscript, template, nav, footer, svg, [hidden], [aria-hidden="true"]').forEach((element) => element.remove())
+  body
+    .querySelectorAll(
+      'script, style, noscript, template, nav, footer, svg, [hidden], [aria-hidden="true"]'
+    )
+    .forEach((element) => element.remove())
 
-  const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/i
-  const strippedAttributes = new Set(["class", "style", "srcset", "sizes", "width", "height", "loading", "decoding", "fetchpriority"])
+  const hiddenStyle =
+    /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/iu
+  const strippedAttributes = new Set([
+    "class",
+    "style",
+    "srcset",
+    "sizes",
+    "width",
+    "height",
+    "loading",
+    "decoding",
+    "fetchpriority",
+  ])
 
   for (const element of document.querySelectorAll("*")) {
     const style = element.getAttribute("style")
@@ -684,7 +776,9 @@ function encodeCursor(payload: CursorPayload): string {
 
 function decodeCursor(value: string): CursorPayload {
   try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Partial<CursorPayload>
+    const parsed = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8")
+    ) as Partial<CursorPayload>
     if (
       parsed.v !== 1 ||
       typeof parsed.documentId !== "string" ||

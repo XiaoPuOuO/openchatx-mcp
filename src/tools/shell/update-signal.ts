@@ -15,7 +15,11 @@ export function createUpdateSignal(): UpdateSignal {
     for (const resolve of pending) resolve()
   }
 
-  async function wait(observedVersion: number, waitMs: number, signal?: AbortSignal): Promise<void> {
+  async function wait(
+    observedVersion: number,
+    waitMs: number,
+    signal?: AbortSignal
+  ): Promise<void> {
     if (waitMs === 0 || version !== observedVersion || signal?.aborted) return
 
     await new Promise<void>((resolve) => {

@@ -1,11 +1,14 @@
 {
   "name": "shellby-ui",
-  "private": true,
   "version": "0.0.1",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build",
+    "dev": "vite",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,6 +23,7 @@
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@tailwindcss/vite": "^4.1.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.3",

@@ -1,8 +1,8 @@
+import { spawn } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { spawn } from "node:child_process"
+import process from "node:process"
 import { fileURLToPath } from "node:url"
-
 import { checkPublicRuntime, checkRtkRuntime } from "./preflight.mjs"
 import { failure, intro, note, outro, spinner } from "./setup-ui.mjs"
 import { initializeShellbyConfig, initializeWorkspace } from "./workspace-setup.mjs"
@@ -13,14 +13,19 @@ const configOnly = process.argv.includes("--config-only")
 if (configOnly) {
   const config = await initializeShellbyConfig()
   await import("../src/config.ts")
-  console.log(`${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
+  console.log(
+    `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`
+  )
   process.exit(0)
 }
 
 intro()
 
 const config = await initializeShellbyConfig()
-note("Configuration", `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`)
+note(
+  "Configuration",
+  `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`
+)
 const { MCP_CONFIG } = await import("../src/config.ts")
 
 const prerequisiteStep = spinner("Checking prerequisites")
@@ -68,7 +73,10 @@ if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
   note("Multi-agent", combinedOutput(browser))
 }
 
-outro(["Sign into ChatGPT if the dedicated Chrome window opened.", "Run `npm start` to launch Shellby MCP."])
+outro([
+  "Sign into ChatGPT if the dedicated Chrome window opened.",
+  "Run `npm start` to launch Shellby MCP.",
+])
 
 async function commandStep(label, successMessage, command, args, options = {}) {
   const step = spinner(label)
@@ -84,7 +92,9 @@ async function commandStep(label, successMessage, command, args, options = {}) {
   }
 
   step.fail(`${label} failed`)
-  failure(`${label} failed`, [combinedOutput(result) || `Command exited with status ${result.status}.`])
+  failure(`${label} failed`, [
+    combinedOutput(result) || `Command exited with status ${result.status}.`,
+  ])
   process.exit(result.status ?? 1)
 }
 

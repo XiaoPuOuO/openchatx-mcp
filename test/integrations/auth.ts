@@ -9,7 +9,9 @@ import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 import { ShellbyAuthStore } from "../../src/auth/auth.js"
 import { connectClient, postWithHost, startMcpHttpServer } from "./helpers.js"
 
-test("remote MCP binds one OpenAI subject while local MCP remains available", { timeout: 20_000 }, async (t) => {
+test("remote MCP binds one OpenAI subject while local MCP remains available", {
+  timeout: 20_000,
+}, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-mcp-remote-auth-"))
   const authStore = new ShellbyAuthStore(join(root, "auth.json"))
   await authStore.ensureState()
@@ -41,7 +43,10 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", { 
   t.after(() => discovery.client.close())
   assert.ok((await discovery.client.listTools()).tools.length > 0)
   assert.equal((await authStore.readState()).subject, null)
-  await assert.rejects(() => discovery.client.callTool({ name: "shell_list", arguments: {} }), /403|denied/i)
+  await assert.rejects(
+    () => discovery.client.callTool({ name: "shell_list", arguments: {} }),
+    /403|denied/iu
+  )
   assert.equal((await authStore.readState()).subject, null)
 
   const owner = await connectClient(running.url, "remote-owner", "subject-a", true)
@@ -49,13 +54,21 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", { 
   assert.ok((await owner.client.callTool({ name: "shell_list", arguments: {} })).content)
   assert.equal((await authStore.readState()).subject, "subject-a")
 
-  const sameOwner = await connectClient(running.url, "remote-owner-new-conversation", "subject-a", true)
+  const sameOwner = await connectClient(
+    running.url,
+    "remote-owner-new-conversation",
+    "subject-a",
+    true
+  )
   t.after(() => sameOwner.client.close())
   assert.ok((await sameOwner.client.callTool({ name: "shell_list", arguments: {} })).content)
 
   const otherSubject = await connectClient(running.url, "remote-other-subject", "subject-b", true)
   t.after(() => otherSubject.client.close())
-  await assert.rejects(() => otherSubject.client.callTool({ name: "shell_list", arguments: {} }), /403|denied/i)
+  await assert.rejects(
+    () => otherSubject.client.callTool({ name: "shell_list", arguments: {} }),
+    /403|denied/iu
+  )
 })
 
 test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, async (t) => {
@@ -80,7 +93,12 @@ test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, as
     await rm(root, { recursive: true, force: true })
   })
 
-  const afterRestart = await connectClient(remoteUrl, "remote-owner-after-restart", "subject-a", true)
+  const afterRestart = await connectClient(
+    remoteUrl,
+    "remote-owner-after-restart",
+    "subject-a",
+    true
+  )
   t.after(() => afterRestart.client.close())
   assert.ok((await afterRestart.client.callTool({ name: "shell_list", arguments: {} })).content)
 })

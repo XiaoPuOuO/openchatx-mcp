@@ -20,7 +20,10 @@ export function appendToolEvents(result: unknown, events: readonly string[]): un
   if (events.length === 0 || !isRecord(result)) return result
   return {
     ...result,
-    content: appendTextContent(result.content, events.map((event) => `**Notice:** ${event}`).join("\n")),
+    content: appendTextContent(
+      result.content,
+      events.map((event) => `**Notice:** ${event}`).join("\n")
+    ),
   }
 }
 
@@ -38,7 +41,8 @@ function renderToolStructuredContent(toolName: string, value: unknown): string {
 }
 
 function renderShellResult(value: unknown): string {
-  if (!isRecord(value) || !Array.isArray(value.commands) || !value.commands.every(isRecord)) return renderStructuredContent(value)
+  if (!isRecord(value) || !Array.isArray(value.commands) || !value.commands.every(isRecord))
+    return renderStructuredContent(value)
 
   const { commands, output, ...metadata } = value
   return renderStructuredContent({
@@ -60,17 +64,26 @@ function renderApplyPatchResult(value: unknown): string {
   const inline: string[] = []
   const sections: string[] = []
   if (typeof value.status === "string") inline.push(`status=${value.status}`)
-  if (typeof value.exit_code === "number" || value.exit_code === null) inline.push(`exit_code=${String(value.exit_code)}`)
+  if (typeof value.exit_code === "number" || value.exit_code === null)
+    inline.push(`exit_code=${String(value.exit_code)}`)
   if (value.output_dropped === true) inline.push("output_dropped=true")
-  if (typeof value.changed === "string" && value.changed) sections.push(`changed:\n${value.changed}`)
+  if (typeof value.changed === "string" && value.changed)
+    sections.push(`changed:\n${value.changed}`)
   if (typeof value.failed === "string" && value.failed) sections.push(`failed:\n${value.failed}`)
   if (typeof value.output === "string" && value.output) sections.push(`output:\n\n${value.output}`)
 
-  return [inline.join(" "), ...sections].filter(Boolean).join("\n\n") || renderStructuredContent(value)
+  return (
+    [inline.join(" "), ...sections].filter(Boolean).join("\n\n") || renderStructuredContent(value)
+  )
 }
 
 function renderSubagentResult(value: unknown): string {
-  if (!isRecord(value) || Object.keys(value).some((key) => key !== "turns") || !Array.isArray(value.turns) || !value.turns.every(isRecord)) {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => key !== "turns") ||
+    !Array.isArray(value.turns) ||
+    !value.turns.every(isRecord)
+  ) {
     return renderStructuredContent(value)
   }
   if (value.turns.length === 0) return renderStructuredContent(value)
@@ -80,7 +93,8 @@ function renderSubagentResult(value: unknown): string {
       const metadata: string[] = []
       for (const key of ["turn_id", "status", "activity", "activity_age_ms"] as const) {
         const item = turn[key]
-        if (item !== undefined && isInlineScalar(item)) metadata.push(`${key}=${formatScalar(item)}`)
+        if (item !== undefined && isInlineScalar(item))
+          metadata.push(`${key}=${formatScalar(item)}`)
       }
       if (metadata.length === 0) return renderRecordListItem(turn, 0)
 
@@ -111,7 +125,9 @@ function renderRecord(record: Record<string, unknown>, depth: number): string {
     }
 
     if (typeof value === "string") {
-      sections.push(`${key}:${key === "output" ? "\n\n" : "\n"}${depth > 0 ? indentBlock(value) : value}`)
+      sections.push(
+        `${key}:${key === "output" ? "\n\n" : "\n"}${depth > 0 ? indentBlock(value) : value}`
+      )
       continue
     }
 
@@ -195,7 +211,13 @@ function wrapInlineParts(parts: readonly string[]): string {
 }
 
 function isInlineScalar(value: unknown): boolean {
-  if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean") return true
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  )
+    return true
   return typeof value === "string" && !value.includes("\n") && value.length <= SHORT_STRING_MAX
 }
 
@@ -204,12 +226,20 @@ function formatScalar(value: unknown): string {
   if (typeof value !== "string") return String(value)
   if (value === "") return '""'
   if (isAmbiguousBareString(value)) return JSON.stringify(value)
-  if (/^[A-Za-z0-9_./:@%+,-]+$/.test(value)) return value
+  if (/^[A-Za-z0-9_./:@%+,-]+$/u.test(value)) return value
   return JSON.stringify(value)
 }
 
 function isAmbiguousBareString(value: string): boolean {
-  if (value === "null" || value === "true" || value === "false" || value === "NaN" || value === "Infinity" || value === "-Infinity") return true
+  if (
+    value === "null" ||
+    value === "true" ||
+    value === "false" ||
+    value === "NaN" ||
+    value === "Infinity" ||
+    value === "-Infinity"
+  )
+    return true
   return value.trim() === value && value !== "" && Number.isFinite(Number(value))
 }
 

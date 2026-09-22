@@ -202,22 +202,32 @@ export function migrateRoomLayout(value: Partial<RoomLayout> | undefined): RoomL
   next.rows = Number.isInteger(value.rows) ? Number(value.rows) : defaults.rows
   next.tileSize = typeof value.tileSize === "number" ? value.tileSize : defaults.tileSize
   const tileCount = next.cols * next.rows
-  next.tiles = Array.isArray(value.tiles) && value.tiles.length === tileCount
-    ? value.tiles.map((tile) => {
-        if (tile.type === "floor") return { ...tile, tint: tile.tint ?? DEFAULT_FLOOR_TINT }
-        if (tile.type === "wall") return { ...tile, tint: tile.tint ?? DEFAULT_WALL_TINT }
-        return { type: "void" as const }
-      })
-    : createDefaultTiles()
-  next.carpetTiles = Array.isArray(value.carpetTiles) && value.carpetTiles.length === tileCount
-    ? structuredClone(value.carpetTiles)
-    : Array.from({ length: tileCount }, () => null)
+  next.tiles =
+    Array.isArray(value.tiles) && value.tiles.length === tileCount
+      ? value.tiles.map((tile) => {
+          if (tile.type === "floor") return { ...tile, tint: tile.tint ?? DEFAULT_FLOOR_TINT }
+          if (tile.type === "wall") return { ...tile, tint: tile.tint ?? DEFAULT_WALL_TINT }
+          return { type: "void" as const }
+        })
+      : createDefaultTiles()
+  next.carpetTiles =
+    Array.isArray(value.carpetTiles) && value.carpetTiles.length === tileCount
+      ? structuredClone(value.carpetTiles)
+      : Array.from({ length: tileCount }, () => null)
   next.pets = Array.isArray(value.pets) ? structuredClone(value.pets) : []
   next.characterAsset = typeof value.characterAsset === "string" ? value.characterAsset : null
   next.rugs = Array.isArray(value.rugs) ? structuredClone(value.rugs) : defaults.rugs
-  next.wallDecor = Array.isArray(value.wallDecor) ? structuredClone(value.wallDecor) : defaults.wallDecor
-  next.furniture = Array.isArray(value.furniture) ? structuredClone(value.furniture) : defaults.furniture
-  next.stations = value.stations ? structuredClone(value.stations) as RoomLayout["stations"] : defaults.stations
-  next.subagentSeat = value.subagentSeat ? structuredClone(value.subagentSeat) : defaults.subagentSeat
+  next.wallDecor = Array.isArray(value.wallDecor)
+    ? structuredClone(value.wallDecor)
+    : defaults.wallDecor
+  next.furniture = Array.isArray(value.furniture)
+    ? structuredClone(value.furniture)
+    : defaults.furniture
+  next.stations = value.stations
+    ? (structuredClone(value.stations) as RoomLayout["stations"])
+    : defaults.stations
+  next.subagentSeat = value.subagentSeat
+    ? structuredClone(value.subagentSeat)
+    : defaults.subagentSeat
   return next
 }

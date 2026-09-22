@@ -15,9 +15,10 @@ hljs.registerLanguage("json", json)
 
 export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: () => void }) {
   const detail = call?.detail || call?.summary || "No captured input for this tool call."
-  const highlighted = call?.detailLanguage && hljs.getLanguage(call.detailLanguage)
-    ? hljs.highlight(detail, { language: call.detailLanguage }).value
-    : hljs.highlightAuto(detail).value
+  const highlighted =
+    call?.detailLanguage && hljs.getLanguage(call.detailLanguage)
+      ? hljs.highlight(detail, { language: call.detailLanguage }).value
+      : hljs.highlightAuto(detail).value
 
   return (
     <Dialog.Root open={Boolean(call)} onOpenChange={(open) => !open && onClose()}>
@@ -27,17 +28,30 @@ export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: ()
           <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
             <div className="min-w-0">
               <Dialog.Title className="truncate text-base font-semibold">{call?.tool}</Dialog.Title>
-              {call?.summary ? <Dialog.Description className="mt-1 truncate text-xs text-muted-foreground">{call.summary}</Dialog.Description> : null}
+              {call?.summary ? (
+                <Dialog.Description className="mt-1 truncate text-xs text-muted-foreground">
+                  {call.summary}
+                </Dialog.Description>
+              ) : null}
             </div>
             <Dialog.Close asChild>
-              <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Close tool call details">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                aria-label="Close tool call details"
+              >
                 <X className="size-4" />
               </Button>
             </Dialog.Close>
           </div>
           <div className="min-h-0 overflow-auto p-5">
             <pre className="overflow-x-auto rounded-lg border bg-muted/30 p-4 text-xs leading-5">
-              <code className="hljs bg-transparent p-0" dangerouslySetInnerHTML={{ __html: highlighted }} />
+              <code
+                className="hljs bg-transparent p-0"
+                dangerouslySetInnerHTML={{ __html: highlighted }}
+              />
             </pre>
           </div>
         </Dialog.Content>

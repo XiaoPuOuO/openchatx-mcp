@@ -1,12 +1,20 @@
-import { McpServer } from "@modelcontextprotocol/server"
-import type { CallToolResult } from "@modelcontextprotocol/server"
+import type { CallToolResult, McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { asRecord, booleanValue, finiteNumber as numberValue } from "../../utils.js"
-import { PeekabooClient, PeekabooError, type PeekabooObservation, type PeekabooResult, type PeekabooSnapshotTarget } from "./peekaboo.js"
+import {
+  type PeekabooClient,
+  PeekabooError,
+  type PeekabooObservation,
+  type PeekabooResult,
+  type PeekabooSnapshotTarget,
+} from "./peekaboo.js"
 
 const appInput = z.string().min(1).describe("App name, bundle ID, or PID:12345.")
-const snapshotInput = z.string().min(1).describe("Snapshot ID from computer_observe or computer_inspect.")
+const snapshotInput = z
+  .string()
+  .min(1)
+  .describe("Snapshot ID from computer_observe or computer_inspect.")
 const windowIdInput = z.number().int().positive().describe("Window ID from computer_list.")
 
 const targetFields = {
@@ -57,11 +65,19 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
     .object({
       app: appInput.optional(),
       window_id: windowIdInput.optional(),
-      screen_index: z.number().int().nonnegative().optional().describe("Display index. Omit for the frontmost window."),
+      screen_index: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("Display index. Omit for the frontmost window."),
       annotate: z.boolean().default(false).describe("Overlay element IDs."),
     })
     .superRefine((value, context) => {
-      if (value.screen_index !== undefined && (value.app !== undefined || value.window_id !== undefined)) {
+      if (
+        value.screen_index !== undefined &&
+        (value.app !== undefined || value.window_id !== undefined)
+      ) {
         context.addIssue({
           code: "custom",
           message: "screen_index cannot be combined with app or window_id.",
@@ -72,7 +88,8 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_observe",
     {
-      description: "Capture a screenshot and snapshot ID for an app, window, screen, or the frontmost window. Observe again after the UI changes.",
+      description:
+        "Capture a screenshot and snapshot ID for an app, window, screen, or the frontmost window. Observe again after the UI changes.",
       inputSchema: observeSchema,
       annotations: {
         readOnlyHint: true,
@@ -104,7 +121,8 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_inspect",
     {
-      description: "Inspect an observed snapshot for accessible elements. Use the returned snapshot_id with its element IDs.",
+      description:
+        "Inspect an observed snapshot for accessible elements. Use the returned snapshot_id with its element IDs.",
       inputSchema: z.object({
         snapshot_id: snapshotInput,
         max_depth: z.number().int().min(1).max(20).default(8),
@@ -123,7 +141,16 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         const target = requireSnapshotTarget(peekaboo, snapshot_id)
         const args = ["see"]
         addObservationTargetArgs(args, target)
-        args.push("--tree", "--no-screenshot", "--depth", String(max_depth), "--max-elements", String(max_elements), "--max-children", String(max_children))
+        args.push(
+          "--tree",
+          "--no-screenshot",
+          "--depth",
+          String(max_depth),
+          "--max-elements",
+          String(max_elements),
+          "--max-children",
+          String(max_children)
+        )
         const result = await peekaboo.run(args, ctx.mcpReq.signal)
         const inspectedSnapshotId = stringValue(asRecord(result.data)?.snapshot_id)
         if (inspectedSnapshotId) peekaboo.rememberSnapshotTarget(inspectedSnapshotId, target)
@@ -155,20 +182,31 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
           message: "x and y must be supplied together.",
         })
       }
-      const targetCount = [value.element_id, value.query, hasCoordinates ? true : undefined].filter((item) => item !== undefined).length
+      const targetCount = [value.element_id, value.query, hasCoordinates ? true : undefined].filter(
+        (item) => item !== undefined
+      ).length
       if (targetCount !== 1) {
         context.addIssue({
           code: "custom",
           message: "Supply exactly one target: element_id, query, or x and y.",
         })
       }
-      if (value.long_press && ((value.button !== undefined && value.button !== "left") || (value.click_count !== undefined && value.click_count !== 1))) {
+      if (
+        value.long_press &&
+        ((value.button !== undefined && value.button !== "left") ||
+          (value.click_count !== undefined && value.click_count !== 1))
+      ) {
         context.addIssue({
           code: "custom",
           message: "long_press cannot be combined with a non-left button or multi-click.",
         })
       }
-      if (value.button !== undefined && value.button !== "left" && value.click_count !== undefined && value.click_count !== 1) {
+      if (
+        value.button !== undefined &&
+        value.button !== "left" &&
+        value.click_count !== undefined &&
+        value.click_count !== 1
+      ) {
         context.addIssue({
           code: "custom",
           message: "right and middle buttons cannot be combined with double- or triple-click.",
@@ -202,7 +240,9 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
           const coordinates = clickCoordinates(target, input.x!, input.y!)
           args.push("--at", `${coordinates.x},${coordinates.y}`)
           addSnapshotTargetArgs(args, target)
-          const exactWindowTarget = target.windowId !== undefined && !(target.kind?.toLowerCase().includes("screen") ?? false)
+          const exactWindowTarget =
+            target.windowId !== undefined &&
+            !(target.kind?.toLowerCase().includes("screen") ?? false)
           if (exactWindowTarget) {
             if (!input.foreground) localExactWindowTarget = target
           } else {
@@ -226,7 +266,11 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       if (input.wait_ms !== undefined) args.push("--wait-for", String(input.wait_ms))
       if (localExactWindowTarget) {
         try {
-          const result = await peekaboo.runWithFreshLocalWindowSnapshot(localExactWindowTarget, args, ctx.mcpReq.signal)
+          const result = await peekaboo.runWithFreshLocalWindowSnapshot(
+            localExactWindowTarget,
+            args,
+            ctx.mcpReq.signal
+          )
           return commandResult(result, "Click completed.")
         } catch (error) {
           return peekabooToolError(error)
@@ -246,10 +290,16 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       delay_ms: z.number().int().min(0).max(1_000).optional(),
     })
     .superRefine((value, context) => {
-      if (!value.foreground && value.app === undefined && value.window_id === undefined && value.snapshot_id === undefined) {
+      if (
+        !value.foreground &&
+        value.app === undefined &&
+        value.window_id === undefined &&
+        value.snapshot_id === undefined
+      ) {
         context.addIssue({
           code: "custom",
-          message: "Background typing requires app, window_id, or snapshot_id; otherwise set foreground=true.",
+          message:
+            "Background typing requires app, window_id, or snapshot_id; otherwise set foreground=true.",
         })
       }
     })
@@ -278,7 +328,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
 
   const keyToken = z
     .string()
-    .regex(/^[A-Za-z0-9_]+$/)
+    .regex(/^[A-Za-z0-9_]+$/u)
     .describe("Key such as return, tab, escape, cmd, shift, or a letter.")
 
   const pressSchema = z
@@ -292,7 +342,8 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       if (!value.foreground && value.window_id === undefined && value.snapshot_id === undefined) {
         context.addIssue({
           code: "custom",
-          message: "Background key presses require an exact window_id or fresh snapshot_id; app-only and targetless presses require foreground=true.",
+          message:
+            "Background key presses require an exact window_id or fresh snapshot_id; app-only and targetless presses require foreground=true.",
         })
       }
     })
@@ -328,7 +379,8 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       if (!value.foreground && value.window_id === undefined && value.snapshot_id === undefined) {
         context.addIssue({
           code: "custom",
-          message: "Background hotkeys require an exact window_id or fresh snapshot_id; app-only and targetless hotkeys require foreground=true.",
+          message:
+            "Background hotkeys require an exact window_id or fresh snapshot_id; app-only and targetless hotkeys require foreground=true.",
         })
       }
     })
@@ -379,7 +431,10 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         })
       }
       if (hasCoordinates && !value.snapshot_id) {
-        context.addIssue({ code: "custom", message: "snapshot_id is required for background coordinate scrolling." })
+        context.addIssue({
+          code: "custom",
+          message: "snapshot_id is required for background coordinate scrolling.",
+        })
       }
       if (!value.element_id && !hasCoordinates && !value.foreground) {
         context.addIssue({
@@ -389,7 +444,11 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       }
       if (
         value.foreground &&
-        (value.element_id !== undefined || hasCoordinates || value.app !== undefined || value.window_id !== undefined || value.snapshot_id !== undefined)
+        (value.element_id !== undefined ||
+          hasCoordinates ||
+          value.app !== undefined ||
+          value.window_id !== undefined ||
+          value.snapshot_id !== undefined)
       ) {
         context.addIssue({
           code: "custom",
@@ -407,7 +466,8 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_scroll",
     {
-      description: "Scroll an element or screenshot coordinate in the background, or set foreground=true to use the physical pointer.",
+      description:
+        "Scroll an element or screenshot coordinate in the background, or set foreground=true to use the physical pointer.",
       inputSchema: scrollSchema,
       annotations: {
         readOnlyHint: false,
@@ -428,11 +488,18 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
           const target = requireSnapshotTarget(peekaboo, input.snapshot_id!)
           const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
           if (screenCapture || target.windowId === undefined) {
-            throw new PeekabooError("EXACT_WINDOW_REQUIRED", "Background coordinate scrolling requires an exact window observation.")
+            throw new PeekabooError(
+              "EXACT_WINDOW_REQUIRED",
+              "Background coordinate scrolling requires an exact window observation."
+            )
           }
           args.push("--at", `${input.x},${input.y}`, "--window-id", String(target.windowId))
           if (input.smooth) args.push("--smooth")
-          const result = await peekaboo.runWithFreshLocalWindowSnapshot(target, args, ctx.mcpReq.signal)
+          const result = await peekaboo.runWithFreshLocalWindowSnapshot(
+            target,
+            args,
+            ctx.mcpReq.signal
+          )
           return commandResult(result, "Scroll completed.")
         } catch (error) {
           return peekabooToolError(error)
@@ -458,7 +525,8 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   server.registerTool(
     "computer_drag",
     {
-      description: "Drag between coordinates inside one exact observed window without moving the physical pointer.",
+      description:
+        "Drag between coordinates inside one exact observed window without moving the physical pointer.",
       inputSchema: dragSchema,
       annotations: {
         readOnlyHint: false,
@@ -478,13 +546,28 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       try {
         const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
         if (screenCapture || target.windowId === undefined) {
-          throw new PeekabooError("EXACT_WINDOW_REQUIRED", "Background dragging requires an exact window observation.")
+          throw new PeekabooError(
+            "EXACT_WINDOW_REQUIRED",
+            "Background dragging requires an exact window observation."
+          )
         }
-        const args = ["drag", "--from", `${input.from.x},${input.from.y}`, "--to", `${input.to.x},${input.to.y}`, "--window-id", String(target.windowId)]
+        const args = [
+          "drag",
+          "--from",
+          `${input.from.x},${input.from.y}`,
+          "--to",
+          `${input.to.x},${input.to.y}`,
+          "--window-id",
+          String(target.windowId),
+        ]
         if (input.duration_ms !== undefined) args.push("--duration", String(input.duration_ms))
         if (input.steps !== undefined) args.push("--steps", String(input.steps))
 
-        const result = await peekaboo.runWithFreshLocalWindowSnapshot(target, args, ctx.mcpReq.signal)
+        const result = await peekaboo.runWithFreshLocalWindowSnapshot(
+          target,
+          args,
+          ctx.mcpReq.signal
+        )
         return commandResult(result, "Drag completed.")
       } catch (error) {
         return peekabooToolError(error)
@@ -534,11 +617,23 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
 
   const windowSchema = z
     .object({
-      action: z.enum(["focus", "close", "minimize", "restore", "maximize", "move", "resize", "set_bounds"]),
+      action: z.enum([
+        "focus",
+        "close",
+        "minimize",
+        "restore",
+        "maximize",
+        "move",
+        "resize",
+        "set_bounds",
+      ]),
       app: appInput.optional(),
       window_id: windowIdInput.optional(),
       window_title: z.string().min(1).optional(),
-      foreground: z.boolean().optional().describe("Allow focusing the window if needed to close it."),
+      foreground: z
+        .boolean()
+        .optional()
+        .describe("Allow focusing the window if needed to close it."),
       x: z.number().int().optional(),
       y: z.number().int().optional(),
       width: z.number().int().positive().optional(),
@@ -621,24 +716,40 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
   )
 }
 
-function addTargetArgs(args: string[], target: { app?: string; window_id?: number; snapshot_id?: string }): void {
+function addTargetArgs(
+  args: string[],
+  target: { app?: string; window_id?: number; snapshot_id?: string }
+): void {
   if (target.app !== undefined) args.push("--app", target.app)
   if (target.window_id !== undefined) args.push("--window-id", String(target.window_id))
   if (target.snapshot_id !== undefined) args.push("--snapshot", target.snapshot_id)
 }
 
-function requireSnapshotTarget(peekaboo: PeekabooClient, snapshotId: string): PeekabooSnapshotTarget {
+function requireSnapshotTarget(
+  peekaboo: PeekabooClient,
+  snapshotId: string
+): PeekabooSnapshotTarget {
   const target = peekaboo.getSnapshotTarget(snapshotId)
   if (target) return target
-  throw new PeekabooError("SNAPSHOT_TARGET_MISSING", "The observation target is no longer available. Call computer_observe again.")
+  throw new PeekabooError(
+    "SNAPSHOT_TARGET_MISSING",
+    "The observation target is no longer available. Call computer_observe again."
+  )
 }
 
-function clickCoordinates(target: PeekabooSnapshotTarget, x: number, y: number): { x: number; y: number; global: boolean } {
+function clickCoordinates(
+  target: PeekabooSnapshotTarget,
+  x: number,
+  y: number
+): { x: number; y: number; global: boolean } {
   const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
   const needsGlobalCoordinates = screenCapture || (target.windowId === undefined && !target.app)
   if (!needsGlobalCoordinates) return { x, y, global: false }
   if (!target.bounds) {
-    throw new PeekabooError("SNAPSHOT_BOUNDS_MISSING", "The observation bounds are unavailable. Call computer_observe again.")
+    throw new PeekabooError(
+      "SNAPSHOT_BOUNDS_MISSING",
+      "The observation bounds are unavailable. Call computer_observe again."
+    )
   }
   return {
     x: x + target.bounds.x,
@@ -673,7 +784,12 @@ function addObservationTargetArgs(args: string[], target: PeekabooSnapshotTarget
   }
 }
 
-function appCommandArgs(action: "launch" | "switch" | "quit" | "relaunch" | "hide" | "unhide", app: string, open: string[], force: boolean): string[] {
+function appCommandArgs(
+  action: "launch" | "switch" | "quit" | "relaunch" | "hide" | "unhide",
+  app: string,
+  open: string[],
+  force: boolean
+): string[] {
   if (action === "launch") {
     const args = ["app", "launch", app, "--wait-ready", "--foreground"]
     for (const item of open) args.push("--open", item)
@@ -684,13 +800,25 @@ function appCommandArgs(action: "launch" | "switch" | "quit" | "relaunch" | "hid
     return ["app", "quit", "--app", app, ...(force ? ["--force"] : [])]
   }
   if (action === "relaunch") {
-    return ["app", "relaunch", app, "--wait-until-ready", "--foreground", ...(force ? ["--force"] : [])]
+    return [
+      "app",
+      "relaunch",
+      app,
+      "--wait-until-ready",
+      "--foreground",
+      ...(force ? ["--force"] : []),
+    ]
   }
   if (action === "unhide") return ["app", "unhide", "--app", app, "--activate"]
   return ["app", action, "--app", app]
 }
 
-async function callPeekaboo(peekaboo: PeekabooClient, args: string[], signal: AbortSignal, fallbackSummary: string): Promise<CallToolResult> {
+async function callPeekaboo(
+  peekaboo: PeekabooClient,
+  args: string[],
+  signal: AbortSignal,
+  fallbackSummary: string
+): Promise<CallToolResult> {
   try {
     return commandResult(await peekaboo.run(args, signal), fallbackSummary)
   } catch (error) {
@@ -699,7 +827,10 @@ async function callPeekaboo(peekaboo: PeekabooClient, args: string[], signal: Ab
 }
 
 function commandResult(result: PeekabooResult, fallbackSummary: string): CallToolResult {
-  const summary = typeof result.summary === "string" ? result.summary : (result.messages?.find((message) => message.trim()) ?? fallbackSummary)
+  const summary =
+    typeof result.summary === "string"
+      ? result.summary
+      : (result.messages?.find((message) => message.trim()) ?? fallbackSummary)
   const structuredContent = asStructuredContent(result.data)
   return {
     content: [{ type: "text", text: summary }],
@@ -754,7 +885,8 @@ function inspectionResult(result: PeekabooResult): CallToolResult {
         .map((item) => {
           const id = stringValue(item.id)
           const role = stringValue(item.role) ?? stringValue(item.role_description) ?? "element"
-          const label = stringValue(item.label) ?? stringValue(item.title) ?? stringValue(item.value)
+          const label =
+            stringValue(item.label) ?? stringValue(item.title) ?? stringValue(item.value)
           return `${id ? `[${id}] ` : ""}${role}${label ? ` ${JSON.stringify(label)}` : ""}`
         })
         .filter(Boolean)

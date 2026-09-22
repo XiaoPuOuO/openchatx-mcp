@@ -1,3 +1,4 @@
+import process from "node:process"
 const useColor = Boolean(process.stdout.isTTY && !process.env.NO_COLOR)
 const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -10,7 +11,9 @@ const yellow = (value) => paint("33", value)
 const red = (value) => paint("31", value)
 
 export function intro() {
-  process.stdout.write(`\n${bold("SHELLBY MCP")} ${dim("SETUP")}\n${dim("First-time local agent harness setup")}\n\n`)
+  process.stdout.write(
+    `\n${bold("SHELLBY MCP")} ${dim("SETUP")}\n${dim("First-time local agent harness setup")}\n\n`
+  )
 }
 
 export function spinner(label) {

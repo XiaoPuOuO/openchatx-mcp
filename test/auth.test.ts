@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
+import process from "node:process"
 import test from "node:test"
-
 import { ShellbyAuthError, ShellbyAuthStore } from "../src/auth/auth.js"
 import { tempDir } from "./helpers/temp.js"
 
@@ -42,7 +42,10 @@ test("concurrent first tool calls bind exactly one subject", async (t) => {
   const auth = new ShellbyAuthStore(join(root, "auth.json"))
   await auth.ensureState()
 
-  const results = await Promise.allSettled([auth.authorizeToolCall("subject-a"), auth.authorizeToolCall("subject-b")])
+  const results = await Promise.allSettled([
+    auth.authorizeToolCall("subject-a"),
+    auth.authorizeToolCall("subject-b"),
+  ])
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1)
   assert.equal(results.filter((result) => result.status === "rejected").length, 1)
 })

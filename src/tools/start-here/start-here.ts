@@ -1,18 +1,25 @@
 import { readdirSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { fileURLToPath } from "node:url"
 import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { getAgentIdentity, setAgentTaskSlug, type AgentIdentity } from "../../server/agent-context.js"
+import {
+  type AgentIdentity,
+  getAgentIdentity,
+  setAgentTaskSlug,
+} from "../../server/agent-context.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
-const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const START_HERE_COOLDOWN_MS = 5_000
-const recentStartLoads = new Map<AgentIdentity, Map<string, { startedAt: number; load: Promise<string> }>>()
+const recentStartLoads = new Map<
+  AgentIdentity,
+  Map<string, { startedAt: number; load: Promise<string> }>
+>()
 
 type PromptSource = {
   path: string
@@ -28,7 +35,8 @@ export function registerStartHereTool(server: McpServer): void {
   server.registerTool(
     START_HERE_TOOL_NAME,
     {
-      description: "Initialize Shellby once per conversation. Loads the selected Deep Work mode and unlocks the other tools",
+      description:
+        "Initialize Shellby once per conversation. Loads the selected Deep Work mode and unlocks the other tools",
       inputSchema: z.object({
         mode: z.enum(modes as [string, ...string[]]),
         task_id: z.string().min(1).max(128),
@@ -49,7 +57,12 @@ export function registerStartHereTool(server: McpServer): void {
           await recent.load
           setAgentTaskSlug(task_id)
           return {
-            content: [{ type: "text", text: `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.` }],
+            content: [
+              {
+                type: "text",
+                text: `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
+              },
+            ],
           }
         } catch {
           if (agentLoads?.get(mode) === recent) agentLoads.delete(mode)
@@ -77,8 +90,14 @@ export function registerStartHereTool(server: McpServer): void {
   )
 }
 
-export async function buildStartHereInstructions(mode: string, root = repositoryRoot): Promise<string> {
-  const [selected, shared] = await Promise.all([readStartPrompt(mode, root), readStartPrompt(SHARED_PROMPT_NAME, root)])
+export async function buildStartHereInstructions(
+  mode: string,
+  root = repositoryRoot
+): Promise<string> {
+  const [selected, shared] = await Promise.all([
+    readStartPrompt(mode, root),
+    readStartPrompt(SHARED_PROMPT_NAME, root),
+  ])
   return [shared.prompt.trim(), selected.prompt.trim()].filter(Boolean).join("\n\n")
 }
 
@@ -108,7 +127,10 @@ function readPromptSlugs(directory: string): string[] {
       .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
       .map((entry) => entry.name.slice(0, -3))
     const invalid = slugs.find((slug) => !PROMPT_SLUG_PATTERN.test(slug))
-    if (invalid) throw new Error(`Invalid start_here prompt filename: ${invalid}.md. Use lowercase kebab-case.`)
+    if (invalid)
+      throw new Error(
+        `Invalid start_here prompt filename: ${invalid}.md. Use lowercase kebab-case.`
+      )
     return slugs
   } catch (error) {
     if (isFsError(error, "ENOENT")) return []

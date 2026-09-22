@@ -1,9 +1,8 @@
 import { createWriteStream } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
-
+import process from "node:process"
 import { chromium } from "playwright-core"
-
 import { MCP_CONFIG } from "../src/config.ts"
 
 const args = parseArgs(process.argv.slice(2))
@@ -72,7 +71,8 @@ async function attachPage(context, page) {
 
   page.on("close", () => record("page.closed", { page_id: pageId, url: sanitizeUrl(page.url()) }))
   page.on("framenavigated", (frame) => {
-    if (frame === page.mainFrame()) record("page.navigated", { page_id: pageId, url: sanitizeUrl(frame.url()) })
+    if (frame === page.mainFrame())
+      record("page.navigated", { page_id: pageId, url: sanitizeUrl(frame.url()) })
   })
 
   let session
@@ -88,7 +88,11 @@ async function attachPage(context, page) {
     ])
     await session.send("Page.setLifecycleEventsEnabled", { enabled: true }).catch(() => undefined)
   } catch (error) {
-    record("page.attach_failed", { page_id: pageId, url: sanitizeUrl(page.url()), error: errorText(error) })
+    record("page.attach_failed", {
+      page_id: pageId,
+      url: sanitizeUrl(page.url()),
+      error: errorText(error),
+    })
     return
   }
 
@@ -135,7 +139,12 @@ async function attachPage(context, page) {
           })
         })
         .catch((error) => {
-          record("Network.streamResourceContentFailed", { page_id: pageId, request_id: event.requestId, url: sanitizeUrl(url), error: errorText(error) })
+          record("Network.streamResourceContentFailed", {
+            page_id: pageId,
+            request_id: event.requestId,
+            url: sanitizeUrl(url),
+            error: errorText(error),
+          })
         })
     }
   })
@@ -149,7 +158,9 @@ async function attachPage(context, page) {
       encoded_data_length: event.encodedDataLength,
       has_data: typeof event.data === "string" && event.data.length > 0,
       data_base64: event.data,
-      data_utf8: isStreamingConversationUrl(requestUrls.get(event.requestId)) ? decodeBase64(event.data) : undefined,
+      data_utf8: isStreamingConversationUrl(requestUrls.get(event.requestId))
+        ? decodeBase64(event.data)
+        : undefined,
     })
   })
 
@@ -162,7 +173,12 @@ async function attachPage(context, page) {
       encoded_data_length: event.encodedDataLength,
     })
     if (args.captureBodies && shouldCaptureBody(meta?.url ?? requestUrls.get(event.requestId))) {
-      void captureResponseBody(session, pageId, event.requestId, meta?.url ?? requestUrls.get(event.requestId))
+      void captureResponseBody(
+        session,
+        pageId,
+        event.requestId,
+        meta?.url ?? requestUrls.get(event.requestId)
+      )
     }
   })
 
@@ -179,7 +195,11 @@ async function attachPage(context, page) {
   })
 
   session.on("Network.webSocketCreated", (event) => {
-    record("Network.webSocketCreated", { page_id: pageId, request_id: event.requestId, url: sanitizeUrl(event.url) })
+    record("Network.webSocketCreated", {
+      page_id: pageId,
+      request_id: event.requestId,
+      url: sanitizeUrl(event.url),
+    })
   })
   session.on("Network.webSocketWillSendHandshakeRequest", (event) => {
     record("Network.webSocketWillSendHandshakeRequest", {
@@ -216,7 +236,11 @@ async function attachPage(context, page) {
     })
   })
   session.on("Network.webSocketFrameError", (event) => {
-    record("Network.webSocketFrameError", { page_id: pageId, request_id: event.requestId, error_message: event.errorMessage })
+    record("Network.webSocketFrameError", {
+      page_id: pageId,
+      request_id: event.requestId,
+      error_message: event.errorMessage,
+    })
   })
   session.on("Network.webSocketClosed", (event) => {
     record("Network.webSocketClosed", { page_id: pageId, request_id: event.requestId })
@@ -232,9 +256,16 @@ async function attachPage(context, page) {
   })
 
   session.on("Page.lifecycleEvent", (event) => {
-    record("Page.lifecycleEvent", { page_id: pageId, frame_id: event.frameId, name: event.name, loader_id: event.loaderId })
+    record("Page.lifecycleEvent", {
+      page_id: pageId,
+      frame_id: event.frameId,
+      name: event.name,
+      loader_id: event.loaderId,
+    })
   })
-  session.on("Page.domContentEventFired", () => record("Page.domContentEventFired", { page_id: pageId }))
+  session.on("Page.domContentEventFired", () =>
+    record("Page.domContentEventFired", { page_id: pageId })
+  )
   session.on("Page.loadEventFired", () => record("Page.loadEventFired", { page_id: pageId }))
   session.on("Runtime.consoleAPICalled", (event) => {
     record("Runtime.consoleAPICalled", {
@@ -245,7 +276,10 @@ async function attachPage(context, page) {
     })
   })
   session.on("Runtime.exceptionThrown", (event) => {
-    record("Runtime.exceptionThrown", { page_id: pageId, exception_details: event.exceptionDetails })
+    record("Runtime.exceptionThrown", {
+      page_id: pageId,
+      exception_details: event.exceptionDetails,
+    })
   })
   session.on("Log.entryAdded", (event) => {
     record("Log.entryAdded", { page_id: pageId, entry: event.entry })
@@ -265,17 +299,25 @@ async function installDomProbe(session, pageId) {
     } catch {
       // Preserve raw binding payload.
     }
-    record("dom.state", { page_id: pageId, execution_context_id: event.executionContextId, payload })
+    record("dom.state", {
+      page_id: pageId,
+      execution_context_id: event.executionContextId,
+      payload,
+    })
     if (args.domSnapshots) void captureDomSnapshot(session, pageId, payload)
   })
 
   await session.send("Runtime.addBinding", { name: bindingName }).catch((error) => {
     record("dom.binding_failed", { page_id: pageId, error: errorText(error) })
   })
-  await session.send("Page.addScriptToEvaluateOnNewDocument", { source: domProbeSource(bindingName) }).catch(() => undefined)
-  await session.send("Runtime.evaluate", { expression: domProbeSource(bindingName), awaitPromise: false }).catch((error) => {
-    record("dom.install_failed", { page_id: pageId, error: errorText(error) })
-  })
+  await session
+    .send("Page.addScriptToEvaluateOnNewDocument", { source: domProbeSource(bindingName) })
+    .catch(() => undefined)
+  await session
+    .send("Runtime.evaluate", { expression: domProbeSource(bindingName), awaitPromise: false })
+    .catch((error) => {
+      record("dom.install_failed", { page_id: pageId, error: errorText(error) })
+    })
 }
 
 function domProbeSource(bindingName) {
@@ -347,7 +389,12 @@ async function captureResponseBody(session, pageId, requestId, url) {
       body,
     })
   } catch (error) {
-    record("Network.responseBodyFailed", { page_id: pageId, request_id: requestId, url: sanitizeUrl(url), error: errorText(error) })
+    record("Network.responseBodyFailed", {
+      page_id: pageId,
+      request_id: requestId,
+      url: sanitizeUrl(url),
+      error: errorText(error),
+    })
   }
 }
 
@@ -379,7 +426,12 @@ async function stop(reason) {
 }
 
 function parseArgs(argv) {
-  const result = { out: undefined, durationMs: undefined, captureBodies: false, domSnapshots: false }
+  const result = {
+    out: undefined,
+    durationMs: undefined,
+    captureBodies: false,
+    domSnapshots: false,
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === "--out") result.out = argv[++index]
@@ -387,11 +439,17 @@ function parseArgs(argv) {
     else if (arg === "--capture-bodies") result.captureBodies = true
     else if (arg === "--dom-snapshots") result.domSnapshots = true
     else if (arg === "--help") {
-      console.log("Usage: npm run probe:chatgpt-cdp -- [--out path] [--duration-ms N] [--capture-bodies] [--dom-snapshots]")
+      console.log(
+        "Usage: npm run probe:chatgpt-cdp -- [--out path] [--duration-ms N] [--capture-bodies] [--dom-snapshots]"
+      )
       process.exit(0)
     } else throw new Error(`Unknown argument: ${arg}`)
   }
-  if (result.durationMs !== undefined && (!Number.isFinite(result.durationMs) || result.durationMs <= 0)) throw new Error("--duration-ms must be > 0")
+  if (
+    result.durationMs !== undefined &&
+    (!Number.isFinite(result.durationMs) || result.durationMs <= 0)
+  )
+    throw new Error("--duration-ms must be > 0")
   return result
 }
 
@@ -399,7 +457,9 @@ function sanitizeHeaders(headers) {
   if (!headers || typeof headers !== "object") return headers
   const redacted = {}
   for (const [key, value] of Object.entries(headers)) {
-    redacted[key] = /authorization|cookie|set-cookie|token|api-key|session/i.test(key) ? "<redacted>" : value
+    redacted[key] = /authorization|cookie|set-cookie|token|api-key|session/iu.test(key)
+      ? "<redacted>"
+      : value
   }
   return redacted
 }
@@ -409,7 +469,8 @@ function sanitizeUrl(value) {
   try {
     const url = new URL(value)
     for (const key of [...url.searchParams.keys()]) {
-      if (/authorization|cookie|token|api[-_]?key|session|verify|secret|signature|sig$/i.test(key)) url.searchParams.set(key, "<redacted>")
+      if (/authorization|cookie|token|api[-_]?key|session|verify|secret|signature|sig$/iu.test(key))
+        url.searchParams.set(key, "<redacted>")
     }
     return url.toString()
   } catch {
@@ -434,7 +495,11 @@ function isStreamingConversationUrl(value) {
   if (!value) return false
   try {
     const url = new URL(value)
-    return url.hostname === "chatgpt.com" && (url.pathname === "/backend-api/f/conversation" || url.pathname === "/backend-api/f/conversation/resume")
+    return (
+      url.hostname === "chatgpt.com" &&
+      (url.pathname === "/backend-api/f/conversation" ||
+        url.pathname === "/backend-api/f/conversation/resume")
+    )
   } catch {
     return false
   }
@@ -451,12 +516,10 @@ function isConversationHistoryUrl(value) {
 }
 
 function decodeBase64(value) {
-  if (typeof value !== "string" || value.length === 0) return undefined
+  if (typeof value !== "string" || value.length === 0) return
   try {
     return Buffer.from(value, "base64").toString("utf8")
-  } catch {
-    return undefined
-  }
+  } catch {}
 }
 
 function errorText(error) {

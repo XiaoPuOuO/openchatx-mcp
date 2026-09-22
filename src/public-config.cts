@@ -6,10 +6,16 @@ import { z } from "zod"
 
 // CommonJS lets the built loader serve PM2's ecosystem file as well as the ESM runtime.
 const defaultConfigPath = resolve(__dirname, "../.shellby/config.toml")
-const httpUrl = z.url().refine((value) => value.startsWith("http://") || value.startsWith("https://"), "URL must use http or https")
+const httpUrl = z
+  .url()
+  .refine(
+    (value) => value.startsWith("http://") || value.startsWith("https://"),
+    "URL must use http or https"
+  )
 const cdpEndpoint = httpUrl.refine((value) => {
   const url = new URL(value)
-  const managedLocal = url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost")
+  const managedLocal =
+    url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost")
   return !managedLocal || url.port.length > 0
 }, "Local CDP endpoint must include an explicit port")
 
@@ -49,10 +55,13 @@ const publicConfigSchema = z.object({
 
 export type ShellbyPublicConfig = z.infer<typeof publicConfigSchema>
 export type ToolOutputFormat = ShellbyPublicConfig["mcp"]["tool_output"]
-export const DEFAULT_PUBLIC_CONFIG = publicConfigSchema.parse(resolveConfigObject(publicConfigSchema, {}, "", () => undefined))
+export const DEFAULT_PUBLIC_CONFIG = publicConfigSchema.parse(
+  resolveConfigObject(publicConfigSchema, {}, "", () => undefined)
+)
 
 export function loadPublicConfig(path = defaultConfigPath): ShellbyPublicConfig {
-  if (!existsSync(path)) throw new Error(`Shellby config is missing at ${path}. Run \`npm run setup\` first.`)
+  if (!existsSync(path))
+    throw new Error(`Shellby config is missing at ${path}. Run \`npm run setup\` first.`)
 
   const source = readFileSync(path, "utf8")
   let value: unknown
@@ -60,7 +69,10 @@ export function loadPublicConfig(path = defaultConfigPath): ShellbyPublicConfig 
     value = parse(source)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Invalid Shellby config syntax at ${path}: ${message}. Fix the TOML syntax; the file has not been changed.`, { cause: error })
+    throw new Error(
+      `Invalid Shellby config syntax at ${path}: ${message}. Fix the TOML syntax; the file has not been changed.`,
+      { cause: error }
+    )
   }
 
   const warn = (message: string) => console.warn(`Shellby config warning (${path}): ${message}`)
@@ -72,14 +84,21 @@ export function loadPublicConfig(path = defaultConfigPath): ShellbyPublicConfig 
   return config
 }
 
-function resolveConfigObject(schema: z.ZodObject, value: unknown, prefix: string, warn: (message: string) => void): Record<string, unknown> {
+function resolveConfigObject(
+  schema: z.ZodObject,
+  value: unknown,
+  prefix: string,
+  warn: (message: string) => void
+): Record<string, unknown> {
   let input: Record<string, unknown> = {}
   if (value !== undefined) {
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) input = value as Record<string, unknown>
+    if (value !== null && typeof value === "object" && !Array.isArray(value))
+      input = value as Record<string, unknown>
     else warn(`${prefix} must be a TOML table; using defaults for this section.`)
   }
   for (const key of Object.keys(input)) {
-    if (!Object.hasOwn(schema.shape, key)) warn(`Unknown setting ${prefix ? `${prefix}.` : ""}${key}; ignoring it.`)
+    if (!Object.hasOwn(schema.shape, key))
+      warn(`Unknown setting ${prefix ? `${prefix}.` : ""}${key}; ignoring it.`)
   }
 
   const result: Record<string, unknown> = {}

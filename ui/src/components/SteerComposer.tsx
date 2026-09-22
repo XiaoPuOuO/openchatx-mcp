@@ -13,7 +13,9 @@ export function SteerComposer({ agent }: { agent: Agent }) {
   const [error, setError] = useState<string>()
   const [dismissedDeliveredId, setDismissedDeliveredId] = useState<string>()
   const pending = agent.instructions.filter((instruction) => !instruction.deliveredAt)
-  const latestDelivered = agent.instructions.find((instruction) => instruction.deliveredAt && instruction.id !== dismissedDeliveredId)
+  const latestDelivered = agent.instructions.find(
+    (instruction) => instruction.deliveredAt && instruction.id !== dismissedDeliveredId
+  )
 
   async function submit() {
     const trimmed = message.trim()
@@ -45,7 +47,9 @@ export function SteerComposer({ agent }: { agent: Agent }) {
 
   return (
     <div className="space-y-1.5 border-t pt-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Steer</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Steer
+      </h3>
       <div className="relative">
         <Textarea
           rows={1}
@@ -66,7 +70,11 @@ export function SteerComposer({ agent }: { agent: Agent }) {
           disabled={!message.trim() || sending}
           onClick={() => void submit()}
         >
-          {sending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+          {sending ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <Send className="size-3.5" />
+          )}
         </Button>
       </div>
       <SteerStatus
@@ -119,7 +127,11 @@ function SteerStatus({
     return (
       <p className="group relative flex min-w-0 items-center gap-1.5 pr-16 text-xs text-muted-foreground">
         <Clock3 className="size-3.5 shrink-0 text-amber-600" />
-        <span className="truncate">{queued.length === 1 ? `Queued: ${queued[0].message}` : `${queued.length} queued · ${queued[0].message}`}</span>
+        <span className="truncate">
+          {queued.length === 1
+            ? `Queued: ${queued[0].message}`
+            : `${queued.length} queued · ${queued[0].message}`}
+        </span>
         <Button
           type="button"
           variant="ghost"

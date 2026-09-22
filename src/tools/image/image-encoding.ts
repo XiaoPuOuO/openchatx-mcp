@@ -27,7 +27,10 @@ export class ImageEncodingError extends Error {
   }
 }
 
-export async function encodeImageForMcp(input: Buffer, options: EncodeImageOptions = {}): Promise<EncodedMcpImage> {
+export async function encodeImageForMcp(
+  input: Buffer,
+  options: EncodeImageOptions = {}
+): Promise<EncodedMcpImage> {
   const maxResponseBytes = options.maxResponseBytes ?? MAX_MCP_IMAGE_RESPONSE_BYTES
   const maxBase64Bytes = maxResponseBytes - RESPONSE_HEADROOM_BYTES
   if (maxBase64Bytes <= 0) {
@@ -58,10 +61,17 @@ export async function encodeImageForMcp(input: Buffer, options: EncodeImageOptio
     }
   } catch (error) {
     if (error instanceof ImageEncodingError) throw error
-    throw new ImageEncodingError("IMAGE_ENCODE_FAILED", error instanceof Error ? error.message : String(error), { cause: error })
+    throw new ImageEncodingError(
+      "IMAGE_ENCODE_FAILED",
+      error instanceof Error ? error.message : String(error),
+      { cause: error }
+    )
   }
 
-  throw new ImageEncodingError("IMAGE_TOO_LARGE", `Image cannot fit within the ${formatBytes(maxResponseBytes)} response limit without resizing.`)
+  throw new ImageEncodingError(
+    "IMAGE_TOO_LARGE",
+    `Image cannot fit within the ${formatBytes(maxResponseBytes)} response limit without resizing.`
+  )
 }
 
 export function formatBytes(bytes: number): string {

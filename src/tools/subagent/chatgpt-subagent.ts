@@ -1,8 +1,8 @@
-import type { Browser, BrowserContext, Page } from "playwright-core"
 import { join } from "node:path"
+import type { Browser, BrowserContext, Page } from "playwright-core"
 
 import { MCP_CONFIG } from "../../config.js"
-import { getAgentIdentity, type AgentIdentity } from "../../server/agent-context.js"
+import { type AgentIdentity, getAgentIdentity } from "../../server/agent-context.js"
 import {
   assertAuthenticated,
   createBackgroundPage,
@@ -13,25 +13,31 @@ import {
   findComposer,
   forkLatestConversationTurn,
   isChatGptUrl,
-  navigateChatGptPage,
   navigateAndCaptureConversationPayload,
+  navigateChatGptPage,
   submitComposer,
   throwIfAborted,
   waitForPromise,
 } from "./chatgpt-subagent-browser.js"
-import { observeAssistantResponse, type AssistantResponseObservation } from "./chatgpt-subagent-observer.js"
-import { extractConversationMessages, findLatestAssistantAfterPrompt } from "./chatgpt-subagent-protocol.js"
-import { createSubagentStore } from "./subagent-store.js"
 import {
-  ChatGptSubagentError,
-  type ChatGptSubagentCallContext,
   type ChatGptCloneRunRequest,
   type ChatGptCloneSelfRequest,
   type ChatGptSubagentActivity,
+  type ChatGptSubagentCallContext,
+  ChatGptSubagentError,
   type ChatGptSubagentPollResult,
   type ChatGptSubagentRequest,
   type ChatGptSubagentService,
 } from "./chatgpt-subagent-contracts.js"
+import {
+  type AssistantResponseObservation,
+  observeAssistantResponse,
+} from "./chatgpt-subagent-observer.js"
+import {
+  extractConversationMessages,
+  findLatestAssistantAfterPrompt,
+} from "./chatgpt-subagent-protocol.js"
+import { createSubagentStore } from "./subagent-store.js"
 
 const AGENT_IDLE_TTL_MS = 30 * 60_000
 const STALE_TURN_RECOVERY_MS = 3 * 60_000
@@ -104,7 +110,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
   const cleanupTimer = setInterval(() => void cleanupIdleAgents(), CLEANUP_INTERVAL_MS)
   cleanupTimer.unref()
 
-  async function askSubagent(request: ChatGptSubagentRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
+  async function askSubagent(
+    request: ChatGptSubagentRequest,
+    callContext: ChatGptSubagentCallContext
+  ): Promise<string> {
     const parentAgent = getAgentIdentity()
     const scope = getScope(parentAgent)
     await beginAgentOperation(parentAgent, scope, request.agentId, callContext)
@@ -141,7 +150,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     }
   }
 
-  async function cloneSelf(request: ChatGptCloneSelfRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
+  async function cloneSelf(
+    request: ChatGptCloneSelfRequest,
+    callContext: ChatGptSubagentCallContext
+  ): Promise<string> {
     const { signal } = callContext
     const parentAgent = getAgentIdentity()
     const scope = getScope(parentAgent)
@@ -153,7 +165,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
     try {
       if (!isChatGptUrl(request.sourceConversationUrl)) {
-        throw new ChatGptSubagentError("AGENT_TARGET_LOST", "clone_self requires a chatgpt.com conversation URL.")
+        throw new ChatGptSubagentError(
+          "AGENT_TARGET_LOST",
+          "clone_self requires a chatgpt.com conversation URL."
+        )
       }
       if (scope.agents.has(request.cloneId) || store?.get(parentAgent, request.cloneId)) {
         throw new ChatGptSubagentError("AGENT_BUSY", `Clone ${request.cloneId} already exists.`)
@@ -163,7 +178,8 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       await navigateChatGptPage(sourcePage, request.sourceConversationUrl, signal)
       await assertAuthenticated(sourcePage)
       branchPage = await forkLatestConversationTurn(sourcePage, signal)
-      if (branchPage !== sourcePage && !sourcePage.isClosed()) await sourcePage.close().catch(() => undefined)
+      if (branchPage !== sourcePage && !sourcePage.isClosed())
+        await sourcePage.close().catch(() => undefined)
       sourcePage = undefined
       agent = {
         agentId: request.cloneId,
@@ -190,7 +206,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     }
   }
 
-  async function cloneRun(request: ChatGptCloneRunRequest, callContext: ChatGptSubagentCallContext): Promise<string> {
+  async function cloneRun(
+    request: ChatGptCloneRunRequest,
+    callContext: ChatGptSubagentCallContext
+  ): Promise<string> {
     const parentAgent = getAgentIdentity()
     const scope = getScope(parentAgent)
     await beginAgentOperation(parentAgent, scope, request.cloneId, callContext)
@@ -237,7 +256,11 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     submittedPrompt: string
   ): Promise<string> {
     const operation = scope.activeOperations.get(agent.agentId)
-    if (!operation) throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agent.agentId} has no active operation.`)
+    if (!operation)
+      throw new ChatGptSubagentError(
+        "AGENT_BUSY",
+        `Agent ${agent.agentId} has no active operation.`
+      )
     const signal = operation.signal
     let observation: AssistantResponseObservation | undefined
     try {
@@ -262,7 +285,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
       observation = await observeAssistantResponse(page, {
         prompt: submittedPrompt,
-        onConversationId: agent.kind === "clone" ? undefined : (conversationId) => bindConversation(parentAgent, agent, conversationId),
+        onConversationId:
+          agent.kind === "clone"
+            ? undefined
+            : (conversationId) => bindConversation(parentAgent, agent, conversationId),
         onActivity: (activity) => {
           if (activity) agent.status = activity
           turn.lastActivityAt = Date.now()
@@ -298,14 +324,24 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     }
   }
 
-  async function pollSubagent(turnId: string, waitMs: number, signal?: AbortSignal): Promise<ChatGptSubagentPollResult> {
+  async function pollSubagent(
+    turnId: string,
+    waitMs: number,
+    signal?: AbortSignal
+  ): Promise<ChatGptSubagentPollResult> {
     const parentAgent = getAgentIdentity()
     const scope = scopes.get(parentAgent)
     const turn = scope?.turns.get(turnId)
     if (!turn) throw new ChatGptSubagentError("UNKNOWN_TURN", `Unknown agent turn: ${turnId}`)
     if (turn.status === "running" && waitMs > 0) {
       let timer: NodeJS.Timeout | undefined
-      await waitForPromise(Promise.race([turn.settled, new Promise<void>((resolve) => (timer = setTimeout(resolve, waitMs)))]), signal).finally(() => {
+      await waitForPromise(
+        Promise.race([
+          turn.settled,
+          new Promise<void>((resolve) => (timer = setTimeout(resolve, waitMs))),
+        ]),
+        signal
+      ).finally(() => {
         if (timer) clearTimeout(timer)
       })
     }
@@ -315,7 +351,8 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     return {
       status: turn.status,
       activity: turn.status === "running" ? activity : undefined,
-      activityAgeMs: turn.status === "running" ? Math.max(0, Date.now() - turn.lastActivityAt) : undefined,
+      activityAgeMs:
+        turn.status === "running" ? Math.max(0, Date.now() - turn.lastActivityAt) : undefined,
       response: turn.response,
       errorCode: turn.errorCode,
       errorMessage: turn.errorMessage,
@@ -328,9 +365,14 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     const page = agent.page && !agent.page.isClosed() ? agent.page : undefined
     if (agent.turnCount > 0) captureConversationUrlFromPage(agent)
     if (page && isExpectedAgentPage(page, agent)) return page
-    const targetUrl = agent.conversationUrl ?? (agent.turnCount === 0 ? (agent.memory ? CHATGPT_START_URL : TEMPORARY_CHAT_URL) : undefined)
+    const targetUrl =
+      agent.conversationUrl ??
+      (agent.turnCount === 0 ? (agent.memory ? CHATGPT_START_URL : TEMPORARY_CHAT_URL) : undefined)
     if (!targetUrl) {
-      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${agent.agentId} lost its page before its conversation URL was saved.`)
+      throw new ChatGptSubagentError(
+        "AGENT_TARGET_LOST",
+        `Agent ${agent.agentId} lost its page before its conversation URL was saved.`
+      )
     }
 
     const created = !page
@@ -357,7 +399,8 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       if (disposed || turn.status !== "running" || turn.observation !== observation) return
       const agent = scopes.get(turn.parentAgent)?.agents.get(turn.agentId)
       if (!agent) return
-      if (agent.kind !== "clone" && result.conversationId) bindConversation(turn.parentAgent, agent, result.conversationId)
+      if (agent.kind !== "clone" && result.conversationId)
+        bindConversation(turn.parentAgent, agent, result.conversationId)
       completeTurn(turn, result.text)
     } catch (error) {
       if (disposed || turn.status !== "running" || turn.observation !== observation) return
@@ -365,7 +408,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     }
   }
 
-  async function failOrRecoverSubmittedTurn(turn: BrowserTurnState, originalError: unknown): Promise<void> {
+  async function failOrRecoverSubmittedTurn(
+    turn: BrowserTurnState,
+    originalError: unknown
+  ): Promise<void> {
     if (turn.status !== "running") return
 
     const oldObservation = turn.observation
@@ -397,11 +443,15 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   async function recoverSubmittedTurn(turn: BrowserTurnState): Promise<boolean> {
     const agent = scopes.get(turn.parentAgent)?.agents.get(turn.agentId)
-    if (!agent) throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`)
+    if (!agent)
+      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`)
     const conversationUrl = agent.conversationUrl
     const conversationId = conversationUrl ? extractConversationId(conversationUrl) : undefined
     if (!conversationUrl || !conversationId) {
-      throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${agent.agentId} has no saved conversation to recover.`)
+      throw new ChatGptSubagentError(
+        "AGENT_TARGET_LOST",
+        `Agent ${agent.agentId} has no saved conversation to recover.`
+      )
     }
 
     const oldPage = agent.page
@@ -412,7 +462,11 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
           return response.ok ? response.json() : undefined
         }, conversationId)
         .catch(() => undefined)
-      const answer = findLatestAssistantAfterPrompt(extractConversationMessages(payload), turn.prompt, agent.turnCount)
+      const answer = findLatestAssistantAfterPrompt(
+        extractConversationMessages(payload),
+        turn.prompt,
+        agent.turnCount
+      )
       if (answer) {
         completeTurn(turn, answer.text)
         return true
@@ -430,7 +484,11 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       agent.lastUsedAt = Date.now()
       if (oldPage && !oldPage.isClosed()) await oldPage.close().catch(() => undefined)
 
-      const answer = findLatestAssistantAfterPrompt(extractConversationMessages(payload), turn.prompt, agent.turnCount)
+      const answer = findLatestAssistantAfterPrompt(
+        extractConversationMessages(payload),
+        turn.prompt,
+        agent.turnCount
+      )
       if (!answer) return false
       completeTurn(turn, answer.text)
       return true
@@ -446,15 +504,22 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     const connectedBrowser = browser
     const allTurns = [...scopes.values()].flatMap((scope) => [...scope.turns.values()])
     const allAgents = [...scopes.values()].flatMap((scope) => [...scope.agents.values()])
-    const observations = allTurns.map((turn) => turn.observation).filter((value): value is AssistantResponseObservation => value !== undefined)
-    const pages = allAgents.map((agent) => agent.page).filter((page): page is Page => page !== undefined && !page.isClosed())
+    const observations = allTurns
+      .map((turn) => turn.observation)
+      .filter((value): value is AssistantResponseObservation => value !== undefined)
+    const pages = allAgents
+      .map((agent) => agent.page)
+      .filter((page): page is Page => page !== undefined && !page.isClosed())
     for (const turn of allTurns) turn.settle()
     scopes.clear()
     context = undefined
     browser = undefined
     connectPromise = undefined
     store?.close()
-    await Promise.allSettled([...observations.map((observation) => observation.dispose()), ...pages.map((page) => page.close())])
+    await Promise.allSettled([
+      ...observations.map((observation) => observation.dispose()),
+      ...pages.map((page) => page.close()),
+    ])
     await connectedBrowser?.close().catch(() => undefined)
   }
 
@@ -472,7 +537,8 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         `Temporary agent ${agentId} was closed after 30 minutes of inactivity. Its conversation cannot be resumed.`
       )
     }
-    if (scope.activeOperations.has(agentId)) throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} already has an active turn.`)
+    if (scope.activeOperations.has(agentId))
+      throw new ChatGptSubagentError("AGENT_BUSY", `Agent ${agentId} already has an active turn.`)
     if (agent?.status === "uncertain") {
       throw new ChatGptSubagentError(
         "AGENT_BUSY",
@@ -493,7 +559,9 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
         connectPromise ??= (async () => {
           try {
             const { chromium } = await import("playwright-core")
-            browser = await chromium.connectOverCDP(MCP_CONFIG.chatGpt.cdpEndpoint, { timeout: CONNECT_TIMEOUT_MS })
+            browser = await chromium.connectOverCDP(MCP_CONFIG.chatGpt.cdpEndpoint, {
+              timeout: CONNECT_TIMEOUT_MS,
+            })
           } catch (error) {
             throw new ChatGptSubagentError(
               "BROWSER_UNAVAILABLE",
@@ -506,7 +574,11 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
             )
           }
           const [browserContext] = browser.contexts()
-          if (!browserContext) throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "Connected Chrome instance did not expose a browser context.")
+          if (!browserContext)
+            throw new ChatGptSubagentError(
+              "BROWSER_UNAVAILABLE",
+              "Connected Chrome instance did not expose a browser context."
+            )
           context = browserContext
         })().finally(() => {
           connectPromise = undefined
@@ -520,7 +592,7 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
           if (!isChatGptUrl(page.url())) continue
           const modal = page.locator(RATE_LIMIT_SELECTOR).first()
           if (!(await modal.isVisible().catch(() => false))) continue
-          const button = modal.getByRole("button", { name: /got it|okay|ok|close/i }).first()
+          const button = modal.getByRole("button", { name: /got it|okay|ok|close/iu }).first()
           await button.click().catch(() => page.keyboard.press("Escape"))
           await delay(RATE_LIMIT_DISMISS_SETTLE_MS, signal)
         }
@@ -538,12 +610,18 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     if (turn.status !== "running") return
     const scope = scopes.get(turn.parentAgent)
     if (!scope) {
-      failTurn(turn, new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`))
+      failTurn(
+        turn,
+        new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`)
+      )
       return
     }
     const agent = scope.agents.get(turn.agentId)
     if (!agent) {
-      failTurn(turn, new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`))
+      failTurn(
+        turn,
+        new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${turn.agentId} no longer exists.`)
+      )
       return
     }
     const now = Date.now()
@@ -578,36 +656,50 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     void turn.observation?.dispose().catch(() => undefined)
     turn.observation = undefined
     const scope = scopes.get(turn.parentAgent)
-    if (scope?.activeOperations.get(turn.agentId)?.turnId === turn.turnId) scope.activeOperations.delete(turn.agentId)
+    if (scope?.activeOperations.get(turn.agentId)?.turnId === turn.turnId)
+      scope.activeOperations.delete(turn.agentId)
     turn.settle()
   }
 
   async function createManagedPage(): Promise<Page> {
-    if (!browser || !context) throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "ChatGPT browser is not connected.")
+    if (!browser || !context)
+      throw new ChatGptSubagentError("BROWSER_UNAVAILABLE", "ChatGPT browser is not connected.")
     return createBackgroundPage(browser, context)
   }
 
   function assertAgentPage(page: Page, agent: BrowserAgentState): void {
     if (isExpectedAgentPage(page, agent)) return
-    throw new ChatGptSubagentError("AGENT_TARGET_LOST", `Agent ${agent.agentId} no longer owns a usable ChatGPT page.`)
+    throw new ChatGptSubagentError(
+      "AGENT_TARGET_LOST",
+      `Agent ${agent.agentId} no longer owns a usable ChatGPT page.`
+    )
   }
 
   function isExpectedAgentPage(page: Page, agent: BrowserAgentState): boolean {
     if (page.isClosed() || !isChatGptUrl(page.url())) return false
     const currentConversationId = extractConversationId(page.url())
-    const expectedConversationId = agent.conversationUrl ? extractConversationId(agent.conversationUrl) : undefined
-    return expectedConversationId ? currentConversationId === expectedConversationId : currentConversationId === undefined
+    const expectedConversationId = agent.conversationUrl
+      ? extractConversationId(agent.conversationUrl)
+      : undefined
+    return expectedConversationId
+      ? currentConversationId === expectedConversationId
+      : currentConversationId === undefined
   }
 
-  function bindConversation(parentAgent: AgentIdentity | undefined, agent: BrowserAgentState, conversationId: string): void {
+  function bindConversation(
+    parentAgent: AgentIdentity | undefined,
+    agent: BrowserAgentState,
+    conversationId: string
+  ): void {
     if (!agent.memory) return
     const pageUrl = agent.page && !agent.page.isClosed() ? agent.page.url() : undefined
-    if (pageUrl && extractConversationId(pageUrl) === conversationId) agent.conversationUrl = pageUrl
+    if (pageUrl && extractConversationId(pageUrl) === conversationId)
+      agent.conversationUrl = pageUrl
     else if (extractConversationId(agent.conversationUrl ?? "") !== conversationId) {
       const url = new URL(CHATGPT_START_URL)
       const encodedId = encodeURIComponent(conversationId)
-      if (/\/g\/g-p-[^/]+\/project\/?$/.test(url.pathname)) {
-        url.pathname = `${url.pathname.replace(/\/project\/?$/, "")}/c/${encodedId}`
+      if (/\/g\/g-p-[^/]+\/project\/?$/u.test(url.pathname)) {
+        url.pathname = `${url.pathname.replace(/\/project\/?$/u, "")}/c/${encodedId}`
         url.search = ""
         url.hash = ""
         agent.conversationUrl = url.toString()
@@ -626,18 +718,33 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   function persistAgent(parentAgent: AgentIdentity | undefined, agent: BrowserAgentState): void {
     if (!agent.memory || !agent.conversationUrl) return
-    store?.set(parentAgent, agent.agentId, { conversationUrl: agent.conversationUrl, turnCount: agent.turnCount, kind: agent.kind })
+    store?.set(parentAgent, agent.agentId, {
+      conversationUrl: agent.conversationUrl,
+      turnCount: agent.turnCount,
+      kind: agent.kind,
+    })
   }
 
-  function assertDelegatedAgentSlotAvailable(parentAgent: AgentIdentity | undefined, scope: SubagentScope, requestedAgentId: string): void {
+  function assertDelegatedAgentSlotAvailable(
+    parentAgent: AgentIdentity | undefined,
+    scope: SubagentScope,
+    requestedAgentId: string
+  ): void {
     const agents = new Map<string, string | undefined>()
 
     for (const persisted of store?.list(parentAgent) ?? []) {
-      agents.set(persisted.agentId, persisted.turnCount > 0 ? `${persisted.agentId}_turn_${persisted.turnCount}` : undefined)
+      agents.set(
+        persisted.agentId,
+        persisted.turnCount > 0 ? `${persisted.agentId}_turn_${persisted.turnCount}` : undefined
+      )
     }
     for (const agent of scope.agents.values()) {
       const activeTurnId = scope.activeOperations.get(agent.agentId)?.turnId
-      agents.set(agent.agentId, activeTurnId ?? (agent.turnCount > 0 ? `${agent.agentId}_turn_${agent.turnCount}` : undefined))
+      agents.set(
+        agent.agentId,
+        activeTurnId ??
+          (agent.turnCount > 0 ? `${agent.agentId}_turn_${agent.turnCount}` : undefined)
+      )
     }
     for (const [agentId, operation] of scope.activeOperations) {
       if (!agents.has(agentId)) agents.set(agentId, operation.turnId)
@@ -647,7 +754,9 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
     const existing = [...agents.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([existingAgentId, turnId]) => `${existingAgentId} (latest_turn_id=${turnId ?? "pending"})`)
+      .map(
+        ([existingAgentId, turnId]) => `${existingAgentId} (latest_turn_id=${turnId ?? "pending"})`
+      )
       .join(", ")
     throw new ChatGptSubagentError(
       "AGENT_LIMIT_REACHED",
@@ -681,21 +790,40 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
     for (const scope of scopes.values()) {
       for (const agent of scope.agents.values()) {
         const activeOperation = scope.activeOperations.get(agent.agentId)
-        const activeTurn = activeOperation?.turnId ? scope.turns.get(activeOperation.turnId) : undefined
+        const activeTurn = activeOperation?.turnId
+          ? scope.turns.get(activeOperation.turnId)
+          : undefined
 
         if (activeTurn?.status === "running") {
-          if (agent.memory && !activeTurn.recoveryAttempted && now - activeTurn.lastActivityAt >= STALE_TURN_RECOVERY_MS) {
-            await failOrRecoverSubmittedTurn(activeTurn, new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn had no observable progress for 3 minutes."))
+          if (
+            agent.memory &&
+            !activeTurn.recoveryAttempted &&
+            now - activeTurn.lastActivityAt >= STALE_TURN_RECOVERY_MS
+          ) {
+            await failOrRecoverSubmittedTurn(
+              activeTurn,
+              new ChatGptSubagentError(
+                "AGENT_IDLE_EXPIRED",
+                "Agent turn had no observable progress for 3 minutes."
+              )
+            )
           } else if (now - activeTurn.lastActivityAt >= AGENT_IDLE_TTL_MS) {
             await failOrRecoverSubmittedTurn(
               activeTurn,
-              new ChatGptSubagentError("AGENT_IDLE_EXPIRED", "Agent turn expired after 30 minutes without observable progress.")
+              new ChatGptSubagentError(
+                "AGENT_IDLE_EXPIRED",
+                "Agent turn expired after 30 minutes without observable progress."
+              )
             )
           }
           continue
         }
 
-        if ((activeOperation && !activeOperation.turnId) || now - agent.lastUsedAt < AGENT_IDLE_TTL_MS) continue
+        if (
+          (activeOperation && !activeOperation.turnId) ||
+          now - agent.lastUsedAt < AGENT_IDLE_TTL_MS
+        )
+          continue
         const page = agent.page
         if (page && !page.isClosed()) {
           if (!agent.memory) agent.idleExpired = true
@@ -725,7 +853,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       // Runtime turn state is not persisted, but these conversation IDs can still be reused for the next turn.
       pendingEvents: (store?.list(parentAgent) ?? [])
         .filter((agent) => agent.turnCount > 0)
-        .map((agent) => `existing_agent agent_id=${agent.agentId} latest_turn_id=${agent.agentId}_turn_${agent.turnCount}`),
+        .map(
+          (agent) =>
+            `existing_agent agent_id=${agent.agentId} latest_turn_id=${agent.agentId}_turn_${agent.turnCount}`
+        ),
     }
     scopes.set(parentAgent, scope)
     return scope

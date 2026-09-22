@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
+import process from "node:process"
 
 const AUTH_STATE_VERSION = 1
 
@@ -8,7 +9,11 @@ export interface ShellbyAuthState {
   subject: string | null
 }
 
-export type ShellbyAuthErrorCode = "state_missing" | "state_invalid" | "subject_missing" | "subject_mismatch"
+export type ShellbyAuthErrorCode =
+  | "state_missing"
+  | "state_invalid"
+  | "subject_missing"
+  | "subject_mismatch"
 
 export class ShellbyAuthError extends Error {
   constructor(
@@ -36,7 +41,11 @@ export class ShellbyAuthStore {
       const state: ShellbyAuthState = { version: AUTH_STATE_VERSION, subject: null }
       await ensurePrivateDirectory(dirname(this.filePath))
       try {
-        await writeFile(this.filePath, serializeState(state), { encoding: "utf8", flag: "wx", mode: 0o600 })
+        await writeFile(this.filePath, serializeState(state), {
+          encoding: "utf8",
+          flag: "wx",
+          mode: 0o600,
+        })
         await chmod(this.filePath, 0o600)
         return state
       } catch (error) {
@@ -65,7 +74,10 @@ export class ShellbyAuthStore {
 
   async authorizeToolCall(subject: string | undefined): Promise<ShellbyAuthState> {
     if (!isValidSubject(subject)) {
-      throw new ShellbyAuthError("subject_missing", "OpenAI subject is required for remote tool calls.")
+      throw new ShellbyAuthError(
+        "subject_missing",
+        "OpenAI subject is required for remote tool calls."
+      )
     }
 
     return this.withMutation(async () => {
@@ -76,7 +88,10 @@ export class ShellbyAuthStore {
         return boundState
       }
       if (state.subject !== subject) {
-        throw new ShellbyAuthError("subject_mismatch", "This Shellby MCP installation is bound to a different ChatGPT user.")
+        throw new ShellbyAuthError(
+          "subject_mismatch",
+          "This Shellby MCP installation is bound to a different ChatGPT user."
+        )
       }
       return state
     })
@@ -131,7 +146,11 @@ async function writeStateAtomically(filePath: string, state: ShellbyAuthState): 
   await ensurePrivateDirectory(directory)
   const temporaryPath = join(directory, `.auth-${process.pid}-${Date.now()}.tmp`)
   try {
-    await writeFile(temporaryPath, serializeState(state), { encoding: "utf8", flag: "wx", mode: 0o600 })
+    await writeFile(temporaryPath, serializeState(state), {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    })
     await rename(temporaryPath, filePath)
     await chmod(filePath, 0o600)
   } finally {

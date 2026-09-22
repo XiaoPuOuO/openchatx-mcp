@@ -19,7 +19,7 @@ export function prepareShellCommand(command: string, cwd: string, env: NodeJS.Pr
   })
 
   if (rewritten.error || (rewritten.status !== 0 && rewritten.status !== 3)) return command
-  const value = rewritten.stdout.replace(/\r?\n$/, "")
+  const value = rewritten.stdout.replace(/\r?\n$/u, "")
   if (!value) return command
 
   const rtkDirectory = dirname(executable)

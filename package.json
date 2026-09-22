@@ -1,53 +1,55 @@
 {
   "name": "shellby-mcp",
   "version": "0.2.0",
-  "description": "Context-optimized agent harness that gives ChatGPT Web full computer access, persistent tools, and multi-agent capabilities.",
   "private": false,
-  "license": "MIT",
-  "type": "module",
+  "description": "Context-optimized agent harness that gives ChatGPT Web full computer access, persistent tools, and multi-agent capabilities.",
+  "homepage": "https://github.com/Serbyte-Development/shellby-mcp#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Serbyte-Development/shellby-mcp.git"
   },
-  "homepage": "https://github.com/Serbyte-Development/shellby-mcp#readme",
-  "engines": {
-    "node": ">=22.13.0"
-  },
+  "license": "MIT",
+  "type": "module",
   "scripts": {
+    "auth:reset": "node --import tsx src/auth/reset.ts",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "dev": "node --import tsx --watch src/index.ts",
-    "ui:install": "npm --prefix ui ci",
-    "ui:dev": "npm --prefix ui run dev",
-    "ui:build": "npm --prefix ui run build",
-    "preflight": "node --import tsx scripts/preflight.mjs",
-    "setup": "node --import tsx scripts/setup.mjs",
-    "setup:computer": "node scripts/peekaboo-permissions.mjs",
-    "setup:chatgpt": "node --import tsx scripts/chatgpt-browser.mjs --setup",
-    "start": "node --import tsx scripts/start.mjs",
-    "restart": "node --import tsx scripts/start.mjs --restart",
-    "pm2": "node --import tsx scripts/pm2.mjs",
-    "stop": "node --import tsx scripts/pm2.mjs stop ecosystem.config.cjs",
-    "status": "node --import tsx scripts/pm2.mjs status",
-    "logs": "node --import tsx scripts/pm2.mjs logs",
-    "print-url": "node --import tsx scripts/print-url.mjs",
-    "prompt": "node --import tsx scripts/print-start-prompt.ts",
-    "schemas": "node --import tsx scripts/tool-schemas.ts",
+    "format": "biome format --write .",
     "inspect": "npx @modelcontextprotocol/inspector",
-    "tunnel": "node --import tsx scripts/pm2.mjs startOrReload ecosystem.config.cjs --only shellby-ngrok --update-env",
-    "auth:reset": "node --import tsx src/auth/reset.ts",
-    "reset-agents": "node --import tsx scripts/reset-agents.mjs",
-    "test": "tsx --test test/*.test.ts",
-    "test:live:subagent": "RUN_LIVE_SUBAGENT_TESTS=1 tsx --test test/live/subagent-live.test.ts",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "logs": "node --import tsx scripts/pm2.mjs logs",
+    "pm2": "node --import tsx scripts/pm2.mjs",
+    "preflight": "node --import tsx scripts/preflight.mjs",
+    "print-url": "node --import tsx scripts/print-url.mjs",
     "probe:chatgpt-cdp": "node --import tsx scripts/chatgpt-cdp-probe.mjs",
     "probe:chatgpt-cdp:summary": "node scripts/summarize-chatgpt-cdp-probe.mjs",
+    "prompt": "node --import tsx scripts/print-start-prompt.ts",
+    "reset-agents": "node --import tsx scripts/reset-agents.mjs",
+    "restart": "node --import tsx scripts/start.mjs --restart",
+    "schemas": "node --import tsx scripts/tool-schemas.ts",
+    "setup": "node --import tsx scripts/setup.mjs",
+    "setup:chatgpt": "node --import tsx scripts/chatgpt-browser.mjs --setup",
+    "setup:computer": "node scripts/peekaboo-permissions.mjs",
+    "start": "node --import tsx scripts/start.mjs",
+    "status": "node --import tsx scripts/pm2.mjs status",
+    "stop": "node --import tsx scripts/pm2.mjs stop ecosystem.config.cjs",
+    "test": "tsx --test test/*.test.ts",
+    "test:live:subagent": "RUN_LIVE_SUBAGENT_TESTS=1 tsx --test test/live/subagent-live.test.ts",
+    "tunnel": "node --import tsx scripts/pm2.mjs startOrReload ecosystem.config.cjs --only shellby-ngrok --update-env",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "ui:build": "npm --prefix ui run build",
+    "ui:dev": "npm --prefix ui run dev",
+    "ui:install": "npm --prefix ui ci",
     "vendor:apply-patch": "scripts/build-apply-patch.sh",
     "vendor:peekaboo": "scripts/build-peekaboo.sh",
     "vendor:pixel-agents": "node scripts/vendor-pixel-agents.mjs",
-    "vendor:pixel-agents:check": "node scripts/vendor-pixel-agents.mjs --check",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
-    "format": "prettier --write src test scripts package.json tsconfig.json tsconfig.build.json eslint.config.js ecosystem.config.cjs"
+    "vendor:pixel-agents:check": "node scripts/vendor-pixel-agents.mjs --check"
+  },
+  "overrides": {
+    "pm2": {
+      "js-yaml": "5.2.3"
+    }
   },
   "dependencies": {
     "@modelcontextprotocol/express": "2.0.0",
@@ -67,21 +69,15 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@eslint/js": "10.0.1",
+    "@biomejs/biome": "2.5.14",
     "@modelcontextprotocol/client": "2.0.0",
     "@types/express": "^5.0.6",
     "@types/node": "22.13.17",
-    "eslint": "^10.11.0",
-    "eslint-config-prettier": "10.1.8",
-    "prettier": "^3.9.8",
     "tsx": "^4.23.15",
-    "typescript": "6.0.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript": "6.0.3"
   },
-  "overrides": {
-    "pm2": {
-      "js-yaml": "5.2.3"
-    }
+  "engines": {
+    "node": ">=22.13.0"
   },
   "os": [
     "darwin"

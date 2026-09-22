@@ -1,10 +1,14 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
-
-import { extractConversationMessages } from "../src/tools/subagent/chatgpt-subagent-protocol.js"
-import { appendToolEvents, compactToolResult, formatOutputBlock, renderStructuredContent } from "../src/server/tool-output.js"
+import {
+  appendToolEvents,
+  compactToolResult,
+  formatOutputBlock,
+  renderStructuredContent,
+} from "../src/server/tool-output.js"
 import { countTokens } from "../src/tokenizer.js"
+import { extractConversationMessages } from "../src/tools/subagent/chatgpt-subagent-protocol.js"
 
 test("renders compact scalar metadata and multiline strings without losing values", () => {
   const structured = {
@@ -15,10 +19,13 @@ test("renders compact scalar metadata and multiline strings without losing value
   }
   const rendered = renderStructuredContent(structured)
 
-  assert.equal(rendered, "status=completed exit_code=0 cwd=/workspace\n\noutput:\n\nline one\nline two")
-  assert.match(rendered, /completed/)
-  assert.match(rendered, /\/workspace/)
-  assert.match(rendered, /line one\nline two/)
+  assert.equal(
+    rendered,
+    "status=completed exit_code=0 cwd=/workspace\n\noutput:\n\nline one\nline two"
+  )
+  assert.match(rendered, /completed/u)
+  assert.match(rendered, /\/workspace/u)
+  assert.match(rendered, /line one\nline two/u)
   assert.ok(countTokens(rendered) < countTokens(JSON.stringify(structured)))
 })
 
@@ -73,11 +80,16 @@ test("renders arrays of simple objects as compact rows and nested objects recurs
 })
 
 test("renders long record fields as nested Markdown instead of JSON", () => {
-  const response = "## Findings\n\nUse the shared registration boundary.\n\n```ts\ninstallToolRegistrationBoundary(server)\n```"
+  const response =
+    "## Findings\n\nUse the shared registration boundary.\n\n```ts\ninstallToolRegistrationBoundary(server)\n```"
   const rendered = renderStructuredContent({
     turns: [
       { turn_id: "reviewer_turn_1", status: "completed", response },
-      { turn_id: "tester_turn_1", status: "completed", response: "## Tests\n\nAdd a regression test for multiline output." },
+      {
+        turn_id: "tester_turn_1",
+        status: "completed",
+        response: "## Tests\n\nAdd a regression test for multiline output.",
+      },
     ],
   })
 
@@ -85,8 +97,8 @@ test("renders long record fields as nested Markdown instead of JSON", () => {
     rendered,
     "turns:\n\n- turn_id=reviewer_turn_1 status=completed\n\n  response:\n    ## Findings\n\n    Use the shared registration boundary.\n\n    ```ts\n    installToolRegistrationBoundary(server)\n    ```\n\n- turn_id=tester_turn_1 status=completed\n\n  response:\n    ## Tests\n\n    Add a regression test for multiline output."
   )
-  assert.doesNotMatch(rendered, /\{"turn_id"/)
-  assert.doesNotMatch(rendered, /\\n/)
+  assert.doesNotMatch(rendered, /\{"turn_id"/u)
+  assert.doesNotMatch(rendered, /\\n/u)
 })
 
 test("falls back to minified JSON for unusual nested arrays", () => {
@@ -101,7 +113,9 @@ test("compact result preserves existing content and removes structuredContent", 
   }) as { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }
 
   assert.equal(compact.structuredContent, undefined)
-  assert.deepEqual(compact.content, [{ type: "text", text: "Command finished.\n\nstatus=completed output=hello" }])
+  assert.deepEqual(compact.content, [
+    { type: "text", text: "Command finished.\n\nstatus=completed output=hello" },
+  ])
 })
 
 test("compact fetch_url image results preserve native image content while rendering metadata", () => {
@@ -114,27 +128,40 @@ test("compact fetch_url image results preserve native image content while render
       content: "",
     },
     content: [{ type: "image", data: "abc", mimeType: "image/jpeg" }],
-  }) as { structuredContent?: unknown; content?: Array<{ type: string; text?: string; data?: string }> }
+  }) as {
+    structuredContent?: unknown
+    content?: Array<{ type: string; text?: string; data?: string }>
+  }
 
   assert.equal(result.structuredContent, undefined)
   assert.equal(
     result.content?.some((item) => item.type === "image" && item.data === "abc"),
     true
   )
-  assert.match(result.content?.find((item) => item.type === "text")?.text ?? "", /url=https:\/\/example.com\/pixel.png.*status=200.*content_type=image\/png/)
+  assert.match(
+    result.content?.find((item) => item.type === "text")?.text ?? "",
+    /url=https:\/\/example.com\/pixel.png.*status=200.*content_type=image\/png/u
+  )
 })
 
 test("subagent formatter preserves fenced Markdown from the frozen real ChatGPT fixture", async () => {
-  const payload = JSON.parse(await readFile(new URL("./fixtures/chatgpt-live-fixture/conversation.json", import.meta.url), "utf8")) as unknown
+  const payload = JSON.parse(
+    await readFile(
+      new URL("./fixtures/chatgpt-live-fixture/conversation.json", import.meta.url),
+      "utf8"
+    )
+  ) as unknown
   const assistant = extractConversationMessages(payload)
     .filter((message) => message.role === "assistant")
     .at(-1)
   assert.ok(assistant)
 
-  const rendered = compactText("subagent_result", { turns: [{ turn_id: "fixture_turn_1", status: "completed", response: assistant.text }] })
+  const rendered = compactText("subagent_result", {
+    turns: [{ turn_id: "fixture_turn_1", status: "completed", response: assistant.text }],
+  })
 
   assert.ok(rendered.startsWith("---- turn_id=fixture_turn_1 status=completed ----"))
-  assert.doesNotMatch(rendered, /response:/)
+  assert.doesNotMatch(rendered, /response:/u)
   assert.ok(rendered.includes("## Live Fixture"))
   assert.ok(rendered.includes("```md"))
   assert.ok(rendered.includes("```ts"))
@@ -145,7 +172,8 @@ test("subagent formatter preserves fenced Markdown from the frozen real ChatGPT 
 
 const longSkillDescription =
   "Create or revise reusable skills for this ChatGPT local-shell MCP workspace, including reusable agent workflows and adaptations of existing skills without bloating the tool schema."
-const longStartError = "subagent_failed: Browser observation failed after submission, so the detached turn could not complete."
+const longStartError =
+  "subagent_failed: Browser observation failed after submission, so the detached turn could not complete."
 
 const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expected: string }> = [
   {
@@ -175,7 +203,13 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
       output: "---- run=1 ----\n\nfinished",
       next_cursor: 24,
       commands: [
-        { run: 1, command: "printf finished", status: "completed", exit_code: 0, dropped_output_bytes: 10 },
+        {
+          run: 1,
+          command: "printf finished",
+          status: "completed",
+          exit_code: 0,
+          dropped_output_bytes: 10,
+        },
         { run: 2, command: "sleep 10", status: "running", exit_code: null },
         { run: 3, command: "pwd", status: "queued", exit_code: null },
         { run: 4, command: "sleep 100", status: "timed_out", exit_code: null },
@@ -189,8 +223,14 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
   },
   {
     tool: "apply_patch",
-    structuredContent: { status: "failed", exit_code: 1, output: "Invalid Context 0:\nexpected line", output_dropped: true },
-    expected: "status=failed exit_code=1 output_dropped=true\n\noutput:\n\nInvalid Context 0:\nexpected line",
+    structuredContent: {
+      status: "failed",
+      exit_code: 1,
+      output: "Invalid Context 0:\nexpected line",
+      output_dropped: true,
+    },
+    expected:
+      "status=failed exit_code=1 output_dropped=true\n\noutput:\n\nInvalid Context 0:\nexpected line",
   },
   {
     tool: "shell_reset",
@@ -205,7 +245,8 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
       limit: 4,
       idle_timeout_ms: 300_000,
     },
-    expected: "count=1 limit=4 idle_timeout_ms=300000\n\nshells:\n\n- shell_id=default status=idle can_close=false idle_ms=50",
+    expected:
+      "count=1 limit=4 idle_timeout_ms=300000\n\nshells:\n\n- shell_id=default status=idle can_close=false idle_ms=50",
   },
   {
     tool: "shell_close",
@@ -226,8 +267,17 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
     tool: "subagent_result",
     structuredContent: {
       turns: [
-        { turn_id: "reviewer_turn_1", status: "completed", response: "## Review\n\nArchitecture looks good." },
-        { turn_id: "tester_turn_1", status: "running", activity: "Using tools", activity_age_ms: 2_750 },
+        {
+          turn_id: "reviewer_turn_1",
+          status: "completed",
+          response: "## Review\n\nArchitecture looks good.",
+        },
+        {
+          turn_id: "tester_turn_1",
+          status: "running",
+          activity: "Using tools",
+          activity_age_ms: 2_750,
+        },
       ],
     },
     expected:
@@ -253,8 +303,12 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
   },
   {
     tool: "skill_load",
-    structuredContent: { path: "/workspace/skills/create-skill/SKILL.md", instructions: "# Skill\n\nDo the work." },
-    expected: "path=/workspace/skills/create-skill/SKILL.md\n\ninstructions:\n# Skill\n\nDo the work.",
+    structuredContent: {
+      path: "/workspace/skills/create-skill/SKILL.md",
+      instructions: "# Skill\n\nDo the work.",
+    },
+    expected:
+      "path=/workspace/skills/create-skill/SKILL.md\n\ninstructions:\n# Skill\n\nDo the work.",
   },
 ]
 
@@ -265,6 +319,8 @@ for (const { tool, structuredContent, expected } of toolFamilyCases) {
 }
 
 function compactText(tool: string, structuredContent: unknown): string {
-  const compact = compactToolResult(tool, { structuredContent }) as { content?: Array<{ type: string; text?: string }> }
+  const compact = compactToolResult(tool, { structuredContent }) as {
+    content?: Array<{ type: string; text?: string }>
+  }
   return compact.content?.find((item) => item.type === "text")?.text ?? ""
 }

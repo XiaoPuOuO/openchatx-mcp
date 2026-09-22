@@ -22,9 +22,15 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
               <StatusDot active={active} />
               <h2 className="truncate text-base font-semibold tracking-tight">{agent.id}</h2>
             </div>
-            <p className="mt-1 truncate text-sm text-muted-foreground">{agent.taskSlug ?? "No task name yet"}</p>
+            <p className="mt-1 truncate text-sm text-muted-foreground">
+              {agent.taskSlug ?? "No task name yet"}
+            </p>
           </div>
-          <Badge className={active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : undefined}>{active ? "ACTIVE" : "INACTIVE"}</Badge>
+          <Badge
+            className={active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : undefined}
+          >
+            {active ? "ACTIVE" : "INACTIVE"}
+          </Badge>
         </div>
       </CardHeader>
 
@@ -32,7 +38,9 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
         <AgentRoom agent={agent} />
 
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Recent
+          </h3>
           <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
             {recent.map((call) => (
               <ActivityRow key={call.id} call={call} onClick={() => setSelectedCall(call)} />
@@ -64,10 +72,20 @@ function ActivityRow({ call, onClick }: { call: AgentCall; onClick: () => void }
         <Check className="size-3.5 shrink-0 text-muted-foreground" />
       )}
       <span className="w-24 shrink-0 truncate font-medium">{call.tool}</span>
-      <span className={`min-w-0 flex-1 truncate font-mono ${failed ? "text-red-700" : "text-muted-foreground"}`}>
+      <span
+        className={`min-w-0 flex-1 truncate font-mono ${failed ? "text-red-700" : "text-muted-foreground"}`}
+      >
         {call.summary || (running ? "Working..." : "Completed")}
       </span>
-      <span className={failed ? "shrink-0 text-red-600" : running ? "shrink-0 text-emerald-600" : "shrink-0 text-muted-foreground"}>
+      <span
+        className={
+          failed
+            ? "shrink-0 text-red-600"
+            : running
+              ? "shrink-0 text-emerald-600"
+              : "shrink-0 text-muted-foreground"
+        }
+      >
         {running ? "now" : formatClock(call.finishedAt ?? call.startedAt)}
       </span>
     </button>

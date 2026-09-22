@@ -1,8 +1,13 @@
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
-import { ChatGptSubagentError, chatGptSubagentActivitySchema, chatGptSubagentStatusSchema, type ChatGptSubagentService } from "./chatgpt-subagent-contracts.js"
+import {
+  ChatGptSubagentError,
+  type ChatGptSubagentService,
+  chatGptSubagentActivitySchema,
+  chatGptSubagentStatusSchema,
+} from "./chatgpt-subagent-contracts.js"
 
 const SUBAGENT_RUN_DELAYS_MS = [1_000, 5_000, 7_000] as const
 
@@ -13,18 +18,30 @@ const subagentInputSchema = z.object({
     .max(64)
     .refine((value) => value.trim().length > 0, "agent_id cannot be only whitespace.")
     .transform((value) => value.trim())
-    .describe("Stable subagent conversation ID. Reuse to continue it; use a new ID for independent work."),
+    .describe(
+      "Stable subagent conversation ID. Reuse to continue it; use a new ID for independent work."
+    ),
   prompt: z
     .string()
     .refine((value) => value.trim().length > 0, "prompt cannot be only whitespace.")
     .transform((value) => value.trim())
     .describe("Task or follow-up instruction. Include enough context for the subagent to act."),
-  memory: z.boolean().default(true).describe("Allow a new agent to access memory outside its conversation. Turn history is always preserved."),
+  memory: z
+    .boolean()
+    .default(true)
+    .describe(
+      "Allow a new agent to access memory outside its conversation. Turn history is always preserved."
+    ),
 })
 
 const subagentRunResultSchema = z.object({
   agent_id: z.string(),
-  turn_id: z.string().optional().describe("Unique ID for one submitted turn. Pass it to subagent_result to retrieve that turn."),
+  turn_id: z
+    .string()
+    .optional()
+    .describe(
+      "Unique ID for one submitted turn. Pass it to subagent_result to retrieve that turn."
+    ),
   status: z.enum(["running", "failed"]),
   error: z.string().optional(),
 })
@@ -32,23 +49,36 @@ const subagentRunResultSchema = z.object({
 const subagentResultSchema = z.object({
   turn_id: z.string(),
   status: chatGptSubagentStatusSchema,
-  activity: chatGptSubagentActivitySchema.optional().describe("Current coarse activity while status is running."),
-  activity_age_ms: z.int().nonnegative().optional().describe("Time since the last observable subagent progress while status is running."),
+  activity: chatGptSubagentActivitySchema
+    .optional()
+    .describe("Current coarse activity while status is running."),
+  activity_age_ms: z
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("Time since the last observable subagent progress while status is running."),
   response: z.string().optional(),
   error: z.string().optional(),
 })
 
-export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatGptSubagentService): void {
+export function registerSubagentTools(
+  server: McpServer,
+  chatGptSubagents: ChatGptSubagentService
+): void {
   server.registerTool(
     "subagent_run",
     {
-      description: "Submit 1-3 subagent tasks and continue working. Retrieve returned turn_id values with subagent_result.",
+      description:
+        "Submit 1-3 subagent tasks and continue working. Retrieve returned turn_id values with subagent_result.",
       inputSchema: z.object({
         agents: z
           .array(subagentInputSchema)
           .min(1)
           .max(3)
-          .refine((agents) => new Set(agents.map((agent) => agent.agent_id)).size === agents.length, "agent_id values must be unique within a batch."),
+          .refine(
+            (agents) => new Set(agents.map((agent) => agent.agent_id)).size === agents.length,
+            "agent_id values must be unique within a batch."
+          ),
       }),
       outputSchema: z.object({
         turns: z.array(subagentRunResultSchema),
@@ -105,7 +135,8 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
   server.registerTool(
     "subagent_result",
     {
-      description: "Retrieve status or results for 1-3 submitted subagent turns. Be patient, subagents may take up to 30 minutes to complete.",
+      description:
+        "Retrieve status or results for 1-3 submitted subagent turns. Be patient, subagents may take up to 30 minutes to complete.",
       inputSchema: z.object({
         turn_ids: z
           .array(
@@ -147,7 +178,9 @@ export function registerSubagentTools(server: McpServer, chatGptSubagents: ChatG
               activity_age_ms: result.activityAgeMs,
               response: result.response,
               error:
-                result.status === "failed" ? `${result.errorCode ?? "subagent_failed"}: ${result.errorMessage ?? "ChatGPT subagent turn failed."}` : undefined,
+                result.status === "failed"
+                  ? `${result.errorCode ?? "subagent_failed"}: ${result.errorMessage ?? "ChatGPT subagent turn failed."}`
+                  : undefined,
             }
           } catch (error) {
             return {
@@ -183,7 +216,10 @@ function subagentErrorText(error: unknown): string {
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   if (!signal) return new Promise((resolve) => setTimeout(resolve, ms))
-  if (signal.aborted) return Promise.reject(new ChatGptSubagentError("REQUEST_ABORTED", "The ChatGPT subagent request was cancelled."))
+  if (signal.aborted)
+    return Promise.reject(
+      new ChatGptSubagentError("REQUEST_ABORTED", "The ChatGPT subagent request was cancelled.")
+    )
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -192,7 +228,9 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms)
     const onAbort = () => {
       clearTimeout(timer)
-      reject(new ChatGptSubagentError("REQUEST_ABORTED", "The ChatGPT subagent request was cancelled."))
+      reject(
+        new ChatGptSubagentError("REQUEST_ABORTED", "The ChatGPT subagent request was cancelled.")
+      )
     }
     signal.addEventListener("abort", onAbort, { once: true })
   })

@@ -4,13 +4,13 @@ import {
   ROOM_GRID_SIZE,
   ROOM_HEIGHT,
   ROOM_WIDTH,
-  resolveRoomAssetPath,
   type RoomCarpetTile,
   type RoomFurnitureItem,
   type RoomLayout,
   type RoomPet,
   type RoomStation,
   type RoomTile,
+  resolveRoomAssetPath,
 } from "./agentRoomLayout"
 
 export const ROOM_PIXEL_SCALE = 2
@@ -49,7 +49,12 @@ export function drawRoomSurface(ctx: CanvasRenderingContext2D, layout: RoomLayou
     ctx.fillStyle = rug.border
     ctx.fillRect(x, y, width, height)
     ctx.fillStyle = rug.fill
-    ctx.fillRect(x + ROOM_GRID_SIZE / 2, y + ROOM_GRID_SIZE / 2, width - ROOM_GRID_SIZE, height - ROOM_GRID_SIZE)
+    ctx.fillRect(
+      x + ROOM_GRID_SIZE / 2,
+      y + ROOM_GRID_SIZE / 2,
+      width - ROOM_GRID_SIZE,
+      height - ROOM_GRID_SIZE
+    )
   }
 
   drawCarpetLayer(ctx, layout)
@@ -74,11 +79,17 @@ export function drawRoomWalls(ctx: CanvasRenderingContext2D, layout: RoomLayout)
   }
 }
 
-export function drawRoomFurnitureItems(ctx: CanvasRenderingContext2D, items: readonly RoomFurnitureItem[]): void {
+export function drawRoomFurnitureItems(
+  ctx: CanvasRenderingContext2D,
+  items: readonly RoomFurnitureItem[]
+): void {
   for (const item of items) drawRoomFurnitureItem(ctx, item)
 }
 
-export function drawRoomFurnitureItem(ctx: CanvasRenderingContext2D, item: RoomFurnitureItem): void {
+export function drawRoomFurnitureItem(
+  ctx: CanvasRenderingContext2D,
+  item: RoomFurnitureItem
+): void {
   const path = resolveRoomAssetPath(item.asset)
   const image = getRoomImage(path)
   if (!isReady(image)) return
@@ -97,7 +108,12 @@ export function drawRoomFurnitureItem(ctx: CanvasRenderingContext2D, item: RoomF
   ctx.restore()
 }
 
-export function roomFurnitureBounds(item: RoomFurnitureItem): { x: number; y: number; width: number; height: number } {
+export function roomFurnitureBounds(item: RoomFurnitureItem): {
+  x: number
+  y: number
+  width: number
+  height: number
+} {
   const image = getRoomImage(resolveRoomAssetPath(item.asset))
   return {
     x: gridToPixel(item.x),
@@ -115,7 +131,11 @@ export function drawRoomBorder(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(ROOM_WIDTH - 5, 0, 5, ROOM_HEIGHT)
 }
 
-export function drawRoomForeground(ctx: CanvasRenderingContext2D, layout: RoomLayout, station: RoomStation): void {
+export function drawRoomForeground(
+  ctx: CanvasRenderingContext2D,
+  layout: RoomLayout,
+  station: RoomStation
+): void {
   drawRoomFurnitureItems(
     ctx,
     layout.furniture.filter((item) => item.foregroundWhenWorkingAt === station)
@@ -135,7 +155,12 @@ export function drawRoomPets(ctx: CanvasRenderingContext2D, pets: readonly RoomP
   }
 }
 
-export function roomPetBounds(pet: RoomPet): { x: number; y: number; width: number; height: number } {
+export function roomPetBounds(pet: RoomPet): {
+  x: number
+  y: number
+  width: number
+  height: number
+} {
   const width = 16 * ROOM_PIXEL_SCALE
   const height = 32 * ROOM_PIXEL_SCALE
   const x = gridToPixel(pet.x)
@@ -199,9 +224,18 @@ function drawCarpetLayer(ctx: CanvasRenderingContext2D, layout: RoomLayout): voi
   }
 }
 
-function carpetVariantsAtJunction(layout: RoomLayout, jx: number, jy: number): Array<{ asset: string; order: number }> {
+function carpetVariantsAtJunction(
+  layout: RoomLayout,
+  jx: number,
+  jy: number
+): Array<{ asset: string; order: number }> {
   const variants = new Map<string, number>()
-  for (const [col, row] of [[jx - 1, jy - 1], [jx, jy - 1], [jx, jy], [jx - 1, jy]]) {
+  for (const [col, row] of [
+    [jx - 1, jy - 1],
+    [jx, jy - 1],
+    [jx, jy],
+    [jx - 1, jy],
+  ]) {
     const tile = carpetTileAt(layout, col, row)
     if (!tile) continue
     variants.set(tile.asset, Math.max(variants.get(tile.asset) ?? 0, tile.order ?? 0))
@@ -225,7 +259,14 @@ function carpetTileAt(layout: RoomLayout, col: number, row: number): RoomCarpetT
   return layout.carpetTiles[row * layout.cols + col] ?? null
 }
 
-function multiplyTint(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, tint: string): void {
+function multiplyTint(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  tint: string
+): void {
   ctx.save()
   ctx.globalCompositeOperation = "multiply"
   ctx.fillStyle = tint

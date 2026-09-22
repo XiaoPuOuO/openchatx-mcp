@@ -15,9 +15,21 @@ test("persists subagent conversation state across store reopen", () => {
   try {
     const first = createSubagentStore(path)
     assert.ok(first)
-    first.set(mainA, "reviewer", { conversationUrl: "https://chatgpt.com/c/example-a", turnCount: 4, kind: "subagent" })
-    first.set(mainA, "clone-a", { conversationUrl: "https://chatgpt.com/c/clone-a", turnCount: 1, kind: "clone" })
-    first.set(mainB, "reviewer", { conversationUrl: "https://chatgpt.com/c/example-b", turnCount: 2, kind: "subagent" })
+    first.set(mainA, "reviewer", {
+      conversationUrl: "https://chatgpt.com/c/example-a",
+      turnCount: 4,
+      kind: "subagent",
+    })
+    first.set(mainA, "clone-a", {
+      conversationUrl: "https://chatgpt.com/c/clone-a",
+      turnCount: 1,
+      kind: "clone",
+    })
+    first.set(mainB, "reviewer", {
+      conversationUrl: "https://chatgpt.com/c/example-b",
+      turnCount: 2,
+      kind: "subagent",
+    })
     assert.deepEqual(first.list(mainA), [
       {
         agentId: "clone-a",

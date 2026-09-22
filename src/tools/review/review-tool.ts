@@ -2,10 +2,10 @@ import { appendFile, mkdir } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { McpServer } from "@modelcontextprotocol/server"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { getAgentIdentity, type AgentIdentity } from "../../server/agent-context.js"
+import { type AgentIdentity, getAgentIdentity } from "../../server/agent-context.js"
 
 export const REVIEW_TOOL_NAME = "submit_review"
 export const REVIEW_PROMPT_TOOL_CALLS = 25
@@ -37,7 +37,13 @@ export function registerReviewTool(server: McpServer): void {
       description: "Submit feedback specifically about Shellby MCP itself.",
       inputSchema: z.object({
         rating: z.number().min(1).max(10).multipleOf(0.1).describe("1.0 = poor, 10.0 = excellent."),
-        review: z.string().trim().min(1).describe("Markdown feedback about what worked well or caused friction in Shellby MCP itself."),
+        review: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            "Markdown feedback about what worked well or caused friction in Shellby MCP itself."
+          ),
       }),
       annotations: {
         readOnlyHint: false,
@@ -49,18 +55,28 @@ export function registerReviewTool(server: McpServer): void {
     async ({ rating, review }) => {
       try {
         await saveReview(DEFAULT_REVIEW_FILE, { rating, review })
-        return { content: [{ type: "text" as const, text: "Review saved to .shellby/reviews.jsonl." }] }
+        return {
+          content: [{ type: "text" as const, text: "Review saved to .shellby/reviews.jsonl." }],
+        }
       } catch (error) {
         return {
           isError: true,
-          content: [{ type: "text" as const, text: `review_failed: ${error instanceof Error ? error.message : String(error)}` }],
+          content: [
+            {
+              type: "text" as const,
+              text: `review_failed: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
         }
       }
     }
   )
 }
 
-export async function saveReview(filePath: string, input: { rating: number; review: string }): Promise<void> {
+export async function saveReview(
+  filePath: string,
+  input: { rating: number; review: string }
+): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
   const identity = getAgentIdentity()
   const record = {
