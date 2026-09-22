@@ -61,22 +61,22 @@
     "playwright-core": "^1.63.0",
     "pm2": "^7.0.4",
     "sharp": "^0.35.3",
-    "smol-toml": "1.8.0",
+    "smol-toml": "^1.9.0",
     "tiktoken": "^1.0.22",
     "unpdf": "1.8.1",
-    "zod": "^4.5.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@modelcontextprotocol/client": "2.0.0",
     "@types/express": "^5.0.6",
     "@types/node": "22.13.17",
-    "eslint": "^10.10.0",
+    "eslint": "^10.11.0",
     "eslint-config-prettier": "10.1.8",
-    "prettier": "^3.9.6",
-    "tsx": "^4.23.12",
+    "prettier": "^3.9.8",
+    "tsx": "^4.23.15",
     "typescript": "6.0.3",
-    "typescript-eslint": "^8.69.0"
+    "typescript-eslint": "^8.70.1"
   },
   "overrides": {
     "pm2": {
