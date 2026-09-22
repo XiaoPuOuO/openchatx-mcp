@@ -560,8 +560,9 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
 
   function drainPendingEvents(): string[] {
     const agent = getAgentIdentity()
-    const scope = scopes.get(agent)
-    if (!scope || scope.pendingEvents.length === 0) return []
+    // The first drain after a restart creates the scope so start_here can surface persisted agents immediately.
+    const scope = getScope(agent)
+    if (scope.pendingEvents.length === 0) return []
     return scope.pendingEvents.splice(0)
   }
 
@@ -721,7 +722,10 @@ export function createChatGptSubagentService(): ChatGptSubagentService {
       agents: new Map(),
       turns: new Map(),
       activeOperations: new Map(),
-      pendingEvents: [],
+      // Runtime turn state is not persisted, but these conversation IDs can still be reused for the next turn.
+      pendingEvents: (store?.list(parentAgent) ?? [])
+        .filter((agent) => agent.turnCount > 0)
+        .map((agent) => `existing_agent agent_id=${agent.agentId} latest_turn_id=${agent.agentId}_turn_${agent.turnCount}`),
     }
     scopes.set(parentAgent, scope)
     return scope

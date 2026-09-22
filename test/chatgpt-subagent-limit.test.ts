@@ -75,3 +75,32 @@ for (const limit of [1, 3, 5]) {
     }
   })
 }
+
+test("drains persisted delegated agents once after service restart", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "shellby-agent-events-"))
+  const previousStateDir = MCP_CONFIG.stateDir
+  MCP_CONFIG.stateDir = directory
+  t.after(() => {
+    MCP_CONFIG.stateDir = previousStateDir
+    rmSync(directory, { recursive: true, force: true })
+  })
+
+  const sessionId = "persisted-agent-events-session"
+  const parentAgent = runWithAgent(sessionId, () => getAgentIdentity()!)
+  const store = createSubagentStore(join(directory, "subagents.sqlite"))
+  assert.ok(store)
+  store.set(parentAgent, "reviewer", { conversationUrl: "https://chatgpt.com/c/reviewer", turnCount: 1, kind: "subagent" })
+  store.set(parentAgent, "tester", { conversationUrl: "https://chatgpt.com/c/tester", turnCount: 3, kind: "subagent" })
+  store.close()
+
+  const service = createChatGptSubagentService()
+  try {
+    assert.deepEqual(runWithAgent(sessionId, () => service.drainEvents()), [
+      "existing_agent agent_id=reviewer latest_turn_id=reviewer_turn_1",
+      "existing_agent agent_id=tester latest_turn_id=tester_turn_3",
+    ])
+    assert.deepEqual(runWithAgent(sessionId, () => service.drainEvents()), [])
+  } finally {
+    await service.dispose()
+  }
+})

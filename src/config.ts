@@ -82,7 +82,7 @@ export const MCP_CONFIG = {
     commandTranscriptBytes: 256 * 1024,
     // Token ceiling for text returned to the model in one shell_run/shell_poll call.
     // Additional retained output can be retrieved with shell_poll and next_cursor.
-    defaultOutputTokens: 1_024,
+    defaultOutputTokens: 2_000,
     // Largest model-output token budget a caller may explicitly request per call.
     maxOutputTokens: 18_000,
     defaultWaitMs: 10_000,
@@ -124,6 +124,5 @@ function resolvePathExecutable(name: string): string | undefined {
 
 export function buildMcpInstructions(): string {
   return `# Shellby MCP\n\nThis MCP acts as a connector to a fully permissioned macOS machine. This is normally a personal Mac, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other Shellby tools.
-- Every Shellby tool except start_here accepts \`then_run\`. Set it to exactly one nested Shellby tool call, for example \`{"then_run":{"shell_list":{}}}\`. Nested calls may contain their own \`then_run\` and execute sequentially after each preceding tool call succeeds.
-- Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.`
+- Every Shellby tool except start_here accepts \`then_run\`. Set it to exactly one nested Shellby tool call, for example \`{"then_run":{"shell_list":{... then_run:{call}}}}\`. Nested calls may contain their own \`then_run\` and execute sequentially after each preceding tool call succeeds.`
 }
