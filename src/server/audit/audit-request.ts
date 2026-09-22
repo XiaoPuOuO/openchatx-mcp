@@ -26,7 +26,7 @@ interface PendingAuditCall {
 
 export function createAuditRequest(
   payload: unknown,
-  startToolCall: (toolName: string, argumentsValue: unknown) => McpAuditCall,
+  startToolCall: (toolName: string, argumentsValue: unknown, via?: "then_run") => McpAuditCall,
   onToolList: () => void
 ): McpAuditRequest {
   const pending: PendingAuditCall[] = []
@@ -50,7 +50,8 @@ export function createAuditRequest(
       const match =
         pending.find((item) => !item.claimed && item.name === toolName && inputMatches(item.argumentsValue, argumentsValue)) ??
         pending.find((item) => !item.claimed && item.name === toolName)
-      if (!match) return undefined
+      // Top-level MCP calls are preloaded into pending. An unmatched execution is created internally by then_run.
+      if (!match) return startToolCall(toolName, argumentsValue, "then_run")
       match.claimed = true
       return match.call
     },

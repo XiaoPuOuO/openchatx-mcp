@@ -23,12 +23,12 @@ export class McpAuditLogger {
   startRequest(payload: unknown): McpAuditRequest {
     return createAuditRequest(
       payload,
-      (toolName, argumentsValue) => this.startToolCall(toolName, argumentsValue),
+      (toolName, argumentsValue, via) => this.startToolCall(toolName, argumentsValue, via),
       () => this.appendToolList()
     )
   }
 
-  private startToolCall(toolName: string, argumentsValue: unknown): McpAuditCall {
+  private startToolCall(toolName: string, argumentsValue: unknown, via?: "then_run"): McpAuditCall {
     const identity = getAgentIdentity()
     const agentLabel = identity ? (identity.taskSlug ? `${identity.agent}/${identity.taskSlug}` : identity.agent) : undefined
     const startedAt = this.clock()
@@ -61,6 +61,7 @@ export class McpAuditLogger {
             failureMessage: toolResponse.failureMessage,
             responseSummary: toolResponse,
             agentLabel,
+            via,
           })
         )
       },

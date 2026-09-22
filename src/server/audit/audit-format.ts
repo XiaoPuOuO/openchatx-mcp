@@ -26,6 +26,7 @@ export function formatAuditEntry(input: {
   failureMessage?: string
   responseSummary: ToolResponseSummary
   agentLabel?: string
+  via?: "then_run"
 }): string {
   const abnormal = input.httpStatus >= 400 || input.state !== "finished" ? ` - HTTP ${input.httpStatus} ${input.state}` : ""
   const tokenCounts = ` - ${input.inputTokens} in${input.outputTokens !== undefined ? ` / ${input.outputTokens} out` : ""}`
@@ -33,6 +34,7 @@ export function formatAuditEntry(input: {
   const tagPrefix = tag ? `${tag} ` : ""
   const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${abnormal} - ${formatAuditTime(input.time)}`
   const details = [
+    input.via ? `via: ${input.via}` : "",
     formatAgentLabel(input.agentLabel),
     formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage),
     formatResponseSummary(input.toolName, input.responseSummary),

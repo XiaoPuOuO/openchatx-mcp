@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server"
+import { z } from "zod"
 
 import { MCP_CONFIG } from "../config.js"
 import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
@@ -7,6 +8,7 @@ import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import { getAgentIdentity } from "./agent-context.js"
 import type { AgentObserver } from "./agent-observer.js"
 import type { McpAuditRequest } from "./audit/audit-log.js"
+import { mergeThenRunResult, parseThenRun, shouldStopThenRun, splitThenRun, withThenRunSchema } from "./then-run.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 
 const SCHEMA_KEY_ORDER = [
@@ -103,14 +105,88 @@ interface StandardSchemaJsonSource {
   }
 }
 
+interface RegisteredTool {
+  callback: (...args: unknown[]) => unknown
+  inputSchema?: z.ZodType
+  outputSchema?: z.ZodType
+  acceptsInput: boolean
+  nativeContent: boolean
+}
+
 export function installToolRegistrationBoundary(server: McpServer, options: ToolRegistrationBoundaryOptions): void {
   const registerTool = server.registerTool.bind(server) as unknown as (name: string, config: ToolRegistrationConfig, callback: unknown) => unknown
   const structuredOutput = MCP_CONFIG.mcp.toolOutput === "structured"
+  const tools = new Map<string, RegisteredTool>()
+
+  const dispatchTool = async (name: string, inputValue: unknown, context: unknown, nested = false): Promise<unknown> => {
+    const tool = tools.get(name)
+    if (!tool) return toolError(`Tool ${name} not found.`)
+
+    const auditInput = isRecord(inputValue) ? inputValue : {}
+    const auditCall = options.auditRequest?.claimTool(name, auditInput)
+    let observedCallId: string | undefined
+
+    try {
+      let parsedInput: unknown = inputValue ?? {}
+      if (nested && tool.inputSchema) {
+        const parsed = await tool.inputSchema.safeParseAsync(parsedInput)
+        if (!parsed.success) {
+          const result = toolError(`Input validation error: Invalid arguments for tool ${name}: ${parsed.error.issues[0]?.message ?? "validation failed"}`)
+          auditCall?.finish({ toolResult: result, modelResult: result })
+          return result
+        }
+        parsedInput = parsed.data
+      }
+
+      const input = isRecord(parsedInput) ? parsedInput : {}
+      const { arguments: callbackInput, thenRun } = splitThenRun(name, input)
+      const agent = getAgentIdentity()
+      if (agent && name !== START_HERE_TOOL_NAME && !agent.taskSlug) {
+        const result = startupRequiredResult()
+        auditCall?.finish({ toolResult: result, modelResult: result })
+        return result
+      }
+
+      observedCallId = options.agentObserver?.startTool(agent, name, input)
+      const result = await (tool.acceptsInput ? tool.callback(callbackInput, context) : tool.callback(context))
+      if (nested) await validateToolOutput(name, tool.outputSchema, result)
+      options.agentObserver?.finishTool(agent, observedCallId)
+
+      const projected = nested || (!tool.nativeContent && !structuredOutput) ? compactToolResult(name, result) : result
+      const events = [
+        ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
+        ...(options.drainPendingEvents?.() ?? []),
+        ...(options.agentObserver?.drainInstructions(agent) ?? []),
+        ...(options.reviewPromptTracker?.() ?? []),
+      ]
+      const finalResult = appendToolEvents(projected, events)
+      auditCall?.finish({ toolResult: result, modelResult: finalResult })
+
+      if (thenRun === undefined || shouldStopThenRun(name, result)) return finalResult
+
+      let next
+      try {
+        next = parseThenRun(thenRun, (toolName) => tools.has(toolName))
+      } catch (error) {
+        return mergeThenRunResult(finalResult, toolError(`then_run_error: ${error instanceof Error ? error.message : String(error)}`))
+      }
+      return mergeThenRunResult(finalResult, await dispatchTool(next.name, next.arguments, context, true))
+    } catch (error) {
+      const agent = getAgentIdentity()
+      options.agentObserver?.failTool(agent, observedCallId)
+      const result = toolError(error instanceof Error ? error.message : String(error))
+      auditCall?.finish({ error, modelResult: result })
+      return result
+    }
+  }
 
   server.registerTool = ((name: string, config: ToolRegistrationConfig, callback: unknown) => {
+    const acceptsInput = config.inputSchema !== undefined
+    config.inputSchema = withThenRunSchema(name, config.inputSchema)
     const computerUse = name.startsWith("computer_")
     const nativeContent = computerUse || name === "image_view"
     if (!nativeContent && !structuredOutput) delete config.outputSchema
+    const outputSchema = config.outputSchema as z.ZodType | undefined
     canonicalizeStandardSchema(config.inputSchema)
     canonicalizeStandardSchema(config.outputSchema)
     const annotations = compactToolAnnotations(config.annotations)
@@ -118,41 +194,36 @@ export function installToolRegistrationBoundary(server: McpServer, options: Tool
     else config.annotations = annotations
 
     if (typeof callback !== "function") return registerTool(name, config, callback)
-    const wrapped = async (...args: unknown[]) => {
-      const input = isRecord(args[0]) ? args[0] : undefined
-      const auditCall = options.auditRequest?.claimTool(name, input ?? {})
-      let observedCallId: string | undefined
-
-      try {
-        const agent = getAgentIdentity()
-        if (agent && name !== START_HERE_TOOL_NAME && !agent.taskSlug) {
-          const result = startupRequiredResult()
-          auditCall?.finish({ toolResult: result, modelResult: result })
-          return result
-        }
-
-        observedCallId = options.agentObserver?.startTool(agent, name, input)
-        const result = await callback(...args)
-        options.agentObserver?.finishTool(agent, observedCallId)
-        const projected = nativeContent || structuredOutput ? result : compactToolResult(name, result)
-        const events = [
-          ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
-          ...(options.drainPendingEvents?.() ?? []),
-          ...(options.agentObserver?.drainInstructions(agent) ?? []),
-          ...(options.reviewPromptTracker?.() ?? []),
-        ]
-        const finalResult = appendToolEvents(projected, events)
-        auditCall?.finish({ toolResult: result, modelResult: finalResult })
-        return finalResult
-      } catch (error) {
-        const agent = getAgentIdentity()
-        options.agentObserver?.failTool(agent, observedCallId)
-        auditCall?.finish({ error })
-        throw error
-      }
-    }
+    tools.set(name, {
+      callback: callback as (...args: unknown[]) => unknown,
+      inputSchema: config.inputSchema as z.ZodType | undefined,
+      outputSchema,
+      acceptsInput,
+      nativeContent,
+    })
+    const wrapped = async (...args: unknown[]) => dispatchTool(name, args[0], args[1])
     return registerTool(name, config, wrapped)
   }) as typeof server.registerTool
+}
+
+async function validateToolOutput(toolName: string, schema: z.ZodType | undefined, result: unknown): Promise<void> {
+  if (!schema || isToolError(result)) return
+  if (!isRecord(result) || result.structuredContent === undefined) {
+    throw new Error(`Output validation error: Tool ${toolName} has an output schema but no structured content was provided`)
+  }
+  const parsed = await schema.safeParseAsync(result.structuredContent)
+  if (!parsed.success) throw new Error(`Output validation error: Invalid structured content for tool ${toolName}: ${parsed.error.issues[0]?.message ?? "validation failed"}`)
+}
+
+function toolError(text: string) {
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text }],
+  }
+}
+
+function isToolError(value: unknown): boolean {
+  return isRecord(value) && value.isError === true
 }
 
 function startupRequiredResult() {

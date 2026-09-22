@@ -124,5 +124,6 @@ function resolvePathExecutable(name: string): string | undefined {
 
 export function buildMcpInstructions(): string {
   return `# Shellby MCP\n\nThis MCP acts as a connector to a fully permissioned macOS machine. This is normally a personal Mac, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other Shellby tools.
+- Every Shellby tool except start_here accepts \`then_run\`. Set it to exactly one nested Shellby tool call, for example \`{"then_run":{"shell_list":{}}}\`. Nested calls may contain their own \`then_run\` and execute sequentially after each preceding tool call succeeds.
 - Do not use ChatGPT's internal container or sandbox for paths under \`/Users/...\` or for work intended to affect the user's local machine; use Shellby MCP instead.`
 }
