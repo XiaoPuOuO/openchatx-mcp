@@ -13,9 +13,9 @@ paths:
 
 ## Build Boundaries
 
-Backend uses Node 22.18.0+ and TypeScript ESM, with `src/public-config.cts` emitted as CommonJS so PM2 and the runtime share config interpretation. `tsconfig.json` typechecks source and tests; `tsconfig.build.json` emits only `src/` into `dist/`. `npm run build` removes the previous backend output before compiling. Biome governs source style and linting; exact dependency versions belong in `package.json` and the lockfile.
+Backend uses Node 22.18.0+ and TypeScript 7 ESM, with `src/public-config.cts` emitted as CommonJS so PM2 and the runtime share config interpretation. `tsconfig.json` typechecks source and tests; `tsconfig.build.json` emits only `src/` into `dist/`. `npm run build` removes the previous backend output before compiling. Root Biome governs source style and linting across the backend package while excluding `ui/**`; exact dependency versions belong in `package.json` and the lockfile.
 
-The React dashboard has its own package, TypeScript/Vite config, dependencies, and `ui/dist` output. Root backend build/setup/start do not build it. Use `npm run ui:install`, `npm run ui:build`, or `npm run ui:dev`; see the [UI wiki](../../../ui/wiki/index.md).
+The React dashboard has its own package, Biome config, TypeScript/Vite config, dependencies, and `ui/dist` output. Root backend build/setup/start do not build it. Use `npm run ui:install`, `npm run ui:build`, or `npm run ui:dev`; run UI linting through the `ui/` package. See the [UI wiki](../../../ui/wiki/index.md).
 
 Fresh checkouts need `npm ci` and `npm run setup -- --config-only` before tests importing `MCP_CONFIG`. Config is required at module load. Tests should use temporary repositories for config loading and scaffolding and restore any process-config mutations they make.
 
@@ -32,7 +32,7 @@ Run the cheapest focused check that addresses the changed behavior. Broaden when
 | Delegation | `test/chatgpt-subagent-browser.test.ts`, `test/chatgpt-subagent-limit.test.ts`, `test/subagent-store.test.ts` |
 | Resource adapters | `test/web-fetch.test.ts`, `test/peekaboo.test.ts`, image tests, and vendor binary smoke tests |
 
-`npm test` runs `test/*.test.ts`. `npm run typecheck` checks source and tests without emitting; `npm run lint` checks `src/` and `test/`. `npm run schemas` starts an isolated HTTP server on an ephemeral port, connects a real MCP client, and prints the configured `tools/list` schemas; optional tool-name arguments filter output. It does not restart production.
+`npm test` runs `test/*.test.ts`. `npm run typecheck` checks source and tests without emitting; `npm run lint` runs the root Biome configuration across the backend package, scripts, tests, and repository-owned config files while excluding `ui/**`. The UI package has its own Biome configuration and lint scripts. `npm run schemas` starts an isolated HTTP server on an ephemeral port, connects a real MCP client, and prints the configured `tools/list` schemas; optional tool-name arguments filter output. It does not restart production.
 
 Integration tests cover modern MCP negotiation and legacy fallback, shared state across clients, startup gating and five-second instruction deduplication, static tool-group toggles, compact/structured results, owner binding on the first tool call, host rejection, and continued client use after an isolated server restart. Source `test/integrations/` owns exact coverage.
 
