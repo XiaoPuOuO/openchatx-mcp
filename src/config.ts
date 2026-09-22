@@ -19,8 +19,11 @@ const publicConfig = loadPublicConfig()
 const rtkExecutable = resolvePathExecutable("rtk")
 
 export const MCP_CONFIG = {
+  /** MCP server identity advertised to connected clients. */
   server: {
+    /** MCP server name advertised during initialization. */
     name: "shellby-mcp",
+    /** MCP server version sourced from package.json. */
     version: packageVersion,
     // icons: [
     //   {
@@ -30,81 +33,132 @@ export const MCP_CONFIG = {
     //   },
     // ],
   },
+  /** Network interface used by the local MCP HTTP server. */
   host: "127.0.0.1",
+  /** TCP port used by the MCP HTTP server. */
   port: publicConfig.port,
+  /** Stable identity for this repository and state-directory combination. */
   instanceId: createHash("sha256")
     .update(`${repositoryRoot}\0${resolveConfiguredPath(publicConfig.state_dir)}`)
     .digest("hex"),
+  /** Directory for Shellby's persistent runtime state. */
   stateDir: resolveConfiguredPath(publicConfig.state_dir),
+  /** Default filesystem workspace exposed to Shellby tools. */
   workspace: resolveConfiguredPath(publicConfig.workspace),
+  /** Executables used by local computer-control tools. */
   peekaboo: {
+    /** Bundled Peekaboo CLI executable. */
     executable: bundledPeekabooExecutable,
+    /** Companion process used to control the physical cursor. */
     cursorHostExecutable: join(dirname(bundledPeekabooExecutable), "peekaboo-cursor-host"),
   },
+  /** Browser-backed ChatGPT delegation settings. */
   chatGpt: {
+    /** Chrome DevTools endpoint used to control the ChatGPT browser session. */
     cdpEndpoint: publicConfig.chatgpt.cdp_endpoint,
+    /** ChatGPT project URL opened for delegated agents. */
     projectUrl: publicConfig.chatgpt.project_url,
+    /** Maximum delegated ChatGPT agents allowed at once. */
     maxDelegatedAgents: publicConfig.chatgpt.max_delegated_agents,
+    /** Default wait before a delegated-agent poll returns while still running. */
     defaultPollWaitMs: 30_000,
+    /** Maximum delegated-agent poll wait accepted from callers. */
     maxPollWaitMs: 270_000,
   },
+  /** Public ngrok tunnel settings. */
   ngrok: {
+    /** Whether Shellby should expose MCP through ngrok. */
     enabled: publicConfig.ngrok.enabled,
+    /** Local ngrok API port used to inspect active tunnels. */
     apiPort: publicConfig.ngrok.api_port,
+    /** Optional configured public ngrok URL. */
     url: publicConfig.ngrok?.url,
+    /** Whether ngrok endpoint pooling is enabled. */
     poolingEnabled: publicConfig.ngrok?.pooling_enabled ?? false,
   },
+  /** MCP protocol presentation settings. */
   mcp: {
+    /** Representation used for ordinary MCP tool results. */
     toolOutput: publicConfig.mcp.tool_output,
   },
+  /** Shellby dashboard settings. */
   ui: {
+    /** Whether the local Shellby UI is served. */
     enabled: publicConfig.ui.enabled,
   },
+  /** HTTP and document-fetching limits. */
   web: {
+    /** Default text format returned by fetch_url. */
     defaultFormat: "markdown" as const,
+    /** Default model-output token budget for one fetch_url response. */
     defaultOutputTokens: 8000,
+    /** Maximum model-output token budget a fetch_url caller may request. */
     maxOutputTokens: 32000,
+    /** Maximum extracted document bytes retained for cursor continuation. */
     documentByteLimit: 2 * 1024 * 1024,
+    /** Maximum downloaded resource size accepted before extraction. */
     resourceByteLimit: 16 * 1024 * 1024,
+    /** Time a cached fetched document remains available for cursor reads. */
     documentTtlMs: 10 * 60 * 1_000,
+    /** Maximum number of fetched documents retained in the cache. */
     documentLimit: 20,
   },
+  /** Persistent shell execution, output, and lifecycle settings. */
   shell: {
+    /** Shell executable used for persistent command sessions. */
     path: publicConfig.shell.path,
+    /** Whether supported shell commands are rewritten through RTK. */
     rtk: publicConfig.shell.rtk,
+    /** RTK executable resolved from PATH when available. */
     rtkExecutable,
-    // Rolling shell-wide stdout/stderr retention used by cursor-based shell_poll.
-    // This is a server-memory/history bound, not a model-output limit.
+    /** Rolling shell-wide character retention available to shell_poll cursors. */
     transcriptChars: 1024 * 1024,
-    // Maximum stdout/stderr retained for any one command before additional output
-    // is permanently dropped. This prevents a noisy command from consuming the
-    // entire shell transcript. Parallel child commands use this limit too.
+    /** Maximum stdout/stderr bytes retained for one command before excess is dropped. */
     commandTranscriptBytes: 256 * 1024,
-    // Token ceiling for text returned to the model in one shell_run/shell_poll call.
-    // Additional retained output can be retrieved with shell_poll and next_cursor.
+    /** Default model-output token budget for one shell_run or shell_poll response. */
     defaultOutputTokens: 2_000,
-    // Largest model-output token budget a caller may explicitly request per call.
+    /** Maximum model-output token budget a shell caller may request per response. */
     maxOutputTokens: 18_000,
+    /** Default time shell_run waits before returning a still-running command. */
     defaultWaitMs: 10_000,
-    maxWaitMs: 10_000,
+    /** Maximum shell_run wait accepted from callers. */
+    maxWaitMs: 270_000,
+    /** Default time shell_poll waits for additional output or completion. */
     defaultPollWaitMs: 40_000,
+    /** Maximum shell_poll wait accepted from callers. */
     maxPollWaitMs: 270_000,
+    /** Maximum time allowed for a newly created shell to become ready. */
     readyTimeoutMs: 10_000,
+    /** Grace period before force-killing a shell process that did not stop. */
     stopGraceMs: 500,
+    /** Maximum completed command records retained per shell for lookup and polling. */
     recordLimit: 1_024,
+    /** Maximum number of simultaneously retained shell sessions. */
     maxShells: 8,
-    idleTimeoutMs: 5 * 60 * 1000, // 5 minutes
-    cacheTimeoutMs: 24 * 60 * 60 * 1000, // 24 hours
+    /** Idle time before a named shell is hibernated or evicted. */
+    idleTimeoutMs: 5 * 60 * 1000,
+    /** Time cached shell state remains restorable after hibernation. */
+    cacheTimeoutMs: 24 * 60 * 60 * 1000,
   },
+  /** Feature flags controlling which MCP tool groups are registered. */
   tools: {
+    /** Enables the Shellby feedback submission tool. */
     review: publicConfig.tools.review,
+    /** Enables persistent shell execution and management tools. */
     shell: publicConfig.tools.shell,
+    /** Enables the first-class apply_patch file-editing tool. */
     applyPatch: publicConfig.tools.apply_patch,
+    /** Enables self-cloning agent tools. */
     clones: publicConfig.tools.clones,
+    /** Enables delegated ChatGPT subagent tools. */
     subagents: publicConfig.tools.subagents,
+    /** Enables HTTP and document fetching tools. */
     web: publicConfig.tools.web,
+    /** Enables reusable workspace skill tools. */
     skills: publicConfig.tools.skills,
+    /** Enables local image viewing tools. */
     image: publicConfig.tools.image,
+    /** Enables macOS computer-control tools. */
     computer: publicConfig.tools.computer,
   },
 }

@@ -1,6 +1,6 @@
 {
   "name": "shellby-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Context-optimized agent harness that gives ChatGPT Web full computer access, persistent tools, and multi-agent capabilities.",
   "private": false,
   "license": "MIT",
