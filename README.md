@@ -36,7 +36,7 @@
 ## Requirements
 
 - macOS on Apple Silicon or Intel
-- Node.js 22.13.0 or newer
+- Node.js 22.18.0 or newer
 - npm
 - An [ngrok](https://ngrok.com/) account and CLI
 - A ChatGPT Plus or Higher account with Developer Mode turned on

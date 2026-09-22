@@ -41,7 +41,7 @@ body:
     id: node
     attributes:
       label: Node.js version
-      placeholder: "22.13.0"
+      placeholder: "22.18.0"
     validations:
       required: true
 

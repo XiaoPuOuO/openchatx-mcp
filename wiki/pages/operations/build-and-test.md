@@ -13,7 +13,7 @@ paths:
 
 ## Build Boundaries
 
-Backend uses Node 22.13.0+ and TypeScript ESM, with `src/public-config.cts` emitted as CommonJS so PM2 and the runtime share config interpretation. `tsconfig.json` typechecks source and tests; `tsconfig.build.json` emits only `src/` into `dist/`. `npm run build` removes the previous backend output before compiling. Root Prettier and ESLint configuration govern source style; exact dependency versions belong in `package.json` and the lockfile.
+Backend uses Node 22.18.0+ and TypeScript ESM, with `src/public-config.cts` emitted as CommonJS so PM2 and the runtime share config interpretation. `tsconfig.json` typechecks source and tests; `tsconfig.build.json` emits only `src/` into `dist/`. `npm run build` removes the previous backend output before compiling. Biome governs source style and linting; exact dependency versions belong in `package.json` and the lockfile.
 
 The React dashboard has its own package, TypeScript/Vite config, dependencies, and `ui/dist` output. Root backend build/setup/start do not build it. Use `npm run ui:install`, `npm run ui:build`, or `npm run ui:dev`; see the [UI wiki](../../../ui/wiki/index.md).
 

@@ -72,12 +72,12 @@
     "@biomejs/biome": "2.5.14",
     "@modelcontextprotocol/client": "2.0.0",
     "@types/express": "^5.0.6",
-    "@types/node": "22.13.17",
+    "@types/node": "22.18.13",
     "tsx": "^4.23.15",
-    "typescript": "6.0.3"
+    "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.18.0"
   },
   "os": [
     "darwin"

@@ -12,9 +12,9 @@ import {
 } from "../scripts/preflight.mjs"
 import { tempDir } from "./helpers/temp.js"
 
-test("requires Node.js 22.13.0 or newer", () => {
-  assert.equal(isSupportedNodeVersion("22.12.9"), false)
-  assert.equal(isSupportedNodeVersion("22.13.0"), true)
+test("requires Node.js 22.18.0 or newer", () => {
+  assert.equal(isSupportedNodeVersion("22.17.9"), false)
+  assert.equal(isSupportedNodeVersion("22.18.0"), true)
   assert.equal(isSupportedNodeVersion("23.0.0"), true)
 })
 

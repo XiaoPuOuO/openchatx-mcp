@@ -19,7 +19,7 @@ export async function checkPublicRuntime(ngrokEnabled = true) {
   }
 
   if (!isSupportedNodeVersion(process.versions.node)) {
-    errors.push(`Node.js 22.13.0+ is required. Current version: ${process.versions.node}.`)
+    errors.push(`Node.js 22.18.0+ is required. Current version: ${process.versions.node}.`)
   }
 
   const pm2Path = join(repoRoot, "node_modules", ".bin", "pm2")
@@ -48,7 +48,7 @@ export async function checkPublicRuntime(ngrokEnabled = true) {
 
 export function isSupportedNodeVersion(version) {
   const [major = 0, minor = 0] = version.split(".").map(Number)
-  return major > 22 || (major === 22 && minor >= 13)
+  return major > 22 || (major === 22 && minor >= 18)
 }
 
 export function isSupportedArchitecture(arch) {
