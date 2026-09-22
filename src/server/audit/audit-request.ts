@@ -1,13 +1,5 @@
 import { asRecord } from "../../utils.js"
 
-interface JsonRpcToolCall {
-  method?: unknown
-  params?: {
-    name?: unknown
-    arguments?: unknown
-  }
-}
-
 export interface McpAuditCall {
   finish(input?: {
     toolResult?: unknown
@@ -81,12 +73,13 @@ function requestsFromPayload(payload: unknown): unknown[] {
 }
 
 function parseToolCall(value: unknown): { name: string; arguments?: unknown } | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
-  const request = value as JsonRpcToolCall
+  const request = asRecord(value)
+  if (!request) return undefined
   if (request.method !== "tools/call") return undefined
-  const name = request.params?.name
+  const params = asRecord(request.params)
+  const name = params?.name
   if (typeof name !== "string" || !name) return undefined
-  return { name, arguments: request.params?.arguments }
+  return { name, arguments: params.arguments }
 }
 
 function inputMatches(expected: unknown, actual: unknown): boolean {
@@ -109,10 +102,5 @@ function inputMatches(expected: unknown, actual: unknown): boolean {
 }
 
 function isToolListRequest(value: unknown): boolean {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      (value as JsonRpcToolCall).method === "tools/list"
-  )
+  return asRecord(value)?.method === "tools/list"
 }

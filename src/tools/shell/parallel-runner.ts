@@ -34,9 +34,8 @@ export interface ExecuteParallelCommandInput {
   signal: AbortSignal
 }
 
-interface QueuedTask<T> {
-  task: () => Promise<T>
-  resolve: (value: T) => void
+interface QueuedTask {
+  run: () => Promise<void>
   reject: (error: Error) => void
   signal?: AbortSignal
   onAbort?: () => void
@@ -44,49 +43,52 @@ interface QueuedTask<T> {
 
 export function createParallelCommandScheduler() {
   let active = 0
-  const queue: QueuedTask<unknown>[] = []
+  const queue: QueuedTask[] = []
 
   function schedule<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     if (signal?.aborted) return Promise.reject(new ParallelCommandAbortedError())
 
     return new Promise<T>((resolve, reject) => {
-      const queued: QueuedTask<T> = {
-        task,
-        resolve,
+      const queued: QueuedTask = {
+        run: () => task().then(resolve, reject),
         reject,
         signal,
       }
       if (signal) {
         queued.onAbort = () => {
-          const index = queue.indexOf(queued as QueuedTask<unknown>)
+          const index = queue.indexOf(queued)
           if (index < 0) return
           queue.splice(index, 1)
           reject(new ParallelCommandAbortedError())
         }
         signal.addEventListener("abort", queued.onAbort, { once: true })
       }
-      queue.push(queued as QueuedTask<unknown>)
+      queue.push(queued)
       pump()
     })
   }
 
+  function finishTask(): void {
+    active -= 1
+    pump()
+  }
+
+  function runTask(queued: QueuedTask): void {
+    active += 1
+    void queued.run().finally(finishTask)
+  }
+
   function pump(): void {
     while (active < PARALLEL_COMMAND_LIMIT && queue.length > 0) {
-      const queued = queue.shift()!
+      const queued = queue.shift()
+      if (!queued) break
       if (queued.onAbort) queued.signal?.removeEventListener("abort", queued.onAbort)
       if (queued.signal?.aborted) {
         queued.reject(new ParallelCommandAbortedError())
         continue
       }
 
-      active += 1
-      void queued
-        .task()
-        .then(queued.resolve, queued.reject)
-        .finally(() => {
-          active -= 1
-          pump()
-        })
+      runTask(queued)
     }
   }
 
@@ -169,7 +171,7 @@ export function executeParallelCommand(
     child.once("error", (error) => {
       output.append(error.message)
       killProcessGroup(child, "SIGKILL")
-      finish(resetRequested ? "reset" : timeoutRequested ? "timed_out" : "failed", null)
+      finish(requestedStatus(resetRequested, timeoutRequested, "failed"), null)
     })
     child.once("exit", () => {
       // The shell may exit while background descendants still hold its stdio
@@ -178,7 +180,7 @@ export function executeParallelCommand(
     })
     child.once("close", (code) => {
       finish(
-        resetRequested ? "reset" : timeoutRequested ? "timed_out" : "completed",
+        requestedStatus(resetRequested, timeoutRequested, "completed"),
         resetRequested || timeoutRequested ? null : code
       )
     })
@@ -191,6 +193,16 @@ export function executeParallelCommand(
     }, input.timeoutMs)
     timeoutTimer.unref()
   })
+}
+
+function requestedStatus(
+  resetRequested: boolean,
+  timeoutRequested: boolean,
+  fallback: Extract<ParallelCommandStatus, "completed" | "failed">
+): ParallelCommandExecutionResult["status"] {
+  if (resetRequested) return "reset"
+  if (timeoutRequested) return "timed_out"
+  return fallback
 }
 
 function createBoundedOutput(maxBytes: number) {

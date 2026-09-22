@@ -39,7 +39,7 @@ export async function initializeWorkspace(workspace) {
     await writeFile(agentsPath, STARTER_AGENTS_MD, { encoding: "utf8", flag: "wx" })
     agentsCreated = true
   } catch (error) {
-    if (error?.code !== "EEXIST") throw error
+    if (error.code !== "EEXIST") throw error
   }
 
   let starterSkillCreated = false
@@ -47,7 +47,7 @@ export async function initializeWorkspace(workspace) {
     await copyFile(STARTER_SKILL_SOURCE, starterSkillPath, constants.COPYFILE_EXCL)
     starterSkillCreated = true
   } catch (error) {
-    if (error?.code !== "EEXIST") throw error
+    if (error.code !== "EEXIST") throw error
   }
 
   return { workspace, agentsPath, starterSkillPath, created: agentsCreated, starterSkillCreated }
@@ -64,7 +64,7 @@ export async function initializeShellbyConfig(repositoryRoot = REPOSITORY_ROOT) 
     })
     return { configPath, created: true, updated: false }
   } catch (error) {
-    if (error?.code !== "EEXIST") throw error
+    if (error.code !== "EEXIST") throw error
   }
 
   // Runtime supplies missing defaults; preserve existing comments, formatting, and values.

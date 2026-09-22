@@ -30,7 +30,8 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../.
 
 export function registerStartHereTool(server: McpServer): void {
   const modes = discoverPromptModes()
-  if (modes.length === 0) throw new Error("start_here requires at least one prompt mode")
+  const [firstMode, ...remainingModes] = modes
+  if (firstMode === undefined) throw new Error("start_here requires at least one prompt mode")
 
   server.registerTool(
     START_HERE_TOOL_NAME,
@@ -38,7 +39,7 @@ export function registerStartHereTool(server: McpServer): void {
       description:
         "Initialize Shellby once per conversation. Loads the selected Deep Work mode and unlocks the other tools",
       inputSchema: z.object({
-        mode: z.enum(modes as [string, ...string[]]),
+        mode: z.enum([firstMode, ...remainingModes]),
         task_id: z.string().min(1).max(128),
       }),
       annotations: {
@@ -139,5 +140,5 @@ function readPromptSlugs(directory: string): string[] {
 }
 
 function isFsError(error: unknown, code: string): boolean {
-  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === code
+  return error instanceof Error && "code" in error && error.code === code
 }

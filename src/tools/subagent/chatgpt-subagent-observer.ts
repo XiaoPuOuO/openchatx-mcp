@@ -50,14 +50,15 @@ export async function observeAssistantResponse(
   const feedHttp = (requestId: string, text: string): void => {
     if (settled || !text) return
     let buffer = (buffers.get(requestId) ?? "") + text
-    while (true) {
-      const match = /\r?\n\r?\n/u.exec(buffer)
-      if (!match || match.index === undefined) break
+    let match = SSE_EVENT_BOUNDARY_RE.exec(buffer)
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Biome incorrectly treats RegExp.exec() result as always truthy.
+    while (match) {
       const end = match.index + match[0].length
       const block = buffer.slice(0, end)
       buffer = buffer.slice(end)
       finish(httpTracker.ingestSse(block))
       if (settled) return
+      match = SSE_EVENT_BOUNDARY_RE.exec(buffer)
     }
     buffers.set(requestId, buffer)
   }
@@ -150,6 +151,8 @@ export async function observeAssistantResponse(
     },
   }
 }
+
+const SSE_EVENT_BOUNDARY_RE = /\r?\n\r?\n/u
 
 function isConversationEndpoint(value?: string): boolean {
   if (!value) return false

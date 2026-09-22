@@ -2,6 +2,8 @@ import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import process from "node:process"
 
+import { isRecord } from "../utils.js"
+
 const AUTH_STATE_VERSION = 1
 
 export interface ShellbyAuthState {
@@ -18,9 +20,10 @@ export type ShellbyAuthErrorCode =
 export class ShellbyAuthError extends Error {
   constructor(
     readonly code: ShellbyAuthErrorCode,
-    message: string
+    message: string,
+    options?: ErrorOptions
   ) {
-    super(message)
+    super(message, options)
     this.name = "ShellbyAuthError"
   }
 }
@@ -61,7 +64,14 @@ export class ShellbyAuthStore {
       raw = await readFile(this.filePath, "utf8")
     } catch (error) {
       if (isNodeError(error, "ENOENT")) {
-        throw new ShellbyAuthError("state_missing", "Shellby MCP authentication state is missing.")
+        // biome-ignore lint/style/useErrorCause: ShellbyAuthError accepts ErrorOptions as its third argument and forwards the cause to Error.
+        throw new ShellbyAuthError(
+          "state_missing",
+          "Shellby MCP authentication state is missing.",
+          {
+            cause: error,
+          }
+        )
       }
       throw error
     }
@@ -124,21 +134,22 @@ function parseState(raw: string): ShellbyAuthState {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
-  } catch {
-    throw invalidState("Shellby MCP authentication state is malformed.")
+  } catch (error) {
+    throw invalidState("Shellby MCP authentication state is malformed.", error)
   }
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw invalidState("Shellby MCP authentication state must be an object.")
   }
-  const state = parsed as Record<string, unknown>
+  const state = parsed
   if (state.version !== AUTH_STATE_VERSION) {
     throw invalidState("Shellby MCP authentication state version is unsupported.")
   }
-  if (state.subject !== null && !isValidSubject(state.subject)) {
+  const subject = state.subject
+  if (subject !== null && !isValidSubject(subject)) {
     throw invalidState("Shellby MCP authentication subject is invalid.")
   }
-  return { version: AUTH_STATE_VERSION, subject: state.subject as string | null }
+  return { version: AUTH_STATE_VERSION, subject }
 }
 
 async function writeStateAtomically(filePath: string, state: ShellbyAuthState): Promise<void> {
@@ -171,10 +182,10 @@ function isValidSubject(subject: unknown): subject is string {
   return typeof subject === "string" && subject.length > 0 && subject.length <= 512
 }
 
-function invalidState(message: string): ShellbyAuthError {
-  return new ShellbyAuthError("state_invalid", message)
+function invalidState(message: string, cause?: unknown): ShellbyAuthError {
+  return new ShellbyAuthError("state_invalid", message, cause === undefined ? undefined : { cause })
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === code
+  return error instanceof Error && "code" in error && error.code === code
 }

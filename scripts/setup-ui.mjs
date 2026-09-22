@@ -1,4 +1,5 @@
 import process from "node:process"
+
 const useColor = Boolean(process.stdout.isTTY && !process.env.NO_COLOR)
 const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 

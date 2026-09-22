@@ -20,11 +20,6 @@ export function saveRoomLayout(layout: RoomLayout): void {
   window.dispatchEvent(new Event(CHANGE_EVENT))
 }
 
-export function clearSavedRoomLayout(): void {
-  window.localStorage.removeItem(STORAGE_KEY)
-  window.dispatchEvent(new Event(CHANGE_EVENT))
-}
-
 export function useRoomLayout(): RoomLayout {
   const [layout, setLayout] = useState(loadRoomLayout)
 

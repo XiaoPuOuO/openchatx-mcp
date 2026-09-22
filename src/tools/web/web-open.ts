@@ -4,10 +4,13 @@ import { stripVTControlCharacters } from "node:util"
 import type { CDPSession } from "playwright-core"
 import { MCP_CONFIG } from "../../config.js"
 import { tokenChunk } from "../../tokenizer.js"
-import { utf8Prefix } from "../../utils.js"
+import { asRecord, utf8Prefix } from "../../utils.js"
 import { type EncodedMcpImage, encodeImageForMcp } from "../image/image-encoding.js"
 
 type WebsiteContentFormat = "markdown" | "html"
+const CHARSET_PATTERN = /(?:^|;)\s*charset\s*=\s*["']?([^;"']+)/iu
+const HIDDEN_STYLE_PATTERN =
+  /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/iu
 
 export interface WebOpenInput {
   url: string
@@ -121,27 +124,9 @@ export class WebPageOpener {
     let offset = 0
 
     if (input.cursor) {
-      const cursor = decodeCursor(input.cursor)
-      document = this.getDocument(cursor.documentId)
-      if (requestedUrl !== document.requestedUrl && requestedUrl !== document.url) {
-        throw new WebOpenError("invalid_cursor", "The cursor does not belong to the requested URL.")
-      }
-      if (format !== document.format) {
-        throw new WebOpenError(
-          "invalid_cursor",
-          `The cursor belongs to format ${document.format}; continue with the same format.`
-        )
-      }
-      if (compact !== document.compact) {
-        throw new WebOpenError(
-          "invalid_cursor",
-          `The cursor belongs to compact=${document.compact}; continue with the same compact setting.`
-        )
-      }
-      offset = cursor.offset
-      if (offset < 0 || offset > document.content.length) {
-        throw new WebOpenError("invalid_cursor", "The cursor offset is invalid.")
-      }
+      const resumed = this.resumeDocument(input.cursor, requestedUrl, format, compact)
+      document = resumed.document
+      offset = resumed.offset
     } else {
       const rendered = await this.renderPage(
         requestedUrl,
@@ -222,12 +207,41 @@ export class WebPageOpener {
     return document
   }
 
+  private resumeDocument(
+    cursorValue: string,
+    requestedUrl: string,
+    format: WebsiteContentFormat,
+    compact: boolean
+  ): { document: CachedDocument; offset: number } {
+    const cursor = decodeCursor(cursorValue)
+    const document = this.getDocument(cursor.documentId)
+    if (requestedUrl !== document.requestedUrl && requestedUrl !== document.url) {
+      throw new WebOpenError("invalid_cursor", "The cursor does not belong to the requested URL.")
+    }
+    if (format !== document.format) {
+      throw new WebOpenError(
+        "invalid_cursor",
+        `The cursor belongs to format ${document.format}; continue with the same format.`
+      )
+    }
+    if (compact !== document.compact) {
+      throw new WebOpenError(
+        "invalid_cursor",
+        `The cursor belongs to compact=${document.compact}; continue with the same compact setting.`
+      )
+    }
+    if (cursor.offset < 0 || cursor.offset > document.content.length) {
+      throw new WebOpenError("invalid_cursor", "The cursor offset is invalid.")
+    }
+    return { document, offset: cursor.offset }
+  }
+
   private storeDocument(document: CachedDocument): void {
     this.documents.set(document.id, document)
     while (this.documents.size > this.documentLimit) {
-      const oldestId = this.documents.keys().next().value as string | undefined
-      if (!oldestId) break
-      this.documents.delete(oldestId)
+      const oldest = this.documents.keys().next()
+      if (oldest.done) break
+      this.documents.delete(oldest.value)
     }
   }
 
@@ -248,9 +262,10 @@ export class WebOpenError extends Error {
       | "open_failed"
       | "resource_too_large"
       | "unsupported_content_type",
-    message: string
+    message: string,
+    options?: ErrorOptions
   ) {
-    super(message)
+    super(message, options)
     this.name = "WebOpenError"
   }
 }
@@ -313,6 +328,7 @@ async function renderWithCloakBrowser(
       void task.catch(() => undefined)
     })
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: The CDP Fetch handler mirrors mutually exclusive HTTP response outcomes and must resolve each paused request exactly once.
     async function handlePausedResponse(event: CdpFetchRequestPaused): Promise<void> {
       try {
         if (!event.responseStatusCode) {
@@ -416,7 +432,7 @@ async function renderWithCloakBrowser(
       }
       await route.continue()
     })
-    let response
+    let response: Awaited<ReturnType<typeof page.goto>> | undefined
     let navigationError: unknown
     try {
       response = await page.goto(url, {
@@ -468,9 +484,10 @@ async function renderWithCloakBrowser(
     }
   } catch (error) {
     if (error instanceof WebOpenError) throw error
-    throw new WebOpenError(
+    throw webOpenError(
       "open_failed",
-      stripVTControlCharacters(error instanceof Error ? error.message : String(error))
+      stripVTControlCharacters(error instanceof Error ? error.message : String(error)),
+      error
     )
   } finally {
     await browser.close()
@@ -604,8 +621,11 @@ function looksLikeText(body: Buffer): boolean {
 }
 
 function decodeTextResource(body: Buffer, contentType?: string): string {
-  const charset =
-    /(?:^|;)\s*charset\s*=\s*["']?([^;"']+)/iu.exec(contentType ?? "")?.[1]?.trim() || "utf-8"
+  const charsetMatch = CHARSET_PATTERN.exec(contentType ?? "")
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: Biome thinks the regex match is guaranteed; TypeScript correctly treats it as nullable.
+  const capturedCharset = charsetMatch?.[1]
+  const detectedCharset = capturedCharset === undefined ? undefined : capturedCharset.trim()
+  const charset = detectedCharset ? detectedCharset : "utf-8"
   try {
     return new TextDecoder(charset).decode(body)
   } catch {
@@ -615,9 +635,10 @@ function decodeTextResource(body: Buffer, contentType?: string): string {
 
 async function convertCapturedResource(resource: CapturedRawResource): Promise<FetchedResource> {
   if (resource.kind === "unsupported") {
+    const contentType = resource.contentType ? resource.contentType : "unknown"
     throw new WebOpenError(
       "unsupported_content_type",
-      `Unsupported content type ${resource.contentType || "unknown"}. Supported resources are webpages, PDFs, images, and common text formats.`
+      `Unsupported content type ${contentType}. Supported resources are webpages, PDFs, images, and common text formats.`
     )
   }
 
@@ -669,7 +690,7 @@ async function extractPdf(body: Buffer): Promise<{ title: string; content: strin
       extractText(pdf, { mergePages: false }),
       getMeta(pdf),
     ])
-    const title = typeof meta.info["Title"] === "string" ? meta.info["Title"].trim() : ""
+    const title = typeof meta.info.Title === "string" ? meta.info.Title.trim() : ""
     const content = text.map((page, index) => `## Page ${index + 1}\n\n${page.trim()}`).join("\n\n")
     return { title, content }
   } finally {
@@ -718,10 +739,10 @@ async function compactRenderedHtml(html: string): Promise<string> {
     .querySelectorAll(
       'script, style, noscript, template, nav, footer, svg, [hidden], [aria-hidden="true"]'
     )
-    .forEach((element) => element.remove())
+    .forEach((element) => {
+      element.remove()
+    })
 
-  const hiddenStyle =
-    /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/iu
   const strippedAttributes = new Set([
     "class",
     "style",
@@ -736,7 +757,7 @@ async function compactRenderedHtml(html: string): Promise<string> {
 
   for (const element of document.querySelectorAll("*")) {
     const style = element.getAttribute("style")
-    if (style && hiddenStyle.test(style)) {
+    if (style && HIDDEN_STYLE_PATTERN.test(style)) {
       element.remove()
       continue
     }
@@ -761,8 +782,8 @@ function normalizeWebUrl(value: string): string {
   let url: URL
   try {
     url = new URL(value)
-  } catch {
-    throw new WebOpenError("invalid_url", "url must be a valid HTTP or HTTPS URL.")
+  } catch (error) {
+    throw webOpenError("invalid_url", "url must be a valid HTTP or HTTPS URL.", error)
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new WebOpenError("invalid_url", "url must use HTTP or HTTPS.")
@@ -776,20 +797,23 @@ function encodeCursor(payload: CursorPayload): string {
 
 function decodeCursor(value: string): CursorPayload {
   try {
-    const parsed = JSON.parse(
-      Buffer.from(value, "base64url").toString("utf8")
-    ) as Partial<CursorPayload>
+    const parsed = asRecord(JSON.parse(Buffer.from(value, "base64url").toString("utf8")))
     if (
-      parsed.v !== 1 ||
+      parsed?.v !== 1 ||
       typeof parsed.documentId !== "string" ||
       parsed.documentId.length === 0 ||
+      typeof parsed.offset !== "number" ||
       !Number.isSafeInteger(parsed.offset) ||
-      (parsed.offset ?? -1) < 0
+      parsed.offset < 0
     ) {
       throw new Error("invalid cursor payload")
     }
-    return parsed as CursorPayload
-  } catch {
-    throw new WebOpenError("invalid_cursor", "cursor is invalid.")
+    return { v: 1, documentId: parsed.documentId, offset: parsed.offset }
+  } catch (error) {
+    throw webOpenError("invalid_cursor", "cursor is invalid.", error)
   }
+}
+
+function webOpenError(code: WebOpenError["code"], message: string, cause: unknown): WebOpenError {
+  return new WebOpenError(code, message, { cause })
 }

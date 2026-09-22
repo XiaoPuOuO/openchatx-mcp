@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noUnnecessaryConditions: Biome fails to track stopping across async lifecycle callbacks */
 import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import process from "node:process"

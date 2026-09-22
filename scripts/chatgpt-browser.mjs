@@ -30,13 +30,12 @@ if (cdpReady && !findManagedChromePid()) {
 }
 
 if (!setup && !configured) {
-  console.log(
-    cdpReady
-      ? "ChatGPT browser: existing CDP session detected (not managed by setup)"
-      : auto
-        ? "ChatGPT browser: not configured (run `npm run setup:chatgpt` to enable subagents)"
-        : "ChatGPT browser is not configured. Run `npm run setup:chatgpt` first."
-  )
+  let message
+  if (cdpReady) message = "ChatGPT browser: existing CDP session detected (not managed by setup)"
+  else if (auto)
+    message = "ChatGPT browser: not configured (run `npm run setup:chatgpt` to enable subagents)"
+  else message = "ChatGPT browser is not configured. Run `npm run setup:chatgpt` first."
+  console.log(message)
   process.exit(0)
 }
 
@@ -114,22 +113,24 @@ async function findChrome() {
     join(homedir(), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
   ]
 
-  for (const candidate of candidates) {
-    try {
-      await access(candidate, constants.X_OK)
-      return candidate
-    } catch {
-      // Try the next normal macOS Chrome location.
-    }
-  }
+  const available = await Promise.all(
+    candidates.map(async (candidate) => {
+      try {
+        await access(candidate, constants.X_OK)
+        return candidate
+      } catch {
+        return null
+      }
+    })
+  )
+  return available.find((candidate) => candidate !== null)
 }
 
-async function waitForCdp(url) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (await isCdpReady(url)) return true
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  return false
+async function waitForCdp(url, attemptsRemaining = 40) {
+  if (await isCdpReady(url)) return true
+  await new Promise((resolve) => setTimeout(resolve, 250))
+  if (attemptsRemaining <= 1) return false
+  return waitForCdp(url, attemptsRemaining - 1)
 }
 
 async function isCdpReady(url) {

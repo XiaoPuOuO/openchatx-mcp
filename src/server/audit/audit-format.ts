@@ -74,8 +74,7 @@ export function summarizeToolResult(
     const message = content
       .map((item) => asRecord(item))
       .filter((item): item is Record<string, unknown> => item !== undefined)
-      .filter((item) => item.type === "text" && typeof item.text === "string")
-      .map((item) => item.text as string)
+      .flatMap((item) => (item.type === "text" && typeof item.text === "string" ? [item.text] : []))
       .join("\n")
     if (message) return { failed: true, failureMessage: message, modelOutput, structuredContent }
   }
@@ -106,7 +105,7 @@ function auditTag(input: {
   httpStatus: number
   state: "finished" | "closed"
   toolFailed: boolean
-}): string {
+}): "!" | "~" | "" {
   if (input.toolFailed || input.httpStatus >= 400 || input.state !== "finished") return "!"
   if (input.durationMs >= SLOW_CALL_MS) return "~"
   return ""
@@ -155,13 +154,7 @@ function formatShellRunArguments(
 ): string {
   const hasCommand = Object.hasOwn(argumentsRecord, "command")
   const hasCommands = Object.hasOwn(argumentsRecord, "commands")
-  const inputShape = hasCommand
-    ? hasCommands
-      ? "both"
-      : "command"
-    : hasCommands
-      ? "commands"
-      : "neither"
+  const inputShape = shellInputShape(hasCommand, hasCommands)
   const command = typeof argumentsRecord.command === "string" ? argumentsRecord.command : ""
   const commands = Array.isArray(argumentsRecord.commands) ? argumentsRecord.commands : null
   const shellId =
@@ -186,6 +179,16 @@ function formatShellRunArguments(
       `commands: |-\n${indentBlock(truncate(JSON.stringify(commands ?? argumentsRecord.commands, null, 2), MAX_SHELL_COMMAND_CHARS))}`
     )
   return fields.join("\n")
+}
+
+function shellInputShape(
+  hasCommand: boolean,
+  hasCommands: boolean
+): "both" | "command" | "commands" | "neither" {
+  if (hasCommand && hasCommands) return "both"
+  if (hasCommand) return "command"
+  if (hasCommands) return "commands"
+  return "neither"
 }
 
 function formatShellPollArguments(

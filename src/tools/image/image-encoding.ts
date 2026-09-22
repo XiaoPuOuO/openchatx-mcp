@@ -61,6 +61,7 @@ export async function encodeImageForMcp(
     }
   } catch (error) {
     if (error instanceof ImageEncodingError) throw error
+    // biome-ignore lint/style/useErrorCause: ImageEncodingError forwards ErrorOptions to Error.
     throw new ImageEncodingError(
       "IMAGE_ENCODE_FAILED",
       error instanceof Error ? error.message : String(error),

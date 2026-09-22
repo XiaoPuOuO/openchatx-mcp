@@ -34,17 +34,19 @@ for (const memory of [false, true]) {
 
     t.mock.timers.tick(29 * 60_000)
     await setImmediate()
-    assert.equal(fixture.pages[0]!.isClosed(), false)
+    assert.equal(fixture.pages[0]?.isClosed(), false)
     t.mock.timers.tick(60_000)
     await setImmediate()
-    assert.equal(fixture.pages[0]!.isClosed(), true)
+    assert.equal(fixture.pages[0]?.isClosed(), true)
     assert.deepEqual(await service.poll(turnId, 0), completed)
 
     if (memory) {
       const nextTurnId = await service.ask({ ...request, prompt: "Follow up" }, {})
       assert.equal((await service.poll(nextTurnId, 0)).status, "completed")
       assert.equal(fixture.pages.length, 2)
-      assert.match(fixture.pages[1]!.url(), /\/c\/lifecycle-conversation$/u)
+      const branchPage = fixture.pages[1]
+      assert.ok(branchPage)
+      assert.match(branchPage.url(), /\/c\/lifecycle-conversation$/u)
     } else {
       // Expiration stays specific even without Chrome, or if the caller changes memory.
       await fixture.browser.close()
@@ -67,7 +69,7 @@ for (const memory of [false, true]) {
     // An externally closed temporary page still gets the existing page-loss error.
     const other = { agentId: "closed-externally", prompt: "Review this", memory: false }
     await service.ask(other, {})
-    await fixture.pages.at(-1)!.close()
+    await fixture.pages.at(-1)?.close()
     await assert.rejects(
       service.ask(other, {}),
       (error: unknown) =>

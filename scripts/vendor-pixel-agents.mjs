@@ -42,9 +42,11 @@ try {
   await cp(sourceAssets, assetsTarget, { recursive: true })
 
   // Remove the pre-catalog legacy subset so there is only one source of truth.
-  for (const legacyDir of ["characters", "floors", "furniture", "walls", "carpets", "pets"]) {
-    await rm(path.join(vendorRoot, legacyDir), { recursive: true, force: true })
-  }
+  await Promise.all(
+    ["characters", "floors", "furniture", "walls", "carpets", "pets"].map((legacyDir) =>
+      rm(path.join(vendorRoot, legacyDir), { recursive: true, force: true })
+    )
+  )
 
   await writeFile(path.join(vendorRoot, "UPSTREAM_COMMIT"), `${PIXEL_AGENTS_COMMIT}\n`)
   await writeFile(path.join(vendorRoot, "UPSTREAM_REPOSITORY"), `${PIXEL_AGENTS_REPOSITORY}\n`)
@@ -73,16 +75,18 @@ async function fetchPinnedSource() {
 
 async function buildCatalog(sourceAssets) {
   const furnitureRoot = path.join(sourceAssets, "furniture")
-  const furniture = []
-
-  for (const directory of (await readdir(furnitureRoot)).sort()) {
-    const manifestPath = path.join(furnitureRoot, directory, "manifest.json")
-    if (!(await exists(manifestPath))) continue
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
-    const directoryPath = path.join(furnitureRoot, directory)
-    const variants = await flattenFurnitureManifest(manifest, directoryPath, directory)
-    furniture.push(...variants)
-  }
+  const furnitureDirectories = (await readdir(furnitureRoot)).sort()
+  const furniture = (
+    await Promise.all(
+      furnitureDirectories.map(async (directory) => {
+        const manifestPath = path.join(furnitureRoot, directory, "manifest.json")
+        if (!(await exists(manifestPath))) return []
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
+        const directoryPath = path.join(furnitureRoot, directory)
+        return flattenFurnitureManifest(manifest, directoryPath, directory)
+      })
+    )
+  ).flat()
 
   const pngFiles = await walkFiles(sourceAssets, (file) => file.endsWith(".png"))
   const images = pngFiles
@@ -122,17 +126,22 @@ async function buildCatalog(sourceAssets) {
   const pets = []
   const petsRoot = path.join(sourceAssets, "pets")
   if (await exists(petsRoot)) {
-    for (const directory of (await readdir(petsRoot)).sort()) {
-      const manifestPath = path.join(petsRoot, directory, "manifest.json")
-      const imagePath = path.join(petsRoot, directory, "pet.png")
-      if (!(await exists(manifestPath)) || !(await exists(imagePath))) continue
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
-      pets.push({
-        id: manifest.id ?? directory,
-        label: manifest.name ?? manifest.id ?? directory,
-        path: `/ui/pixel-agents/assets/pets/${directory}/pet.png`,
+    const petDirectories = (await readdir(petsRoot)).sort()
+    const entries = await Promise.all(
+      petDirectories.map(async (directory) => {
+        const manifestPath = path.join(petsRoot, directory, "manifest.json")
+        const imagePath = path.join(petsRoot, directory, "pet.png")
+        const [hasManifest, hasImage] = await Promise.all([exists(manifestPath), exists(imagePath)])
+        if (!hasManifest || !hasImage) return
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
+        return {
+          id: manifest.id ?? directory,
+          label: manifest.name ?? manifest.id ?? directory,
+          path: `/ui/pixel-agents/assets/pets/${directory}/pet.png`,
+        }
       })
-    }
+    )
+    pets.push(...entries.filter(Boolean))
   }
 
   return {
@@ -244,7 +253,7 @@ async function checkVendorSnapshot() {
   if (!Array.isArray(catalog.images) || catalog.images.length === 0)
     throw new Error("catalog.json has no image entries")
 
-  for (const entry of [
+  const catalogEntries = [
     ...catalog.furniture,
     ...catalog.floors,
     ...catalog.walls,
@@ -252,13 +261,17 @@ async function checkVendorSnapshot() {
     ...catalog.characters,
     ...catalog.pets,
     ...catalog.images,
-  ]) {
+  ]
+  const assetPaths = catalogEntries.map((entry) => {
     const prefix = "/ui/pixel-agents/assets/"
     if (!entry.path.startsWith(prefix)) throw new Error(`Unexpected catalog path: ${entry.path}`)
     const relative = entry.path.slice(prefix.length)
-    if (!(await exists(path.join(assetsTarget, relative))))
-      throw new Error(`Missing vendored asset: ${relative}`)
-  }
+    return { relative, target: path.join(assetsTarget, relative) }
+  })
+  const assetExists = await Promise.all(assetPaths.map(({ target }) => exists(target)))
+  const missingIndex = assetExists.indexOf(false)
+  if (missingIndex >= 0)
+    throw new Error(`Missing vendored asset: ${assetPaths[missingIndex].relative}`)
 
   console.log(`Pixel Agents vendor snapshot OK: ${commit}`)
   console.log(
@@ -267,13 +280,15 @@ async function checkVendorSnapshot() {
 }
 
 async function walkFiles(root, predicate) {
-  const files = []
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    const target = path.join(root, entry.name)
-    if (entry.isDirectory()) files.push(...(await walkFiles(target, predicate)))
-    else if (predicate(target)) files.push(target)
-  }
-  return files
+  const entries = await readdir(root, { withFileTypes: true })
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const target = path.join(root, entry.name)
+      if (entry.isDirectory()) return walkFiles(target, predicate)
+      return predicate(target) ? [target] : []
+    })
+  )
+  return files.flat()
 }
 
 async function assertDirectory(target) {

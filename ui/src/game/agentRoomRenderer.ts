@@ -1,6 +1,5 @@
 import {
   gridToPixel,
-  ROOM_ASSETS,
   ROOM_GRID_SIZE,
   ROOM_HEIGHT,
   ROOM_WIDTH,
@@ -9,7 +8,6 @@ import {
   type RoomLayout,
   type RoomPet,
   type RoomStation,
-  type RoomTile,
   resolveRoomAssetPath,
 } from "./agentRoomLayout"
 
@@ -65,7 +63,7 @@ export function drawRoomWalls(ctx: CanvasRenderingContext2D, layout: RoomLayout)
   for (let row = 0; row < layout.rows; row += 1) {
     for (let col = 0; col < layout.cols; col += 1) {
       const tile = layout.tiles[row * layout.cols + col]
-      if (!tile || tile.type !== "wall") continue
+      if (tile?.type !== "wall") continue
       const image = getRoomImage(tile.asset)
       if (!isReady(image)) continue
       const mask = wallMask(layout, col, row, tile.asset)
@@ -86,10 +84,7 @@ export function drawRoomFurnitureItems(
   for (const item of items) drawRoomFurnitureItem(ctx, item)
 }
 
-export function drawRoomFurnitureItem(
-  ctx: CanvasRenderingContext2D,
-  item: RoomFurnitureItem
-): void {
+function drawRoomFurnitureItem(ctx: CanvasRenderingContext2D, item: RoomFurnitureItem): void {
   const path = resolveRoomAssetPath(item.asset)
   const image = getRoomImage(path)
   if (!isReady(image)) return

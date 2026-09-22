@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noUnnecessaryConditions: Biome fails to track stopping across async lifecycle callbacks */
 import { execFile } from "node:child_process"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -9,6 +10,7 @@ import { asRecord, finiteNumber as numberValue } from "../../utils.js"
 import { encodeImageForMcp, ImageEncodingError } from "../image/image-encoding.js"
 
 const execFileAsync = promisify(execFile)
+const PID_APP_RE = /^PID:\d+$/u
 
 interface PeekabooEnvelope {
   success: boolean
@@ -199,45 +201,9 @@ export class PeekabooClient {
       )
       const data = asRecord(result.data)
       const snapshotId = stringValue(data?.snapshot_id)
-      let target = observationTarget(data)
-      const requestedApp = optionValue(args, "--app")
-      if (requestedApp !== undefined && /^PID:\d+$/u.test(requestedApp)) {
-        target = {
-          ...target,
-          app: requestedApp,
-        }
-      }
-      const requestedWindowId = integerOption(args, "--window-id")
-      if (requestedWindowId !== undefined && target?.windowId === undefined) {
-        target = {
-          ...target,
-          kind: target?.kind ?? "window-id",
-          windowId: requestedWindowId,
-        }
-      }
-
-      const screenCapture =
-        target?.kind?.toLowerCase().includes("screen") || optionValue(args, "--mode") === "screen"
-      if (screenCapture) {
-        const screenIndex = integerOption(args, "--screen-index") ?? 0
-        target = { ...target, kind: target?.kind ?? "screen", screenIndex }
-        if (!target.bounds) {
-          const screens = await this.runNow(["screen", "list"], signal)
-          const bounds = screenBounds(screens.data, screenIndex)
-          if (bounds) {
-            target = { ...target, bounds }
-          }
-        }
-      }
+      const target = await this.resolveObservationTarget(args, data, signal)
       if (snapshotId && target) this.rememberSnapshot(snapshotId, target)
-      const imagePath =
-        options.annotate &&
-        typeof data?.screenshot_annotated === "string" &&
-        data.screenshot_annotated
-          ? data.screenshot_annotated
-          : typeof data?.screenshot_raw === "string" && data.screenshot_raw
-            ? data.screenshot_raw
-            : requestedPath
+      const imagePath = screenshotPath(data, requestedPath, options.annotate)
 
       try {
         const image = await readFile(imagePath)
@@ -250,13 +216,13 @@ export class PeekabooClient {
         }
       } catch (error) {
         if (error instanceof ImageEncodingError) {
-          throw new PeekabooError(error.code, error.message, undefined, { cause: error })
+          throw peekabooErrorWithCause(error.code, error.message, undefined, error)
         }
-        throw new PeekabooError(
+        throw peekabooErrorWithCause(
           "SCREENSHOT_READ_FAILED",
           "Peekaboo completed but its screenshot could not be read or encoded.",
-          error instanceof Error ? error.message : String(error),
-          { cause: error }
+          unknownErrorMessage(error),
+          error
         )
       }
     } finally {
@@ -264,13 +230,51 @@ export class PeekabooClient {
     }
   }
 
+  private async resolveObservationTarget(
+    args: string[],
+    data: Record<string, unknown> | undefined,
+    signal: AbortSignal
+  ): Promise<PeekabooSnapshotTarget | undefined> {
+    let target = observationTarget(data)
+    const requestedApp = optionValue(args, "--app")
+    if (requestedApp !== undefined && PID_APP_RE.test(requestedApp)) {
+      target = {
+        ...target,
+        app: requestedApp,
+      }
+    }
+    const requestedWindowId = integerOption(args, "--window-id")
+    if (requestedWindowId !== undefined && target?.windowId === undefined) {
+      target = {
+        ...target,
+        kind: target?.kind ?? "window-id",
+        windowId: requestedWindowId,
+      }
+    }
+
+    const screenCapture =
+      target?.kind?.toLowerCase().includes("screen") || optionValue(args, "--mode") === "screen"
+    if (screenCapture) {
+      const screenIndex = integerOption(args, "--screen-index") ?? 0
+      target = { ...target, kind: target?.kind ?? "screen", screenIndex }
+      if (!target.bounds) {
+        const screens = await this.runNow(["screen", "list"], signal)
+        const bounds = screenBounds(screens.data, screenIndex)
+        if (bounds) {
+          target = { ...target, bounds }
+        }
+      }
+    }
+    return target
+  }
+
   private rememberSnapshot(snapshotId: string, target: PeekabooSnapshotTarget): void {
     this.snapshots.delete(snapshotId)
     this.snapshots.set(snapshotId, target)
     while (this.snapshots.size > 64) {
-      const oldest = this.snapshots.keys().next().value as string | undefined
-      if (oldest === undefined) break
-      this.snapshots.delete(oldest)
+      const oldest = this.snapshots.keys().next()
+      if (oldest.done) break
+      this.snapshots.delete(oldest.value)
     }
   }
 
@@ -297,24 +301,21 @@ export class PeekabooClient {
       const envelope = tryParseEnvelope(stdout)
       if (envelope?.success === false) throw envelopeError(envelope, error)
 
-      const processError = error as NodeJS.ErrnoException
-      if (processError.code === "ENOENT") {
-        throw new PeekabooError(
+      if (errorCode(error) === "ENOENT") {
+        throw peekabooErrorWithCause(
           "PEEKABOO_NOT_FOUND",
           `Peekaboo executable ${JSON.stringify(this.executable)} was not found. Run npm install.`,
           undefined,
-          {
-            cause: error,
-          }
+          error
         )
       }
 
-      const detail = error instanceof Error ? error.message : String(error)
-      throw new PeekabooError(
+      const detail = unknownErrorMessage(error)
+      throw peekabooErrorWithCause(
         "PEEKABOO_PROCESS_FAILED",
         `Peekaboo command failed: ${detail}`,
         stderr.trim().slice(-4096) || undefined,
-        { cause: error }
+        error
       )
     }
 
@@ -346,11 +347,26 @@ function parseEnvelope(stdout: string, stderr: string): PeekabooEnvelope {
 
 function tryParseEnvelope(stdout: string): PeekabooEnvelope | null {
   try {
-    const parsed = JSON.parse(stdout.trim()) as unknown
-    if (!parsed || typeof parsed !== "object") return null
-    const success = (parsed as { success?: unknown }).success
+    const parsed = asRecord(JSON.parse(stdout.trim()))
+    if (!parsed) return null
+    const success = parsed.success
     if (typeof success !== "boolean") return null
-    return parsed as PeekabooEnvelope
+    const parsedError = asRecord(parsed.error)
+    return {
+      success,
+      ...("data" in parsed ? { data: parsed.data } : {}),
+      ...("summary" in parsed ? { summary: parsed.summary } : {}),
+      ...("messages" in parsed ? { messages: parsed.messages } : {}),
+      ...(parsedError
+        ? {
+            error: {
+              ...("code" in parsedError ? { code: parsedError.code } : {}),
+              ...("message" in parsedError ? { message: parsedError.message } : {}),
+              ...("details" in parsedError ? { details: parsedError.details } : {}),
+            },
+          }
+        : {}),
+    }
   } catch {
     return null
   }
@@ -364,13 +380,51 @@ function envelopeError(envelope: PeekabooEnvelope, cause?: unknown): PeekabooErr
       ? envelope.error.message
       : "Peekaboo reported a command failure."
   const details = typeof envelope.error?.details === "string" ? envelope.error.details : undefined
-  return new PeekabooError(code, message, details, { cause })
+  return cause === undefined
+    ? new PeekabooError(code, message, details)
+    : peekabooErrorWithCause(code, message, details, cause)
 }
 
 function processOutput(error: unknown, field: "stdout" | "stderr"): string {
-  if (!error || typeof error !== "object") return ""
-  const value = (error as Record<string, unknown>)[field]
-  return typeof value === "string" ? value : Buffer.isBuffer(value) ? value.toString("utf8") : ""
+  const value = asRecord(error)?.[field]
+  if (typeof value === "string") return value
+  if (Buffer.isBuffer(value)) return value.toString("utf8")
+  return ""
+}
+
+function screenshotPath(
+  data: Record<string, unknown> | undefined,
+  requestedPath: string,
+  annotate: boolean
+): string {
+  if (annotate && typeof data?.screenshot_annotated === "string" && data.screenshot_annotated) {
+    return data.screenshot_annotated
+  }
+  if (typeof data?.screenshot_raw === "string" && data.screenshot_raw) return data.screenshot_raw
+  return requestedPath
+}
+
+function errorCode(error: unknown): string | undefined {
+  const code = asRecord(error)?.code
+  return typeof code === "string" ? code : undefined
+}
+
+function unknownErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
+    return String(error)
+  }
+  return "Unknown error"
+}
+
+function peekabooErrorWithCause(
+  code: string,
+  message: string,
+  details: string | undefined,
+  cause: unknown
+): PeekabooError {
+  return new PeekabooError(code, message, details, { cause })
 }
 
 function observationTarget(

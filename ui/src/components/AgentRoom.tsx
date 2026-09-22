@@ -29,15 +29,17 @@ const SITTING_OFFSET = gridToPixel(1.5)
 export function AgentRoom({ agent }: { agent: Agent }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<AgentRoomState>(createAgentRoomState())
+  const agentRef = useRef(agent)
   const layout = useRoomLayout()
 
   useEffect(() => {
+    agentRef.current = agent
     syncAgentActivities(stateRef.current, agent)
   }, [agent])
 
   useEffect(() => {
     stateRef.current = createAgentRoomState(stationsForLayout(layout))
-    syncAgentActivities(stateRef.current, agent)
+    syncAgentActivities(stateRef.current, agentRef.current)
   }, [layout])
 
   useEffect(() => {
@@ -80,7 +82,7 @@ function renderRoom(
   drawRoomPets(ctx, layout.pets)
   drawCharacter(ctx, state, agentId, layout)
   const delegating = isDelegating(state)
-  if (delegating) drawSubagentConversation(ctx, state, agentId, layout, stations)
+  if (delegating) drawSubagentConversation(ctx, agentId, layout, stations)
   if (state.mode === "working") drawRoomForeground(ctx, layout, state.station)
   if (state.bubble && !delegating) drawSpeechBubble(ctx, state.x, state.y, state.bubble)
   drawRoomBorder(ctx)
@@ -125,7 +127,6 @@ function drawCharacter(
 
 function drawSubagentConversation(
   ctx: CanvasRenderingContext2D,
-  state: AgentRoomState,
   agentId: string,
   layout: RoomLayout,
   stations: AgentStationMap

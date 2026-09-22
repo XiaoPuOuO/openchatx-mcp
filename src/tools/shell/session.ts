@@ -30,6 +30,8 @@ import {
 import { createTranscriptBuffer, type TranscriptBuffer } from "./transcript.js"
 import { createUpdateSignal } from "./update-signal.js"
 
+const LINE_SEPARATOR = /\r?\n/u
+
 export type { ShellRecoverableState } from "./shell-process.js"
 
 export interface ShellSnapshot extends Record<string, unknown> {
@@ -138,6 +140,7 @@ export interface ShellSession {
   close(): Promise<void>
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Session operations intentionally close over one shared shell state machine; splitting the factory would widen mutable state ownership.
 export function createShellSession(options: ShellSessionOptions = {}): ShellSession {
   const transcriptLimit = positiveInteger(options.transcriptLimit, MCP_CONFIG.shell.transcriptChars)
   const transcript = createTranscriptBuffer(transcriptLimit)
@@ -191,6 +194,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     return processController.captureRecoverableState()
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Command dispatch is the session state machine and keeps request-id, parallel, and active-command invariants in one place.
   async function runCommand(input: RunCommandInput): Promise<ShellSnapshot> {
     if ((input.command === undefined) === (input.commands === undefined)) {
       throw new ShellSessionError("invalid_command", "Provide exactly one of command or commands.")
@@ -284,9 +288,10 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       record.status = resetInFlight ? "reset" : "shell_exited"
       if (active === record) active = null
       updates.notify()
-      throw new ShellSessionError(
+      throw shellSessionError(
         "shell_unavailable",
-        `Could not write to the shell: ${errorMessage(error)}`
+        `Could not write to the shell: ${errorMessage(error)}`,
+        error
       )
     }
 
@@ -330,15 +335,15 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     return snapshot(record, input.cursor, maxOutputTokens)
   }
 
-  async function runParallelCommands(options: {
+  async function runParallelCommands(parallelOptions: {
     input: RunCommandInput
     commands: ParallelCommandSpec[]
     commandHash: string
     maxOutputTokens: number
   }): Promise<ShellSnapshot> {
-    const rootCwd = options.input.cwd ?? processController.currentCwd
+    const rootCwd = parallelOptions.input.cwd ?? processController.currentCwd
     validateWorkingDirectory(rootCwd)
-    const runs: ParallelRunRecord[] = options.commands.map((command, index) => {
+    const runs: ParallelRunRecord[] = parallelOptions.commands.map((command, index) => {
       const cwd = resolve(rootCwd, command.path)
       validateWorkingDirectory(cwd)
       return {
@@ -353,8 +358,8 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     })
 
     const record: ParallelBatchRecord = {
-      requestId: options.input.request_id,
-      commandHash: options.commandHash,
+      requestId: parallelOptions.input.request_id,
+      commandHash: parallelOptions.commandHash,
       cwd: rootCwd,
       transcript: createTranscriptBuffer(transcriptLimit),
       endCursor: null,
@@ -371,15 +376,17 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 
     let context: ShellProcessContext
     try {
-      context = await processController.captureContext(options.input.cwd)
+      context = await processController.captureContext(parallelOptions.input.cwd)
     } catch (error) {
-      if (record.status === "reset") return parallelSnapshot(record, 0, options.maxOutputTokens)
+      if (record.status === "reset")
+        return parallelSnapshot(record, 0, parallelOptions.maxOutputTokens)
       parallelRecords.delete(record.requestId)
       if (activeParallel === record) activeParallel = null
       updates.notify()
-      throw new ShellSessionError(
+      throw shellSessionError(
         "shell_unavailable",
-        `Could not capture the shell environment: ${errorMessage(error)}`
+        `Could not capture the shell environment: ${errorMessage(error)}`,
+        error
       )
     }
 
@@ -416,8 +423,8 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       record.tasks.push(task)
     }
 
-    await waitForResult(record, options.input.yield_time_ms, options.input.signal)
-    return parallelSnapshot(record, 0, options.maxOutputTokens)
+    await waitForResult(record, parallelOptions.input.yield_time_ms, parallelOptions.input.signal)
+    return parallelSnapshot(record, 0, parallelOptions.maxOutputTokens)
   }
 
   function finishCommand(record: CommandRecord, result: ShellProcessCommandResult): void {
@@ -461,12 +468,12 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       (total, run) => Math.min(Number.MAX_SAFE_INTEGER, total + run.droppedOutputBytes),
       0
     )
-    const exitCode =
-      record.status === "completed"
-        ? record.runs.every((run) => run.status === "completed" && run.exitCode === 0)
-          ? 0
-          : 1
-        : null
+    let exitCode: number | null = null
+    if (record.status === "completed") {
+      exitCode = record.runs.every((run) => run.status === "completed" && run.exitCode === 0)
+        ? 0
+        : 1
+    }
     return {
       request_id: record.requestId,
       status: record.status,
@@ -493,7 +500,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 
   async function cancelActiveParallelBatch(): Promise<void> {
     const record = activeParallel
-    if (!record || record.status !== "running") return
+    if (record?.status !== "running") return
     record.status = "reset"
     for (const run of record.runs) {
       if (!isParallelTerminal(run.status)) {
@@ -639,7 +646,7 @@ function isParallelTerminal(status: ParallelCommandStatus): boolean {
 function batchCommandPreview(command: string): string {
   const firstLine =
     command
-      .split(/\r?\n/u)
+      .split(LINE_SEPARATOR)
       .find((line) => line.trim().length > 0)
       ?.trim()
       .replace(/\s+/gu, " ") ?? ""
@@ -672,11 +679,22 @@ function validateWorkingDirectory(cwd: string | undefined): void {
       )
   } catch (error) {
     if (error instanceof ShellSessionError) throw error
-    throw new ShellSessionError(
+    throw shellSessionError(
       "invalid_command",
-      `cwd is not accessible: ${JSON.stringify(cwd)} (${errorMessage(error)}).`
+      `cwd is not accessible: ${JSON.stringify(cwd)} (${errorMessage(error)}).`,
+      error
     )
   }
+}
+
+function shellSessionError(
+  code: ShellSessionError["code"],
+  message: string,
+  cause: unknown
+): ShellSessionError {
+  const error = new ShellSessionError(code, message)
+  error.cause = cause
+  return error
 }
 
 function errorMessage(error: unknown): string {

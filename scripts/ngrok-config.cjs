@@ -15,12 +15,10 @@ function ngrokConfigFiles(config, repositoryRoot, executable) {
   if (!["2", "3"].includes(version))
     throw new Error("Shellby requires ngrok config version 2 or 3.")
   const configured = config.state_dir
-  const stateDir =
-    configured === "~"
-      ? homedir()
-      : configured.startsWith("~/")
-        ? join(homedir(), configured.slice(2))
-        : resolve(repositoryRoot, configured)
+  let stateDir
+  if (configured === "~") stateDir = homedir()
+  else if (configured.startsWith("~/")) stateDir = join(homedir(), configured.slice(2))
+  else stateDir = resolve(repositoryRoot, configured)
   const overridePath = join(stateDir, "ngrok-agent.json")
   const address = { web_addr: `127.0.0.1:${config.ngrok.api_port}` }
   const override = version === "3" ? { version, agent: address } : { version, ...address }

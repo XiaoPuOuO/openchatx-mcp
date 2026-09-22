@@ -13,10 +13,13 @@ import { createReviewPromptTracker } from "../tools/review/review-tool.js"
 import type { ShellSessionManager } from "../tools/shell/session-manager.js"
 import type { ChatGptSubagentService } from "../tools/subagent/chatgpt-subagent-contracts.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
+import { asRecord } from "../utils.js"
 import { runWithAgent } from "./agent-context.js"
 import type { AgentObserver } from "./agent-observer.js"
 import type { McpAuditLogger, McpAuditRequest } from "./audit/audit-log.js"
 import { createMcpServer } from "./mcp-server.js"
+
+const MCP_ROUTE = /^\/mcp$/u
 
 interface RequestRuntimeContext {
   auditRequest?: McpAuditRequest
@@ -54,8 +57,6 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
-  const mcpRoute = /^\/mcp$/u
-
   const mcpHandler = createMcpHandler(
     () => {
       const requestContext = requestRuntime.getStore()
@@ -156,7 +157,7 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
     })
   }
 
-  app.all(mcpRoute, async (req: Request, res: Response) => {
+  app.all(MCP_ROUTE, async (req: Request, res: Response) => {
     if (
       req.method === "POST" &&
       authStore &&
@@ -205,13 +206,10 @@ export async function startMcpHttpServer(services: McpRuntimeServices): Promise<
 function containsToolCall(payload: unknown): boolean {
   const requests = Array.isArray(payload) ? payload : [payload]
   return requests.some((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false
-    const request = value as { method?: unknown; params?: { name?: unknown } }
-    return (
-      request.method === "tools/call" &&
-      typeof request.params?.name === "string" &&
-      request.params.name.length > 0
-    )
+    const request = asRecord(value)
+    if (request?.method !== "tools/call") return false
+    const params = asRecord(request.params)
+    return typeof params?.name === "string" && params.name.length > 0
   })
 }
 

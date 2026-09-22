@@ -14,10 +14,12 @@ export function nonNegativeInteger(value: number | undefined, fallback: number):
   return value
 }
 
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 export function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined
+  return isRecord(value) ? value : undefined
 }
 
 export function finiteNumber(value: unknown): number | undefined {
@@ -43,8 +45,10 @@ export function utf8Chunk(
     if (codePoint === undefined) break
     const codeUnits = codePoint > 0xffff ? 2 : 1
     if (offset + codeUnits > limit) break
-    const characterBytes =
-      codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4
+    let characterBytes = 4
+    if (codePoint <= 0x7f) characterBytes = 1
+    else if (codePoint <= 0x7ff) characterBytes = 2
+    else if (codePoint <= 0xffff) characterBytes = 3
     if (bytes + characterBytes > maxBytes) break
     bytes += characterBytes
     offset += codeUnits

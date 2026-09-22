@@ -5,7 +5,6 @@ import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
-// @ts-expect-error scripts are plain ESM entrypoints without declaration files.
 import {
   checkRtkRuntime,
   isSupportedArchitecture,
@@ -27,7 +26,9 @@ test("supports Apple Silicon and Intel Macs", () => {
 
 test("requires RTK only when shell.rtk is enabled", () => {
   assert.equal(checkRtkRuntime(false, undefined), undefined)
-  assert.match(checkRtkRuntime(true, undefined), /brew install rtk/u)
+  const missingRtk = checkRtkRuntime(true, undefined)
+  assert.ok(missingRtk)
+  assert.match(missingRtk, /brew install rtk/u)
 })
 
 test("preflight and full setup honor local config without ngrok on PATH", async (t) => {

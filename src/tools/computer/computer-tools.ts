@@ -16,6 +16,7 @@ const snapshotInput = z
   .min(1)
   .describe("Snapshot ID from computer_observe or computer_inspect.")
 const windowIdInput = z.number().int().positive().describe("Window ID from computer_list.")
+const KEY_TOKEN_PATTERN = /^[A-Za-z0-9_]+$/u
 
 const targetFields = {
   app: appInput.optional(),
@@ -23,6 +24,7 @@ const targetFields = {
   snapshot_id: snapshotInput.optional(),
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Registration stays together so shared schemas and tool contracts remain locally auditable.
 export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooClient): void {
   const listSchema = z.object({
     kind: z.enum(["apps", "windows", "screens", "permissions"]).default("apps"),
@@ -226,6 +228,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         openWorldHint: false,
       },
     },
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Click dispatch mirrors the mutually exclusive target modes in the public tool schema.
     async (input, ctx) => {
       const args = ["click"]
       let forceForeground = false
@@ -237,7 +240,10 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       } else {
         try {
           const target = requireSnapshotTarget(peekaboo, input.snapshot_id)
-          const coordinates = clickCoordinates(target, input.x!, input.y!)
+          if (input.x === undefined || input.y === undefined) {
+            throw new PeekabooError("INVALID_TARGET", "Coordinate clicks require both x and y.")
+          }
+          const coordinates = clickCoordinates(target, input.x, input.y)
           args.push("--at", `${coordinates.x},${coordinates.y}`)
           addSnapshotTargetArgs(args, target)
           const exactWindowTarget =
@@ -328,7 +334,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
 
   const keyToken = z
     .string()
-    .regex(/^[A-Za-z0-9_]+$/u)
+    .regex(KEY_TOKEN_PATTERN)
     .describe("Key such as return, tab, escape, cmd, shift, or a letter.")
 
   const pressSchema = z
@@ -418,6 +424,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
     })
     .superRefine((value, context) => {
       const hasCoordinates = value.x !== undefined && value.y !== undefined
+      const hasBackgroundTarget = hasScrollBackgroundTarget(value, hasCoordinates)
       if ((value.x === undefined) !== (value.y === undefined)) {
         context.addIssue({ code: "custom", message: "x and y must be supplied together." })
       }
@@ -442,14 +449,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
           message: "Supply element_id or x and y for background scrolling, or set foreground=true.",
         })
       }
-      if (
-        value.foreground &&
-        (value.element_id !== undefined ||
-          hasCoordinates ||
-          value.app !== undefined ||
-          value.window_id !== undefined ||
-          value.snapshot_id !== undefined)
-      ) {
+      if (value.foreground && hasBackgroundTarget) {
         context.addIssue({
           code: "custom",
           message: "foreground pointer scrolling cannot be combined with a background target.",
@@ -462,6 +462,35 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         })
       }
     })
+
+  async function scrollAtCoordinates(
+    input: z.infer<typeof scrollSchema>,
+    args: string[],
+    signal: AbortSignal
+  ): Promise<CallToolResult> {
+    try {
+      if (!input.snapshot_id) {
+        throw new PeekabooError(
+          "SNAPSHOT_TARGET_MISSING",
+          "Background coordinate scrolling requires a snapshot ID."
+        )
+      }
+      const target = requireSnapshotTarget(peekaboo, input.snapshot_id)
+      const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
+      if (screenCapture || target.windowId === undefined) {
+        throw new PeekabooError(
+          "EXACT_WINDOW_REQUIRED",
+          "Background coordinate scrolling requires an exact window observation."
+        )
+      }
+      args.push("--at", `${input.x},${input.y}`, "--window-id", String(target.windowId))
+      if (input.smooth) args.push("--smooth")
+      const result = await peekaboo.runWithFreshLocalWindowSnapshot(target, args, signal)
+      return commandResult(result, "Scroll completed.")
+    } catch (error) {
+      return peekabooToolError(error)
+    }
+  }
 
   server.registerTool(
     "computer_scroll",
@@ -484,26 +513,7 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
         addTargetArgs(args, input)
       }
       if (input.x !== undefined && input.y !== undefined) {
-        try {
-          const target = requireSnapshotTarget(peekaboo, input.snapshot_id!)
-          const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
-          if (screenCapture || target.windowId === undefined) {
-            throw new PeekabooError(
-              "EXACT_WINDOW_REQUIRED",
-              "Background coordinate scrolling requires an exact window observation."
-            )
-          }
-          args.push("--at", `${input.x},${input.y}`, "--window-id", String(target.windowId))
-          if (input.smooth) args.push("--smooth")
-          const result = await peekaboo.runWithFreshLocalWindowSnapshot(
-            target,
-            args,
-            ctx.mcpReq.signal
-          )
-          return commandResult(result, "Scroll completed.")
-        } catch (error) {
-          return peekabooToolError(error)
-        }
+        return scrollAtCoordinates(input, args, ctx.mcpReq.signal)
       }
       if (input.smooth) args.push("--smooth")
       if (input.foreground) args.push("--foreground")
@@ -713,6 +723,24 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       if (input.foreground) args.push("--foreground")
       return callPeekaboo(peekaboo, args, ctx.mcpReq.signal, `Window ${input.action} completed.`)
     }
+  )
+}
+
+function hasScrollBackgroundTarget(
+  value: {
+    element_id?: string
+    app?: string
+    window_id?: number
+    snapshot_id?: string
+  },
+  hasCoordinates: boolean
+): boolean {
+  return (
+    value.element_id !== undefined ||
+    hasCoordinates ||
+    value.app !== undefined ||
+    value.window_id !== undefined ||
+    value.snapshot_id !== undefined
   )
 }
 

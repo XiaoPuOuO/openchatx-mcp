@@ -3,14 +3,15 @@ import { dirname } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 import type { AgentIdentity } from "../../server/agent-context.js"
+import { asRecord } from "../../utils.js"
 
-export interface PersistedSubagent {
+interface PersistedSubagent {
   conversationUrl: string
   turnCount: number
   kind: "subagent" | "clone"
 }
 
-export interface PersistedSubagentEntry extends PersistedSubagent {
+interface PersistedSubagentEntry extends PersistedSubagent {
   agentId: string
 }
 
@@ -53,9 +54,7 @@ export function createSubagentStore(path: string): SubagentStore | undefined {
     return {
       get(parentAgent, agentId) {
         try {
-          const row = get.get(parentAgent?.sessionId ?? "", agentId) as
-            | { conversation_url?: unknown; turn_count?: unknown; kind?: unknown }
-            | undefined
+          const row = asRecord(get.get(parentAgent?.sessionId ?? "", agentId))
           if (
             !row ||
             typeof row.conversation_url !== "string" ||
@@ -67,17 +66,16 @@ export function createSubagentStore(path: string): SubagentStore | undefined {
             turnCount: row.turn_count,
             kind: row.kind === "clone" ? "clone" : "subagent",
           }
-        } catch {}
+        } catch {
+          // Treat read failures as missing persisted state.
+        }
       },
       list(parentAgent) {
         try {
-          const rows = list.all(parentAgent?.sessionId ?? "") as Array<{
-            agent_id?: unknown
-            conversation_url?: unknown
-            turn_count?: unknown
-            kind?: unknown
-          }>
-          return rows.flatMap((row) => {
+          const rows = list.all(parentAgent?.sessionId ?? "")
+          return rows.flatMap((rawRow) => {
+            const row = asRecord(rawRow)
+            if (!row) return []
             if (
               typeof row.agent_id !== "string" ||
               typeof row.conversation_url !== "string" ||

@@ -1,4 +1,4 @@
-export interface PixelAgentsFurnitureCatalogEntry {
+interface PixelAgentsFurnitureCatalogEntry {
   id: string
   label: string
   category: string
@@ -15,12 +15,12 @@ export interface PixelAgentsFurnitureCatalogEntry {
   backgroundTiles: number
 }
 
-export interface PixelAgentsImageCatalogEntry {
+interface PixelAgentsImageCatalogEntry {
   kind: string
   path: string
 }
 
-export interface PixelAgentsSimpleCatalogEntry {
+interface PixelAgentsSimpleCatalogEntry {
   id: string
   label: string
   path: string

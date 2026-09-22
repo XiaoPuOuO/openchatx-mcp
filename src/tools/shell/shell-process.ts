@@ -8,6 +8,7 @@ import { MCP_CONFIG } from "../../config.js"
 import { prepareShellCommand } from "./rtk.js"
 
 type StopReason = "reset" | "close"
+const INTEGER_TEXT_PATTERN = /^-?\d+$/u
 
 export interface ShellRecoverableState {
   cwd: string
@@ -84,6 +85,7 @@ interface ActiveCommandState {
   resolve: (result: ShellProcessCommandResult) => void
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: The process controller is a cohesive closure over one child-process state machine; splitting it would widen mutable state ownership.
 export function createShellProcess(options: ShellProcessOptions): ShellProcess {
   const shellPath = options.shellPath
   const cwd = options.cwd
@@ -108,7 +110,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
   async function start(): Promise<void> {
     if (closed) throw new Error("The shell process is closed.")
     if (ready && child) return
-    if (startPromise) return startPromise
+    if (startPromise !== null) return startPromise
 
     startPromise = spawnShell().finally(() => {
       startPromise = null
@@ -295,9 +297,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       if (finalizeTimer) clearTimeout(finalizeTimer)
       const description =
         terminationDescription === "unknown termination"
-          ? signal
-            ? `signal ${signal}`
-            : `exit code ${code ?? "unknown"}`
+          ? describeTermination(code, signal)
           : terminationDescription
       finalizeChild(spawned, description)
     })
@@ -325,6 +325,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     if (initialState === restoreState) initialState = null
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This parser advances mutually exclusive readiness, context-capture, and command marker states over a streaming buffer.
   function handleDecodedOutput(chunk: string): void {
     if (chunk.length === 0) return
     parserBuffer += chunk
@@ -407,7 +408,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
       const parsedStatus = Number.parseInt(statusText, 10)
       if (
         cwdSeparator < 1 ||
-        !/^-?\d+$/u.test(statusText) ||
+        !INTEGER_TEXT_PATTERN.test(statusText) ||
         !Number.isSafeInteger(parsedStatus) ||
         !isAbsolute(parsedCwd)
       ) {
@@ -457,6 +458,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     parserBuffer = parserBuffer.slice(safeLength)
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Child finalization reconciles all pending process states atomically before optional restart.
   function finalizeChild(
     finalizedChild: ChildProcessWithoutNullStreams,
     description: string
@@ -585,6 +587,10 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     reset,
     close,
   }
+}
+
+function describeTermination(code: number | null, signal: NodeJS.Signals | null): string {
+  return signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`
 }
 
 function buildCommandScript(command: string, token: string, cwd?: string): string {

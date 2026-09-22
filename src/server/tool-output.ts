@@ -1,11 +1,12 @@
 const SHORT_STRING_MAX = 120
 const MAX_INLINE_LINE = 240
+const BARE_STRING_PATTERN = /^[A-Za-z0-9_./:@%+,-]+$/u
 
 export function compactToolResult(toolName: string, result: unknown): unknown {
   if (!isRecord(result) || result.structuredContent === undefined) return result
   const rendered = renderToolStructuredContent(toolName, result.structuredContent)
   const compact = { ...result }
-  delete compact.structuredContent
+  compact.structuredContent = undefined
   if (!rendered) return compact
   compact.content = appendTextContent(compact.content, rendered)
   return compact
@@ -226,7 +227,7 @@ function formatScalar(value: unknown): string {
   if (typeof value !== "string") return String(value)
   if (value === "") return '""'
   if (isAmbiguousBareString(value)) return JSON.stringify(value)
-  if (/^[A-Za-z0-9_./:@%+,-]+$/u.test(value)) return value
+  if (BARE_STRING_PATTERN.test(value)) return value
   return JSON.stringify(value)
 }
 

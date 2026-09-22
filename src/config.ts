@@ -7,8 +7,6 @@ import { fileURLToPath } from "node:url"
 
 import { loadPublicConfig } from "./public-config.cjs"
 
-export { loadPublicConfig, type ToolOutputFormat } from "./public-config.cjs"
-
 const packageMetadata = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
 )

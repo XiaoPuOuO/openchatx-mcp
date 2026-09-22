@@ -162,10 +162,13 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
       "- agent_id=test-reviewer turn_id=turn-test-reviewer-1 status=running",
     ].join("\n")
   )
-  assert.ok(starts[1]!.at - starts[0]!.at >= 4_500)
-  assert.ok(starts[0]!.parentAgent)
-  assert.equal(starts[1]!.parentAgent, starts[0]!.parentAgent)
-  assert.equal(starts[0]!.parentAgent?.taskSlug, "subagent-state")
+  const [firstStart, secondStart] = starts
+  assert.ok(firstStart)
+  assert.ok(secondStart)
+  assert.ok(secondStart.at - firstStart.at >= 4_500)
+  assert.ok(firstStart.parentAgent)
+  assert.equal(secondStart.parentAgent, firstStart.parentAgent)
+  assert.equal(firstStart.parentAgent.taskSlug, "subagent-state")
   await first.client.close()
 
   const second = await connectClient(running.url, "subagent-client-2")

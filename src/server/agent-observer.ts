@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events"
 
+import { asRecord } from "../utils.js"
 import type { AgentIdentity } from "./agent-context.js"
 
-export type AgentCallStatus = "running" | "completed" | "failed"
+type AgentCallStatus = "running" | "completed" | "failed"
 
-export interface AgentCallSnapshot {
+interface AgentCallSnapshot {
   id: string
   tool: string
   summary: string
@@ -15,14 +16,14 @@ export interface AgentCallSnapshot {
   status: AgentCallStatus
 }
 
-export interface AgentInstructionSnapshot {
+interface AgentInstructionSnapshot {
   id: string
   message: string
   createdAt: number
   deliveredAt?: number
 }
 
-export interface AgentSnapshot {
+interface AgentSnapshot {
   id: string
   taskSlug?: string
   firstSeenAt: number
@@ -37,7 +38,7 @@ interface AgentState extends AgentSnapshot {
   activeCalls: Map<string, AgentCallSnapshot>
 }
 
-export interface AgentObserverEvent {
+interface AgentObserverEvent {
   type: "agent_changed"
   agent: AgentSnapshot
 }
@@ -230,28 +231,39 @@ function toSnapshot(agent: AgentState): AgentSnapshot {
 function summarizeTool(tool: string, input: unknown): string {
   const record = asRecord(input)
   if (!record) return ""
-  if (tool === "shell_run") {
-    if (typeof record.command === "string") return singleLine(record.command, 140)
-    if (Array.isArray(record.commands)) return `${record.commands.length} parallel commands`
-  }
-  if (tool === "shell_poll") {
-    const shell = typeof record.shell_id === "string" ? record.shell_id : "default"
-    const request = typeof record.request_id === "string" ? record.request_id : ""
-    return request ? `${shell}/${request}` : shell
-  }
-  if (tool === "apply_patch") {
-    return typeof record.cwd === "string" ? record.cwd : "Applying patch"
-  }
-  if (tool === "fetch_url" && typeof record.url === "string") return singleLine(record.url, 140)
-  if (tool === "image_view" && typeof record.path === "string") return singleLine(record.path, 140)
-  if (tool === "subagent_run" && Array.isArray(record.agents))
-    return `${record.agents.length} agents`
+  const specialized = summarizeKnownTool(tool, record)
+  if (specialized !== undefined) return specialized
 
   const preferred = ["path", "cwd", "request_id", "query", "name", "task_id"]
   for (const key of preferred) {
-    if (typeof record[key] === "string") return singleLine(record[key] as string, 140)
+    const value = record[key]
+    if (typeof value === "string") return singleLine(value, 140)
   }
   return ""
+}
+
+function summarizeKnownTool(tool: string, record: Record<string, unknown>): string | undefined {
+  switch (tool) {
+    case "shell_run":
+      if (typeof record.command === "string") return singleLine(record.command, 140)
+      if (Array.isArray(record.commands)) return `${record.commands.length} parallel commands`
+      return undefined
+    case "shell_poll": {
+      const shell = typeof record.shell_id === "string" ? record.shell_id : "default"
+      const request = typeof record.request_id === "string" ? record.request_id : ""
+      return request ? `${shell}/${request}` : shell
+    }
+    case "apply_patch":
+      return typeof record.cwd === "string" ? record.cwd : "Applying patch"
+    case "fetch_url":
+      return typeof record.url === "string" ? singleLine(record.url, 140) : undefined
+    case "image_view":
+      return typeof record.path === "string" ? singleLine(record.path, 140) : undefined
+    case "subagent_run":
+      return Array.isArray(record.agents) ? `${record.agents.length} agents` : undefined
+    default:
+      return undefined
+  }
 }
 
 function formatToolDetail(
@@ -283,10 +295,4 @@ function formatToolDetail(
 function singleLine(value: string, maxLength: number): string {
   const compact = value.replace(/\s+/gu, " ").trim()
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 1)}…`
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined
 }

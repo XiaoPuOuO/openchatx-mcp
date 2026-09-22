@@ -7,7 +7,7 @@ import { z } from "zod"
 
 import { type AgentIdentity, getAgentIdentity } from "../../server/agent-context.js"
 
-export const REVIEW_TOOL_NAME = "submit_review"
+const REVIEW_TOOL_NAME = "submit_review"
 export const REVIEW_PROMPT_TOOL_CALLS = 25
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")

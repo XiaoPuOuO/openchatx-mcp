@@ -133,7 +133,7 @@ export async function forkLatestConversationTurn(page: Page, signal?: AbortSigna
 
 export async function assertAuthenticated(page: Page): Promise<void> {
   const url = new URL(page.url())
-  const loginRoute = /\/auth\/(login|signin)/iu.test(url.pathname)
+  const loginRoute = CHATGPT_LOGIN_ROUTE_RE.test(url.pathname)
   const visibleLogin = await page
     .locator('a[href*="/auth/login"], a[href*="/auth/signin"], button:has-text("Log in")')
     .first()
@@ -146,6 +146,9 @@ export async function assertAuthenticated(page: Page): Promise<void> {
     )
   }
 }
+
+const CHATGPT_LOGIN_ROUTE_RE = /\/auth\/(login|signin)/iu
+const CHATGPT_CONVERSATION_ID_RE = /(?:^|\/)c\/([^/?#]+)/u
 
 export async function navigateAndCaptureConversationPayload(
   page: Page,
@@ -357,7 +360,7 @@ function isConversationPayloadUrl(value: string, conversationId: string): boolea
 
 export function extractConversationId(value: string): string | undefined {
   try {
-    const match = new URL(value).pathname.match(/(?:^|\/)c\/([^/?#]+)/u)
+    const match = new URL(value).pathname.match(CHATGPT_CONVERSATION_ID_RE)
     const rawConversationId = match?.[1]
     if (!rawConversationId) return undefined
     const conversationId = decodeURIComponent(rawConversationId)

@@ -107,10 +107,10 @@ function describe(row) {
   return row.type
 }
 
-function collapseDomStates(rows) {
+function collapseDomStates(states) {
   const result = []
   let previous
-  for (const row of rows) {
+  for (const row of states) {
     const payload = row.payload && typeof row.payload === "object" ? row.payload : {}
     const signature = JSON.stringify({
       text: payload.streaming_status_text,

@@ -98,12 +98,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const computerDrag = tools.tools.find((tool) => tool.name === "computer_drag")
   assert.ok(shellRun && shellPoll && fetchUrl && subagentResult && computerDrag)
 
-  const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)[
-    "yield_time_ms"
-  ]
-  const pollYield = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>)[
-    "yield_time_ms"
-  ]
+  const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)
+    .yield_time_ms
+  const pollYield = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>)
+    .yield_time_ms
   const webProperties = fetchUrl.inputSchema.properties as Record<string, Record<string, unknown>>
   const webTokens = webProperties.max_output_tokens
   const webCompact = webProperties.compact

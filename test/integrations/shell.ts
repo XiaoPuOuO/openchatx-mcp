@@ -88,7 +88,7 @@ test("isolates named shells and allows independent foreground work", {
   const beta = await callUntilComplete(
     connected.client,
     "beta-state",
-    `printf '%s' "${"${NAMED_STATE-unset}"}"`,
+    "printf '%s' \"${NAMED_STATE-unset}\"",
     "beta"
   )
   assert.equal(beta.output, "unset")

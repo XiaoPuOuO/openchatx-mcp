@@ -1,3 +1,4 @@
+import type { Dirent, Stats } from "node:fs"
 import { readdir, readFile, stat } from "node:fs/promises"
 import { join } from "node:path"
 import type { McpServer } from "@modelcontextprotocol/server"
@@ -9,6 +10,7 @@ import { type AgentIdentity, getAgentIdentity } from "../server/agent-context.js
 export const MAX_SKILL_BYTES = 256 * 1024
 
 const SKILL_NAME_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/u
+const LINE_BREAK_RE = /\r?\n/u
 const SKILL_LOAD_COOLDOWN_MS = 5_000
 const recentSkillLoads = new Map<
   AgentIdentity,
@@ -43,7 +45,7 @@ export class SkillCatalog {
   async list(signal?: AbortSignal): Promise<SkillSummary[]> {
     signal?.throwIfAborted()
 
-    let entries
+    let entries: Dirent[]
     try {
       entries = await readdir(this.root, { withFileTypes: true })
     } catch (error) {
@@ -83,11 +85,12 @@ export class SkillCatalog {
     signal?.throwIfAborted()
 
     const path = join(this.root, name, "SKILL.md")
-    let fileStat
+    let fileStat: Stats
     try {
       fileStat = await stat(path)
     } catch (error) {
       if (isFsError(error, "ENOENT") || isFsError(error, "ENOTDIR")) {
+        // biome-ignore lint/style/useErrorCause: SkillCatalogError forwards ErrorOptions to Error.
         throw new SkillCatalogError(
           "unknown_skill",
           `Unknown skill ${JSON.stringify(name)}. Call skill_list to discover available skills.`,
@@ -228,7 +231,7 @@ export function registerSkillTools(server: McpServer): void {
 }
 
 function frontmatterValue(markdown: string, key: string): string | undefined {
-  const lines = markdown.split(/\r?\n/u)
+  const lines = markdown.split(LINE_BREAK_RE)
   if (lines[0]?.trim() !== "---") return undefined
 
   for (let index = 1; index < lines.length; index += 1) {
@@ -254,7 +257,7 @@ function unquote(value: string): string {
 }
 
 function isFsError(error: unknown, code: string): boolean {
-  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === code
+  return error instanceof Error && "code" in error && error.code === code
 }
 
 function skillToolError(error: unknown) {

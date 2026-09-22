@@ -100,14 +100,17 @@ test("print-url uses this copy's ngrok API and filters other upstreams and domai
   )
   await writeFile(
     join(root, "src/config.ts"),
-    `export const MCP_CONFIG = ${JSON.stringify({ port: 3334, ngrok: { enabled: true, apiPort: address.port, url: "https://second.ngrok.app" } })}`
+    `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, ngrok: { enabled: true, apiPort: address.port, url: "https://second.ngrok.app" }, ui: { enabled: true } })}`
   )
   const result = await run(
     process.execPath,
     ["--import", "tsx", join(root, "scripts/print-url.mjs"), "--optional"],
     { timeout: 10_000 }
   )
-  assert.equal(result.stdout.trim(), "MCP URL: https://second.ngrok.app/mcp")
+  assert.equal(
+    result.stdout.trim(),
+    "MCP URL: https://second.ngrok.app/mcp\nUI URL: http://127.0.0.1:3334/ui"
+  )
   assert.equal(requests, 1)
 })
 
@@ -121,7 +124,7 @@ test("print-url reports the configured local address without contacting ngrok wh
   )
   await writeFile(
     join(root, "src/config.ts"),
-    'export const MCP_CONFIG = { host: "127.0.0.1", port: 3334, ngrok: { enabled: false } }'
+    'export const MCP_CONFIG = { host: "127.0.0.1", port: 3334, ngrok: { enabled: false }, ui: { enabled: false } }'
   )
   const result = await run(
     process.execPath,
@@ -137,6 +140,29 @@ test("print-url reports the configured local address without contacting ngrok wh
   assert.equal(result.stdout.trim(), "MCP URL: http://127.0.0.1:3334/mcp (local only)")
 })
 
+test("print-url also prints the local UI URL when enabled", async (t) => {
+  const root = await tempDir(t, "shellby-ui-url-")
+  await mkdir(join(root, "scripts"))
+  await mkdir(join(root, "src"))
+  await copyFile(
+    new URL("../scripts/print-url.mjs", import.meta.url),
+    join(root, "scripts/print-url.mjs")
+  )
+  await writeFile(
+    join(root, "src/config.ts"),
+    'export const MCP_CONFIG = { host: "127.0.0.1", port: 3334, ngrok: { enabled: false }, ui: { enabled: true } }'
+  )
+  const result = await run(
+    process.execPath,
+    ["--import", "tsx", join(root, "scripts/print-url.mjs")],
+    { timeout: 10_000 }
+  )
+  assert.equal(
+    result.stdout.trim(),
+    "MCP URL: http://127.0.0.1:3334/mcp (local only)\nUI URL: http://127.0.0.1:3334/ui"
+  )
+})
+
 test("two MCP listeners keep separate health identities and remote owner bindings", async (t) => {
   const root = await tempDir(t, "shellby-instances-")
   const previous = {
@@ -149,7 +175,7 @@ test("two MCP listeners keep separate health identities and remote owner binding
     Object.keys(previous.tools).map((key) => [key, false])
   ) as typeof previous.tools
   MCP_CONFIG.port = 0
-  const servers = []
+  const servers: Array<Awaited<ReturnType<typeof startMcpHttpServer>>> = []
   for (const name of ["first", "second"]) {
     MCP_CONFIG.instanceId = name
     const auth = new ShellbyAuthStore(join(root, name, "auth.json"))
@@ -183,9 +209,12 @@ test("two MCP listeners keep separate health identities and remote owner binding
       "Host rewrite must pass the guard and bind only this copy"
     )
   }
-  assert.notEqual(servers[0]!.port, servers[1]!.port)
-  await servers[0]!.close()
-  const health = await fetch(`http://127.0.0.1:${servers[1]!.port}/healthz`)
+  const [firstServer, secondServer] = servers
+  assert.ok(firstServer)
+  assert.ok(secondServer)
+  assert.notEqual(firstServer.port, secondServer.port)
+  await firstServer.close()
+  const health = await fetch(`http://127.0.0.1:${secondServer.port}/healthz`)
   assert.equal(health.headers.get("x-shellby-instance"), "second")
   assert.deepEqual(await health.json(), { ok: true })
 })

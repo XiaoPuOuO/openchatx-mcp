@@ -3,11 +3,11 @@ export const ROOM_WIDTH = 448
 export const ROOM_HEIGHT = 288
 export const ROOM_TILE_SIZE = 4
 export const ROOM_TILE_COLS = ROOM_WIDTH / (ROOM_GRID_SIZE * ROOM_TILE_SIZE)
-export const ROOM_TILE_ROWS = ROOM_HEIGHT / (ROOM_GRID_SIZE * ROOM_TILE_SIZE)
+const ROOM_TILE_ROWS = ROOM_HEIGHT / (ROOM_GRID_SIZE * ROOM_TILE_SIZE)
 
 export type RoomDirection = "down" | "up" | "right" | "left"
 
-export const ROOM_ASSETS = {
+const ROOM_ASSETS = {
   floor: "/ui/pixel-agents/assets/floors/floor_5.png",
   deskFront: "/ui/pixel-agents/assets/furniture/DESK/DESK_FRONT.png",
   deskSide: "/ui/pixel-agents/assets/furniture/DESK/DESK_SIDE.png",
@@ -42,7 +42,7 @@ export interface RoomFurnitureItem {
   foregroundWhenWorkingAt?: RoomStation
 }
 
-export interface RoomRug {
+interface RoomRug {
   x: number
   y: number
   width: number
@@ -51,7 +51,7 @@ export interface RoomRug {
   border: string
 }
 
-export interface RoomStationConfig {
+interface RoomStationConfig {
   x: number
   y: number
   label: string

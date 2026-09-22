@@ -37,10 +37,9 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   const server = new McpServer(MCP_CONFIG.server, {
     instructions: buildMcpInstructions(),
   })
+  const chatGptSubagents = options.chatGptSubagents
   installToolRegistrationBoundary(server, {
-    drainPendingEvents: options.chatGptSubagents
-      ? () => options.chatGptSubagents!.drainEvents()
-      : undefined,
+    drainPendingEvents: chatGptSubagents ? () => chatGptSubagents.drainEvents() : undefined,
     agentObserver: options.agentObserver,
     reviewPromptTracker: options.reviewPromptTracker,
     auditRequest: options.auditRequest,

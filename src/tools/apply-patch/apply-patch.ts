@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process"
+import type { Stats } from "node:fs"
 import { stat } from "node:fs/promises"
 import { isAbsolute } from "node:path"
 import process from "node:process"
@@ -10,6 +11,7 @@ import { tokenPrefix } from "../../tokenizer.js"
 
 const FAILURE_OUTPUT_TOKENS = 1_024
 const STOP_GRACE_MS = 500
+const PATCH_LINE_SEPARATOR = /\r?\n/u
 const DEFAULT_APPLY_PATCH_BINARY = fileURLToPath(
   new URL("../../../vendor/apply-patch/apply_patch", import.meta.url)
 )
@@ -132,11 +134,11 @@ function toToolResult(result: ApplyPatchResult): CompactApplyPatchResult {
 export async function applyPatch(input: ApplyPatchInput): Promise<ApplyPatchResult> {
   input.signal?.throwIfAborted()
 
-  let cwdStat
+  let cwdStat: Stats
   try {
     cwdStat = await stat(input.cwd)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isNodeError(error, "ENOENT")) {
       throw new Error(`cwd does not exist: ${input.cwd}`, { cause: error })
     }
     throw error
@@ -250,15 +252,12 @@ export async function applyPatch(input: ApplyPatchInput): Promise<ApplyPatchResu
 
   const failedIndex =
     processResult.status === "failed" ? findFailedSectionIndex(processResult.output, sections) : -1
-  const changed = summarizeChanges(
-    processResult.status === "completed"
-      ? sections
-      : failedIndex >= 0
-        ? sections.slice(0, failedIndex)
-        : []
-  )
-  const failed =
-    failedIndex >= 0 ? summarizeFailure(processResult.output, sections[failedIndex]!) : undefined
+  let changedSections: readonly PatchSection[] = []
+  if (processResult.status === "completed") changedSections = sections
+  else if (failedIndex >= 0) changedSections = sections.slice(0, failedIndex)
+  const changed = summarizeChanges(changedSections)
+  const failedSection = failedIndex >= 0 ? sections[failedIndex] : undefined
+  const failed = failedSection ? summarizeFailure(processResult.output, failedSection) : undefined
   return {
     ...processResult,
     ...(changed ? { changed } : {}),
@@ -286,59 +285,74 @@ function parsePatchSections(patch: string): PatchSection[] {
   let section: PatchSection | undefined
   let hunk: PatchHunk | undefined
 
-  const startSection = (kind: PatchSection["kind"], path: string) => {
-    section = { kind, path, additions: 0, deletions: 0, hunks: [] }
-    sections.push(section)
-    hunk = undefined
-  }
-
-  for (const line of patch.split(/\r?\n/u)) {
-    if (line.startsWith("*** Add File: ")) {
-      startSection("add", line.slice("*** Add File: ".length).trim())
-      continue
-    }
-    if (line.startsWith("*** Update File: ")) {
-      startSection("update", line.slice("*** Update File: ".length).trim())
-      continue
-    }
-    if (line.startsWith("*** Delete File: ")) {
-      startSection("delete", line.slice("*** Delete File: ".length).trim())
+  for (const line of patch.split(PATCH_LINE_SEPARATOR)) {
+    const nextSection = parseSectionHeader(line)
+    if (nextSection) {
+      section = nextSection
+      sections.push(nextSection)
+      hunk = undefined
       continue
     }
     if (!section) continue
-
-    if (section.kind === "update" && line.startsWith("*** Move to: ")) {
-      section.moveTo = line.slice("*** Move to: ".length).trim()
-      continue
-    }
-    if (section.kind === "update" && (line === "@@" || line.startsWith("@@ "))) {
-      hunk = {
-        index: section.hunks.length + 1,
-        ...(line.length > 2 ? { context: line.slice(3) } : {}),
-        expected: [],
-      }
-      section.hunks.push(hunk)
-      continue
-    }
-    if (line === "*** End of File" || line === "*** End Patch") continue
-
-    if (section.kind === "add") {
-      if (line.startsWith("+")) section.additions += 1
-      continue
-    }
-    const prefix = line[0]
-    if (section.kind !== "update" || (prefix !== " " && prefix !== "+" && prefix !== "-")) continue
-
-    if (!hunk) {
-      hunk = { index: section.hunks.length + 1, expected: [] }
-      section.hunks.push(hunk)
-    }
-    if (line.startsWith("+")) section.additions += 1
-    if (line.startsWith("-")) section.deletions += 1
-    if (line.startsWith(" ") || line.startsWith("-")) hunk.expected.push(line.slice(1))
+    hunk = consumePatchLine(line, section, hunk)
   }
 
   return sections.filter((candidate) => candidate.path.length > 0)
+}
+
+function parseSectionHeader(line: string): PatchSection | undefined {
+  const headers: Array<[string, PatchSection["kind"]]> = [
+    ["*** Add File: ", "add"],
+    ["*** Update File: ", "update"],
+    ["*** Delete File: ", "delete"],
+  ]
+  for (const [prefix, kind] of headers) {
+    if (line.startsWith(prefix)) {
+      return { kind, path: line.slice(prefix.length).trim(), additions: 0, deletions: 0, hunks: [] }
+    }
+  }
+  return undefined
+}
+
+function consumePatchLine(
+  line: string,
+  section: PatchSection,
+  currentHunk: PatchHunk | undefined
+): PatchHunk | undefined {
+  if (section.kind === "update" && line.startsWith("*** Move to: ")) {
+    section.moveTo = line.slice("*** Move to: ".length).trim()
+    return currentHunk
+  }
+  if (section.kind === "update" && (line === "@@" || line.startsWith("@@ "))) {
+    const hunk: PatchHunk = {
+      index: section.hunks.length + 1,
+      ...(line.length > 2 ? { context: line.slice(3) } : {}),
+      expected: [],
+    }
+    section.hunks.push(hunk)
+    return hunk
+  }
+  if (line === "*** End of File" || line === "*** End Patch") return currentHunk
+  if (section.kind === "add") {
+    if (line.startsWith("+")) section.additions += 1
+    return currentHunk
+  }
+
+  const prefix = line[0]
+  if (section.kind !== "update" || (prefix !== " " && prefix !== "+" && prefix !== "-")) {
+    return currentHunk
+  }
+
+  const hunk = currentHunk ?? { index: section.hunks.length + 1, expected: [] }
+  if (!currentHunk) section.hunks.push(hunk)
+  if (prefix === "+") section.additions += 1
+  if (prefix === "-") section.deletions += 1
+  if (prefix === " " || prefix === "-") hunk.expected.push(line.slice(1))
+  return hunk
+}
+
+function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === code
 }
 
 function summarizeChanges(sections: readonly PatchSection[]): string | undefined {
@@ -403,7 +417,7 @@ function identifyFailedHunk(output: string, hunks: readonly PatchHunk[]): PatchH
     if (
       scored[0] &&
       scored[0].score > 0 &&
-      (scored.length === 1 || scored[0].score > scored[1]!.score)
+      (scored.length === 1 || (scored[1] !== undefined && scored[0].score > scored[1].score))
     )
       return scored[0].hunk
   }

@@ -6,7 +6,8 @@ import test from "node:test"
 
 import { MCP_CONFIG } from "../src/config.js"
 import { createShellSession, type ShellSession } from "../src/tools/shell/session.js"
-import { createShellSessionManager, DEFAULT_SHELL_ID } from "../src/tools/shell/session-manager.js"
+import { createShellSessionManager } from "../src/tools/shell/session-manager.js"
+import { DEFAULT_SHELL_ID } from "../src/tools/shell/shell-contracts.js"
 import { runToCompletion, waitForProcessExit } from "./helpers/shell.js"
 
 test("creates named shells lazily and keeps their state isolated", async (t) => {

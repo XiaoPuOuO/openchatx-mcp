@@ -298,7 +298,7 @@ test("creates and repairs audit logs with owner-only permissions", async (t) => 
 
   await writeFile(existingFile, "existing\n")
   await chmod(existingFile, 0o644)
-  new McpAuditLogger(existingFile)
+  assert.ok(new McpAuditLogger(existingFile))
   assert.equal((await stat(existingFile)).mode & 0o777, 0o600)
   assert.equal(await readFile(existingFile, "utf8"), "existing\n")
 })

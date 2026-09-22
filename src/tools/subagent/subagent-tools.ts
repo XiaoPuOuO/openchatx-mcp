@@ -99,7 +99,8 @@ export function registerSubagentTools(
 
         if (index > 0) {
           try {
-            await delay(SUBAGENT_RUN_DELAYS_MS[index]!, ctx.mcpReq.signal)
+            const delayMs = SUBAGENT_RUN_DELAYS_MS[index]
+            if (delayMs !== undefined) await delay(delayMs, ctx.mcpReq.signal)
           } catch (error) {
             turns.push(runFailure(agent.agent_id, error))
             break

@@ -125,18 +125,17 @@ function runAllowFailure(command, args) {
   spawnSync(command, args, { encoding: "utf8" })
 }
 
-async function waitForMcp() {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      const response = await fetch(healthUrl, {
-        signal: AbortSignal.timeout(500),
-      })
-      if (response.ok && response.headers.get("x-shellby-instance") === MCP_CONFIG.instanceId)
-        return true
-    } catch {
-      // PM2 may still be starting the process.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
+async function waitForMcp(attemptsRemaining = 20) {
+  try {
+    const response = await fetch(healthUrl, {
+      signal: AbortSignal.timeout(500),
+    })
+    if (response.ok && response.headers.get("x-shellby-instance") === MCP_CONFIG.instanceId)
+      return true
+  } catch {
+    // PM2 may still be starting the process.
   }
-  return false
+  await new Promise((resolve) => setTimeout(resolve, 250))
+  if (attemptsRemaining <= 1) return false
+  return waitForMcp(attemptsRemaining - 1)
 }

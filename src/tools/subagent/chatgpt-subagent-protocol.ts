@@ -1,6 +1,8 @@
 import { asRecord } from "../../utils.js"
 import type { ChatGptSubagentActivity } from "./chatgpt-subagent-contracts.js"
 
+const LINE_SEPARATOR = /\r?\n/u
+
 export interface ChatGptTurnCompletion {
   text: string
   conversationId?: string
@@ -81,13 +83,11 @@ export class ChatGptTurnTracker {
 
       const value = asRecord(record.v)
       const message = value ? normalizeMessage(value) : undefined
-      if (message?.role === "user" && promptsMatch(message.text, this.prompt))
-        this.bind(sourceId, turnId)
+      this.bindPromptMessage(message, sourceId, turnId)
 
       const inputMessage = asRecord(record.input_message)
       const input = inputMessage ? normalizeMessage({ message: inputMessage }) : undefined
-      if (input?.role === "user" && promptsMatch(input.text, this.prompt))
-        this.bind(sourceId, turnId)
+      this.bindPromptMessage(input, sourceId, turnId)
 
       if (this.sourceId !== sourceId) continue
       this.captureConversationId(record)
@@ -108,6 +108,16 @@ export class ChatGptTurnTracker {
     return this.result()
   }
 
+  private bindPromptMessage(
+    message: NormalizedMessage | undefined,
+    sourceId: string,
+    turnId?: string
+  ): void {
+    if (message?.role === "user" && promptsMatch(message.text, this.prompt)) {
+      this.bind(sourceId, turnId)
+    }
+  }
+
   private bind(sourceId: string, turnId?: string): void {
     if (this.sourceId) return
     this.sourceId = sourceId
@@ -124,7 +134,7 @@ export class ChatGptTurnTracker {
   private applyDelta(delta: Record<string, unknown>): void {
     if (!this.assistant) return
     const explicitOperation = stringValue(delta.o)
-    const operation = explicitOperation || this.lastDeltaOperation
+    const operation = explicitOperation ? explicitOperation : this.lastDeltaOperation
     if (operation === "patch" && Array.isArray(delta.v)) {
       for (const nested of delta.v) {
         const record = asRecord(nested)
@@ -134,40 +144,37 @@ export class ChatGptTurnTracker {
     }
 
     const explicitPath = stringValue(delta.p)
-    const path = explicitPath || this.lastDeltaPath
+    const path = explicitPath ? explicitPath : this.lastDeltaPath
     if (explicitPath) this.lastDeltaPath = explicitPath
     if (explicitOperation) this.lastDeltaOperation = explicitOperation
     if (!path) return
 
-    if (
-      operation === "append" &&
-      path === "/message/content/parts/0" &&
-      typeof delta.v === "string"
-    ) {
-      this.assistant.text += delta.v
+    this.applyAssistantDelta(operation, path, delta.v)
+  }
+
+  private applyAssistantDelta(operation: string | undefined, path: string, value: unknown): void {
+    if (!this.assistant) return
+    const target = `${operation ?? ""}:${path}`
+    if (target === "append:/message/content/parts/0" && typeof value === "string") {
+      this.assistant.text += value
       this.onActivity?.("Generating response")
-    } else if (
-      operation === "replace" &&
-      path === "/message/status" &&
-      typeof delta.v === "string"
-    ) {
-      this.assistant.status = delta.v
-    } else if (
-      operation === "replace" &&
-      path === "/message/end_turn" &&
-      typeof delta.v === "boolean"
-    ) {
-      this.assistant.endTurn = delta.v
-    } else if (
-      operation === "replace" &&
-      path === "/message/recipient" &&
-      (typeof delta.v === "string" || delta.v === null)
-    ) {
-      this.assistant.recipient = delta.v as string | null
+      return
+    }
+    if (target === "replace:/message/status" && typeof value === "string") {
+      this.assistant.status = value
+      return
+    }
+    if (target === "replace:/message/end_turn" && typeof value === "boolean") {
+      this.assistant.endTurn = value
+      return
+    }
+    if (target === "replace:/message/recipient" && (typeof value === "string" || value === null)) {
+      this.assistant.recipient = value
     }
   }
 
   private result(): ChatGptTurnCompletion | undefined {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Biome misses mutation of completion state inside callback traversal.
     if (!this.complete || !this.sourceId || !this.assistant) return undefined
     if (this.assistant.status !== "finished_successfully" || this.assistant.endTurn !== true)
       return undefined
@@ -197,14 +204,8 @@ function normalizeMessage(record: Record<string, unknown>): NormalizedMessage | 
   return {
     role: stringValue(author.role),
     status: stringValue(message.status),
-    endTurn:
-      typeof message.end_turn === "boolean" || message.end_turn === null
-        ? (message.end_turn as boolean | null)
-        : undefined,
-    recipient:
-      typeof message.recipient === "string" || message.recipient === null
-        ? (message.recipient as string | null)
-        : undefined,
+    endTurn: nullableBoolean(message.end_turn),
+    recipient: nullableString(message.recipient),
     text: extractMessageText(asRecord(message.content)),
   }
 }
@@ -227,7 +228,7 @@ function classifyActivity(message: NormalizedMessage): ChatGptSubagentActivity {
 
 function parseResponsePayloads(text: string): unknown[] {
   const payloads: unknown[] = []
-  for (const rawLine of text.split(/\r?\n/u)) {
+  for (const rawLine of text.split(LINE_SEPARATOR)) {
     const line = rawLine.trim()
     if (!line || line === "data: [DONE]") continue
     const candidate = line.startsWith("data:") ? line.slice(5).trim() : line
@@ -256,9 +257,18 @@ function visitObjects(
     for (const item of value) visitObjects(item, visitor, seen)
     return
   }
-  const record = value as Record<string, unknown>
+  const record = asRecord(value)
+  if (!record) return
   visitor(record)
   for (const nested of Object.values(record)) visitObjects(nested, visitor, seen)
+}
+
+function nullableBoolean(value: unknown): boolean | null | undefined {
+  return typeof value === "boolean" || value === null ? value : undefined
+}
+
+function nullableString(value: unknown): string | null | undefined {
+  return typeof value === "string" || value === null ? value : undefined
 }
 
 function stringValue(value: unknown): string | undefined {

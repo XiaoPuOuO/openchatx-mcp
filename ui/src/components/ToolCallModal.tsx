@@ -1,3 +1,4 @@
+// biome-ignore-all lint/security/noDangerouslySetInnerHtml: Highlight.js escapes source text and emits the markup required for syntax highlighting.
 import * as Dialog from "@radix-ui/react-dialog"
 import hljs from "highlight.js/lib/core"
 import bash from "highlight.js/lib/languages/bash"

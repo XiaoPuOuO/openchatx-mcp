@@ -8,8 +8,6 @@ import {
 } from "./session.js"
 import { DEFAULT_SHELL_ID, type ShellListOutput } from "./shell-contracts.js"
 
-export { DEFAULT_SHELL_ID } from "./shell-contracts.js"
-
 const DEFAULT_CLEANUP_INTERVAL_MS = 60 * 1000
 export interface ShellSessionManagerOptions {
   createShell?: (initialState?: ShellRecoverableState) => ShellSession
@@ -51,6 +49,7 @@ export interface ShellSessionManager {
   close(): Promise<void>
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: The manager is a cohesive closure over shared shell lifecycle state; splitting it would widen that mutable state surface.
 export function createShellSessionManager(
   options: ShellSessionManagerOptions = {}
 ): ShellSessionManager {
@@ -91,7 +90,11 @@ export function createShellSessionManager(
   }
 
   function getDefaultShell(): ShellSession {
-    return sessions.get(DEFAULT_SHELL_ID)!
+    const shell = sessions.get(DEFAULT_SHELL_ID)
+    if (!shell) {
+      throw new ShellSessionError("closed", "The default shell session is unavailable.")
+    }
+    return shell
   }
 
   async function getOrCreate(

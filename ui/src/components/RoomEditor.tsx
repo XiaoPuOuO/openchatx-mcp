@@ -162,6 +162,7 @@ export function RoomEditor() {
     return () => cancelAnimationFrame(frameId)
   }, [layout, selection])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: These helpers only capture stable React state setters.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || !selection) return

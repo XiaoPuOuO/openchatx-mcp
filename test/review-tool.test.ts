@@ -18,7 +18,7 @@ test("saves Shellby reviews with the agent audit alias and task slug", async (t)
       rating: 8.7,
       review: "Fast local tools; shell polling was easy to follow.",
     })
-    return getAgentIdentity()!.agent
+    return getAgentIdentity()?.agent
   })
 
   const records = (await readFile(path, "utf8"))

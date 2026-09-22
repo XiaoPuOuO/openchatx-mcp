@@ -5,6 +5,7 @@ import { MCP_CONFIG } from "../../config.js"
 
 const REWRITE_TIMEOUT_MS = 2_000
 const REWRITE_MAX_BUFFER_BYTES = 256 * 1024
+const TRAILING_NEWLINE_RE = /\r?\n$/u
 
 export function prepareShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv): string {
   const executable = MCP_CONFIG.shell.rtkExecutable
@@ -19,7 +20,7 @@ export function prepareShellCommand(command: string, cwd: string, env: NodeJS.Pr
   })
 
   if (rewritten.error || (rewritten.status !== 0 && rewritten.status !== 3)) return command
-  const value = rewritten.stdout.replace(/\r?\n$/u, "")
+  const value = rewritten.stdout.replace(TRAILING_NEWLINE_RE, "")
   if (!value) return command
 
   const rtkDirectory = dirname(executable)

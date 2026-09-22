@@ -1,4 +1,4 @@
-export type AgentCallStatus = "running" | "completed" | "failed"
+type AgentCallStatus = "running" | "completed" | "failed"
 
 export interface AgentCall {
   id: string

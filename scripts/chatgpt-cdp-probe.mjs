@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noUnnecessaryConditions: Biome fails to track CLI option mutations from parseArgs. */
 import { createWriteStream } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
@@ -418,7 +419,7 @@ async function stop(reason) {
   stopping = true
   if (durationTimer) clearTimeout(durationTimer)
   record("probe.stopping", { reason })
-  for (const session of sessions) await session.detach().catch(() => undefined)
+  await Promise.all([...sessions].map((session) => session.detach().catch(() => undefined)))
   record("probe.stopped", { reason })
   await new Promise((resolvePromise) => output.end(resolvePromise))
   console.log(`Stopped. Trace: ${outputPath}`)
@@ -519,7 +520,9 @@ function decodeBase64(value) {
   if (typeof value !== "string" || value.length === 0) return
   try {
     return Buffer.from(value, "base64").toString("utf8")
-  } catch {}
+  } catch {
+    // Ignore malformed payloads from the probe stream.
+  }
 }
 
 function errorText(error) {

@@ -34,7 +34,9 @@ export function parseThenRun(value: unknown, hasTool: (name: string) => boolean)
   const entries = Object.entries(value)
   if (entries.length !== 1) throw new Error("then_run must contain exactly one Shellby tool call.")
 
-  const [name, argumentsValue] = entries[0]!
+  const entry = entries.shift()
+  if (!entry) throw new Error("then_run must contain exactly one Shellby tool call.")
+  const [name, argumentsValue] = entry
   if (name === START_HERE_TOOL_NAME || !hasTool(name))
     throw new Error(`Unknown then_run tool: ${name}.`)
   if (!isRecord(argumentsValue))

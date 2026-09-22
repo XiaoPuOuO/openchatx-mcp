@@ -112,7 +112,6 @@
         }
       },
       "performance": {
-        "noAwaitInLoops": "error",
         "noBarrelFile": "error",
         "noDelete": "warn",
         "noReExportAll": "error",
@@ -181,9 +180,6 @@
             "allowComments": true
           }
         }
-      },
-      "security": {
-        "noSecrets": "warn"
       }
     }
   },
@@ -240,10 +236,14 @@
           },
           "suspicious": {
             "noAssignInExpressions": "off",
-            "noShadow": "off"
+            "noEmptyBlockStatements": "off",
+            "noShadow": "off",
+            "noTemplateCurlyInString": "off",
+            "noUnnecessaryConditions": "off"
           },
           "style": {
-            "noNestedTernary": "off"
+            "noNestedTernary": "off",
+            "noNonNullAssertion": "off"
           }
         }
       }

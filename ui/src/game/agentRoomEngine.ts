@@ -10,8 +10,8 @@ import {
   type RoomStation,
 } from "./agentRoomLayout"
 
-export type AgentStation = RoomStation
-export type AgentDirection = RoomDirection
+type AgentStation = RoomStation
+type AgentDirection = RoomDirection
 
 type RoomMode = "idle" | "walking" | "working"
 
@@ -60,7 +60,7 @@ export function stationsForLayout(layout: RoomLayout): AgentStationMap {
   }
 }
 
-export const STATIONS = stationsForLayout(ROOM_LAYOUT as unknown as RoomLayout)
+const STATIONS = stationsForLayout(ROOM_LAYOUT as unknown as RoomLayout)
 
 const WALK_SPEED = 86
 const MAX_DELTA_TIME_SEC = 0.1
@@ -269,7 +269,7 @@ export function startAgentRoomLoop(
   }
 }
 
-export function stationForTool(tool: string): AgentStation {
+function stationForTool(tool: string): AgentStation {
   if (tool === "apply_patch") return "patch"
   if (tool === "fetch_url" || tool.startsWith("web_")) return "web"
   if (tool === "image_view" || tool.startsWith("image_")) return "image"
@@ -277,7 +277,7 @@ export function stationForTool(tool: string): AgentStation {
   return "terminal"
 }
 
-export function bubbleForTool(tool: string): string {
+function bubbleForTool(tool: string): string {
   if (tool === "apply_patch") return "Applying patch..."
   if (tool === "fetch_url" || tool.startsWith("web_")) return "Browsing..."
   if (tool === "image_view" || tool.startsWith("image_")) return "Viewing image..."

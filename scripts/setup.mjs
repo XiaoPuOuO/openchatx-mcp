@@ -10,22 +10,24 @@ import { initializeShellbyConfig, initializeWorkspace } from "./workspace-setup.
 const scriptsDir = dirname(fileURLToPath(import.meta.url))
 const configOnly = process.argv.includes("--config-only")
 
+function formatConfigPath(configResult) {
+  let suffix = ""
+  if (configResult.created) suffix = " (created)"
+  else if (configResult.updated) suffix = " (updated)"
+  return `${configResult.configPath}${suffix}`
+}
+
 if (configOnly) {
   const config = await initializeShellbyConfig()
   await import("../src/config.ts")
-  console.log(
-    `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`
-  )
+  console.log(formatConfigPath(config))
   process.exit(0)
 }
 
 intro()
 
 const config = await initializeShellbyConfig()
-note(
-  "Configuration",
-  `${config.configPath}${config.created ? " (created)" : config.updated ? " (updated)" : ""}`
-)
+note("Configuration", formatConfigPath(config))
 const { MCP_CONFIG } = await import("../src/config.ts")
 
 const prerequisiteStep = spinner("Checking prerequisites")
@@ -103,8 +105,12 @@ function run(command, args) {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] })
     let stdout = ""
     let stderr = ""
-    child.stdout.on("data", (chunk) => (stdout += chunk))
-    child.stderr.on("data", (chunk) => (stderr += chunk))
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk
+    })
     child.once("error", reject)
     child.once("close", (status) => resolve({ status: status ?? 1, stdout, stderr }))
   })

@@ -676,7 +676,6 @@ test("reset kills a TERM-resistant background descendant", { timeout: 10_000 }, 
   const shell = createShellSession()
   // biome-ignore lint/style/useConst: assigned after cleanup registration so early failures can still clean up the old process group.
   let descendantPid: number | undefined
-  // biome-ignore lint/style/useConst: assigned after cleanup registration so early failures can still clean up the old process group.
   let oldProcessGroup: number | undefined
   t.after(async () => {
     await shell.close()

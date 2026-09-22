@@ -5,7 +5,7 @@ import test from "node:test"
 
 // @ts-expect-error scripts are plain ESM entrypoints without declaration files.
 import { initializeShellbyConfig, initializeWorkspace } from "../scripts/workspace-setup.mjs"
-import { loadPublicConfig } from "../src/config.js"
+import { loadPublicConfig } from "../src/public-config.cjs"
 import { SkillCatalog } from "../src/tools/skills.js"
 import { tempDir } from "./helpers/temp.js"
 

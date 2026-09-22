@@ -35,11 +35,10 @@ export class McpAuditLogger {
 
   private startToolCall(toolName: string, argumentsValue: unknown, via?: "then_run"): McpAuditCall {
     const identity = getAgentIdentity()
-    const agentLabel = identity
-      ? identity.taskSlug
-        ? `${identity.agent}/${identity.taskSlug}`
-        : identity.agent
-      : undefined
+    let agentLabel: string | undefined
+    if (identity) {
+      agentLabel = identity.taskSlug ? `${identity.agent}/${identity.taskSlug}` : identity.agent
+    }
     const startedAt = this.clock()
     const startedTime = this.now()
     const inputTokens = countTokens(JSON.stringify(argumentsValue ?? {}))

@@ -7,8 +7,7 @@ import test from "node:test"
 import { runInNewContext } from "node:vm"
 // @ts-expect-error scripts are plain ESM entrypoints without declaration files.
 import { initializeShellbyConfig } from "../scripts/workspace-setup.mjs"
-import { loadPublicConfig } from "../src/config.js"
-import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cjs"
+import { DEFAULT_PUBLIC_CONFIG, loadPublicConfig } from "../src/public-config.cjs"
 import { tempDir } from "./helpers/temp.js"
 
 test("loads and validates Shellby TOML config", async (t) => {
@@ -374,5 +373,5 @@ test("local PM2 ecosystem needs neither ngrok executable nor native configuratio
     },
   })
   assert.equal(module.exports.apps.length, 1)
-  assert.equal(module.exports.apps[0]!.name, "shellby-mcp")
+  assert.equal(module.exports.apps[0]?.name, "shellby-mcp")
 })

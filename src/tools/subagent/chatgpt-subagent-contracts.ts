@@ -8,7 +8,7 @@ export const chatGptSubagentActivitySchema = z.enum([
   "Generating response",
 ])
 
-export type ChatGptSubagentStatus = z.infer<typeof chatGptSubagentStatusSchema>
+type ChatGptSubagentStatus = z.infer<typeof chatGptSubagentStatusSchema>
 export type ChatGptSubagentActivity = z.infer<typeof chatGptSubagentActivitySchema>
 
 export interface ChatGptSubagentRequest {

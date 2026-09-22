@@ -54,7 +54,6 @@ const publicConfigSchema = z.object({
 })
 
 export type ShellbyPublicConfig = z.infer<typeof publicConfigSchema>
-export type ToolOutputFormat = ShellbyPublicConfig["mcp"]["tool_output"]
 export const DEFAULT_PUBLIC_CONFIG = publicConfigSchema.parse(
   resolveConfigObject(publicConfigSchema, {}, "", () => undefined)
 )
@@ -90,33 +89,53 @@ function resolveConfigObject(
   prefix: string,
   warn: (message: string) => void
 ): Record<string, unknown> {
-  let input: Record<string, unknown> = {}
-  if (value !== undefined) {
-    if (value !== null && typeof value === "object" && !Array.isArray(value))
-      input = value as Record<string, unknown>
-    else warn(`${prefix} must be a TOML table; using defaults for this section.`)
-  }
+  const input = resolveConfigInput(value, prefix, warn)
   for (const key of Object.keys(input)) {
     if (!Object.hasOwn(schema.shape, key))
       warn(`Unknown setting ${prefix ? `${prefix}.` : ""}${key}; ignoring it.`)
   }
 
   const result: Record<string, unknown> = {}
-  for (const [key, field] of Object.entries(schema.shape) as Array<[string, z.ZodType]>) {
+  for (const [key, field] of Object.entries(schema.shape)) {
     const path = prefix ? `${prefix}.${key}` : key
     const supplied = Object.hasOwn(input, key) ? input[key] : undefined
-    if (field instanceof z.ZodObject) {
-      result[key] = resolveConfigObject(field, supplied, path, warn)
-      continue
-    }
-    const parsed = field.safeParse(supplied)
-    const resolved = parsed.success ? parsed.data : field.parse(undefined)
-    if (!parsed.success) {
-      warn(
-        `${path}: ${parsed.error.issues.map((issue) => issue.message).join("; ")}; ${resolved === undefined ? "ignoring this optional setting" : `using default ${JSON.stringify(resolved)}`}.`
-      )
-    }
+    const resolved = resolveConfigValue(field, supplied, path, warn)
     if (resolved !== undefined) result[key] = resolved
   }
   return result
+}
+
+function resolveConfigInput(
+  value: unknown,
+  prefix: string,
+  warn: (message: string) => void
+): Record<string, unknown> {
+  if (value === undefined) return {}
+  if (isRecord(value)) return value
+  warn(`${prefix} must be a TOML table; using defaults for this section.`)
+  return {}
+}
+
+function resolveConfigValue(
+  field: z.ZodType,
+  supplied: unknown,
+  path: string,
+  warn: (message: string) => void
+): unknown {
+  if (field instanceof z.ZodObject) return resolveConfigObject(field, supplied, path, warn)
+
+  const parsed = field.safeParse(supplied)
+  const resolved = parsed.success ? parsed.data : field.parse(undefined)
+  if (!parsed.success) {
+    const fallback =
+      resolved === undefined
+        ? "ignoring this optional setting"
+        : `using default ${JSON.stringify(resolved)}`
+    warn(`${path}: ${parsed.error.issues.map((issue) => issue.message).join("; ")}; ${fallback}.`)
+  }
+  return resolved
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
