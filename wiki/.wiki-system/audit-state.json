@@ -29,7 +29,7 @@
       "fingerprint": "sha256:ca62a85db76821a89f2734733eaffd8f1c8b61f072a8a99b8666d299702de988"
     },
     "pages/persistent-shell-runtime.md": {
-      "fingerprint": "sha256:40c04c99284c01fe721fc09a24db30732f95ecfa91254c79699463a03e2c5e52"
+      "fingerprint": "sha256:bba7be3b67e497435a5440f868d4ff5c2ee485cd3422b9ea89175dd5b962be23"
     },
     "pages/project/open-questions-and-risks.md": {
       "fingerprint": "sha256:8949ec9384a8d989c5457903e00872edb03ca68b1f0e5e4760655afa1dcf4f62"
@@ -59,7 +59,7 @@
       "fingerprint": "sha256:64f76ed2f9ab651caca0cfe90c9a01654f9fa2099dc1eefaf5e6bdc941b69b63"
     },
     "pages/tools/shell-run.md": {
-      "fingerprint": "sha256:7f506ee5436e66cb8505be8325089b5686b5dc40a67cea0445b851cf22f3880c"
+      "fingerprint": "sha256:9957bb68b55bd6723f870f8d5908169ac7bcef110fa796ea0614e4d4330f493e"
     },
     "pages/tools/subagent.md": {
       "fingerprint": "sha256:29873370ac262a65256bb829fcccc8d5a21c7b61e503acfc3c3837334d0cc588"

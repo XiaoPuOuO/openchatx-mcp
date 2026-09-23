@@ -25,6 +25,8 @@ Commands are passed into a fixed wrapper script, optionally preceded by a valida
 
 Marker-safe decoding and parsing live in `shell-process.ts`; retained transcript/capture ceilings remain in the session layer (`src/tools/shell/shell-process.ts`, `src/tools/shell/session.ts`, `test/shell-session.test.ts`).
 
+When a complete marker is absent, the parser publishes ordinary output immediately and retains only the longest trailing substring that could begin the expected marker. This makes short readiness messages available before command completion while keeping split markers private and Unicode boundaries intact. The session still returns at completion or the caller's yield deadline.
+
 The wrapper clears `errexit` before and after evaluation so a prior `set -e` does not poison later calls. An explicit `exit` or a command that terminates the shell still destroys state (`src/tools/shell/shell-process.ts`, `test/shell-session.test.ts`).
 
 ## Output Storage and Request Records

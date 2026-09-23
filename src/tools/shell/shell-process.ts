@@ -431,7 +431,12 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
   }
 
   function flushSafePrefix(marker: string, onOutput?: (chunk: string) => void): void {
-    let safeLength = Math.max(0, parserBuffer.length - marker.length + 1)
+    // Retain only a suffix that could become the marker when another chunk arrives.
+    let retainedLength = Math.min(parserBuffer.length, marker.length - 1)
+    while (retainedLength > 0 && !parserBuffer.endsWith(marker.slice(0, retainedLength))) {
+      retainedLength -= 1
+    }
+    let safeLength = parserBuffer.length - retainedLength
     if (
       safeLength > 0 &&
       safeLength < parserBuffer.length &&

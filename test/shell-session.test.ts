@@ -20,6 +20,98 @@ import {
 } from "./helpers/shell.js"
 import { tempDir } from "./helpers/temp.js"
 
+test("returns short stdout and stderr before completion without duplicate polls", {
+  timeout: 10_000,
+}, async (t) => {
+  const directory = await tempDir(t, "shell-mcp-incremental-")
+  const nextFile = join(directory, "next")
+  const finishFile = join(directory, "finish")
+  const shell = createShellSession()
+  t.after(() => shell.close())
+
+  const first = await shell.runCommand({
+    request_id: "incremental-output",
+    command: [
+      "printf 'READY🙂\\n'",
+      "printf 'WARN\\n' >&2",
+      `while [[ ! -e ${quote(nextFile)} ]]; do sleep 0.01; done`,
+      "printf NEXT",
+      `while [[ ! -e ${quote(finishFile)} ]]; do sleep 0.01; done`,
+      "printf DONE",
+    ].join("\n"),
+    yield_time_ms: 200,
+    max_output_tokens: 64,
+  })
+  assert.equal(first.status, "running")
+  assert.equal(first.exit_code, null)
+  assert.equal(first.output, "READY🙂\nWARN\n")
+
+  const idle = await shell.pollCommand({
+    request_id: first.request_id,
+    cursor: first.next_cursor,
+    yield_time_ms: 20,
+    max_output_tokens: 64,
+  })
+  assert.equal(idle.status, "running")
+  assert.equal(idle.output, "")
+  assert.equal(idle.next_cursor, first.next_cursor)
+
+  await writeFile(nextFile, "go")
+  const second = await shell.pollCommand({
+    request_id: first.request_id,
+    cursor: idle.next_cursor,
+    yield_time_ms: 200,
+    max_output_tokens: 64,
+  })
+  assert.equal(second.status, "running")
+  assert.equal(second.output, "NEXT")
+
+  await writeFile(finishFile, "go")
+  const completed = await pollToCompletion(shell, second)
+  assert.equal(completed.snapshot.status, "completed")
+  assert.equal(completed.snapshot.exit_code, 0)
+  assert.equal(first.output + completed.output, "READY🙂\nWARN\nNEXTDONE")
+})
+
+test("holds only a possible marker prefix while streaming ordinary output", {
+  timeout: 10_000,
+}, async (t) => {
+  const directory = await tempDir(t, "shell-mcp-marker-prefix-")
+  const nextFile = join(directory, "next")
+  const finishFile = join(directory, "finish")
+  const shell = createShellSession()
+  t.after(() => shell.close())
+
+  const first = await shell.runCommand({
+    request_id: "incremental-marker-prefix",
+    command: [
+      "printf 'before\\036__MCP_DONE_'",
+      `while [[ ! -e ${quote(nextFile)} ]]; do sleep 0.01; done`,
+      "printf 'not-a-token🙂'",
+      `while [[ ! -e ${quote(finishFile)} ]]; do sleep 0.01; done`,
+    ].join("\n"),
+    yield_time_ms: 200,
+    max_output_tokens: 64,
+  })
+  assert.equal(first.status, "running")
+  assert.equal(first.output, "before")
+
+  await writeFile(nextFile, "go")
+  const second = await shell.pollCommand({
+    request_id: first.request_id,
+    cursor: first.next_cursor,
+    yield_time_ms: 200,
+    max_output_tokens: 64,
+  })
+  assert.equal(second.status, "running")
+  assert.equal(second.output, "\u001e__MCP_DONE_not-a-token🙂")
+
+  await writeFile(finishFile, "go")
+  const completed = await pollToCompletion(shell, second)
+  assert.equal(completed.snapshot.status, "completed")
+  assert.equal(first.output + completed.output, "before\u001e__MCP_DONE_not-a-token🙂")
+})
+
 test("retains cwd and environment across commands", { timeout: 10_000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "shell-mcp-state-"))
   const shell = createShellSession()

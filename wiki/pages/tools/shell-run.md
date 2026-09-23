@@ -98,6 +98,8 @@ Batch output remains in completion order. Headers only identify the run; exit co
 
 `stdout` + `stderr` share the output stream.
 
+For single commands, each yield includes available output through that point, even while `status=running`. Continue from `next_cursor` to receive newly available output without repeating earlier chunks. A poll with no new output returns an empty output string and keeps the cursor unchanged. The parser only withholds a trailing possible protocol marker. Output buffered inside the child program becomes available when that program flushes it; for example, Python can use `-u` or `print(..., flush=True)`.
+
 When zsh output contains a `command not found: apply_patch` line, normal, batch, and polled output replace that line with direct guidance to the native `apply_patch` MCP tool. Other output and the original exit status remain unchanged (`src/tools/shell/shell-tools.ts`, `test/integrations/shell.ts`).
 
 - `output_truncated=true`: this response chunk hit its token limit. More retained output exists.

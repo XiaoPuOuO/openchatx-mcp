@@ -6,8 +6,10 @@ import test from "node:test"
 
 import { createShellSession } from "../../src/tools/shell/session.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
+import { quote } from "../helpers/shell.js"
 import {
   callUntilComplete,
+  compactField,
   connectClient,
   snapshotFromResult,
   startMcpHttpServer,
@@ -16,6 +18,69 @@ import {
 
 const APPLY_PATCH_TOOL_GUIDANCE =
   "`apply_patch` is a separate MCP tool and cannot be used through `shell_run`. For local file changes, including creating, updating, deleting, moving, or renaming files, use the `apply_patch` MCP tool directly."
+
+test("returns incremental shell output through MCP before the command finishes", {
+  timeout: 10_000,
+}, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "mcp-incremental-output-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "incremental-shell-client")
+  t.after(() => connected.client.close())
+  const next = join(root, "next")
+  const finish = join(root, "finish")
+
+  const first = snapshotFromResult(
+    await connected.client.callTool({
+      name: "shell_run",
+      arguments: {
+        request_id: "incremental-shell",
+        command: [
+          "printf READY",
+          `while [[ ! -e ${quote(next)} ]]; do sleep 0.01; done`,
+          "printf PROGRESS",
+          `while [[ ! -e ${quote(finish)} ]]; do sleep 0.01; done`,
+          "printf DONE",
+        ].join("\n"),
+        yield_time_ms: 200,
+      },
+    })
+  )
+  assert.equal(first.status, "running")
+  assert.equal(first.output, "READY")
+  assert.notEqual(first.next_cursor, undefined)
+
+  await writeFile(next, "go")
+  const progress = await connected.client.callTool({
+    name: "shell_poll",
+    arguments: {
+      request_id: "incremental-shell",
+      cursor: first.next_cursor,
+      yield_time_ms: 200,
+    },
+  })
+  assert.notEqual(progress.isError, true)
+  assert.equal(compactField(toolText(progress), "status"), "running")
+  assert.equal(compactField(toolText(progress), "output"), "PROGRESS")
+  const cursor = compactField(toolText(progress), "next_cursor")
+  assert.ok(cursor)
+
+  await writeFile(finish, "go")
+  const completed = await connected.client.callTool({
+    name: "shell_poll",
+    arguments: {
+      request_id: "incremental-shell",
+      cursor: Number(cursor),
+      yield_time_ms: 1_000,
+    },
+  })
+  assert.notEqual(completed.isError, true)
+  assert.equal(compactField(toolText(completed), "status"), "completed")
+  assert.equal(compactField(toolText(completed), "output"), "DONE")
+  assert.equal(compactField(toolText(completed), "exit_code"), "0")
+  assert.equal(compactField(toolText(completed), "next_cursor"), undefined)
+})
 
 test("redirects missing apply_patch commands to the native tool in normal and batch output", {
   timeout: 20_000,
