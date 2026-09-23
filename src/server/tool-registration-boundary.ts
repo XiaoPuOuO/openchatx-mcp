@@ -407,7 +407,6 @@ function projectThenRunSchema(schema: unknown, enabled: boolean): unknown {
     properties: {
       "[toolName: string]": { type: ["object"] },
     },
-    required: ["[toolName: string]"],
   }
   return schema
 }

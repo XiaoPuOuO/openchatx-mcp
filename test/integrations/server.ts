@@ -90,7 +90,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       tool.name
     )
     assert.equal(thenRun?.type, "object", tool.name)
-    assert.deepEqual(thenRun?.required, ["[toolName: string]"], tool.name)
+    assert.equal(thenRun?.required, undefined, tool.name)
     const thenRunProperties = thenRun?.properties as
       | Record<string, Record<string, unknown>>
       | undefined
