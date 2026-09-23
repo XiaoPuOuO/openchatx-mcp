@@ -1,16 +1,17 @@
 import { join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
-import { ShellbyAuthStore } from "./auth/auth.js"
+import { createAgentObserver } from "./agent/observer.js"
+import { ShellbyAuthStore } from "./auth/store.js"
 import { MCP_CONFIG } from "./config.js"
-import { createAgentObserver } from "./server/agent-observer.js"
+import { createMcpServerFactory } from "./mcp/server-factory.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
 import { CursorHostManager } from "./tools/computer/cursor-host.js"
 import { PeekabooClient } from "./tools/computer/peekaboo.js"
+import { createChatGptDelegationService } from "./tools/delegation/chatgpt-service.js"
 import { createShellSession } from "./tools/shell/session.js"
 import { createShellSessionManager } from "./tools/shell/session-manager.js"
-import { createChatGptSubagentService } from "./tools/subagent/chatgpt-subagent.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
 
 const auditLogPath = fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
@@ -18,8 +19,10 @@ const auditLogger = new McpAuditLogger(auditLogPath)
 const agentObserver = MCP_CONFIG.ui.enabled ? createAgentObserver() : undefined
 const authStore = new ShellbyAuthStore(join(MCP_CONFIG.stateDir, "auth.json"))
 await authStore.ensureState()
-const chatGptSubagents =
-  MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? createChatGptSubagentService() : undefined
+const chatGptDelegation =
+  MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents
+    ? createChatGptDelegationService()
+    : undefined
 const peekaboo = MCP_CONFIG.tools.computer ? new PeekabooClient({ localOnly: true }) : undefined
 const webPageOpener = MCP_CONFIG.tools.web ? new WebPageOpener() : undefined
 const cursorHost = MCP_CONFIG.tools.computer
@@ -38,13 +41,15 @@ let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
   await shells?.startDefault()
   running = await startMcpHttpServer({
-    shellManager: shells,
-    peekaboo,
-    chatGptSubagents,
+    createMcpServer: createMcpServerFactory({
+      shellManager: shells,
+      peekaboo,
+      chatGptDelegation,
+      webPageOpener,
+    }),
     auditLogger,
-    agentObserver,
     authStore,
-    webPageOpener,
+    agentObserver,
   })
 } catch (error) {
   await closeRuntimeServices()
@@ -63,7 +68,7 @@ console.log(
 )
 if (peekaboo) console.log(`Agent cursor: ${cursorHostStarted ? "enabled" : "disabled"}`)
 console.log(
-  `ChatGPT agents: ${chatGptSubagents ? `enabled via attach-only CDP ${MCP_CONFIG.chatGpt.cdpEndpoint}` : "disabled"}`
+  `ChatGPT agents: ${chatGptDelegation ? `enabled via attach-only CDP ${MCP_CONFIG.chatGpt.cdpEndpoint}` : "disabled"}`
 )
 
 let shuttingDown = false
@@ -82,7 +87,7 @@ async function closeRuntimeServices(): Promise<void> {
   await Promise.allSettled([
     shells?.close() ?? Promise.resolve(),
     peekaboo?.close() ?? Promise.resolve(),
-    chatGptSubagents?.dispose() ?? Promise.resolve(),
+    chatGptDelegation?.dispose() ?? Promise.resolve(),
     cursorHost?.close() ?? Promise.resolve(),
   ])
 }

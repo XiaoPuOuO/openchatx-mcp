@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { type AgentIdentity, getAgentIdentity } from "../../server/agent-context.js"
+import { type AgentIdentity, getAgentIdentity } from "../../agent/context.js"
 
 const REVIEW_TOOL_NAME = "submit_review"
 export const REVIEW_PROMPT_TOOL_CALLS = 25

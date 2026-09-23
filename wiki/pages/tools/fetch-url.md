@@ -10,7 +10,7 @@ paths:
 
 # fetch_url
 
-`web-tool.ts` owns the MCP contract; `web-open.ts` owns browser acquisition, response interception, MIME dispatch, extraction, and retained documents. Production creates one `WebPageOpener` when web tools are enabled.
+`web-tool.ts` owns the MCP contract. `web-acquisition.ts` is the deep acquisition boundary for browser launch/cleanup, CDP response interception, MIME dispatch, and HTML/PDF/image/text conversion. `web-open.ts` owns retained text documents, cursor validation, TTL/LRU retention, byte bounding, and token pagination. Production creates one `WebPageOpener` when web tools are enabled.
 
 ## Resource Handling
 

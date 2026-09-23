@@ -5,13 +5,13 @@ import { join } from "node:path"
 import test from "node:test"
 
 import { McpAuditLogger } from "../../src/server/audit/audit-log.js"
-import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
+import type { ChatGptDelegationService } from "../../src/tools/delegation/contracts.js"
 import { connectClient, startMcpHttpServer } from "./helpers.js"
 
 test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "mcp-audit-integration-"))
   const auditPath = join(root, "agent-commands.yaml")
-  const chatGptSubagents: ChatGptSubagentService = {
+  const chatGptDelegation: ChatGptDelegationService = {
     async ask({ agentId }) {
       return `turn-${agentId}`
     },
@@ -21,8 +21,8 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     async cloneRun() {
       throw new Error("unused")
     },
-    async poll(turnId) {
-      return { turnId, status: "completed", response: "done" }
+    async poll(_turnId) {
+      return { status: "completed", response: "done" }
     },
     drainEvents() {
       return []
@@ -32,7 +32,7 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   const running = await startMcpHttpServer({
     port: 0,
     auditLogger: new McpAuditLogger(auditPath),
-    chatGptSubagents,
+    chatGptDelegation,
   })
   t.after(async () => {
     await running.close()

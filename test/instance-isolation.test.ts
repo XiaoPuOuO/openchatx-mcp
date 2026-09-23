@@ -7,8 +7,9 @@ import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { promisify } from "node:util"
-import { ShellbyAuthStore } from "../src/auth/auth.js"
+import { ShellbyAuthStore } from "../src/auth/store.js"
 import { MCP_CONFIG } from "../src/config.js"
+import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
 import { tempDir } from "./helpers/temp.js"
 
@@ -92,11 +93,12 @@ test("print-url uses this copy's ngrok API and filters other upstreams and domai
   )
   const address = api.address()
   assert.ok(address && typeof address !== "string")
-  await mkdir(join(root, "scripts"))
+  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
   await mkdir(join(root, "src"))
+  await writeFile(join(root, "package.json"), '{"type":"module"}\n')
   await copyFile(
-    new URL("../scripts/print-url.mjs", import.meta.url),
-    join(root, "scripts/print-url.mjs")
+    new URL("../scripts/print-url.ts", import.meta.url),
+    join(root, "scripts/print-url.ts")
   )
   await writeFile(
     join(root, "src/config.ts"),
@@ -104,7 +106,7 @@ test("print-url uses this copy's ngrok API and filters other upstreams and domai
   )
   const result = await run(
     process.execPath,
-    ["--import", "tsx", join(root, "scripts/print-url.mjs"), "--optional"],
+    ["--import", "tsx", join(root, "scripts/print-url.ts"), "--optional"],
     { timeout: 10_000 }
   )
   assert.equal(
@@ -116,11 +118,12 @@ test("print-url uses this copy's ngrok API and filters other upstreams and domai
 
 test("print-url reports the configured local address without contacting ngrok when disabled", async (t) => {
   const root = await tempDir(t, "shellby-local-url-")
-  await mkdir(join(root, "scripts"))
+  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
   await mkdir(join(root, "src"))
+  await writeFile(join(root, "package.json"), JSON.stringify({ type: "module" }))
   await copyFile(
-    new URL("../scripts/print-url.mjs", import.meta.url),
-    join(root, "scripts/print-url.mjs")
+    new URL("../scripts/print-url.ts", import.meta.url),
+    join(root, "scripts/print-url.ts")
   )
   await writeFile(
     join(root, "src/config.ts"),
@@ -133,7 +136,7 @@ test("print-url reports the configured local address without contacting ngrok wh
       "tsx",
       "--import",
       "data:text/javascript,globalThis.fetch=()=>{process.exit(9)}",
-      join(root, "scripts/print-url.mjs"),
+      join(root, "scripts/print-url.ts"),
     ],
     { timeout: 10_000 }
   )
@@ -142,11 +145,12 @@ test("print-url reports the configured local address without contacting ngrok wh
 
 test("print-url also prints the local UI URL when enabled", async (t) => {
   const root = await tempDir(t, "shellby-ui-url-")
-  await mkdir(join(root, "scripts"))
+  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
   await mkdir(join(root, "src"))
+  await writeFile(join(root, "package.json"), JSON.stringify({ type: "module" }))
   await copyFile(
-    new URL("../scripts/print-url.mjs", import.meta.url),
-    join(root, "scripts/print-url.mjs")
+    new URL("../scripts/print-url.ts", import.meta.url),
+    join(root, "scripts/print-url.ts")
   )
   await writeFile(
     join(root, "src/config.ts"),
@@ -154,7 +158,7 @@ test("print-url also prints the local UI URL when enabled", async (t) => {
   )
   const result = await run(
     process.execPath,
-    ["--import", "tsx", join(root, "scripts/print-url.mjs")],
+    ["--import", "tsx", join(root, "scripts/print-url.ts")],
     { timeout: 10_000 }
   )
   assert.equal(
@@ -165,22 +169,20 @@ test("print-url also prints the local UI URL when enabled", async (t) => {
 
 test("two MCP listeners keep separate health identities and remote owner bindings", async (t) => {
   const root = await tempDir(t, "shellby-instances-")
-  const previous = {
-    port: MCP_CONFIG.port,
-    instanceId: MCP_CONFIG.instanceId,
-    tools: MCP_CONFIG.tools,
-  }
-  t.after(() => Object.assign(MCP_CONFIG, previous))
-  MCP_CONFIG.tools = Object.fromEntries(
-    Object.keys(previous.tools).map((key) => [key, false])
-  ) as typeof previous.tools
-  MCP_CONFIG.port = 0
+  const disabledTools = Object.fromEntries(
+    Object.keys(MCP_CONFIG.tools).map((key) => [key, false])
+  ) as typeof MCP_CONFIG.tools
   const servers: Array<Awaited<ReturnType<typeof startMcpHttpServer>>> = []
   for (const name of ["first", "second"]) {
-    MCP_CONFIG.instanceId = name
     const auth = new ShellbyAuthStore(join(root, name, "auth.json"))
     await auth.ensureState()
-    const server = await startMcpHttpServer({ authStore: auth })
+    const server = await startMcpHttpServer(
+      {
+        createMcpServer: createMcpServerFactory({}, { tools: disabledTools }),
+        authStore: auth,
+      },
+      { port: 0, instanceId: name }
+    )
     servers.push(server)
     t.after(() => server.close())
     const health = await fetch(`http://127.0.0.1:${server.port}/healthz`)
@@ -234,11 +236,11 @@ test("browser setup refuses a CDP endpoint belonging to another profile", async 
   )
   const address = api.address()
   assert.ok(address && typeof address !== "string")
-  await mkdir(join(root, "scripts"))
+  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
   await mkdir(join(root, "src"))
   await copyFile(
-    new URL("../scripts/chatgpt-browser.mjs", import.meta.url),
-    join(root, "scripts/chatgpt-browser.mjs")
+    new URL("../scripts/chatgpt/browser.mjs", import.meta.url),
+    join(root, "scripts/chatgpt/browser.mjs")
   )
   await writeFile(
     join(root, "src/config.ts"),
@@ -247,7 +249,7 @@ test("browser setup refuses a CDP endpoint belonging to another profile", async 
   await assert.rejects(
     run(
       process.execPath,
-      ["--import", "tsx", join(root, "scripts/chatgpt-browser.mjs"), "--setup"],
+      ["--import", "tsx", join(root, "scripts/chatgpt/browser.mjs"), "--setup"],
       { timeout: 10_000 }
     ),
     (error: unknown) => {

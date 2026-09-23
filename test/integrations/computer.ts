@@ -309,6 +309,22 @@ test("routes Computer Use through Peekaboo and preserves semantic errors", {
   assert.deepEqual(exactObserve.args.slice(0, 5), ["see", "--app", "Finder", "--window-id", "4242"])
   assert.equal(exactObserve.args.includes("--no-remote"), true)
 
+  const screenObserved = await connected.client.callTool({
+    name: "computer_observe",
+    arguments: { screen_index: 1 },
+  })
+  assert.equal(screenObserved.isError, undefined)
+  assert.deepEqual(screenObserved.structuredContent, { snapshot_id: "snapshot-screen" })
+
+  const screenClick = await connected.client.callTool({
+    name: "computer_click",
+    arguments: { snapshot_id: "snapshot-screen", x: 10, y: 20 },
+  })
+  assert.deepEqual(screenClick.structuredContent, {
+    command: "click",
+    args: ["click", "--at", "1090,1620", "--global", "--foreground", "--no-remote", "--json"],
+  })
+
   const launched = await connected.client.callTool({
     name: "computer_app",
     arguments: { action: "launch", app: "TextEdit", open: ["/tmp/example.txt"] },

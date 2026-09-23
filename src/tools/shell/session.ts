@@ -3,18 +3,11 @@ import { statSync } from "node:fs"
 import { isAbsolute, resolve } from "node:path"
 import process from "node:process"
 import { MCP_CONFIG } from "../../config.js"
-import { formatOutputBlock } from "../../server/tool-output.js"
 import { positiveInteger, utf8Chunk } from "../../utils.js"
-import {
-  createParallelCommandScheduler,
-  DEFAULT_PARALLEL_COMMAND_TIMEOUT_MS,
-  executeParallelCommand,
-  ParallelCommandAbortedError,
-  type ParallelCommandExecutionResult,
-  type ParallelCommandSpec,
-  type ParallelCommandStatus,
-} from "./parallel-runner.js"
+import { DEFAULT_PARALLEL_COMMAND_TIMEOUT_MS } from "./parallel-runner.js"
+import { createParallelSession } from "./parallel-session.js"
 import type {
+  ParallelCommandStatus,
   ShellCommandStatus,
   ShellPollInput,
   ShellResetInput,
@@ -24,13 +17,10 @@ import type {
 import {
   createShellProcess,
   type ShellProcessCommandResult,
-  type ShellProcessContext,
   type ShellRecoverableState,
 } from "./shell-process.js"
-import { createTranscriptBuffer, type TranscriptBuffer } from "./transcript.js"
+import { createTranscriptBuffer } from "./transcript.js"
 import { createUpdateSignal } from "./update-signal.js"
-
-const LINE_SEPARATOR = /\r?\n/u
 
 export type { ShellRecoverableState } from "./shell-process.js"
 
@@ -85,29 +75,6 @@ interface CommandRecord {
   droppedOutputBytes: number
 }
 
-interface ParallelRunRecord {
-  run: number
-  command: string
-  path: string
-  cwd: string
-  status: ParallelCommandStatus
-  exitCode: number | null
-  droppedOutputBytes: number
-}
-
-interface ParallelBatchRecord {
-  requestId: string
-  commandHash: string
-  cwd: string
-  transcript: TranscriptBuffer
-  endCursor: number | null
-  status: Extract<ShellCommandStatus, "running" | "completed" | "reset">
-  runs: ParallelRunRecord[]
-  remainingRuns: number
-  abortController: AbortController
-  tasks: Promise<void>[]
-}
-
 type ResetResult = ShellResetOutput
 
 export class ShellSessionError extends Error {
@@ -140,7 +107,7 @@ export interface ShellSession {
   close(): Promise<void>
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Session operations intentionally close over one shared shell state machine; splitting the factory would widen mutable state ownership.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: The session remains the cohesive owner of persistent-shell arbitration and single-command state; parallel batch lifecycle is isolated in parallel-session.ts.
 export function createShellSession(options: ShellSessionOptions = {}): ShellSession {
   const transcriptLimit = positiveInteger(options.transcriptLimit, MCP_CONFIG.shell.transcriptChars)
   const transcript = createTranscriptBuffer(transcriptLimit)
@@ -153,13 +120,18 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     options.parallelCommandTimeoutMs,
     DEFAULT_PARALLEL_COMMAND_TIMEOUT_MS
   )
-  const scheduleParallelCommand = createParallelCommandScheduler()
   const records = new Map<string, CommandRecord>()
-  const parallelRecords = new Map<string, ParallelBatchRecord>()
   const updates = createUpdateSignal()
+  const parallelSession = createParallelSession({
+    transcriptLimit,
+    commandTranscriptBytes,
+    recordLimit,
+    commandTimeoutMs: parallelCommandTimeoutMs,
+    onUpdate: updates.notify,
+    waitForResult,
+  })
 
   let active: CommandRecord | null = null
-  let activeParallel: ParallelBatchRecord | null = null
   let resetInFlight: Promise<ResetResult> | null = null
 
   const processController = createShellProcess({
@@ -174,7 +146,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
   function hasActiveWork(): boolean {
     return (
       active !== null ||
-      activeParallel !== null ||
+      parallelSession.hasActiveWork ||
       resetInFlight !== null ||
       processController.hasActiveOperation
     )
@@ -221,24 +193,25 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       return snapshot(existing, existing.startCursor, maxOutputTokens)
     }
 
-    const existingParallel = parallelRecords.get(input.request_id)
-    if (existingParallel) {
-      if (existingParallel.commandHash !== commandHash) {
-        throw new ShellSessionError(
-          "request_conflict",
-          `request_id ${JSON.stringify(input.request_id)} was already used for a different command.`
-        )
-      }
-      if (existingParallel.status === "running") {
-        await waitForResult(existingParallel, input.yield_time_ms, input.signal)
-      }
-      return parallelSnapshot(existingParallel, 0, maxOutputTokens)
+    const parallelRetry = await parallelSession.retry({
+      requestId: input.request_id,
+      commandHash,
+      waitMs: input.yield_time_ms,
+      maxOutputTokens,
+      signal: input.signal,
+    })
+    if (parallelRetry.kind === "conflict") {
+      throw new ShellSessionError(
+        "request_conflict",
+        `request_id ${JSON.stringify(input.request_id)} was already used for a different command.`
+      )
     }
+    if (parallelRetry.kind === "found") return parallelRetry.snapshot
 
     if (resetInFlight) throw new ShellSessionError("busy", "The shell is being reset.")
-    if (active || activeParallel || processController.hasActiveOperation) {
+    if (active || parallelSession.hasActiveWork || processController.hasActiveOperation) {
       const requestId =
-        active?.requestId ?? activeParallel?.requestId ?? "an internal shell operation"
+        active?.requestId ?? parallelSession.activeRequestId ?? "an internal shell operation"
       throw new ShellSessionError(
         "busy",
         `The shell is busy with request_id ${JSON.stringify(requestId)}. Poll that request or reset the shell.`
@@ -252,12 +225,30 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     validateWorkingDirectory(commandCwd)
 
     if (parallelCommands) {
-      return runParallelCommands({
-        input: commandCwd === input.cwd ? input : { ...input, cwd: commandCwd },
-        commands: parallelCommands,
+      const rootCwd = commandCwd ?? processController.currentCwd
+      validateWorkingDirectory(rootCwd)
+      for (const command of parallelCommands) {
+        validateWorkingDirectory(resolve(rootCwd, command.path))
+      }
+      const started = await parallelSession.start({
+        requestId: input.request_id,
         commandHash,
+        rootCwd,
+        commands: parallelCommands,
+        shellPath: processController.shellPath,
+        captureContext: () => processController.captureContext(commandCwd),
+        waitMs: input.yield_time_ms,
         maxOutputTokens,
+        signal: input.signal,
       })
+      if (started.kind === "capture_failed") {
+        throw shellSessionError(
+          "shell_unavailable",
+          `Could not capture the shell environment: ${errorMessage(started.error)}`,
+          started.error
+        )
+      }
+      return started.snapshot
     }
 
     if (input.command === undefined)
@@ -301,130 +292,32 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 
   async function pollCommand(input: PollCommandInput): Promise<ShellSnapshot> {
     const record = records.get(input.request_id)
-    const parallelRecord = parallelRecords.get(input.request_id)
-    if (!record && !parallelRecord) {
-      throw new ShellSessionError(
-        "request_not_found",
-        `No command exists for request_id ${JSON.stringify(input.request_id)}.`
-      )
-    }
+    if (record) {
+      if (input.cursor < record.startCursor)
+        throw new ShellSessionError(
+          "invalid_cursor",
+          "cursor is before the requested command's output."
+        )
 
-    if (parallelRecord) {
       const maxOutputTokens = input.max_output_tokens
-      if (parallelRecord.status === "running") {
-        await waitForResult(parallelRecord, input.yield_time_ms, input.signal)
+      if (record.status === "running") {
+        await waitForResult(record, input.yield_time_ms, input.signal)
       }
-      return parallelSnapshot(parallelRecord, input.cursor, maxOutputTokens)
+      return snapshot(record, input.cursor, maxOutputTokens)
     }
 
-    if (!record)
-      throw new ShellSessionError(
-        "request_not_found",
-        `No command exists for request_id ${JSON.stringify(input.request_id)}.`
-      )
-    if (input.cursor < record.startCursor)
-      throw new ShellSessionError(
-        "invalid_cursor",
-        "cursor is before the requested command's output."
-      )
-
-    const maxOutputTokens = input.max_output_tokens
-    if (record.status === "running") {
-      await waitForResult(record, input.yield_time_ms, input.signal)
-    }
-    return snapshot(record, input.cursor, maxOutputTokens)
-  }
-
-  async function runParallelCommands(parallelOptions: {
-    input: RunCommandInput
-    commands: ParallelCommandSpec[]
-    commandHash: string
-    maxOutputTokens: number
-  }): Promise<ShellSnapshot> {
-    const rootCwd = parallelOptions.input.cwd ?? processController.currentCwd
-    validateWorkingDirectory(rootCwd)
-    const runs: ParallelRunRecord[] = parallelOptions.commands.map((command, index) => {
-      const cwd = resolve(rootCwd, command.path)
-      validateWorkingDirectory(cwd)
-      return {
-        run: index + 1,
-        command: command.command,
-        path: command.path,
-        cwd,
-        status: "queued",
-        exitCode: null,
-        droppedOutputBytes: 0,
-      }
+    const parallel = await parallelSession.poll({
+      requestId: input.request_id,
+      cursor: input.cursor,
+      waitMs: input.yield_time_ms,
+      maxOutputTokens: input.max_output_tokens,
+      signal: input.signal,
     })
-
-    const record: ParallelBatchRecord = {
-      requestId: parallelOptions.input.request_id,
-      commandHash: parallelOptions.commandHash,
-      cwd: rootCwd,
-      transcript: createTranscriptBuffer(transcriptLimit),
-      endCursor: null,
-      status: "running",
-      runs,
-      remainingRuns: runs.length,
-      abortController: new AbortController(),
-      tasks: [],
-    }
-
-    pruneParallelRecords()
-    parallelRecords.set(record.requestId, record)
-    activeParallel = record
-
-    let context: ShellProcessContext
-    try {
-      context = await processController.captureContext(parallelOptions.input.cwd)
-    } catch (error) {
-      if (record.status === "reset")
-        return parallelSnapshot(record, 0, parallelOptions.maxOutputTokens)
-      parallelRecords.delete(record.requestId)
-      if (activeParallel === record) activeParallel = null
-      updates.notify()
-      throw shellSessionError(
-        "shell_unavailable",
-        `Could not capture the shell environment: ${errorMessage(error)}`,
-        error
-      )
-    }
-
-    record.cwd = context.cwd
-    for (const run of record.runs) run.cwd = resolve(context.cwd, run.path)
-
-    for (const run of record.runs) {
-      const task = scheduleParallelCommand(async () => {
-        if (record.status !== "running") throw new ParallelCommandAbortedError()
-        run.status = "running"
-        updates.notify()
-        return executeParallelCommand({
-          shellPath: processController.shellPath,
-          command: run.command,
-          cwd: run.cwd,
-          env: context.env,
-          outputLimitBytes: commandTranscriptBytes,
-          timeoutMs: parallelCommandTimeoutMs,
-          signal: record.abortController.signal,
-        })
-      }, record.abortController.signal).then(
-        (result) => finishParallelRun(record, run, result),
-        (error) =>
-          finishParallelRun(record, run, {
-            status:
-              error instanceof ParallelCommandAbortedError || record.abortController.signal.aborted
-                ? "reset"
-                : "failed",
-            exitCode: null,
-            output: error instanceof ParallelCommandAbortedError ? "" : errorMessage(error),
-            droppedOutputBytes: 0,
-          })
-      )
-      record.tasks.push(task)
-    }
-
-    await waitForResult(record, parallelOptions.input.yield_time_ms, parallelOptions.input.signal)
-    return parallelSnapshot(record, 0, parallelOptions.maxOutputTokens)
+    if (parallel) return parallel
+    throw new ShellSessionError(
+      "request_not_found",
+      `No command exists for request_id ${JSON.stringify(input.request_id)}.`
+    )
   }
 
   function finishCommand(record: CommandRecord, result: ShellProcessCommandResult): void {
@@ -435,85 +328,6 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     record.status = result.status
     if (active === record) active = null
     updates.notify()
-  }
-
-  function finishParallelRun(
-    record: ParallelBatchRecord,
-    run: ParallelRunRecord,
-    result: ParallelCommandExecutionResult
-  ): void {
-    if (record.status === "reset" || run.status === "reset") return
-
-    run.status = result.status
-    run.exitCode = result.exitCode
-    run.droppedOutputBytes = result.droppedOutputBytes
-    record.transcript.append(formatParallelRunOutput(run, result.output))
-    record.remainingRuns -= 1
-
-    if (record.remainingRuns === 0) {
-      record.status = "completed"
-      record.endCursor = record.transcript.end
-      if (activeParallel === record) activeParallel = null
-    }
-    updates.notify()
-  }
-
-  function parallelSnapshot(
-    record: ParallelBatchRecord,
-    cursor: number,
-    maxOutputTokens: number
-  ): ShellSnapshot {
-    const read = record.transcript.read(cursor, maxOutputTokens, record.endCursor ?? undefined)
-    const droppedOutputBytes = record.runs.reduce(
-      (total, run) => Math.min(Number.MAX_SAFE_INTEGER, total + run.droppedOutputBytes),
-      0
-    )
-    let exitCode: number | null = null
-    if (record.status === "completed") {
-      exitCode = record.runs.every((run) => run.status === "completed" && run.exitCode === 0)
-        ? 0
-        : 1
-    }
-    return {
-      request_id: record.requestId,
-      status: record.status,
-      exit_code: exitCode,
-      cwd: record.cwd,
-      output: read.output,
-      next_cursor: read.nextCursor,
-      output_truncated: read.hasMore,
-      cursor_expired: read.cursorExpired,
-      output_dropped: droppedOutputBytes > 0,
-      dropped_output_bytes: droppedOutputBytes,
-      commands: record.runs.map((run) => ({
-        run: run.run,
-        command: batchCommandPreview(run.command),
-        path: run.path,
-        status: run.status,
-        exit_code: run.exitCode,
-        ...(run.droppedOutputBytes > 0
-          ? { output_dropped: true as const, dropped_output_bytes: run.droppedOutputBytes }
-          : {}),
-      })),
-    }
-  }
-
-  async function cancelActiveParallelBatch(): Promise<void> {
-    const record = activeParallel
-    if (record?.status !== "running") return
-    record.status = "reset"
-    for (const run of record.runs) {
-      if (!isParallelTerminal(run.status)) {
-        run.status = "reset"
-        run.exitCode = null
-        record.transcript.append(formatParallelRunOutput(run, ""))
-      }
-    }
-    record.endCursor = record.transcript.end
-    record.abortController.abort()
-    if (activeParallel === record) activeParallel = null
-    updates.notify()
-    await Promise.allSettled(record.tasks)
   }
 
   async function reset(input: ResetShellInput): Promise<ResetResult> {
@@ -535,14 +349,14 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
   }
 
   async function performReset(reason?: string): Promise<ResetResult> {
-    await cancelActiveParallelBatch()
+    await parallelSession.cancelActive()
     const generation = await processController.reset(reason)
     return { shell_generation: generation, state_lost: true, status: "ready" }
   }
 
   async function close(): Promise<void> {
     if (processController.closed) return
-    await cancelActiveParallelBatch()
+    await parallelSession.cancelActive()
     await processController.close()
     updates.notify()
   }
@@ -564,7 +378,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
   }
 
   async function waitForResult(
-    record: CommandRecord | ParallelBatchRecord,
+    record: { status: ShellCommandStatus },
     waitMs: number,
     signal?: AbortSignal
   ): Promise<void> {
@@ -582,16 +396,6 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
       const oldestCompleted = [...records.values()].find((record) => record.status !== "running")
       if (!oldestCompleted) return
       records.delete(oldestCompleted.requestId)
-    }
-  }
-
-  function pruneParallelRecords(): void {
-    while (parallelRecords.size >= recordLimit) {
-      const oldestCompleted = [...parallelRecords.values()].find(
-        (record) => record.status !== "running"
-      )
-      if (!oldestCompleted) return
-      parallelRecords.delete(oldestCompleted.requestId)
     }
   }
 
@@ -637,26 +441,6 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     reset,
     close,
   }
-}
-
-function isParallelTerminal(status: ParallelCommandStatus): boolean {
-  return status !== "queued" && status !== "running"
-}
-
-function batchCommandPreview(command: string): string {
-  const firstLine =
-    command
-      .split(LINE_SEPARATOR)
-      .find((line) => line.trim().length > 0)
-      ?.trim()
-      .replace(/\s+/gu, " ") ?? ""
-  const characters = Array.from(firstLine)
-  return characters.length <= 20 ? firstLine : `${characters.slice(0, 19).join("")}…`
-}
-
-function formatParallelRunOutput(run: ParallelRunRecord, output: string): string {
-  const block = formatOutputBlock([`run=${run.run}`], output)
-  return `${block}\n\n`
 }
 
 function hashCommand(input: Pick<RunCommandInput, "command" | "commands" | "cwd">): string {

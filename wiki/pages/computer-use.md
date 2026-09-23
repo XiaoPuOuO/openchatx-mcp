@@ -14,7 +14,7 @@ This page documents Shellby's focused `computer_*` execution path, Peekaboo owne
 
 ## Runtime Path
 
-Focused Computer Use is `computer_*` -> one serialized `PeekabooClient` -> Shellby's bundled Peekaboo CLI. Production constructs the client in local-only mode, so focused tools append `--no-remote` and do not depend on Peekaboo's daemon. The package-local CLI in `vendor/peekaboo/peekaboo` is the only production executable, keeping the adapter and CLI version coupled (`src/config.ts`, `src/index.ts`, `src/tools/computer/peekaboo.ts`).
+Focused Computer Use is `computer_*` -> one serialized `PeekabooClient` -> Shellby's bundled Peekaboo CLI. Tool handlers pass typed observation target intent to the adapter; `PeekabooClient` owns translation of that intent to Peekaboo argv plus retained snapshot-target interpretation. Production constructs the client in local-only mode, so focused tools append `--no-remote` and do not depend on Peekaboo's daemon. The package-local CLI in `vendor/peekaboo/peekaboo` is the only production executable, keeping the adapter and CLI version coupled (`src/config.ts`, `src/index.ts`, `src/tools/computer/peekaboo.ts`).
 
 Raw Peekaboo commands through `shell_run` are outside this adapter and may use Peekaboo's daemon unless the caller supplies `--no-remote`.
 
@@ -22,11 +22,11 @@ Shellby also ships `vendor/peekaboo/peekaboo-cursor-host` beside the bundled Pee
 
 ## Snapshots and Coordinates
 
-`computer_observe` captures the target at its original dimensions and retains the resolved target metadata with the returned snapshot ID. Shellby does not resize screenshots, so screenshot coordinates remain in the capture's coordinate space. Exact-window coordinate actions use the retained window target and, where required, a fresh local Peekaboo snapshot receipt; screen coordinates are translated with retained display bounds (`src/tools/computer/computer-tools.ts`, `src/tools/computer/peekaboo.ts`, `src/tools/image/image-encoding.ts`).
+`computer_observe` captures the target at its original dimensions and retains the resolved target metadata with the returned snapshot ID. Shellby does not resize screenshots, so screenshot coordinates remain in the capture's coordinate space. `PeekabooClient` owns snapshot lookup, screen-coordinate translation, and exact-window classification; exact-window coordinate actions use the retained window target and, where required, a fresh local Peekaboo snapshot receipt (`src/tools/computer/computer-tools.ts`, `src/tools/computer/peekaboo.ts`, `src/tools/image/image-encoding.ts`).
 
 When observation explicitly targets `PID:<pid>`, Shellby preserves that exact app selector in the retained snapshot target even if Peekaboo omits or normalizes the returned observation target. Follow-up actions therefore remain process-bound (`src/tools/computer/peekaboo.ts`, `test/peekaboo.test.ts`).
 
-`computer_inspect` performs a fresh tree observation and returns a new snapshot ID. Element IDs from inspection belong to that returned snapshot and must not be paired with the older screenshot snapshot (`src/tools/computer/computer-tools.ts`).
+`computer_inspect` delegates snapshot lookup, retained-target to Peekaboo-argv translation, tree observation, and propagation of the retained target onto the returned snapshot ID to `PeekabooClient`. Element IDs from inspection belong to that returned snapshot and must not be paired with the older screenshot snapshot (`src/tools/computer/computer-tools.ts`, `src/tools/computer/peekaboo.ts`).
 
 Because Shellby deliberately does not resize captures or invent a second coordinate transform, upstream capture-scaling changes can surface directly as targeting errors. When targeting appears wrong, verify the configured Peekaboo binary's reported bounds and screenshot dimensions before changing Shellby coordinate logic (`src/tools/computer/peekaboo.ts`, `src/tools/image/image-encoding.ts`, `test/peekaboo.test.ts`).
 

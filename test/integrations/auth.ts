@@ -6,7 +6,7 @@ import test from "node:test"
 
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
-import { ShellbyAuthStore } from "../../src/auth/auth.js"
+import { ShellbyAuthStore } from "../../src/auth/store.js"
 import { connectClient, postWithHost, startMcpHttpServer } from "./helpers.js"
 
 test("remote MCP binds one OpenAI subject while local MCP remains available", {

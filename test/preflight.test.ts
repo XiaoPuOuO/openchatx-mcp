@@ -9,7 +9,7 @@ import {
   checkRtkRuntime,
   isSupportedArchitecture,
   isSupportedNodeVersion,
-} from "../scripts/preflight.mjs"
+} from "../scripts/preflight.js"
 import { tempDir } from "./helpers/temp.js"
 
 test("requires Node.js 22.18.0 or newer", () => {
@@ -36,10 +36,10 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
   for (const dir of ["scripts", "src", ".shellby", "bin", "skills/create-skill"])
     await mkdir(join(root, dir), { recursive: true })
   for (const path of [
-    "scripts/setup.mjs",
-    "scripts/setup-ui.mjs",
-    "scripts/preflight.mjs",
-    "scripts/workspace-setup.mjs",
+    "scripts/setup.ts",
+    "scripts/setup-console.ts",
+    "scripts/preflight.ts",
+    "scripts/workspace-setup.ts",
     "src/config.ts",
     "src/public-config.cts",
     "skills/create-skill/SKILL.md",
@@ -79,7 +79,7 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
   for (const script of ["preflight", "setup"]) {
     const result = spawnSync(
       process.execPath,
-      ["--import", "tsx", join(root, `scripts/${script}.mjs`)],
+      ["--import", "tsx", join(root, `scripts/${script}.ts`)],
       {
         encoding: "utf8",
         env: { ...process.env, PATH: join(root, "bin") },
@@ -95,7 +95,7 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
   await writeFile(configPath, source.replace("enabled = false", "enabled = true"))
   const remote = spawnSync(
     process.execPath,
-    ["--import", "tsx", join(root, "scripts/preflight.mjs")],
+    ["--import", "tsx", join(root, "scripts/preflight.ts")],
     {
       encoding: "utf8",
       env: { ...process.env, PATH: join(root, "bin") },

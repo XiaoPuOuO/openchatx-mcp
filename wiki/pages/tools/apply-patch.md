@@ -2,6 +2,7 @@
 summary: "Caller-facing apply_patch grammar, execution model, partial-failure behavior, result summaries, limits, and tested semantics."
 paths:
   - src/tools/apply-patch/apply-patch.ts
+  - src/tools/apply-patch/patch-summary.ts
   - test/apply-patch-vendor.test.ts
   - test/integrations/apply-patch.ts
 ---
@@ -17,9 +18,9 @@ Canonical behavior notes for the first-class `apply_patch` MCP tool and vendored
 - MCP tool. No shell ID, request ID, polling, or shell lock.
 - Requires absolute `cwd`; the wrapper rejects a missing path or non-directory before spawning the binary. Patch text goes to native stdin (`src/tools/apply-patch/apply-patch.ts`).
 - The child receives `CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS=1`, preserving the vendored binary's line-ending behavior expected by Shellby (`src/tools/apply-patch/apply-patch.ts`).
-- Binary: `vendor/apply-patch/apply_patch`, macOS Universal 2, built from pinned Codex source (`vendor/apply-patch/provenance.json`, `scripts/build-apply-patch.sh`).
+- Binary: `vendor/apply-patch/apply_patch`, macOS Universal 2, built from pinned Codex source (`vendor/apply-patch/provenance.json`, `scripts/vendor/build-apply-patch.sh`).
 - Failure stdout+stderr share a hard 1,024 `o200k_base` token cap. Extra diagnostic text is dropped.
-- Abort: detached POSIX process group, `SIGTERM`, 500 ms, `SIGKILL`, then one more bounded grace before forced settlement. Windows signals child directly (`src/tools/apply-patch/apply-patch.ts`).
+- Abort: detached POSIX process group, `SIGTERM`, 500 ms, `SIGKILL`, then one more bounded grace before forced settlement. Shared platform-specific group signaling and TERM-to-KILL escalation live in `src/child-process-termination.ts`; apply-patch keeps its own forced-settlement/error semantics (`src/tools/apply-patch/apply-patch.ts`).
 
 ## Supported Patch Surface
 
@@ -114,9 +115,9 @@ Change forms:
 - move: `old -> new`
 - move+edit: `old -> new +N -M`
 
-`+N/-M` come from patch lines, not a post-write filesystem diff. Reporting relies on verified native ordering: on success summarize all sections; on recognized failure summarize sections before the failed section. The wrapper does not reread files before/after.
+`+N/-M` come from patch lines, not a post-write filesystem diff. `src/tools/apply-patch/patch-summary.ts` owns Shellby's interpretation of patch sections plus the vendored binary's ordered first-failure diagnostics. On success it summarizes all sections; on recognized failure it summarizes sections before the failed section. The process wrapper does not reread files before/after.
 
-Failure mapping is conservative. It matches the first native diagnostic line to the longest patch path, then identifies update context/hunk from the diagnostic when possible. If the failure cannot be mapped, it does not claim prior changes. `output_dropped: true` means the native diagnostic exceeded the 1,024-token cap (`src/tools/apply-patch/apply-patch.ts`, `src/server/tool-registration-boundary.ts`).
+Failure mapping is conservative. It matches the first native diagnostic line to the longest patch path, then identifies update context/hunk from the diagnostic when possible. If the failure cannot be mapped, it does not claim prior changes. `output_dropped: true` means the native diagnostic exceeded the 1,024-token cap (`src/tools/apply-patch/patch-summary.ts`, `src/tools/apply-patch/apply-patch.ts`).
 
 ## Native Quirks / Boundaries
 

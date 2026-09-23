@@ -2,23 +2,32 @@ import assert from "node:assert/strict"
 import { request as httpRequest } from "node:http"
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
-
-import { MCP_CONFIG } from "../../src/config.js"
+import type { AgentObserver } from "../../src/agent/observer.js"
+import type { ShellbyAuthStore } from "../../src/auth/store.js"
 import {
-  type McpRuntimeServices,
+  createMcpServerFactory,
+  type McpCapabilityServices,
+  type McpRuntimeProfileOverrides,
+} from "../../src/mcp/server-factory.js"
+import type { McpAuditLogger } from "../../src/server/audit/audit-log.js"
+import {
+  type McpHttpProfileOverrides,
   startMcpHttpServer as startMcpHttpServerRaw,
 } from "../../src/server/http-server.js"
 import { PeekabooClient } from "../../src/tools/computer/peekaboo.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
-import { createChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent.js"
 import { WebPageOpener } from "../../src/tools/web/web-open.js"
 
-type TestMcpServerOptions = Partial<McpRuntimeServices> & {
+type TestMcpServerOptions = Partial<McpCapabilityServices> & {
   port?: number
+  http?: McpHttpProfileOverrides
+  profile?: McpRuntimeProfileOverrides
+  auditLogger?: McpAuditLogger
+  authStore?: ShellbyAuthStore
+  agentObserver?: AgentObserver
 }
 
-MCP_CONFIG.port = 0
-Object.assign(MCP_CONFIG.tools, {
+const TEST_TOOLS = {
   review: true,
   shell: true,
   applyPatch: true,
@@ -28,41 +37,48 @@ Object.assign(MCP_CONFIG.tools, {
   skills: true,
   image: true,
   computer: true,
-})
+} satisfies McpRuntimeProfileOverrides["tools"]
 
 export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
-  const { port = 0, ...services } = options
-  MCP_CONFIG.port = port
-  const shellManager = MCP_CONFIG.tools.shell
+  const { port = 0, http, profile, auditLogger, authStore, agentObserver, ...services } = options
+  const tools = { ...TEST_TOOLS, ...profile?.tools }
+  const shellManager = tools.shell
     ? (services.shellManager ?? createShellSessionManager())
     : undefined
-  const peekaboo = MCP_CONFIG.tools.computer
+  const peekaboo = tools.computer
     ? (services.peekaboo ?? new PeekabooClient({ localOnly: true }))
     : undefined
-  const chatGptSubagents =
-    MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents
-      ? (services.chatGptSubagents ?? createChatGptSubagentService())
+  const chatGptDelegation =
+    tools.clones || tools.subagents
+      ? (services.chatGptDelegation ?? createUnavailableDelegationService())
       : undefined
-  const runtime = {
+  const capabilityServices = {
     shellManager,
     peekaboo,
-    chatGptSubagents,
-    webPageOpener: MCP_CONFIG.tools.web
-      ? (services.webPageOpener ?? new WebPageOpener())
-      : undefined,
-    auditLogger: services.auditLogger,
-    authStore: services.authStore,
+    chatGptDelegation,
+    webPageOpener: tools.web ? (services.webPageOpener ?? new WebPageOpener()) : undefined,
   }
   const closeRuntime = () =>
     Promise.allSettled([
       shellManager?.close() ?? Promise.resolve(),
       peekaboo?.close() ?? Promise.resolve(),
-      chatGptSubagents?.dispose() ?? Promise.resolve(),
+      chatGptDelegation?.dispose() ?? Promise.resolve(),
     ])
 
   try {
     await shellManager?.startDefault()
-    const running = await startMcpHttpServerRaw(runtime)
+    const running = await startMcpHttpServerRaw(
+      {
+        createMcpServer: createMcpServerFactory(capabilityServices, {
+          ...profile,
+          tools,
+        }),
+        auditLogger,
+        authStore,
+        agentObserver,
+      },
+      { ...http, port }
+    )
     return {
       ...running,
       close: async () => {
@@ -73,6 +89,22 @@ export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
   } catch (error) {
     await closeRuntime()
     throw error
+  }
+}
+
+function createUnavailableDelegationService(): NonNullable<
+  McpCapabilityServices["chatGptDelegation"]
+> {
+  const unavailable = async (): Promise<never> => {
+    throw new Error("This deterministic integration test did not supply a ChatGPT agent service.")
+  }
+  return {
+    ask: unavailable,
+    cloneSelf: unavailable,
+    cloneRun: unavailable,
+    poll: unavailable,
+    drainEvents: () => [],
+    dispose: async () => {},
   }
 }
 

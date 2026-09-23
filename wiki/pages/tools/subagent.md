@@ -1,9 +1,9 @@
 ---
 summary: "Caller-facing subagent_run and subagent_result contract for delegation, continuity, capacity, polling, completion, and failures."
 paths:
-  - src/tools/subagent/subagent-tools.ts
-  - src/tools/subagent/chatgpt-subagent-contracts.ts
-  - src/tools/subagent/chatgpt-subagent.ts
+  - src/tools/delegation/subagent-tools.ts
+  - src/tools/delegation/contracts.ts
+  - src/tools/delegation/chatgpt-service.ts
   - src/config.ts
   - src/public-config.cts
 ---
@@ -12,7 +12,7 @@ paths:
 
 ## What This Is
 
-Caller-facing contract for detached browser-backed ChatGPT delegation. Public tool descriptions and schemas are defined in `src/tools/subagent/subagent-tools.ts`. Browser implementation lives in [Browser ChatGPT Subagents](../subagents/browser-chatgpt-subagents.md); completion lives in [Subagent Completion](../subagents/subagent-completion.md).
+Caller-facing contract for detached browser-backed ChatGPT delegation. Public tool descriptions and schemas are defined in `src/tools/delegation/subagent-tools.ts`. Browser implementation lives in [Browser ChatGPT Subagents](../subagents/browser-chatgpt-subagents.md); completion lives in [Subagent Completion](../subagents/subagent-completion.md).
 
 ## `subagent_run`
 
@@ -49,13 +49,13 @@ Compact results separate returned turns with top-level metadata headers and plac
 
 ## Lifetime and Failures
 
-Turn records and prior `turn_id` results are process-local. The calling `X-OpenAI-Session`, `agent_id`, conversation URL, and turn count form the persisted mapping in `<state_dir>/subagents.sqlite`, so the same main-agent session can reuse an `agent_id` after restart without colliding with another session's agent of the same name. `npm run reset-agents` intentionally clears those mappings (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
+Turn records and prior `turn_id` results are process-local. The calling `X-OpenAI-Session`, `agent_id`, conversation URL, and turn count form the persisted mapping in `<state_dir>/subagents.sqlite`, so the same main-agent session can reuse an `agent_id` after restart without colliding with another session's agent of the same name. `npm run reset-agents` intentionally clears those mappings (`src/tools/delegation/store.ts`, `scripts/chatgpt/reset-delegation-state.ts`).
 
 After 30 idle minutes, the managed background page closes; saved conversation identity and prior local results remain. A later call restores a memory-backed conversation. Temporary chats have no saved URL for restoration. Idle cleanup marks their retained agent record as expired; later prompts return `TEMP_AGENT_EXPIRED` before browser reconnection. The message explains that cleanup closed the temporary agent after 30 minutes of inactivity and its conversation cannot be resumed. Changing `memory` on reuse does not bypass expiration. The marker and completed results remain process-local; other page loss retains the existing `AGENT_TARGET_LOST` behavior.
 
 Memory-backed turns enter one-shot recovery after three minutes without bound progress; observer failures also trigger recovery. Other active turns retain a 30-minute no-progress cutoff. Recovery reopens and reads the saved conversation once, never resubmits the prompt, and never waits on a second observer. If recovery cannot prove the submitted turn finished, that agent is marked `uncertain` and rejects later prompts with `AGENT_BUSY`; use another existing agent ID, or a new ID when a delegated-agent slot is available, instead of risking an overlapping upstream turn.
 
-Caller-facing failures include `SUBAGENT_UNAVAILABLE`, `AGENT_BUSY`, `AGENT_LIMIT_REACHED`, `SUBAGENT_RATE_LIMITED`, `AGENT_TARGET_LOST`, `AGENT_IDLE_EXPIRED`, `TEMP_AGENT_EXPIRED`, `UNKNOWN_TURN`, and `REQUEST_ABORTED`. Backend-specific availability, authentication, and UI failures are projected as `SUBAGENT_UNAVAILABLE`; callers may retry the same subagent call once, then continue without delegation if it fails again. The guidance explicitly discourages changing the task or prompt as a workaround. Other backend implementation details remain inside the subagent runtime. `AGENT_LIMIT_REACHED` lists the delegated agent IDs already owned by that main agent and each agent's latest known turn ID so the caller can reuse one.
+Caller-facing failures include `SUBAGENT_UNAVAILABLE`, `AGENT_BUSY`, `AGENT_LIMIT_REACHED`, `SUBAGENT_RATE_LIMITED`, `SUBAGENT_PERSISTENCE_UNAVAILABLE`, `AGENT_TARGET_LOST`, `AGENT_IDLE_EXPIRED`, `TEMP_AGENT_EXPIRED`, `UNKNOWN_TURN`, and `REQUEST_ABORTED`. `SUBAGENT_PERSISTENCE_UNAVAILABLE` means durable restoration/capacity state could not be read safely; the rejected call did not submit a new prompt. Backend-specific availability, authentication, and UI failures are projected as `SUBAGENT_UNAVAILABLE`; callers may retry the same subagent call once, then continue without delegation if it fails again. The guidance explicitly discourages changing the task or prompt as a workaround. Other backend implementation details remain inside the subagent runtime. `AGENT_LIMIT_REACHED` lists the delegated agent IDs already owned by that main agent and each agent's latest known turn ID so the caller can reuse one.
 
 Detached completion queues one `agent_finished` event for delivery on the next MCP tool response; retrieve the answer with `subagent_result`.
 

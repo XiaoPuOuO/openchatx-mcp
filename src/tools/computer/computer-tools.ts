@@ -5,9 +5,10 @@ import { asRecord, booleanValue, finiteNumber as numberValue } from "../../utils
 import {
   type PeekabooClient,
   PeekabooError,
+  type PeekabooExactWindowTarget,
   type PeekabooObservation,
+  type PeekabooObservationTarget,
   type PeekabooResult,
-  type PeekabooSnapshotTarget,
 } from "./peekaboo.js"
 
 const appInput = z.string().min(1).describe("App name, bundle ID, or PID:12345.")
@@ -101,18 +102,22 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       },
     },
     async ({ app, window_id, screen_index, annotate }, ctx) => {
-      const args: string[] = []
+      let target: PeekabooObservationTarget
       if (screen_index !== undefined) {
-        args.push("--mode", "screen", "--screen-index", String(screen_index))
+        target = { kind: "screen", screenIndex: screen_index }
+      } else if (window_id !== undefined) {
+        target = { kind: "window", windowId: window_id, ...(app ? { app } : {}) }
+      } else if (app !== undefined) {
+        target = { kind: "app", app }
       } else {
-        if (app !== undefined) args.push("--app", app)
-        if (window_id !== undefined) args.push("--window-id", String(window_id))
-        if (app === undefined && window_id === undefined) args.push("--mode", "frontmost")
+        target = { kind: "frontmost" }
       }
-      args.push("--no-web-focus")
 
       try {
-        const observation = await peekaboo.observe(args, { annotate }, ctx.mcpReq.signal)
+        const observation = await peekaboo.observe(
+          { target, annotate, noWebFocus: true },
+          ctx.mcpReq.signal
+        )
         return observationResult(observation)
       } catch (error) {
         return peekabooToolError(error)
@@ -140,22 +145,15 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
     },
     async ({ snapshot_id, max_depth, max_elements, max_children }, ctx) => {
       try {
-        const target = requireSnapshotTarget(peekaboo, snapshot_id)
-        const args = ["see"]
-        addObservationTargetArgs(args, target)
-        args.push(
-          "--tree",
-          "--no-screenshot",
-          "--depth",
-          String(max_depth),
-          "--max-elements",
-          String(max_elements),
-          "--max-children",
-          String(max_children)
+        const result = await peekaboo.inspect(
+          {
+            snapshotId: snapshot_id,
+            maxDepth: max_depth,
+            maxElements: max_elements,
+            maxChildren: max_children,
+          },
+          ctx.mcpReq.signal
         )
-        const result = await peekaboo.run(args, ctx.mcpReq.signal)
-        const inspectedSnapshotId = stringValue(asRecord(result.data)?.snapshot_id)
-        if (inspectedSnapshotId) peekaboo.rememberSnapshotTarget(inspectedSnapshotId, target)
         return inspectionResult(result)
       } catch (error) {
         return peekabooToolError(error)
@@ -232,25 +230,25 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
     async (input, ctx) => {
       const args = ["click"]
       let forceForeground = false
-      let localExactWindowTarget: Pick<PeekabooSnapshotTarget, "app" | "windowId"> | undefined
+      let localExactWindowTarget: PeekabooExactWindowTarget | undefined
       if (input.element_id) {
         args.push("--on", input.element_id, "--snapshot", input.snapshot_id)
       } else if (input.query) {
         args.push(input.query, "--snapshot", input.snapshot_id)
       } else {
         try {
-          const target = requireSnapshotTarget(peekaboo, input.snapshot_id)
           if (input.x === undefined || input.y === undefined) {
             throw new PeekabooError("INVALID_TARGET", "Coordinate clicks require both x and y.")
           }
-          const coordinates = clickCoordinates(target, input.x, input.y)
+          const coordinates = peekaboo.resolveSnapshotCoordinates(
+            input.snapshot_id,
+            input.x,
+            input.y
+          )
           args.push("--at", `${coordinates.x},${coordinates.y}`)
-          addSnapshotTargetArgs(args, target)
-          const exactWindowTarget =
-            target.windowId !== undefined &&
-            !(target.kind?.toLowerCase().includes("screen") ?? false)
-          if (exactWindowTarget) {
-            if (!input.foreground) localExactWindowTarget = target
+          args.push(...coordinates.targetArgs)
+          if (coordinates.exactWindowTarget) {
+            if (!input.foreground) localExactWindowTarget = coordinates.exactWindowTarget
           } else {
             forceForeground = true
           }
@@ -475,14 +473,10 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
           "Background coordinate scrolling requires a snapshot ID."
         )
       }
-      const target = requireSnapshotTarget(peekaboo, input.snapshot_id)
-      const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
-      if (screenCapture || target.windowId === undefined) {
-        throw new PeekabooError(
-          "EXACT_WINDOW_REQUIRED",
-          "Background coordinate scrolling requires an exact window observation."
-        )
-      }
+      const target = peekaboo.requireExactWindowTarget(
+        input.snapshot_id,
+        "Background coordinate scrolling requires an exact window observation."
+      )
       args.push("--at", `${input.x},${input.y}`, "--window-id", String(target.windowId))
       if (input.smooth) args.push("--smooth")
       const result = await peekaboo.runWithFreshLocalWindowSnapshot(target, args, signal)
@@ -546,21 +540,17 @@ export function registerComputerUseTools(server: McpServer, peekaboo: PeekabooCl
       },
     },
     async (input, ctx) => {
-      let target: PeekabooSnapshotTarget
+      let target: PeekabooExactWindowTarget
       try {
-        target = requireSnapshotTarget(peekaboo, input.snapshot_id)
+        target = peekaboo.requireExactWindowTarget(
+          input.snapshot_id,
+          "Background dragging requires an exact window observation."
+        )
       } catch (error) {
         return peekabooToolError(error)
       }
 
       try {
-        const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
-        if (screenCapture || target.windowId === undefined) {
-          throw new PeekabooError(
-            "EXACT_WINDOW_REQUIRED",
-            "Background dragging requires an exact window observation."
-          )
-        }
         const args = [
           "drag",
           "--from",
@@ -751,65 +741,6 @@ function addTargetArgs(
   if (target.app !== undefined) args.push("--app", target.app)
   if (target.window_id !== undefined) args.push("--window-id", String(target.window_id))
   if (target.snapshot_id !== undefined) args.push("--snapshot", target.snapshot_id)
-}
-
-function requireSnapshotTarget(
-  peekaboo: PeekabooClient,
-  snapshotId: string
-): PeekabooSnapshotTarget {
-  const target = peekaboo.getSnapshotTarget(snapshotId)
-  if (target) return target
-  throw new PeekabooError(
-    "SNAPSHOT_TARGET_MISSING",
-    "The observation target is no longer available. Call computer_observe again."
-  )
-}
-
-function clickCoordinates(
-  target: PeekabooSnapshotTarget,
-  x: number,
-  y: number
-): { x: number; y: number; global: boolean } {
-  const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
-  const needsGlobalCoordinates = screenCapture || (target.windowId === undefined && !target.app)
-  if (!needsGlobalCoordinates) return { x, y, global: false }
-  if (!target.bounds) {
-    throw new PeekabooError(
-      "SNAPSHOT_BOUNDS_MISSING",
-      "The observation bounds are unavailable. Call computer_observe again."
-    )
-  }
-  return {
-    x: x + target.bounds.x,
-    y: y + target.bounds.y,
-    global: true,
-  }
-}
-
-function addSnapshotTargetArgs(args: string[], target: PeekabooSnapshotTarget): void {
-  const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
-  if (screenCapture) return
-  if (target.windowId !== undefined) {
-    args.push("--window-id", String(target.windowId))
-  } else if (target.app) {
-    args.push("--app", target.app)
-  }
-}
-
-function addObservationTargetArgs(args: string[], target: PeekabooSnapshotTarget): void {
-  const screenCapture = target.kind?.toLowerCase().includes("screen") ?? false
-  if (screenCapture) {
-    args.push("--mode", "screen", "--screen-index", String(target.screenIndex ?? 0))
-  } else if (target.windowId !== undefined) {
-    if (target.app) args.push("--app", target.app)
-    args.push("--window-id", String(target.windowId))
-  } else if (target.app && target.windowTitle) {
-    args.push("--app", target.app, "--window-title", target.windowTitle)
-  } else if (target.app) {
-    args.push("--app", target.app)
-  } else {
-    args.push("--mode", "frontmost")
-  }
 }
 
 function appCommandArgs(

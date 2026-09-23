@@ -1,9 +1,10 @@
 ---
 summary: "Subagent completion detection, event delivery, bounded recovery, result settlement, and failure semantics."
 paths:
-  - src/tools/subagent/chatgpt-subagent.ts
-  - src/tools/subagent/chatgpt-subagent-observer.ts
-  - src/tools/subagent/subagent-tools.ts
+  - src/tools/delegation/chatgpt-service.ts
+  - src/tools/delegation/lifecycle.ts
+  - src/tools/delegation/response-observer.ts
+  - src/tools/delegation/subagent-tools.ts
 ---
 
 # Subagent Completion
@@ -32,11 +33,11 @@ This is separate from pre-submit restoration: a closed idle page or mismatched c
 
 ## Detached Result Lifecycle
 
-`subagent_run` returns after one successful submission. The submitted turn captures the launching caller's shared `AgentIdentity`; the observer or recovery path later queues exactly one `agent_finished agent_id=<agent_id> turn_id=<turn_id>` event for that captured parent. A different ChatGPT conversation cannot drain that notice because event draining uses the current request's `AgentIdentity`. No separate notification-session identifier is carried through the subagent API (`src/server/agent-context.ts`, `src/server/mcp-server.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
+`subagent_run` returns after one successful submission. The submitted turn captures the launching caller's shared `AgentIdentity`; the delegation lifecycle settles the turn and queues exactly one `agent_finished agent_id=<agent_id> turn_id=<turn_id>` event for that captured parent. A different ChatGPT conversation cannot drain that notice because event draining uses the current request's `AgentIdentity`. No separate notification-session identifier is carried through the delegation API (`src/agent/context.ts`, `src/mcp/server-factory.ts`, `src/tools/delegation/chatgpt-service.ts`, `src/tools/delegation/lifecycle.ts`).
 
 `subagent_result(wait_ms)` only waits on the turn's local settlement promise. It never contacts ChatGPT, refreshes the browser, or performs reconciliation.
 
-Completed/failed results remain available only in the current MCP process, even after idle cleanup closes the agent's page. The agent conversation URL and turn count are persisted separately in `<state_dir>/subagents.sqlite`, so context can survive process restart even though old `turn_id` results cannot (`src/tools/subagent/chatgpt-subagent.ts`, `src/tools/subagent/subagent-store.ts`).
+Completed/failed results remain available only in the current MCP process, even after idle cleanup closes the agent's page. `DelegationLifecycle` owns those process-local turn records and hydrates durable agent identity from `<state_dir>/subagents.sqlite`; conversation URL and turn count can survive process restart even though old `turn_id` results cannot. Persistence reads fail closed before a new browser submission if the store becomes unavailable. A post-submit write failure does not retroactively fail the detached turn (`src/tools/delegation/lifecycle.ts`, `src/tools/delegation/store.ts`).
 
 ## Invariants
 

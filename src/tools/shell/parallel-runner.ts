@@ -1,6 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process"
 import process from "node:process"
 import { StringDecoder } from "node:string_decoder"
+import {
+  type ProcessGroupTermination,
+  signalProcessGroup,
+  startProcessGroupTermination,
+} from "../../child-process-termination.js"
 import { utf8Chunk } from "../../utils.js"
 import { prepareShellCommand } from "./rtk.js"
 import type { ParallelCommandStatus } from "./shell-contracts.js"
@@ -117,14 +122,15 @@ export function executeParallelCommand(
     let settled = false
     let timeoutRequested = false
     let resetRequested = false
-    let forceTimer: NodeJS.Timeout | null = null
+    let termination: ProcessGroupTermination | null = null
     let timeoutTimer: NodeJS.Timeout | null = null
 
     const finish = (status: ParallelCommandExecutionResult["status"], exitCode: number | null) => {
       if (settled) return
       settled = true
       if (timeoutTimer) clearTimeout(timeoutTimer)
-      if (forceTimer) clearTimeout(forceTimer)
+      termination?.cancel()
+      termination = null
       input.signal.removeEventListener("abort", onAbort)
       const stdoutTail = stdoutDecoder.end()
       const stderrTail = stderrDecoder.end()
@@ -134,13 +140,19 @@ export function executeParallelCommand(
     }
 
     const stop = () => {
-      killProcessGroup(child, "SIGTERM")
-      if (forceTimer) clearTimeout(forceTimer)
-      forceTimer = setTimeout(() => {
-        killProcessGroup(child, "SIGKILL")
-        finish(resetRequested ? "reset" : "timed_out", null)
-      }, STOP_GRACE_MS)
-      forceTimer.unref()
+      termination?.cancel()
+      const currentTermination = startProcessGroupTermination(child, {
+        graceMs: STOP_GRACE_MS,
+        unrefGraceTimer: true,
+      })
+      termination = currentTermination
+      void currentTermination.completion.then((result) => {
+        if (termination !== currentTermination) return
+        termination = null
+        if (result === "grace_elapsed") {
+          finish(resetRequested ? "reset" : "timed_out", null)
+        }
+      })
     }
 
     const onAbort = () => {
@@ -170,13 +182,13 @@ export function executeParallelCommand(
     child.stderr?.on("data", (chunk: Buffer) => output.append(stderrDecoder.write(chunk)))
     child.once("error", (error) => {
       output.append(error.message)
-      killProcessGroup(child, "SIGKILL")
+      signalProcessGroup(child, "SIGKILL")
       finish(requestedStatus(resetRequested, timeoutRequested, "failed"), null)
     })
     child.once("exit", () => {
       // The shell may exit while background descendants still hold its stdio
       // pipes open. Kill the process group here instead of waiting for close.
-      killProcessGroup(child, "SIGKILL")
+      signalProcessGroup(child, "SIGKILL")
     })
     child.once("close", (code) => {
       finish(
@@ -236,15 +248,5 @@ function createBoundedOutput(maxBytes: number) {
     get droppedBytes() {
       return droppedBytes
     },
-  }
-}
-
-function killProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (!child.pid) return
-  try {
-    if (process.platform === "win32") child.kill(signal)
-    else process.kill(-child.pid, signal)
-  } catch {
-    // Child cleanup is best effort for the same reason as persistent-shell cleanup.
   }
 }

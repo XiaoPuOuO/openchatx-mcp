@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import { getAgentIdentity, runWithAgent, setAgentTaskSlug } from "../src/server/agent-context.js"
+import { getAgentIdentity, runWithAgent, setAgentTaskSlug } from "../src/agent/context.js"
 import { saveReview } from "../src/tools/review/review-tool.js"
 
 test("saves Shellby reviews with the agent audit alias and task slug", async (t) => {

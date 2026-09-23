@@ -2,7 +2,7 @@ import { join } from "node:path"
 import process from "node:process"
 import { createInterface } from "node:readline/promises"
 import { MCP_CONFIG } from "../config.js"
-import { ShellbyAuthStore } from "./auth.js"
+import { ShellbyAuthStore } from "./store.js"
 
 const auth = new ShellbyAuthStore(join(MCP_CONFIG.stateDir, "auth.json"))
 const input = createInterface({ input: process.stdin, output: process.stdout })

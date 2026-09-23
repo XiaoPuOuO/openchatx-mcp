@@ -1,12 +1,12 @@
 ---
 summary: "Simple MCP caller identity tracking, audit labels, completion-event routing, and historical findings from the removed subagent-lineage experiment."
 paths:
-  - src/server/agent-context.ts
+  - src/agent/context.ts
   - src/server/http-server.ts
   - src/server/audit/
-  - src/server/mcp-server.ts
-  - src/tools/subagent/chatgpt-subagent.ts
-  - src/tools/subagent/subagent-tools.ts
+  - src/mcp/server-factory.ts
+  - src/tools/delegation/chatgpt-service.ts
+  - src/tools/delegation/subagent-tools.ts
 ---
 
 # Session Tracking
@@ -27,11 +27,11 @@ Each distinct session receives a short first-seen `agent-N` identity from `agent
 session: "agent-1"
 ```
 
-The next distinct caller becomes `agent-2`, then `agent-3`, and so on for the process lifetime. After a successful `start_here`, its caller-provided task slug becomes part of the same identity. Audit entries format that as `agent-1/audit-session-labels`; reviews and other runtime features consume the same identity (`src/server/agent-context.ts`, `src/server/http-server.ts`, `src/server/audit/audit-log.ts`, `src/tools/start-here/start-here.ts`).
+The next distinct caller becomes `agent-2`, then `agent-3`, and so on for the process lifetime. After a successful `start_here`, its caller-provided task slug becomes part of the same identity. Audit entries format that as `agent-1/audit-session-labels`; reviews and other runtime features consume the same identity (`src/agent/context.ts`, `src/server/http-server.ts`, `src/server/audit/audit-log.ts`, `src/tools/start-here/start-here.ts`).
 
 ## Completion Events
 
-Each submitted subagent or clone turn captures the launching request's `AgentIdentity`. When that detached turn completes, including through recovery work driven by the service cleanup timer, `agent_finished` is queued against that captured identity. A later MCP response drains events for its current `AgentIdentity`. This preserves direct parent notification without carrying a separate notification session ID through the subagent API (`src/server/agent-context.ts`, `src/server/mcp-server.ts`, `src/tools/subagent/chatgpt-subagent.ts`).
+Each submitted subagent or clone turn captures the launching request's `AgentIdentity`. When that detached turn completes, including through recovery work driven by the service cleanup timer, `agent_finished` is queued against that captured identity. A later MCP response drains events for its current `AgentIdentity`. This preserves direct parent notification without carrying a separate notification session ID through the delegation API (`src/agent/context.ts`, `src/mcp/server-factory.ts`, `src/tools/delegation/chatgpt-service.ts`).
 
 ## Removed Lineage Experiment
 

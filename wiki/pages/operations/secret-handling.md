@@ -3,7 +3,7 @@ summary: "Rules for authentication metadata, local state, provider credentials, 
 paths:
   - src/auth/
   - src/server/audit/
-  - src/tools/subagent/subagent-store.ts
+  - src/tools/delegation/store.ts
   - .gitignore
 ---
 
@@ -15,9 +15,9 @@ This page defines what authentication, provider, audit-log, and machine-local in
 
 ## Current State
 
-Remote ChatGPT ownership state is stored outside the repository in `<state_dir>/auth.json` with owner-only permissions; `state_dir` defaults to `~/.shellby`. Treat the bound OpenAI subject as private authentication metadata; transport and binding mechanics are documented in [HTTP Transport](../http-transport.md) (`src/auth/auth.ts`, `src/server/http-server.ts`).
+Remote ChatGPT ownership state is stored outside the repository in `<state_dir>/auth.json` with owner-only permissions; `state_dir` defaults to `~/.shellby`. Treat the bound OpenAI subject as private authentication metadata; transport and binding mechanics are documented in [HTTP Transport](../http-transport.md) (`src/auth/store.ts`, `src/server/http-server.ts`).
 
-Subagent conversation mappings are stored best-effort in `<state_dir>/subagents.sqlite`. The database contains parent MCP session IDs, ChatGPT conversation URLs, and turn counts, which can expose private account/conversation identifiers. Unlike the auth store, `subagent-store.ts` does not explicitly chmod the SQLite database; treat the file and its `-wal` / `-shm` sidecars as sensitive local state (`src/tools/subagent/subagent-store.ts`, `scripts/reset-agents.mjs`).
+Delegated-agent conversation mappings are stored best-effort in `<state_dir>/subagents.sqlite`. The database contains parent MCP session IDs, ChatGPT conversation URLs, and turn counts, which can expose private account/conversation identifiers. Unlike the auth store, `store.ts` does not explicitly chmod the SQLite database; treat the file and its `-wal` / `-shm` sidecars as sensitive local state (`src/tools/delegation/store.ts`, `scripts/chatgpt/reset-delegation-state.ts`).
 
 Provider credentials such as ngrok, npm, or future CI tokens belong in provider/user configuration or a password manager, not repository Markdown (`package.json`).
 

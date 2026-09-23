@@ -1,31 +1,38 @@
 import process from "node:process"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { MCP_CONFIG } from "../src/config.js"
+import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
 import { countTokens, OUTPUT_TOKEN_ENCODING } from "../src/tokenizer.js"
 import { PeekabooClient } from "../src/tools/computer/peekaboo.js"
+import { createChatGptDelegationService } from "../src/tools/delegation/chatgpt-service.js"
 import { createShellSession } from "../src/tools/shell/session.js"
 import { createShellSessionManager } from "../src/tools/shell/session-manager.js"
-import { createChatGptSubagentService } from "../src/tools/subagent/chatgpt-subagent.js"
 import { WebPageOpener } from "../src/tools/web/web-open.js"
 
 const requestedNames = new Set(process.argv.slice(2))
-MCP_CONFIG.port = 0
 const shells = MCP_CONFIG.tools.shell
   ? createShellSessionManager({
       createShell: () => createShellSession({ cwd: MCP_CONFIG.workspace }),
     })
   : undefined
 const peekaboo = MCP_CONFIG.tools.computer ? new PeekabooClient({ localOnly: true }) : undefined
-const chatGptSubagents =
-  MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents ? createChatGptSubagentService() : undefined
+const chatGptDelegation =
+  MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents
+    ? createChatGptDelegationService()
+    : undefined
 const webPageOpener = MCP_CONFIG.tools.web ? new WebPageOpener() : undefined
-const running = await startMcpHttpServer({
-  shellManager: shells,
-  peekaboo,
-  chatGptSubagents,
-  webPageOpener,
-})
+const running = await startMcpHttpServer(
+  {
+    createMcpServer: createMcpServerFactory({
+      shellManager: shells,
+      peekaboo,
+      chatGptDelegation,
+      webPageOpener,
+    }),
+  },
+  { port: 0 }
+)
 const client = new Client(
   { name: "shellby-mcp-schema-viewer", version: MCP_CONFIG.server.version },
   { versionNegotiation: { mode: "auto" } }
@@ -56,6 +63,6 @@ try {
   await Promise.allSettled([
     shells?.close() ?? Promise.resolve(),
     peekaboo?.close() ?? Promise.resolve(),
-    chatGptSubagents?.dispose() ?? Promise.resolve(),
+    chatGptDelegation?.dispose() ?? Promise.resolve(),
   ])
 }

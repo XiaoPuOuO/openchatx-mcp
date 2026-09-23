@@ -22,25 +22,23 @@ async function runStartup(
   } = {}
 ) {
   const root = await realpath(await tempDir(t, "shellby-start-"))
-  for (const directory of ["scripts", "src", "bin", "node_modules/.bin"])
+  for (const directory of ["scripts", "scripts/chatgpt", "src", "bin", "node_modules/.bin"])
     await mkdir(join(root, directory), { recursive: true })
-  await copyFile(
-    new URL("../scripts/start.mjs", import.meta.url),
-    join(root, "scripts", "start.mjs")
-  )
-  await copyFile(new URL("../scripts/pm2.mjs", import.meta.url), join(root, "scripts", "pm2.mjs"))
+  await writeFile(join(root, "package.json"), '{"type":"module"}\n')
+  await copyFile(new URL("../scripts/start.ts", import.meta.url), join(root, "scripts", "start.ts"))
+  await copyFile(new URL("../scripts/pm2.ts", import.meta.url), join(root, "scripts", "pm2.ts"))
   await writeFile(
     join(root, "src", "config.ts"),
     `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, instanceId: "fixture", stateDir: join(root, "state"), workspace: root, ngrok: { enabled: options.ngrokEnabled ?? true }, shell: { rtk: false }, tools: { clones: false, subagents: options.agentsEnabled ?? false } })}`
   )
   await writeFile(
-    join(root, "scripts", "preflight.mjs"),
+    join(root, "scripts", "preflight.ts"),
     `export async function checkPublicRuntime(ngrokEnabled) { if(ngrokEnabled !== ${options.ngrokEnabled ?? true}) throw new Error("wrong ngrok preflight mode"); return { errors: [] }; }
 export function checkRtkRuntime() {}
 export function printPreflightErrors() {}`
   )
   await writeFile(
-    join(root, "scripts", "print-url.mjs"),
+    join(root, "scripts", "print-url.ts"),
     options.ngrokEnabled === false
       ? 'console.log("http://127.0.0.1:3334/mcp")'
       : 'console.log("https://test.invalid/mcp")'
@@ -51,12 +49,12 @@ export function printPreflightErrors() {}`
   for (const [command, path] of [
     ["npm", "bin/npm"],
     ["pm2", "node_modules/.bin/pm2"],
-    ["browser", "scripts/chatgpt-browser.mjs"],
+    ["browser", "scripts/chatgpt/browser.mjs"],
   ]) {
     await writeFile(
       join(root, path!),
       `#!/usr/bin/env node
-${command === "browser" ? 'import { appendFileSync, existsSync } from "node:fs";' : 'const { appendFileSync, existsSync } = require("node:fs");'}
+import { appendFileSync, existsSync } from "node:fs";
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({
   command: ${JSON.stringify(command)}, args, auditExists: existsSync(${JSON.stringify(join(root, "agent-commands.yaml"))}),
@@ -76,7 +74,7 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
       "tsx",
       "--import",
       `data:text/javascript,globalThis.fetch=async(url)=>{if(url!=="http://127.0.0.1:3334/healthz")throw new Error("wrong health port");return {ok:true,headers:new Headers({"x-shellby-instance":${JSON.stringify(options.healthInstance ?? "fixture")}})}}`,
-      join(root, "scripts", options.pm2Args ? "pm2.mjs" : "start.mjs"),
+      join(root, "scripts", options.pm2Args ? "pm2.ts" : "start.ts"),
       ...(options.pm2Args ?? [
         ...(options.restart ? ["--restart"] : []),
         ...(options.hard ? ["--hard"] : []),
@@ -308,7 +306,7 @@ test("PM2 operational commands use Shellby's dedicated daemon and preserve CLI a
   ) as { scripts: Record<string, string> }
   for (const name of ["stop", "status", "logs", "pm2"]) {
     const command = packageJson.scripts[name]!
-    assert.ok(command.startsWith("node --import tsx scripts/pm2.mjs"))
+    assert.ok(command.startsWith("node --import tsx scripts/pm2.ts"))
     const args = command.split(" ").slice(4)
     if (name === "pm2") args.push("jlist")
     if (name === "logs") args.push("--lines", "20", "--nostream")

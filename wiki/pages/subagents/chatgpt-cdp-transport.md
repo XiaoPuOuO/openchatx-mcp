@@ -1,11 +1,11 @@
 ---
 summary: "Observed private ChatGPT Web turn transport used by Shellby's raw-CDP subagent completion tracker."
 paths:
-  - src/tools/subagent/chatgpt-subagent-observer.ts
-  - src/tools/subagent/chatgpt-subagent-protocol.ts
-  - src/tools/subagent/chatgpt-subagent.ts
-  - scripts/chatgpt-cdp-probe.mjs
-  - scripts/summarize-chatgpt-cdp-probe.mjs
+  - src/tools/delegation/response-observer.ts
+  - src/tools/delegation/turn-protocol.ts
+  - src/tools/delegation/chatgpt-service.ts
+  - scripts/chatgpt/cdp-probe.mjs
+  - scripts/chatgpt/summarize-cdp-probe.mjs
 ---
 
 # ChatGPT CDP Transport
@@ -28,7 +28,7 @@ Once the exact submitted prompt binds a tracker to a source, every subsequent no
 
 ## CDP Probe
 
-`scripts/chatgpt-cdp-probe.mjs` is a manual diagnostic recorder for the dedicated authenticated ChatGPT Chrome. It attaches to the configured CDP endpoint and records JSONL evidence without launching, closing, reloading, or navigating Chrome. It is intended for investigating private transport changes and subagent liveness failures against the real ChatGPT Web client.
+`scripts/chatgpt/cdp-probe.mjs` is a manual diagnostic recorder for the dedicated authenticated ChatGPT Chrome. It attaches to the configured CDP endpoint and records JSONL evidence without launching, closing, reloading, or navigating Chrome. It is intended for investigating private transport changes and subagent liveness failures against the real ChatGPT Web client.
 
 Start a capture before reproducing the behavior:
 

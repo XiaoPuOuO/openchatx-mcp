@@ -6,11 +6,8 @@ paths:
   - src/hooks/useAgents.ts
   - src/lib/api.ts
   - src/types.ts
-  - src/components/AgentCard.tsx
-  - src/components/SteerComposer.tsx
-  - src/components/ToolCallModal.tsx
-  - src/components/RoomEditor.tsx
-  - src/game/roomLayoutStorage.ts
+  - src/features/dashboard/
+  - src/features/agent-room/
 ---
 
 # Runtime and Interaction Map
@@ -21,19 +18,20 @@ paths:
 
 SSE reconnect does not fetch another snapshot or replay missed events. An agent unchanged after reconnection may remain stale until a later event or page refresh. Preserve the initial snapshot/SSE merge when changing startup behavior.
 
-Browser types in `src/types.ts` mirror observer snapshots: agent identity/task slug, current call, recent calls, and steering instructions. Keep changes aligned with server observer payloads in root repo `src/server/agent-observer.ts`.
+Browser types in `src/types.ts` mirror observer snapshots: agent identity/task slug, current call, recent calls, and steering instructions. Keep changes aligned with server observer payloads in root repo `src/agent/observer.ts`.
 
 ## Component Ownership
 
 | Area | Owner | Durable behavior |
 | --- | --- | --- |
 | Page shell / connection indicator | `src/App.tsx` | Active means `lastSeenAt` within 30 seconds. |
-| Per-agent composition | `src/components/AgentCard.tsx` | Room, recent activity, steering, call modal. |
+| Per-agent composition | `src/features/dashboard/AgentCard.tsx` | Room, recent activity, steering, call modal. |
 | Live data | `src/hooks/useAgents.ts` | Snapshot + SSE replacement model. |
 | API calls | `src/lib/api.ts` | Relative `/ui/api/...` URLs only. |
-| Steering | `src/components/SteerComposer.tsx` | Queue on server; cancel queued instruction; delivered dismissal local only. |
-| Tool details | `src/components/ToolCallModal.tsx` | Show captured call detail with limited highlight.js languages. |
-| Room editor | `src/components/RoomEditor.tsx` | Edit the 8px room layout interactively and save a browser-local override used by agent rooms. |
+| Steering | `src/features/dashboard/SteerComposer.tsx` | Queue on server; cancel queued instruction; delivered dismissal local only. |
+| Tool details | `src/features/dashboard/ToolCallModal.tsx` | Show captured call detail with limited highlight.js languages. |
+| Agent room | `src/features/agent-room/` | Canvas runtime, layout/rendering, Pixel Agents catalog/storage, and editor. |
+| Room editor | `src/features/agent-room/editor/RoomEditor.tsx` | Orchestrate editor state, pointer behavior, persistence, and layout mutation. |
 
 ## Steering Contract
 
@@ -54,6 +52,6 @@ Do not derive operational truth from pixel-room queue. Room intentionally lags f
 
 ## Server Boundary
 
-Backend routes and static serving live in root repo `src/server/http-server.ts`. Server configuration and local-only exposure are documented in [HTTP Transport](../../../wiki/pages/http-transport.md). Tool observation and steering delivery live in `src/server/agent-observer.ts` and `src/server/tool-registration-boundary.ts`.
+Backend transport lives in root repo `src/server/http-server.ts`; dashboard routes and observer state live in `src/agent/`. Server configuration and local-only exposure are documented in [HTTP Transport](../../../wiki/pages/http-transport.md). Tool execution/steering delivery lives in `src/mcp/tool-registration-boundary.ts`.
 
 Production assets use the same configured port as MCP. The Vite development proxy reads root `port` from the repository's `.shellby/config.toml` through the shared public config loader, so a second repository copy points at its own backend. Run config-only setup if the file is missing before invoking Vite (`vite.config.ts`, `../src/public-config.cts`).

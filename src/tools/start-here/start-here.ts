@@ -6,20 +6,14 @@ import { fileURLToPath } from "node:url"
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import {
-  type AgentIdentity,
-  getAgentIdentity,
-  setAgentTaskSlug,
-} from "../../server/agent-context.js"
+import { setAgentTaskSlug } from "../../agent/context.js"
+import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const START_HERE_COOLDOWN_MS = 5_000
-const recentStartLoads = new Map<
-  AgentIdentity,
-  Map<string, { startedAt: number; load: Promise<string> }>
->()
+const loadStartInstructions = createAgentLoadDeduper<string>(START_HERE_COOLDOWN_MS)
 
 type PromptSource = {
   path: string
@@ -50,42 +44,19 @@ export function registerStartHereTool(server: McpServer): void {
       },
     },
     async ({ mode, task_id }) => {
-      const agent = getAgentIdentity()
-      let agentLoads = agent ? recentStartLoads.get(agent) : undefined
-      const recent = agentLoads?.get(mode)
-      if (recent && Date.now() - recent.startedAt < START_HERE_COOLDOWN_MS) {
-        try {
-          await recent.load
-          setAgentTaskSlug(task_id)
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
-              },
-            ],
-          }
-        } catch {
-          if (agentLoads?.get(mode) === recent) agentLoads.delete(mode)
-        }
-      }
-
-      const load = buildStartHereInstructions(mode)
-      const tracked = { startedAt: Date.now(), load }
-      if (agent) {
-        agentLoads ??= new Map()
-        recentStartLoads.set(agent, agentLoads)
-        agentLoads.set(mode, tracked)
-      }
-      try {
-        const instructions = await load
-        setAgentTaskSlug(task_id)
-        return {
-          content: [{ type: "text", text: instructions }],
-        }
-      } catch (error) {
-        if (agentLoads?.get(mode) === tracked) agentLoads.delete(mode)
-        throw error
+      const { value: instructions, reused } = await loadStartInstructions(mode, () =>
+        buildStartHereInstructions(mode)
+      )
+      setAgentTaskSlug(task_id)
+      return {
+        content: [
+          {
+            type: "text",
+            text: reused
+              ? `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`
+              : instructions,
+          },
+        ],
       }
     }
   )

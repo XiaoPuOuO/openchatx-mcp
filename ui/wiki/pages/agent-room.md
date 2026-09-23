@@ -1,12 +1,12 @@
 ---
 summary: "Canvas agent-room architecture, activity queue semantics, tool-to-station mapping, render layering, and Pixel Agents asset usage."
 paths:
-  - src/components/AgentRoom.tsx
-  - src/components/RoomEditor.tsx
-  - src/game/agentRoomEngine.ts
-  - src/game/agentRoomLayout.ts
-  - src/game/agentRoomRenderer.ts
-  - src/game/roomLayoutStorage.ts
+  - src/features/agent-room/AgentRoom.tsx
+  - src/features/agent-room/engine.ts
+  - src/features/agent-room/layout.ts
+  - src/features/agent-room/renderer.ts
+  - src/features/agent-room/room-layout-storage.ts
+  - src/features/agent-room/editor/
   - public/pixel-agents/
   - THIRD_PARTY_NOTICES.md
 ---
@@ -15,11 +15,11 @@ paths:
 
 ## Mental Model
 
-`AgentRoom.tsx` renders room and sprites on Canvas. `agentRoomEngine.ts` owns movement, direction, tool station mapping, animation queue, and RAF update loop. Keep React out of per-frame state.
+The feature lives under `src/features/agent-room/`. `AgentRoom.tsx` renders room and sprites on Canvas. `engine.ts` owns movement, direction, tool station mapping, animation queue, and RAF update loop. Keep React out of per-frame state.
 
-Static room composition lives in `agentRoomLayout.ts`. Object/entity coordinates use an 8px logical grid, so decimal values such as `8.5` are valid for half-grid placement. Terrain uses a 14×9 tile map whose cells are 4 logical units / 32 canvas pixels. The v2 layout stores floor/wall/VOID tiles, a parallel carpet layer, furniture, pets, station anchors, rugs, and an optional character appearance override.
+Static room composition lives in `layout.ts`; shared room drawing lives in `renderer.ts`. Object/entity coordinates use an 8px logical grid, so decimal values such as `8.5` are valid for half-grid placement. Terrain uses a 14×9 tile map whose cells are 4 logical units / 32 canvas pixels. The v2 layout stores floor/wall/VOID tiles, a parallel carpet layer, furniture, pets, station anchors, rugs, and an optional character appearance override.
 
-`/ui/editor` provides an interactive editor over the same data model. Its tools are Select, Furniture, Floor, Wall, Carpet, and Entities. Floor/wall/carpet tools paint 32px terrain cells; furniture, stations, rugs, and pets retain the finer 8px drag grid. Right-click erases terrain paint. Entities can place Pixel Agents pets and override the room's agent character sheet. Saving writes a browser-local layout override through `roomLayoutStorage.ts`; old v1 overrides are migrated additively so existing furniture/station edits survive.
+`/ui/editor` provides an interactive editor over the same data model. `editor/RoomEditor.tsx` owns page state, pointer/paint orchestration, persistence, and layout mutation. `editor/EditorPanels.tsx` owns palette and inspector UI; `editor/editor-selection.ts` owns selection identity, hit testing, bounds, labels, and position lookup; `editor/editor-canvas.ts` owns editor-only grid/station/selection rendering. Its tools are Select, Furniture, Floor, Wall, Carpet, and Entities. Floor/wall/carpet tools paint 32px terrain cells; furniture, stations, rugs, and pets retain the finer 8px drag grid. Right-click erases terrain paint. Entities can place Pixel Agents pets and override the room's agent character sheet. Saving writes a browser-local layout override through `room-layout-storage.ts`; old v1 overrides are migrated additively so existing furniture/station edits survive.
 
 Pixel Agents UI assets are vendored as a pinned snapshot under `public/pixel-agents/assets/`. `public/pixel-agents/UPSTREAM_COMMIT` records the exact upstream revision and `public/pixel-agents/catalog.json` normalizes the furniture manifests for the editor. Run root `npm run vendor:pixel-agents` to regenerate the snapshot and `npm run vendor:pixel-agents:check` to validate it without network access. `THIRD_PARTY_NOTICES.md` carries MIT attribution.
 

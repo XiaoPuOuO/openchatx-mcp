@@ -4,8 +4,9 @@ paths:
   - src/tools/shell/shell-tools.ts
   - src/tools/shell/shell-contracts.ts
   - src/tools/shell/session.ts
+  - src/tools/shell/parallel-session.ts
   - src/tools/shell/rtk.ts
-  - src/server/tool-output.ts
+  - src/mcp/tool-output.ts
 ---
 
 # `shell_run` / `shell_poll`

@@ -13,6 +13,7 @@ Dashboard is observer, and visualization layer. Server-side `AgentObserver` owns
 ## Engineering Approach
 
 - Keep UI small and direct. React components own ordinary interaction state; imperative Canvas engine owns pixel-room animation.
+- Organize feature-specific UI under `src/features/`; keep reusable primitives under `src/components/ui` and shared data/API/hooks at the top-level `src` owners.
 - React Compiler enabled. Avoid manual memoization unless measured need exists.
 - Prefer low-color application chrome. Reserve semantic color for active, failed, queued, delivered, and connection states.
 - Pixel-room visuals use bundled Pixel Agents assets and ideas under MIT attribution. Keep Shellby-specific tool mapping and animation behavior local, see [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents/blob/main/README.md) for more details.

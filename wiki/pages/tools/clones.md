@@ -1,10 +1,10 @@
 ---
 summary: "Clone branching, shared delegated-ID ownership, persistence, and reuse through the ChatGPT agent runtime."
 paths:
-  - src/tools/subagent/clone-tools.ts
-  - src/tools/subagent/chatgpt-subagent.ts
-  - src/tools/subagent/chatgpt-subagent-browser.ts
-  - src/tools/subagent/subagent-store.ts
+  - src/tools/delegation/clone-tools.ts
+  - src/tools/delegation/chatgpt-service.ts
+  - src/tools/delegation/chatgpt-browser.ts
+  - src/tools/delegation/store.ts
   - src/config.ts
   - src/public-config.cts
 ---

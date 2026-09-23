@@ -1,18 +1,18 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { type AgentIdentity, getAgentIdentity } from "../../src/server/agent-context.js"
+import { type AgentIdentity, getAgentIdentity } from "../../src/agent/context.js"
 import {
-  ChatGptSubagentError,
-  type ChatGptSubagentService,
-} from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
+  ChatGptDelegationError,
+  type ChatGptDelegationService,
+} from "../../src/tools/delegation/contracts.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("delivers a completed subagent event on the next MCP response exactly once", {
   timeout: 10_000,
 }, async (t) => {
   const events = new Map<string, string[]>()
-  const chatGptSubagents: ChatGptSubagentService = {
+  const chatGptDelegation: ChatGptDelegationService = {
     async ask() {
       throw new Error("unused")
     },
@@ -33,7 +33,7 @@ test("delivers a completed subagent event on the next MCP response exactly once"
     },
     async dispose() {},
   }
-  const running = await startMcpHttpServer({ chatGptSubagents })
+  const running = await startMcpHttpServer({ chatGptDelegation })
   t.after(() => running.close())
   const other = await connectClient(
     running.url,
@@ -89,10 +89,10 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
   let activePolls = 0
   let maxActivePolls = 0
 
-  const chatGptSubagents: ChatGptSubagentService = {
+  const chatGptDelegation: ChatGptDelegationService = {
     async ask({ agentId, prompt }, context) {
       if (agentId === "unavailable-agent") {
-        throw new ChatGptSubagentError(
+        throw new ChatGptDelegationError(
           "BROWSER_UNAVAILABLE",
           "Expected an already-running debuggable Chrome instance at http://127.0.0.1:9222."
         )
@@ -119,7 +119,6 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
         await new Promise((resolve) => setTimeout(resolve, 25))
         if (turnId === "heartbeat-fixture") {
           return {
-            turnId,
             status: "running",
             activity: "Searching the web",
             activityAgeMs: 2_750,
@@ -127,7 +126,6 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
         }
         if (turnId === "backend-failure") {
           return {
-            turnId,
             status: "failed",
             errorCode: "BROWSER_UNAVAILABLE",
             errorMessage: "Chrome disconnected while observing the turn.",
@@ -135,8 +133,8 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
         }
         const response = completed.get(turnId)
         if (!response)
-          throw new ChatGptSubagentError("UNKNOWN_TURN", `Unknown agent turn: ${turnId}`)
-        return { turnId, status: "completed", response }
+          throw new ChatGptDelegationError("UNKNOWN_TURN", `Unknown agent turn: ${turnId}`)
+        return { status: "completed", response }
       } finally {
         activePolls -= 1
       }
@@ -147,7 +145,7 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
     async dispose() {},
   }
 
-  const running = await startMcpHttpServer({ chatGptSubagents })
+  const running = await startMcpHttpServer({ chatGptDelegation })
   t.after(() => running.close())
 
   const first = await connectClient(

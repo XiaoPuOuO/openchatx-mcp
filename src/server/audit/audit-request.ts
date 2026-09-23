@@ -1,3 +1,4 @@
+import type { RequestId } from "@modelcontextprotocol/server"
 import { asRecord } from "../../utils.js"
 
 export interface McpAuditCall {
@@ -11,13 +12,14 @@ export interface McpAuditCall {
 }
 
 export interface McpAuditRequest {
-  claimTool(toolName: string, argumentsValue: unknown): McpAuditCall | undefined
+  claimTool(requestId: RequestId, toolName: string): McpAuditCall | undefined
+  startNestedTool(toolName: string, argumentsValue: unknown): McpAuditCall
   finishTransport(input: { httpStatus: number; state: "finished" | "closed" }): void
 }
 
 interface PendingAuditCall {
+  requestId?: RequestId
   name: string
-  argumentsValue: unknown
   call: McpAuditCall
   claimed: boolean
 }
@@ -36,26 +38,24 @@ export function createAuditRequest(
     const parsed = parseToolCall(request)
     if (!parsed) continue
     pending.push({
+      requestId: parsed.requestId,
       name: parsed.name,
-      argumentsValue: parsed.arguments,
       call: startToolCall(parsed.name, parsed.arguments),
       claimed: false,
     })
   }
 
   return {
-    claimTool(toolName, argumentsValue) {
-      const match =
-        pending.find(
-          (item) =>
-            !item.claimed &&
-            item.name === toolName &&
-            inputMatches(item.argumentsValue, argumentsValue)
-        ) ?? pending.find((item) => !item.claimed && item.name === toolName)
-      // Top-level MCP calls are preloaded into pending. An unmatched execution is created internally by then_run.
-      if (!match) return startToolCall(toolName, argumentsValue, "then_run")
+    claimTool(requestId, toolName) {
+      const match = pending.find(
+        (item) => !item.claimed && item.requestId === requestId && item.name === toolName
+      )
+      if (!match) return
       match.claimed = true
       return match.call
+    },
+    startNestedTool(toolName, argumentsValue) {
+      return startToolCall(toolName, argumentsValue, "then_run")
     },
     finishTransport({ httpStatus, state }) {
       for (const item of pending) {
@@ -72,33 +72,21 @@ function requestsFromPayload(payload: unknown): unknown[] {
   return Array.isArray(payload) ? payload : [payload]
 }
 
-function parseToolCall(value: unknown): { name: string; arguments?: unknown } | undefined {
+function parseToolCall(
+  value: unknown
+): { requestId?: RequestId; name: string; arguments?: unknown } | undefined {
   const request = asRecord(value)
   if (!request) return undefined
   if (request.method !== "tools/call") return undefined
   const params = asRecord(request.params)
   const name = params?.name
   if (typeof name !== "string" || !name) return undefined
-  return { name, arguments: params.arguments }
-}
-
-function inputMatches(expected: unknown, actual: unknown): boolean {
-  if (Object.is(expected, actual)) return true
-  if (Array.isArray(expected)) {
-    return (
-      Array.isArray(actual) &&
-      expected.length === actual.length &&
-      expected.every((item, index) => inputMatches(item, actual[index]))
-    )
+  const id = request.id
+  return {
+    ...(typeof id === "string" || typeof id === "number" ? { requestId: id } : {}),
+    name,
+    arguments: params.arguments,
   }
-  const expectedRecord = asRecord(expected)
-  const actualRecord = asRecord(actual)
-  if (expectedRecord && actualRecord) {
-    return Object.entries(expectedRecord).every(
-      ([key, value]) => Object.hasOwn(actualRecord, key) && inputMatches(value, actualRecord[key])
-    )
-  }
-  return false
 }
 
 function isToolListRequest(value: unknown): boolean {

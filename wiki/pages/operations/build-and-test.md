@@ -28,11 +28,11 @@ Run the cheapest focused check that addresses the changed behavior. Broaden when
 | Config and setup | `test/config.test.ts`, `test/setup-workspace.test.ts`, `test/start.test.ts`, `test/instance-isolation.test.ts`, `test/preflight.test.ts` |
 | Shell lifecycle, batches, rewriting | `test/shell-session.test.ts`, `test/shell-session-manager.test.ts`, `test/shell-parallel.test.ts`, `test/rtk.test.ts` |
 | MCP contract and transport | `test/mcp-integration.test.ts` loads cases from `test/integrations/`; registration/projection also have focused tests. |
-| Audit and dashboard observation | `test/mcp-audit-log.test.ts`, `test/agent-observer.test.ts`, `test/agent-context.test.ts` |
-| Delegation | `test/chatgpt-subagent-browser.test.ts`, `test/chatgpt-subagent-limit.test.ts`, `test/subagent-store.test.ts` |
+| Audit and dashboard observation | `test/server/audit-log.test.ts`, `test/agent/observer.test.ts`, `test/agent/context.test.ts` |
+| Delegation | `test/tools/delegation/turn-protocol.test.ts`, `test/tools/delegation/chatgpt-service.test.ts`, `test/tools/delegation/delegated-agent-limit.test.ts`, `test/tools/delegation/store.test.ts` |
 | Resource adapters | `test/web-fetch.test.ts`, `test/peekaboo.test.ts`, image tests, and vendor binary smoke tests |
 
-`npm test` runs `test/*.test.ts`. `npm run typecheck` checks source and tests without emitting; `npm run lint` runs the root Biome configuration across the backend package, scripts, tests, and repository-owned config files while excluding `ui/**`. The UI package has its own Biome configuration and lint scripts. `npm run schemas` starts an isolated HTTP server on an ephemeral port, connects a real MCP client, and prints the configured `tools/list` schemas; optional tool-name arguments filter output. It does not restart production.
+`npm test` delegates test discovery to `tsx --test`, which uses Node's recursive test-runner conventions and recognizes TypeScript test files. Moving a unit suite into a feature folder therefore does not require another package-script edit. `npm run typecheck` checks source and tests without emitting; `npm run lint` runs the root Biome configuration across the backend package, scripts, tests, and repository-owned config files while excluding `ui/**`. The UI package has its own Biome configuration and lint scripts. `npm run schemas` starts an isolated HTTP server on an ephemeral port, connects a real MCP client, and prints the configured `tools/list` schemas; optional tool-name arguments filter output. It does not restart production.
 
 Integration tests cover modern MCP negotiation and legacy fallback, shared state across clients, startup gating and five-second instruction deduplication, static tool-group toggles, compact/structured results, owner binding on the first tool call, host rejection, and continued client use after an isolated server restart. Source `test/integrations/` owns exact coverage.
 

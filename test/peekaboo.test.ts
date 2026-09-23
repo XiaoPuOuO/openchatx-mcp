@@ -219,7 +219,7 @@ test("returns screenshot bytes and removes observation artifacts", async (t) => 
   const client = fakeClient({ FAKE_PEEKABOO_LOG: logPath })
   t.after(() => client.close())
 
-  const result = await client.observe(["--app", "Finder"], { annotate: true })
+  const result = await client.observe({ target: { kind: "app", app: "Finder" }, annotate: true })
 
   assert.equal(result.mimeType, "image/jpeg")
   assert.equal(Buffer.from(result.imageData, "base64").subarray(0, 3).toString("hex"), "ffd8ff")
@@ -253,12 +253,56 @@ test("preserves an exact requested app selector for later snapshot actions", asy
   })
   t.after(() => client.close())
 
-  const result = await client.observe(["--app", "PID:95973"], { annotate: false })
+  const result = await client.observe({
+    target: { kind: "app", app: "PID:95973" },
+    annotate: false,
+  })
 
   assert.deepEqual(result.target, {
     app: "PID:95973",
   })
   assert.deepEqual(client.getSnapshotTarget("snapshot-42"), result.target)
+})
+
+test("inspect owns target argv construction and propagates the target to its new snapshot", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "peekaboo-inspect-target-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const logPath = join(root, "calls.jsonl")
+  const client = fakeClient({
+    FAKE_PEEKABOO_LOG: logPath,
+    FAKE_PEEKABOO_APP_NAME: "Google Chrome",
+    FAKE_PEEKABOO_OMIT_OBSERVATION_TARGET: "1",
+  })
+  t.after(() => client.close())
+
+  await client.observe({
+    target: { kind: "app", app: "PID:95973" },
+    annotate: false,
+  })
+  const result = await client.inspect({
+    snapshotId: "snapshot-42",
+    maxDepth: 4,
+    maxElements: 20,
+    maxChildren: 10,
+  })
+
+  assert.equal((result.data as { snapshot_id?: string }).snapshot_id, "snapshot-inspect")
+  assert.deepEqual(client.getSnapshotTarget("snapshot-inspect"), { app: "PID:95973" })
+  const inspectArgs = startEvents(await readLog(logPath))[1]?.args
+  assert.deepEqual(inspectArgs, [
+    "see",
+    "--app",
+    "PID:95973",
+    "--tree",
+    "--no-screenshot",
+    "--depth",
+    "4",
+    "--max-elements",
+    "20",
+    "--max-children",
+    "10",
+    "--json",
+  ])
 })
 
 test("removes observation artifacts after a Peekaboo error", async (t) => {
@@ -271,13 +315,37 @@ test("removes observation artifacts after a Peekaboo error", async (t) => {
   })
   t.after(() => client.close())
 
-  const error = await peekabooRejection(client.observe(["--app", "Finder"], { annotate: false }))
+  const error = await peekabooRejection(
+    client.observe({ target: { kind: "app", app: "Finder" }, annotate: false })
+  )
   assert.equal(error.code, "FAKE_COMMAND_FAILED")
 
   const args = startEvents(await readLog(logPath))[0]?.args ?? []
   const screenshotPath = args[args.indexOf("--path") + 1]
   assert.ok(screenshotPath)
   await assert.rejects(access(screenshotPath))
+})
+
+test("uses typed screen observation intent to retain display bounds", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "peekaboo-observe-screen-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const logPath = join(root, "calls.jsonl")
+  const client = fakeClient({ FAKE_PEEKABOO_LOG: logPath })
+  t.after(() => client.close())
+
+  const result = await client.observe({
+    target: { kind: "screen", screenIndex: 1 },
+    annotate: false,
+  })
+
+  assert.deepEqual(result.target, {
+    kind: "screen",
+    screenIndex: 1,
+    bounds: { x: 1080, y: 1600, width: 1440, height: 900 },
+  })
+  const starts = startEvents(await readLog(logPath))
+  assert.deepEqual(starts[0]?.args.slice(0, 5), ["see", "--mode", "screen", "--screen-index", "1"])
+  assert.deepEqual(starts[1]?.args, ["screen", "list", "--json"])
 })
 
 interface FakeEvent {

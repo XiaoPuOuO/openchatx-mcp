@@ -1,8 +1,8 @@
 ---
 summary: "Model-facing conventions for tool names, routing descriptions, schemas, parameter descriptions, and compact outputs."
 paths:
-  - src/server/tool-registration-boundary.ts
-  - src/server/tool-output.ts
+  - src/mcp/tool-registration-boundary.ts
+  - src/mcp/tool-output.ts
   - src/tools/
 ---
 
@@ -140,7 +140,7 @@ The boundary currently strips validation details that add little useful informat
 
 Keep model-facing structure and constraints when they affect how the agent should plan or choose a value. In particular, preserve required/optional shape, types, enums, defaults, `maxItems`, numeric ceilings, and meaningful numeric ranges. A three-subagent `maxItems` limit changes planning; a 128-character ID ceiling usually does not.
 
-After pruning, the registration boundary recursively puts the remaining JSON Schema keywords in one LLM-oriented canonical order: meaning first (`description`), then shape (`type`/references), defaults and choices, structure, and retained validation constraints. Tool parameter order inside `properties` is preserved (`src/server/mcp-server.ts`, `src/server/tool-registration-boundary.ts`, `test/tool-registration-boundary.test.ts`, `test/integrations/server.ts`).
+After pruning, the registration boundary recursively puts the remaining JSON Schema keywords in one LLM-oriented canonical order: meaning first (`description`), then shape (`type`/references), defaults and choices, structure, and retained validation constraints. Tool parameter order inside `properties` is preserved (`src/mcp/server-factory.ts`, `src/mcp/tool-registration-boundary.ts`, `test/mcp/tool-schema-presentation.test.ts`, `test/integrations/mcp-runtime.ts`).
 
 ## Parameter Descriptions
 
@@ -163,7 +163,7 @@ Do not repeat information that remains visible in the advertised schema, such as
 
 ## Output Contracts
 
-Design the smallest stable result shape that lets the client decide what to do next. With the default `mcp.tool_output = "compact"`, the registration boundary strips ordinary public output schemas and renders ordinary typed results as compact Markdown. With `mcp.tool_output = "structured"`, it preserves the ordinary output schemas and native structured results. Computer Use and `image_view` keep their native MCP content blocks in either mode (`src/server/tool-registration-boundary.ts`).
+Design the smallest stable result shape that lets the client decide what to do next. With the default `mcp.tool_output = "compact"`, the registration boundary strips ordinary public output schemas and renders ordinary typed results as compact Markdown. With `mcp.tool_output = "structured"`, it preserves the ordinary output schemas and native structured results. Computer Use and `image_view` keep their native MCP content blocks in either mode (`src/mcp/tool-registration-boundary.ts`).
 
 Keep tool descriptions focused on routing. Result-shape details belong in native MCP schemas/content where retained, in compact output shaping, or in the wiki when callers need durable semantics.
 

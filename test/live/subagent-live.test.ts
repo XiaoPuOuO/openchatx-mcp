@@ -5,7 +5,7 @@ import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
-import { MCP_CONFIG } from "../../src/config.js"
+import { createChatGptDelegationService } from "../../src/tools/delegation/chatgpt-service.js"
 import { startMcpHttpServer } from "../integrations/helpers.js"
 
 const LIVE_TEST_ENABLED = process.env.RUN_LIVE_SUBAGENT_TESTS === "1" && !process.env.CI
@@ -71,18 +71,22 @@ test("live MCP subagent_run/subagent_result preserves response and context acros
   })
 
   try {
-    Object.assign(MCP_CONFIG.tools, {
-      review: false,
-      shell: false,
-      applyPatch: false,
-      clones: false,
-      subagents: true,
-      web: false,
-      skills: false,
-      image: false,
-      computer: false,
+    const running = await startMcpHttpServer({
+      chatGptDelegation: createChatGptDelegationService(),
+      profile: {
+        tools: {
+          review: false,
+          shell: false,
+          applyPatch: false,
+          clones: false,
+          subagents: true,
+          web: false,
+          skills: false,
+          image: false,
+          computer: false,
+        },
+      },
     })
-    const running = await startMcpHttpServer()
     t.after(() => running.close().catch(() => undefined))
 
     const client = new Client(

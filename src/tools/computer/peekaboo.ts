@@ -50,6 +50,38 @@ export interface PeekabooSnapshotTarget {
   }
 }
 
+export type PeekabooObservationTarget =
+  | { kind: "frontmost" }
+  | { kind: "screen"; screenIndex: number }
+  | { kind: "app"; app: string }
+  | { kind: "window"; windowId: number; app?: string }
+
+export interface PeekabooObservationRequest {
+  target: PeekabooObservationTarget
+  annotate: boolean
+  noWebFocus?: boolean
+}
+
+export interface PeekabooInspectRequest {
+  snapshotId: string
+  maxDepth: number
+  maxElements: number
+  maxChildren: number
+}
+
+export interface PeekabooExactWindowTarget {
+  app?: string
+  windowId: number
+}
+
+export interface PeekabooResolvedCoordinates {
+  x: number
+  y: number
+  global: boolean
+  targetArgs: string[]
+  exactWindowTarget?: PeekabooExactWindowTarget
+}
+
 export interface PeekabooClientOptions {
   executable?: string
   baseArgs?: string[]
@@ -98,27 +130,20 @@ export class PeekabooClient {
     return this.enqueue((requestSignal) => this.runNow(args, requestSignal), signal)
   }
 
-  observe(
-    args: string[],
-    options: { annotate: boolean },
-    signal?: AbortSignal
-  ): Promise<PeekabooObservation> {
-    return this.enqueue((requestSignal) => this.observeNow(args, options, requestSignal), signal)
+  observe(request: PeekabooObservationRequest, signal?: AbortSignal): Promise<PeekabooObservation> {
+    return this.enqueue((requestSignal) => this.observeNow(request, requestSignal), signal)
+  }
+
+  inspect(request: PeekabooInspectRequest, signal?: AbortSignal): Promise<PeekabooResult> {
+    return this.enqueue((requestSignal) => this.inspectNow(request, requestSignal), signal)
   }
 
   runWithFreshLocalWindowSnapshot(
-    target: Pick<PeekabooSnapshotTarget, "app" | "windowId">,
+    target: PeekabooExactWindowTarget,
     args: string[],
     signal?: AbortSignal
   ): Promise<PeekabooResult> {
     return this.enqueue(async (requestSignal) => {
-      if (target.windowId === undefined) {
-        throw new PeekabooError(
-          "SNAPSHOT_TARGET_MISSING",
-          "An exact window is required for this action."
-        )
-      }
-
       const directory = await mkdtemp(join(tmpdir(), "peekaboo-mcp-receipt-"))
       const requestedPath = join(directory, "capture.png")
 
@@ -150,6 +175,56 @@ export class PeekabooClient {
 
   getSnapshotTarget(snapshotId: string): PeekabooSnapshotTarget | undefined {
     return this.snapshots.get(snapshotId)
+  }
+
+  requireSnapshotTarget(snapshotId: string): PeekabooSnapshotTarget {
+    const target = this.snapshots.get(snapshotId)
+    if (target) return target
+    throw new PeekabooError(
+      "SNAPSHOT_TARGET_MISSING",
+      "The observation target is no longer available. Call computer_observe again."
+    )
+  }
+
+  requireExactWindowTarget(snapshotId: string, message: string): PeekabooExactWindowTarget {
+    const target = this.requireSnapshotTarget(snapshotId)
+    const exactWindow = exactWindowTarget(target)
+    if (exactWindow) return exactWindow
+    throw new PeekabooError("EXACT_WINDOW_REQUIRED", message)
+  }
+
+  resolveSnapshotCoordinates(
+    snapshotId: string,
+    x: number,
+    y: number
+  ): PeekabooResolvedCoordinates {
+    const target = this.requireSnapshotTarget(snapshotId)
+    const exactWindow = exactWindowTarget(target)
+    const needsGlobalCoordinates =
+      isScreenSnapshotTarget(target) || (target.windowId === undefined && !target.app)
+
+    if (!needsGlobalCoordinates) {
+      return {
+        x,
+        y,
+        global: false,
+        targetArgs: snapshotActionTargetArgs(target),
+        ...(exactWindow ? { exactWindowTarget: exactWindow } : {}),
+      }
+    }
+    if (!target.bounds) {
+      throw new PeekabooError(
+        "SNAPSHOT_BOUNDS_MISSING",
+        "The observation bounds are unavailable. Call computer_observe again."
+      )
+    }
+    return {
+      x: x + target.bounds.x,
+      y: y + target.bounds.y,
+      global: true,
+      targetArgs: snapshotActionTargetArgs(target),
+      ...(exactWindow ? { exactWindowTarget: exactWindow } : {}),
+    }
   }
 
   rememberSnapshotTarget(snapshotId: string, target: PeekabooSnapshotTarget): void {
@@ -187,23 +262,23 @@ export class PeekabooClient {
   }
 
   private async observeNow(
-    args: string[],
-    options: { annotate: boolean },
+    request: PeekabooObservationRequest,
     signal: AbortSignal
   ): Promise<PeekabooObservation> {
     const directory = await mkdtemp(join(tmpdir(), "peekaboo-mcp-"))
     const requestedPath = join(directory, "capture.png")
+    const args = observationRequestArgs(request)
 
     try {
       const result = await this.runNow(
-        ["see", ...args, "--path", requestedPath, ...(options.annotate ? ["--annotate"] : [])],
+        ["see", ...args, "--path", requestedPath, ...(request.annotate ? ["--annotate"] : [])],
         signal
       )
       const data = asRecord(result.data)
       const snapshotId = stringValue(data?.snapshot_id)
-      const target = await this.resolveObservationTarget(args, data, signal)
+      const target = await this.resolveObservationTarget(request.target, data, signal)
       if (snapshotId && target) this.rememberSnapshot(snapshotId, target)
-      const imagePath = screenshotPath(data, requestedPath, options.annotate)
+      const imagePath = screenshotPath(data, requestedPath, request.annotate)
 
       try {
         const image = await readFile(imagePath)
@@ -230,20 +305,49 @@ export class PeekabooClient {
     }
   }
 
+  private async inspectNow(
+    request: PeekabooInspectRequest,
+    signal: AbortSignal
+  ): Promise<PeekabooResult> {
+    const target = this.requireSnapshotTarget(request.snapshotId)
+    const result = await this.runNow(
+      [
+        "see",
+        ...snapshotObservationTargetArgs(target),
+        "--tree",
+        "--no-screenshot",
+        "--depth",
+        String(request.maxDepth),
+        "--max-elements",
+        String(request.maxElements),
+        "--max-children",
+        String(request.maxChildren),
+      ],
+      signal
+    )
+    const inspectedSnapshotId = stringValue(asRecord(result.data)?.snapshot_id)
+    if (inspectedSnapshotId) this.rememberSnapshot(inspectedSnapshotId, target)
+    return result
+  }
+
   private async resolveObservationTarget(
-    args: string[],
+    requestedTarget: PeekabooObservationTarget,
     data: Record<string, unknown> | undefined,
     signal: AbortSignal
   ): Promise<PeekabooSnapshotTarget | undefined> {
     let target = observationTarget(data)
-    const requestedApp = optionValue(args, "--app")
+    const requestedApp =
+      requestedTarget.kind === "app" || requestedTarget.kind === "window"
+        ? requestedTarget.app
+        : undefined
     if (requestedApp !== undefined && PID_APP_RE.test(requestedApp)) {
       target = {
         ...target,
         app: requestedApp,
       }
     }
-    const requestedWindowId = integerOption(args, "--window-id")
+    const requestedWindowId =
+      requestedTarget.kind === "window" ? requestedTarget.windowId : undefined
     if (requestedWindowId !== undefined && target?.windowId === undefined) {
       target = {
         ...target,
@@ -252,10 +356,9 @@ export class PeekabooClient {
       }
     }
 
-    const screenCapture =
-      target?.kind?.toLowerCase().includes("screen") || optionValue(args, "--mode") === "screen"
+    const screenCapture = isScreenSnapshotTarget(target) || requestedTarget.kind === "screen"
     if (screenCapture) {
-      const screenIndex = integerOption(args, "--screen-index") ?? 0
+      const screenIndex = requestedTarget.kind === "screen" ? requestedTarget.screenIndex : 0
       target = { ...target, kind: target?.kind ?? "screen", screenIndex }
       if (!target.bounds) {
         const screens = await this.runNow(["screen", "list"], signal)
@@ -495,16 +598,54 @@ function screenBounds(
   return rectangle(screen?.bounds)
 }
 
-function optionValue(args: string[], name: string): string | undefined {
-  const index = args.indexOf(name)
-  return index >= 0 ? args[index + 1] : undefined
+function observationRequestArgs(request: PeekabooObservationRequest): string[] {
+  const args: string[] = []
+  const target = request.target
+  if (target.kind === "frontmost") {
+    args.push("--mode", "frontmost")
+  } else if (target.kind === "screen") {
+    args.push("--mode", "screen", "--screen-index", String(target.screenIndex))
+  } else if (target.kind === "app") {
+    args.push("--app", target.app)
+  } else {
+    if (target.app) args.push("--app", target.app)
+    args.push("--window-id", String(target.windowId))
+  }
+  if (request.noWebFocus) args.push("--no-web-focus")
+  return args
 }
 
-function integerOption(args: string[], name: string): number | undefined {
-  const value = optionValue(args, name)
-  if (value === undefined) return undefined
-  const parsed = Number(value)
-  return Number.isInteger(parsed) ? parsed : undefined
+function isScreenSnapshotTarget(target: PeekabooSnapshotTarget | undefined): boolean {
+  return target?.kind?.toLowerCase().includes("screen") ?? false
+}
+
+function exactWindowTarget(target: PeekabooSnapshotTarget): PeekabooExactWindowTarget | undefined {
+  if (isScreenSnapshotTarget(target) || target.windowId === undefined) return undefined
+  return {
+    ...(target.app ? { app: target.app } : {}),
+    windowId: target.windowId,
+  }
+}
+
+function snapshotActionTargetArgs(target: PeekabooSnapshotTarget): string[] {
+  if (isScreenSnapshotTarget(target)) return []
+  if (target.windowId !== undefined) return ["--window-id", String(target.windowId)]
+  if (target.app) return ["--app", target.app]
+  return []
+}
+
+function snapshotObservationTargetArgs(target: PeekabooSnapshotTarget): string[] {
+  if (isScreenSnapshotTarget(target)) {
+    return ["--mode", "screen", "--screen-index", String(target.screenIndex ?? 0)]
+  }
+  if (target.windowId !== undefined) {
+    return [...(target.app ? ["--app", target.app] : []), "--window-id", String(target.windowId)]
+  }
+  if (target.app && target.windowTitle) {
+    return ["--app", target.app, "--window-title", target.windowTitle]
+  }
+  if (target.app) return ["--app", target.app]
+  return ["--mode", "frontmost"]
 }
 
 function stringValue(value: unknown): string | undefined {

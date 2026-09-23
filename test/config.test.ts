@@ -5,8 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
-// @ts-expect-error scripts are plain ESM entrypoints without declaration files.
-import { initializeShellbyConfig } from "../scripts/workspace-setup.mjs"
+import { initializeShellbyConfig } from "../scripts/workspace-setup.js"
 import { DEFAULT_PUBLIC_CONFIG, loadPublicConfig } from "../src/public-config.cjs"
 import { tempDir } from "./helpers/temp.js"
 

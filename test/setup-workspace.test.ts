@@ -3,10 +3,9 @@ import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test from "node:test"
 
-// @ts-expect-error scripts are plain ESM entrypoints without declaration files.
-import { initializeShellbyConfig, initializeWorkspace } from "../scripts/workspace-setup.mjs"
+import { initializeShellbyConfig, initializeWorkspace } from "../scripts/workspace-setup.js"
 import { loadPublicConfig } from "../src/public-config.cjs"
-import { SkillCatalog } from "../src/tools/skills.js"
+import { SkillCatalog } from "../src/tools/skills/skill-catalog.js"
 import { tempDir } from "./helpers/temp.js"
 
 test("workspace setup creates starter instructions and create-skill without overwriting either", async (t) => {

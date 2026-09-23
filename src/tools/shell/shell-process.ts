@@ -4,6 +4,10 @@ import { statSync } from "node:fs"
 import { isAbsolute } from "node:path"
 import process from "node:process"
 import { StringDecoder } from "node:string_decoder"
+import {
+  signalProcessGroup,
+  startProcessGroupTermination,
+} from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
 import { prepareShellCommand } from "./rtk.js"
 
@@ -154,7 +158,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
         })
         options.onUpdate()
       }
-      killProcessGroup(commandChild, "SIGKILL")
+      signalProcessGroup(commandChild, "SIGKILL")
       throw error
     }
 
@@ -174,7 +178,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     return new Promise<ShellProcessContext>((resolveContext, rejectContext) => {
       const timer = setTimeout(() => {
         if (contextCaptureState?.child === captureChild) contextCaptureState = null
-        killProcessGroup(captureChild, "SIGKILL")
+        signalProcessGroup(captureChild, "SIGKILL")
         rejectContext(
           new Error(
             `Shell context capture did not complete within ${MCP_CONFIG.shell.readyTimeoutMs}ms.`
@@ -291,7 +295,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     spawned.once("error", (error) => scheduleForcedFinalization(`spawn error: ${error.message}`))
     spawned.once("exit", (code, signal) => {
       scheduleForcedFinalization(signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`)
-      if (!stopReasons.has(spawned)) killProcessGroup(spawned, "SIGKILL")
+      if (!stopReasons.has(spawned)) signalProcessGroup(spawned, "SIGKILL")
     })
     spawned.once("close", (code, signal) => {
       if (finalizeTimer) clearTimeout(finalizeTimer)
@@ -308,7 +312,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Shell did not become ready within ${MCP_CONFIG.shell.readyTimeoutMs}ms.`))
-        killProcessGroup(spawned, "SIGKILL")
+        signalProcessGroup(spawned, "SIGKILL")
       }, MCP_CONFIG.shell.readyTimeoutMs)
 
       readyState = { child: spawned, marker, resolve, reject, timer }
@@ -319,7 +323,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
         clearTimeout(timer)
         readyState = null
         reject(error instanceof Error ? error : new Error(String(error)))
-        killProcessGroup(spawned, "SIGKILL")
+        signalProcessGroup(spawned, "SIGKILL")
       })
     })
     if (initialState === restoreState) initialState = null
@@ -512,7 +516,7 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     }
 
     if (!reason) {
-      killProcessGroup(finalizedChild, "SIGKILL")
+      signalProcessGroup(finalizedChild, "SIGKILL")
       if (!closed) {
         queueMicrotask(() => {
           if (closed) return
@@ -536,9 +540,11 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
   }
 
   async function stopChild(stoppedChild: ChildProcessWithoutNullStreams): Promise<void> {
-    killProcessGroup(stoppedChild, "SIGTERM")
-    await waitForExit(stoppedChild, MCP_CONFIG.shell.stopGraceMs)
-    killProcessGroup(stoppedChild, "SIGKILL")
+    const termination = startProcessGroupTermination(stoppedChild, {
+      graceMs: MCP_CONFIG.shell.stopGraceMs,
+      waitForExit: true,
+    })
+    await termination.completion
     if (!(await waitForChildClose(stoppedChild, MCP_CONFIG.shell.stopGraceMs)))
       finalizeChild(stoppedChild, "forced shutdown timeout")
   }
@@ -672,33 +678,6 @@ function writeToStdin(child: ChildProcessWithoutNullStreams, value: string): Pro
       else resolve()
     })
   })
-}
-
-function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true)
-
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      child.off("exit", onExit)
-      resolve(false)
-    }, timeoutMs)
-    const onExit = () => {
-      clearTimeout(timer)
-      resolve(true)
-    }
-    child.once("exit", onExit)
-  })
-}
-
-function killProcessGroup(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
-  if (!child.pid) return
-  try {
-    if (process.platform === "win32") child.kill(signal)
-    else process.kill(-child.pid, signal)
-  } catch {
-    // Process-group cleanup is best effort. A descendant with a different
-    // effective user can make killpg return EPERM on macOS.
-  }
 }
 
 function errorMessage(error: unknown): string {

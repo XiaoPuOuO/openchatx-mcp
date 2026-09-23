@@ -1,9 +1,9 @@
 import { Activity, PencilRuler, RefreshCw, Wifi, WifiOff } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { AgentCard } from "./components/AgentCard"
-import { RoomEditor } from "./components/RoomEditor"
 import { Button } from "./components/ui/button"
+import { RoomEditor } from "./features/agent-room/editor/RoomEditor"
+import { AgentCard } from "./features/dashboard/AgentCard"
 import { useAgents } from "./hooks/useAgents"
 
 export function App() {
