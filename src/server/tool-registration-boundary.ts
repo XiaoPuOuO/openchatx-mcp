@@ -228,7 +228,7 @@ export function installToolRegistrationBoundary(
     if (!nativeContent && !structuredOutput) config.outputSchema = undefined
     const inputSchema = config.inputSchema instanceof z.ZodType ? config.inputSchema : undefined
     const outputSchema = config.outputSchema instanceof z.ZodType ? config.outputSchema : undefined
-    canonicalizeStandardSchema(config.inputSchema)
+    canonicalizeStandardSchema(config.inputSchema, name !== START_HERE_TOOL_NAME)
     canonicalizeStandardSchema(config.outputSchema)
     const annotations = compactToolAnnotations(config.annotations)
     if (annotations === undefined) config.annotations = undefined
@@ -380,7 +380,7 @@ export function canonicalizeJsonSchema(value: unknown): unknown {
   return result
 }
 
-function canonicalizeStandardSchema(schema: unknown): void {
+function canonicalizeStandardSchema(schema: unknown, projectThenRun = false): void {
   if (!isRecord(schema) || canonicalizedSchemas.has(schema)) return
   const standard = schema["~standard"]
   if (!isStandardSchemaJsonSource(standard)) return
@@ -389,10 +389,27 @@ function canonicalizeStandardSchema(schema: unknown): void {
   const input = source.jsonSchema.input
   const output = source.jsonSchema.output
   source.jsonSchema = {
-    input: (options) => canonicalizeJsonSchema(input(options)),
+    input: (options) =>
+      projectThenRunSchema(canonicalizeJsonSchema(input(options)), projectThenRun),
     output: (options) => canonicalizeJsonSchema(output(options)),
   }
   canonicalizedSchemas.add(schema)
+}
+
+function projectThenRunSchema(schema: unknown, enabled: boolean): unknown {
+  if (!enabled || !isRecord(schema) || !isRecord(schema.properties)) return schema
+  const thenRun = schema.properties.then_run
+  if (!isRecord(thenRun)) return schema
+
+  schema.properties.then_run = {
+    ...(typeof thenRun.description === "string" ? { description: thenRun.description } : {}),
+    type: "object",
+    properties: {
+      "[toolName: string]": { type: ["object"] },
+    },
+    required: ["[toolName: string]"],
+  }
+  return schema
 }
 
 function shouldStripSchemaEntry(

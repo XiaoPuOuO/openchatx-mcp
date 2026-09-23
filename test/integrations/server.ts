@@ -86,9 +86,15 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       .then_run
     assert.equal(
       thenRun?.description,
-      "Next sequential tool call. May nest additional calls.",
+      "Exactly one entry. Key is the Shellby tool name; value is that tool's arguments. May nest then_run.",
       tool.name
     )
+    assert.equal(thenRun?.type, "object", tool.name)
+    assert.deepEqual(thenRun?.required, ["[toolName: string]"], tool.name)
+    const thenRunProperties = thenRun?.properties as
+      | Record<string, Record<string, unknown>>
+      | undefined
+    assert.deepEqual(thenRunProperties?.["[toolName: string]"]?.type, ["object"], tool.name)
   }
 
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")

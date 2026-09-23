@@ -3,9 +3,11 @@ import { z } from "zod"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 
 const THEN_RUN_SCHEMA = z
-  .unknown()
+  .record(z.string(), z.record(z.string(), z.unknown()))
   .optional()
-  .describe("Next sequential tool call. May nest additional calls.")
+  .describe(
+    "Exactly one entry. Key is the Shellby tool name; value is that tool's arguments. May nest then_run."
+  )
 
 export interface ThenRunCall {
   name: string
