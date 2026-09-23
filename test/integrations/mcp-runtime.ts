@@ -39,7 +39,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "subagent_result",
       "fetch_url",
       "skill_list",
-      "skill_load",
+      "skill_use",
       "image_view",
       "computer_list",
       "computer_observe",
@@ -192,7 +192,7 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
   const tools = await connected.client.listTools()
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
-    ["start_here", "skill_list", "skill_load"]
+    ["start_here", "skill_list", "skill_use"]
   )
   assert.equal(tools.tools.find((tool) => tool.name === "skill_list")?.outputSchema, undefined)
 })

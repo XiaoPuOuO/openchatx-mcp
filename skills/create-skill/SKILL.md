@@ -1,6 +1,6 @@
 ---
 name: create-skill
-description: Create or revise reusable Shellby MCP skills. Use when the user asks to create a skill, add a reusable agent workflow, improve an existing skill, or package repeatable instructions for skill_list and skill_load.
+description: Create or revise reusable Shellby MCP skills. Use when the user asks to create a skill, add a reusable agent workflow, improve an existing skill, or package repeatable instructions for skill_list and skill_use.
 ---
 
 # Create Skill
@@ -59,7 +59,7 @@ description: What the skill does and concrete requests that should trigger it.
 3. Capture only reusable instructions, constraints, domain knowledge, scripts, references, and assets needed for those requests.
 4. Create or update `<workspace>/skills/<name>/SKILL.md`.
 5. Use `skill_list` to verify discovery.
-6. Use `skill_load` to verify the complete instructions load correctly.
+6. Use `skill_use` to verify the complete instructions load correctly.
 7. Exercise complex skills on a realistic request when useful.
 
 ## Portability
@@ -78,4 +78,4 @@ Verify that:
 - referenced files exist;
 - scripts were tested when present;
 - `skill_list` shows the skill;
-- `skill_load` returns the expected instructions.
+- `skill_use` returns the expected instructions.

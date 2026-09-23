@@ -329,105 +329,113 @@ export function createShellProcess(options: ShellProcessOptions): ShellProcess {
     if (initialState === restoreState) initialState = null
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This parser advances mutually exclusive readiness, context-capture, and command marker states over a streaming buffer.
   function handleDecodedOutput(chunk: string): void {
     if (chunk.length === 0) return
     parserBuffer += chunk
 
     while (parserBuffer.length > 0) {
+      // Each consumer returns false when it needs another chunk to continue.
+      let canContinue: boolean
       if (readyState) {
-        const markerIndex = parserBuffer.indexOf(readyState.marker)
-        if (markerIndex < 0) {
-          flushSafePrefix(readyState.marker)
-          return
-        }
-
-        options.onIdleOutput(parserBuffer.slice(0, markerIndex))
-        parserBuffer = parserBuffer.slice(markerIndex + readyState.marker.length)
-        clearTimeout(readyState.timer)
-        const resolved = readyState
-        readyState = null
-        ready = true
-        resolved.resolve()
-        options.onUpdate()
-        continue
-      }
-
-      if (contextCaptureState) {
-        const context = contextCaptureState
-        if (!context.started) {
-          const markerIndex = parserBuffer.indexOf(context.startMarker)
-          if (markerIndex < 0) {
-            flushSafePrefix(context.startMarker)
-            return
-          }
-          options.onIdleOutput(parserBuffer.slice(0, markerIndex))
-          parserBuffer = parserBuffer.slice(markerIndex + context.startMarker.length)
-          context.started = true
-        }
-
-        const markerIndex = parserBuffer.indexOf(context.endMarker)
-        if (markerIndex < 0) {
-          flushContextCapturePrefix(context)
-          return
-        }
-
-        context.value += parserBuffer.slice(0, markerIndex)
-        parserBuffer = parserBuffer.slice(markerIndex + context.endMarker.length)
-        clearTimeout(context.timer)
-        contextCaptureState = null
-        try {
-          context.resolve(parseShellContext(context.value))
-        } catch (error) {
-          context.reject(error instanceof Error ? error : new Error(String(error)))
-        }
-        options.onUpdate()
-        continue
-      }
-
-      if (!activeCommand) {
+        canContinue = consumeReadyOutput(readyState)
+      } else if (contextCaptureState) {
+        canContinue = consumeContextOutput(contextCaptureState)
+      } else if (activeCommand) {
+        canContinue = consumeCommandOutput(activeCommand)
+      } else {
         options.onIdleOutput(parserBuffer)
         parserBuffer = ""
         return
       }
-
-      const command = activeCommand
-      const markerIndex = parserBuffer.indexOf(command.markerPrefix)
-      if (markerIndex < 0) {
-        flushSafePrefix(command.markerPrefix, command.onOutput)
-        return
-      }
-
-      const markerEnd = parserBuffer.indexOf("\u001f", markerIndex + command.markerPrefix.length)
-      if (markerEnd < 0) {
-        command.onOutput(parserBuffer.slice(0, markerIndex))
-        parserBuffer = parserBuffer.slice(markerIndex)
-        return
-      }
-
-      const markerPayload = parserBuffer.slice(markerIndex + command.markerPrefix.length, markerEnd)
-      const cwdSeparator = markerPayload.indexOf("\0")
-      const statusText = markerPayload.slice(0, cwdSeparator)
-      const parsedCwd = markerPayload.slice(cwdSeparator + 1)
-      const parsedStatus = Number.parseInt(statusText, 10)
-      if (
-        cwdSeparator < 1 ||
-        !INTEGER_TEXT_PATTERN.test(statusText) ||
-        !Number.isSafeInteger(parsedStatus) ||
-        !isAbsolute(parsedCwd)
-      ) {
-        const falsePrefixEnd = markerIndex + command.markerPrefix.length
-        command.onOutput(parserBuffer.slice(0, falsePrefixEnd))
-        parserBuffer = parserBuffer.slice(falsePrefixEnd)
-        continue
-      }
-
-      command.onOutput(parserBuffer.slice(0, markerIndex))
-      parserBuffer = parserBuffer.slice(markerEnd + 1)
-      currentCwd = parsedCwd
-      finishActiveCommand("completed", parsedStatus, parsedCwd)
-      options.onUpdate()
+      if (!canContinue) return
     }
+  }
+
+  function consumeReadyOutput(state: ReadyState): boolean {
+    const markerIndex = parserBuffer.indexOf(state.marker)
+    if (markerIndex < 0) {
+      flushSafePrefix(state.marker)
+      return false
+    }
+
+    options.onIdleOutput(parserBuffer.slice(0, markerIndex))
+    parserBuffer = parserBuffer.slice(markerIndex + state.marker.length)
+    clearTimeout(state.timer)
+    readyState = null
+    ready = true
+    state.resolve()
+    options.onUpdate()
+    return true
+  }
+
+  function consumeContextOutput(context: ContextCaptureState): boolean {
+    if (!context.started) {
+      const markerIndex = parserBuffer.indexOf(context.startMarker)
+      if (markerIndex < 0) {
+        flushSafePrefix(context.startMarker)
+        return false
+      }
+      options.onIdleOutput(parserBuffer.slice(0, markerIndex))
+      parserBuffer = parserBuffer.slice(markerIndex + context.startMarker.length)
+      context.started = true
+    }
+
+    const markerIndex = parserBuffer.indexOf(context.endMarker)
+    if (markerIndex < 0) {
+      flushContextCapturePrefix(context)
+      return false
+    }
+
+    context.value += parserBuffer.slice(0, markerIndex)
+    parserBuffer = parserBuffer.slice(markerIndex + context.endMarker.length)
+    clearTimeout(context.timer)
+    contextCaptureState = null
+    try {
+      context.resolve(parseShellContext(context.value))
+    } catch (error) {
+      context.reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    options.onUpdate()
+    return true
+  }
+
+  function consumeCommandOutput(command: ActiveCommandState): boolean {
+    const markerIndex = parserBuffer.indexOf(command.markerPrefix)
+    if (markerIndex < 0) {
+      flushSafePrefix(command.markerPrefix, command.onOutput)
+      return false
+    }
+
+    const markerEnd = parserBuffer.indexOf("\u001f", markerIndex + command.markerPrefix.length)
+    if (markerEnd < 0) {
+      command.onOutput(parserBuffer.slice(0, markerIndex))
+      parserBuffer = parserBuffer.slice(markerIndex)
+      return false
+    }
+
+    const markerPayload = parserBuffer.slice(markerIndex + command.markerPrefix.length, markerEnd)
+    const cwdSeparator = markerPayload.indexOf("\0")
+    const statusText = markerPayload.slice(0, cwdSeparator)
+    const parsedCwd = markerPayload.slice(cwdSeparator + 1)
+    const parsedStatus = Number.parseInt(statusText, 10)
+    if (
+      cwdSeparator < 1 ||
+      !INTEGER_TEXT_PATTERN.test(statusText) ||
+      !Number.isSafeInteger(parsedStatus) ||
+      !isAbsolute(parsedCwd)
+    ) {
+      const falsePrefixEnd = markerIndex + command.markerPrefix.length
+      command.onOutput(parserBuffer.slice(0, falsePrefixEnd))
+      parserBuffer = parserBuffer.slice(falsePrefixEnd)
+      return true
+    }
+
+    command.onOutput(parserBuffer.slice(0, markerIndex))
+    parserBuffer = parserBuffer.slice(markerEnd + 1)
+    currentCwd = parsedCwd
+    finishActiveCommand("completed", parsedStatus, parsedCwd)
+    options.onUpdate()
+    return true
   }
 
   function flushSafePrefix(marker: string, onOutput?: (chunk: string) => void): void {

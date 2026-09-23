@@ -29,7 +29,7 @@
       "fingerprint": "sha256:ca62a85db76821a89f2734733eaffd8f1c8b61f072a8a99b8666d299702de988"
     },
     "pages/persistent-shell-runtime.md": {
-      "fingerprint": "sha256:bba7be3b67e497435a5440f868d4ff5c2ee485cd3422b9ea89175dd5b962be23"
+      "fingerprint": "sha256:0c3b8025cd096656dfaac0d3e80cd5fc3a684eb84bb08f3222f8706f26ea379a"
     },
     "pages/project/open-questions-and-risks.md": {
       "fingerprint": "sha256:8949ec9384a8d989c5457903e00872edb03ca68b1f0e5e4760655afa1dcf4f62"
@@ -47,7 +47,7 @@
       "fingerprint": "sha256:4202ba62a9c6246565fa3d12b590cf603e84a4a832bcd0d055f9b379363d898a"
     },
     "pages/tool-naming-and-schema-design.md": {
-      "fingerprint": "sha256:33ec763cc2a57793bd0b43c1836c8adf233658d196fec64692ca181f08f08e80"
+      "fingerprint": "sha256:b474bd134e7ef6bbf10e558c2b5df93ff5de549fc7cff527fd1177bc38913e7c"
     },
     "pages/tools/apply-patch.md": {
       "fingerprint": "sha256:4c3406a671f3e6ef42bb9ea185d1efa482044a14a034d81c39452b4b47853d1e"
@@ -65,7 +65,7 @@
       "fingerprint": "sha256:29873370ac262a65256bb829fcccc8d5a21c7b61e503acfc3c3837334d0cc588"
     },
     "pages/workspace-tooling.md": {
-      "fingerprint": "sha256:9c237b2da041c2060bca5e484949d40b73f64cee6a43d72df3b3f37ec3e8f0c6"
+      "fingerprint": "sha256:b0972959f0badb15ad79dc1776bd2c6dd817d636ee7baa53ad5a1cdb78d3cbe8"
     }
   }
 }

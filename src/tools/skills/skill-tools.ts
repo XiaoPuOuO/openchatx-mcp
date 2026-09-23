@@ -50,7 +50,7 @@ export function registerSkillTools(server: McpServer): void {
   )
 
   server.registerTool(
-    "skill_load",
+    "skill_use",
     {
       description: "Load a skill's instructions, then follow them using the appropriate tools.",
       inputSchema: z.object({

@@ -175,8 +175,8 @@ test("suppresses rapid duplicate skill loads for the same agent", {
   })
 
   const simultaneous = await Promise.all([
-    connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
-    connected.client.callTool({ name: "skill_load", arguments: { name: "cooldown-skill" } }),
+    connected.client.callTool({ name: "skill_use", arguments: { name: "cooldown-skill" } }),
+    connected.client.callTool({ name: "skill_use", arguments: { name: "cooldown-skill" } }),
   ])
   const simultaneousText = simultaneous.map(toolText)
   assert.equal(simultaneousText.filter((text) => /Full instructions\./u.test(text)).length, 1)
@@ -186,17 +186,17 @@ test("suppresses rapid duplicate skill loads for the same agent", {
   )
 
   const duplicate = await connected.client.callTool({
-    name: "skill_load",
+    name: "skill_use",
     arguments: { name: "cooldown-skill" },
   })
   assert.match(toolText(duplicate), /loaded recently by this agent/u)
 
   const firstMissing = await connected.client.callTool({
-    name: "skill_load",
+    name: "skill_use",
     arguments: { name: "missing-skill" },
   })
   const retryMissing = await connected.client.callTool({
-    name: "skill_load",
+    name: "skill_use",
     arguments: { name: "missing-skill" },
   })
   assert.match(toolText(firstMissing), /unknown_skill/u)

@@ -14,4 +14,4 @@
 - [Subagents](./pages/subagents/index.md) — Browser-backed ChatGPT subagent architecture, completion, recovery, and private ChatGPT transport behavior.
 - [Tool Naming and Schema Design](./pages/tool-naming-and-schema-design.md) — Model-facing conventions for tool names, routing descriptions, schemas, parameter descriptions, and compact outputs.
 - [Tools](./pages/tools/index.md) — Caller-facing contracts for shell execution, patching, browser delegation, clones, and resource fetching.
-- [Workspace Tooling](./pages/workspace-tooling.md) — Default coding workspace behavior and the dynamic reusable-skill catalog exposed through skill_list and skill_load.
+- [Workspace Tooling](./pages/workspace-tooling.md) — Default coding workspace behavior and the dynamic reusable-skill catalog exposed through skill_list and skill_use.

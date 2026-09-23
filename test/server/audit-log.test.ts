@@ -309,7 +309,7 @@ test("audits batched tool calls independently", async (t) => {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
-      params: { name: "skill_load", arguments: { name: "second" } },
+      params: { name: "skill_use", arguments: { name: "second" } },
     },
   ])
   assert.equal(calls.length, 2)
@@ -331,7 +331,7 @@ test("audits batched tool calls independently", async (t) => {
   assert.match(
     log,
     new RegExp(
-      `! skill_load - 0ms - ${countTokens(JSON.stringify({ name: "second" }))} in / ${countTokens(secondOutput)} out - Aug 14 12:30 AM`
+      `! skill_use - 0ms - ${countTokens(JSON.stringify({ name: "second" }))} in / ${countTokens(secondOutput)} out - Aug 14 12:30 AM`
     )
   )
 })
@@ -561,13 +561,13 @@ test("caps large ordinary tool arguments", async (t) => {
   )
   const [call] = claimAuditToolCalls(logger, {
     method: "tools/call",
-    params: { name: "skill_load", arguments: { name: "x".repeat(2_000) } },
+    params: { name: "skill_use", arguments: { name: "x".repeat(2_000) } },
   })
   assert.ok(call)
   call.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /^--- # skill_load - 0ms - \d+ in - Aug 7 10:00 PM\nargs: "/u)
+  assert.match(log, /^--- # skill_use - 0ms - \d+ in - Aug 7 10:00 PM\nargs: "/u)
   assert.match(log, /chars omitted/u)
   assert.ok(log.length < 800)
 })

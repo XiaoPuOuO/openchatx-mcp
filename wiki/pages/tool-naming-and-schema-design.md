@@ -26,7 +26,7 @@ Prefer:
 <domain>_<specific action>
 ```
 
-Examples: `skill_list`, `skill_load`, `shell_run`, `shell_poll`, `computer_click`.
+Examples: `skill_list`, `skill_use`, `shell_run`, `shell_poll`, `computer_click`.
 
 Use concrete conventional verbs such as `list`, `load`, `read`, `fetch`, `run`, `poll`, `create`, `delete`, `reset`, and `close`. Avoid vague verbs such as `use`, `manage`, `handle`, or `process` when a precise action exists.
 

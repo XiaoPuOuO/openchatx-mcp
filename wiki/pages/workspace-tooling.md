@@ -1,5 +1,5 @@
 ---
-summary: "Default coding workspace behavior and the dynamic reusable-skill catalog exposed through skill_list and skill_load."
+summary: "Default coding workspace behavior and the dynamic reusable-skill catalog exposed through skill_list and skill_use."
 paths:
   - src/tools/skills/skill-tools.ts
   - src/tools/skills/skill-catalog.ts
@@ -26,17 +26,17 @@ This page documents the configured coding workspace and dynamic skill catalog.
 
 ## Workspace Skills
 
-Reusable agent workflows live under `<workspace>/skills/<name>/SKILL.md`. `src/tools/skills/skill-catalog.ts` owns filesystem discovery, name validation, frontmatter descriptions, symlink-compatible lookup, and the byte ceiling. `src/tools/skills/skill-tools.ts` is the MCP adapter: `skill_list` scans through the catalog and `skill_load` returns complete instructions plus the local `SKILL.md` path. The catalog validates names at its own boundary, so direct callers do not depend on MCP-schema validation for path safety.
+Reusable agent workflows live under `<workspace>/skills/<name>/SKILL.md`. `src/tools/skills/skill-catalog.ts` owns filesystem discovery, name validation, frontmatter descriptions, symlink-compatible lookup, and the byte ceiling. `src/tools/skills/skill-tools.ts` is the MCP adapter: `skill_list` scans through the catalog and `skill_use` returns complete instructions plus the local `SKILL.md` path. The catalog validates names at its own boundary, so direct callers do not depend on MCP-schema validation for path safety.
 
 Repeated loads of the same skill by the same `AgentIdentity` within five seconds reuse the pending load and return a short reuse notice; failed loads remain retryable. `src/agent/load-deduper.ts` owns this per-agent load pattern and is also used by `start_here`. Callers without session identity are not deduplicated. Skills are dynamic data rather than MCP schema entries, so adding or removing a skill does not require rebuilding the server (`src/tools/skills/skill-catalog.ts`, `src/tools/skills/skill-tools.ts`, `src/agent/load-deduper.ts`, `src/mcp/server-factory.ts`).
 
 The maintainer workspace catalog is intentionally not enumerated here because it is dynamic and can change without a Shellby rebuild. Directory symlinks are supported, so selected shared skills can stay single-sourced while still appearing under `<workspace>/skills` (`src/tools/skills/skill-catalog.ts`, `test/tools/skills/skill-catalog.test.ts`).
 
-Skill names may begin with an alphanumeric character or underscore and may otherwise contain letters, numbers, dots, underscores, and hyphens. A leading underscore can be used for workspace-local skills such as `_web-search`. The restricted character set prevents path traversal while still allowing a named workspace entry to be a symlink. `SKILL.md` is capped at 256 KiB; broken or oversized entries are omitted from `skill_list`, while direct `skill_load` calls return explicit errors (`src/tools/skills/skill-catalog.ts`, `src/tools/skills/skill-tools.ts`, `test/tools/skills/skill-catalog.test.ts`).
+Skill names may begin with an alphanumeric character or underscore and may otherwise contain letters, numbers, dots, underscores, and hyphens. A leading underscore can be used for workspace-local skills such as `_web-search`. The restricted character set prevents path traversal while still allowing a named workspace entry to be a symlink. `SKILL.md` is capped at 256 KiB; broken or oversized entries are omitted from `skill_list`, while direct `skill_use` calls return explicit errors (`src/tools/skills/skill-catalog.ts`, `src/tools/skills/skill-tools.ts`, `test/tools/skills/skill-catalog.test.ts`).
 
 ## Skill Bootstrap Boundary
 
-`skills/create-skill/SKILL.md` is repository-owned bootstrap source, while `<workspace>/skills/create-skill/SKILL.md` becomes workspace-owned state after the first setup copy. Runtime discovery scans only `<workspace>/skills`; repository-level skill files do not enter `skill_list` or `skill_load` unless setup or another explicit mechanism places them there (`scripts/workspace-setup.ts`, `skills/create-skill/SKILL.md`, `src/tools/skills/skill-catalog.ts`).
+`skills/create-skill/SKILL.md` is repository-owned bootstrap source, while `<workspace>/skills/create-skill/SKILL.md` becomes workspace-owned state after the first setup copy. Runtime discovery scans only `<workspace>/skills`; repository-level skill files do not enter `skill_list` or `skill_use` unless setup or another explicit mechanism places them there (`scripts/workspace-setup.ts`, `skills/create-skill/SKILL.md`, `src/tools/skills/skill-catalog.ts`).
 
 ## Related
 

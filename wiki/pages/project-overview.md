@@ -16,3 +16,5 @@ Shellby MCP is a local macOS agent harness that gives ChatGPT Web stateful, high
 - Prefer functional typescript over class-based when it improves readability and maintainability.
 - Follow the Agile principle of adapting to new information: keep major software design decisions changeable as the build progresses.
 - For larger problems, use problem decomposition: dividing a complex problem into smaller, independently completable outcomes.
+
+Follow the coding principles in the `coding-principles` skill.
