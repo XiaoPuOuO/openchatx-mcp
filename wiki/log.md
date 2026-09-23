@@ -25,3 +25,7 @@ Recreating PM2 on every restart broke restarts requested through Shellby's own s
 ## 2026-09-13 — State directory is intended for simultaneous repository copies
 
 The operator clarified that `state_dir` exists so a copied repository can run as a separate MCP alongside the original. Storage separation alone did not meet that intent: MCP, ngrok's local API, and Chrome also need separate ports, and independent remote connectors need distinct public endpoints. Keep lifecycle commands scoped to the configured PM2 home and prevent health checks or URL discovery from accepting the other copy. Local-only copies can disable ngrok entirely.
+
+## 2026-09-22 — Subagent failures preserve the caller abstraction
+
+A real `BROWSER_UNAVAILABLE` response caused the calling agent to rewrite the delegated prompt around Chrome even though the prompt was unrelated to the infrastructure failure. Caller-facing subagent errors now hide browser, authentication, and UI implementation details and return recovery guidance at the subagent-service level. Keep backend-specific diagnostics internal so callers respond to delegation availability instead of attempting to repair the hidden transport through prompt changes.

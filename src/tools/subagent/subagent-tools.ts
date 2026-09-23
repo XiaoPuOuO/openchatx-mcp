@@ -10,6 +10,10 @@ import {
 } from "./chatgpt-subagent-contracts.js"
 
 const SUBAGENT_RUN_DELAYS_MS = [1_000, 5_000, 7_000] as const
+const SUBAGENT_UNAVAILABLE_ERROR =
+  "SUBAGENT_UNAVAILABLE: The subagent service is temporarily unavailable. Retry the same subagent call once. If it fails again, continue without delegation. Do not change the task or prompt as a workaround."
+const SUBAGENT_FAILED_ERROR =
+  "subagent_failed: The subagent failed unexpectedly. Continue the task without delegation."
 
 const subagentInputSchema = z.object({
   agent_id: z
@@ -180,7 +184,7 @@ export function registerSubagentTools(
               response: result.response,
               error:
                 result.status === "failed"
-                  ? `${result.errorCode ?? "subagent_failed"}: ${result.errorMessage ?? "ChatGPT subagent turn failed."}`
+                  ? subagentFailureText(result.errorCode, result.errorMessage)
                   : undefined,
             }
           } catch (error) {
@@ -211,8 +215,28 @@ function runFailure(agentId: string, error: unknown): z.infer<typeof subagentRun
 
 function subagentErrorText(error: unknown): string {
   return error instanceof ChatGptSubagentError
-    ? `${error.code}: ${error.message}`
-    : `subagent_failed: ${error instanceof Error ? error.message : String(error)}`
+    ? subagentFailureText(error.code, error.message)
+    : SUBAGENT_FAILED_ERROR
+}
+
+function subagentFailureText(code: string | undefined, message: string | undefined): string {
+  switch (code) {
+    case "BROWSER_UNAVAILABLE":
+    case "CHATGPT_NOT_AUTHENTICATED":
+    case "CHATGPT_UI_CHANGED":
+      return SUBAGENT_UNAVAILABLE_ERROR
+    case "SUBAGENT_RATE_LIMITED":
+      return "SUBAGENT_RATE_LIMITED: New subagent turns are temporarily rate limited. Existing turns remain available through subagent_result. Do not retry automatically."
+    case "AGENT_TARGET_LOST":
+      return "AGENT_TARGET_LOST: The subagent's execution state is no longer available. Start a new subagent with a new agent_id if delegation is still needed."
+    case "REQUEST_ABORTED":
+      return "REQUEST_ABORTED: The subagent request was cancelled. A submitted turn will not be retried automatically."
+    case undefined:
+    case "subagent_failed":
+      return SUBAGENT_FAILED_ERROR
+    default:
+      return `${code}: ${message ?? "Subagent turn failed."}`
+  }
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

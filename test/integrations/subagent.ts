@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { type AgentIdentity, getAgentIdentity } from "../../src/server/agent-context.js"
-import type { ChatGptSubagentService } from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
+import {
+  ChatGptSubagentError,
+  type ChatGptSubagentService,
+} from "../../src/tools/subagent/chatgpt-subagent-contracts.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("delivers a completed subagent event on the next MCP response exactly once", {
@@ -88,7 +91,12 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
 
   const chatGptSubagents: ChatGptSubagentService = {
     async ask({ agentId, prompt }, context) {
-      if (agentId === "unavailable-agent") throw new Error("browser unavailable")
+      if (agentId === "unavailable-agent") {
+        throw new ChatGptSubagentError(
+          "BROWSER_UNAVAILABLE",
+          "Expected an already-running debuggable Chrome instance at http://127.0.0.1:9222."
+        )
+      }
       assert.ok(context.signal)
       starts.push({ agentId, at: Date.now(), parentAgent: getAgentIdentity() })
       const history = histories.get(agentId) ?? []
@@ -117,8 +125,17 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
             activityAgeMs: 2_750,
           }
         }
+        if (turnId === "backend-failure") {
+          return {
+            turnId,
+            status: "failed",
+            errorCode: "BROWSER_UNAVAILABLE",
+            errorMessage: "Chrome disconnected while observing the turn.",
+          }
+        }
         const response = completed.get(turnId)
-        if (!response) throw new Error(`unknown turn ${turnId}`)
+        if (!response)
+          throw new ChatGptSubagentError("UNKNOWN_TURN", `Unknown agent turn: ${turnId}`)
         return { turnId, status: "completed", response }
       } finally {
         activePolls -= 1
@@ -204,7 +221,7 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
       "",
       "---- turn_id=missing-turn status=failed ----",
       "",
-      "subagent_failed: unknown turn missing-turn",
+      "UNKNOWN_TURN: Unknown agent turn: missing-turn",
     ].join("\n")
   )
 
@@ -234,6 +251,22 @@ test("runs staggered subagents and retrieves turns across MCP client sessions", 
   })
   assert.equal(
     toolText(failedStart),
-    'turns:\n\n- agent_id=unavailable-agent status=failed error="subagent_failed: browser unavailable"'
+    [
+      "turns:",
+      "",
+      "- agent_id=unavailable-agent status=failed",
+      "",
+      "  error:",
+      "    SUBAGENT_UNAVAILABLE: The subagent service is temporarily unavailable. Retry the same subagent call once. If it fails again, continue without delegation. Do not change the task or prompt as a workaround.",
+    ].join("\n")
+  )
+
+  const failedResult = await second.client.callTool({
+    name: "subagent_result",
+    arguments: { turn_ids: ["backend-failure"], wait_ms: 0 },
+  })
+  assert.equal(
+    toolText(failedResult),
+    "---- turn_id=backend-failure status=failed ----\n\nSUBAGENT_UNAVAILABLE: The subagent service is temporarily unavailable. Retry the same subagent call once. If it fails again, continue without delegation. Do not change the task or prompt as a workaround."
   )
 })
