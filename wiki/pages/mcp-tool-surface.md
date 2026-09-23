@@ -7,6 +7,7 @@ paths:
   - src/mcp/tool-registration-boundary.ts
   - src/mcp/tool-schema-presentation.ts
   - src/mcp/tool-output.ts
+  - src/tools/file/
   - src/tools/start-here/
   - src/tools/review/
 ---
@@ -31,11 +32,13 @@ Prompt loading returns `shared.md` first, then the selected mode. Contents are r
 
 `src/mcp/tool-schema-presentation.ts` owns model-facing JSON Schema projection, redundant annotation pruning, compact-output schema visibility, and native-content exceptions while retaining Zod runtime validation. `src/mcp/tool-registration-boundary.ts` owns runtime dispatch concerns: startup gating, nested `then_run`, output validation/projection, audit/observer lifecycle, and post-call notices. [Tool Naming and Schema Design](./tool-naming-and-schema-design.md) owns rationale and projection caveats.
 
-With `mcp.tool_output = "compact"`, ordinary tools omit public output schemas and render typed results through `src/mcp/tool-output.ts`. Structured mode preserves native structured results and output schemas. `computer_*` and `image_view` preserve native MCP content in either mode. Compact nested records use readable blocks; unusual array shapes may use minified JSON. Multi-result text uses `---- metadata ----` separators.
+With `mcp.tool_output = "compact"`, ordinary tools omit public output schemas and render typed results through `src/mcp/tool-output.ts`. Structured mode preserves native structured results and output schemas. `computer_*`, `image_view`, and `file_read` preserve native MCP content in either mode. Compact nested records use readable blocks; unusual array shapes may use minified JSON. Multi-result text uses `---- metadata ----` separators.
 
 After handler completion, the boundary appends file-edit guidance, queued delegated-turn events, human steering, and the optional review notice. Thrown handlers do not drain these notices. Audit receives the original result and final model projection directly; see [Audit Logging](./operations/audit-logging.md).
 
 `submit_review` stores feedback in local `.shellby/reviews.jsonl`. Its process-local tracker asks once after sustained tool use by a session. Source `src/tools/review/review-tool.ts` owns threshold and rating schema; this feedback experiment is separate from authorization and runtime correctness.
+
+Error results carrying an explicit `structuredContent.error_code` preserve that metadata in compact output. When a nested `then_run` fails with an explicit error code, the merged result carries that code and `isError: true` while retaining prior content.
 
 ## Capability Routes
 
@@ -48,6 +51,7 @@ After handler completion, the boundary appends file-edit guidance, queued delega
 | Workspace skills | [Workspace Tooling](./workspace-tooling.md) | `src/tools/skills/skill-tools.ts` |
 | Computer interaction | [Computer Use](./computer-use.md) | `src/tools/computer/` |
 | Local images | Shared Sharp encoder preserves dimensions, lowers JPEG quality to fit its byte budget, and fails rather than resizing. | `src/tools/image/` |
+| File transfer | `file_read` returns local bytes as embedded MCP resource content; `file_write` consumes an OpenAI file input and writes its downloaded bytes to a local path. | `src/tools/file/file-tools.ts` |
 
 ## Related
 

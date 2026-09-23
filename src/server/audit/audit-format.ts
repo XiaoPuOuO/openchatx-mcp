@@ -123,6 +123,8 @@ function formatArguments(
   switch (toolName) {
     case "apply_patch":
       return formatApplyPatchArguments(argumentsRecord, toolFailed, failureMessage)
+    case "file_write":
+      return formatFileWriteArguments(argumentsRecord, toolFailed, failureMessage)
     case "shell_run":
       return formatShellRunArguments(argumentsRecord, toolFailed, failureMessage)
     case "shell_poll":
@@ -130,6 +132,23 @@ function formatArguments(
     default:
       return formatGenericArguments(value)
   }
+}
+
+function formatFileWriteArguments(
+  argumentsRecord: Record<string, unknown>,
+  toolFailed: boolean,
+  failureMessage?: string
+): string {
+  const file = asRecord(argumentsRecord.file)
+  const fields = [
+    typeof argumentsRecord.path === "string" ? `path: ${yamlString(argumentsRecord.path)}` : "",
+    file && typeof file.file_id === "string" ? `file_id: ${yamlString(file.file_id)}` : "",
+    file && typeof file.file_name === "string" ? `file_name: ${yamlString(file.file_name)}` : "",
+    file && typeof file.mime_type === "string" ? `mime_type: ${yamlString(file.mime_type)}` : "",
+  ].filter(Boolean)
+  if (toolFailed && failureMessage)
+    fields.push(`message: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`)
+  return fields.join("\n")
 }
 
 function formatApplyPatchArguments(
@@ -274,17 +293,24 @@ function serializeModelFacingToolResult(value: Record<string, unknown>): string 
   const parts: string[] = []
   if (Array.isArray(value.content)) {
     for (const item of value.content) {
-      const record = asRecord(item)
-      if (!record) continue
-      if (record.type === "text" && typeof record.text === "string") {
-        parts.push(record.text)
-      } else if (record.type !== "image") {
-        parts.push(JSON.stringify(record))
-      }
+      const serialized = serializeModelFacingContentItem(item)
+      if (serialized !== undefined) parts.push(serialized)
     }
   }
   if (value.structuredContent !== undefined) parts.push(JSON.stringify(value.structuredContent))
   return parts.length > 0 ? parts.join("\n") : undefined
+}
+
+function serializeModelFacingContentItem(value: unknown): string | undefined {
+  const record = asRecord(value)
+  if (!record) return undefined
+  if (record.type === "text" && typeof record.text === "string") return record.text
+  if (record.type === "image" || record.type === "audio") return undefined
+  if (record.type === "resource") {
+    const resource = asRecord(record.resource)
+    if (resource && typeof resource.blob === "string") return undefined
+  }
+  return JSON.stringify(record)
 }
 
 function indentBlock(content: string): string {

@@ -84,6 +84,60 @@ test("logs shell output token count", async (t) => {
   assert.match(log, /result: status="completed" exit_code=0 cwd="\/workspace"/u)
 })
 
+test("does not persist file download URLs or tokenize embedded file blobs", async (t) => {
+  const file = await auditFile(t)
+  const logger = new McpAuditLogger(
+    file,
+    () => new Date(2026, 8, 22, 20, 0, 0),
+    () => 0
+  )
+
+  const [writeCall] = claimAuditToolCalls(logger, {
+    method: "tools/call",
+    params: {
+      name: "file_write",
+      arguments: {
+        file: {
+          download_url: "https://files.example.test/secret-token",
+          file_id: "file_123",
+          file_name: "payload.bin",
+          mime_type: "application/octet-stream",
+        },
+        path: "/tmp/payload.bin",
+      },
+    },
+  })
+  assert.ok(writeCall)
+  writeCall.finish({ modelResult: { content: [{ type: "text", text: "Wrote payload.bin." }] } })
+
+  const [readCall] = claimAuditToolCalls(logger, {
+    method: "tools/call",
+    params: { name: "file_read", arguments: { path: "/tmp/payload.bin" } },
+  })
+  assert.ok(readCall)
+  readCall.finish({
+    modelResult: {
+      content: [
+        {
+          type: "resource",
+          resource: {
+            uri: "file:///tmp/payload.bin",
+            mimeType: "application/octet-stream",
+            blob: "A".repeat(10_000),
+          },
+        },
+      ],
+    },
+  })
+
+  const log = await readFile(file, "utf8")
+  assert.doesNotMatch(log, /secret-token/u)
+  assert.doesNotMatch(log, /A{100}/u)
+  assert.match(log, /file_id: "file_123"/u)
+  assert.match(log, /file_name: "payload.bin"/u)
+  assert.match(log, /--- # file_read - 0ms - \d+ in - Sep 22 8:00 PM/u)
+})
+
 test("puts audit heading before entry details with time last", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(

@@ -22,6 +22,12 @@ HTML uses the CloakBrowser render path and can return Markdown, cleaned HTML, or
 - Unsupported binary types fail explicitly.
 - Empty 204/205 responses and declared zero-length responses retain HTTP metadata, including bodyless HTTP errors Chromium would otherwise treat as failed navigation.
 
+## Error Classification
+
+Handled fetch failures return `isError: true` and `structuredContent.error_code` alongside the detailed text. Chromium navigation failures with `ERR_CONNECTION_REFUSED` return `CONNECTION_REFUSED`; other unclassified runtime failures return `OPEN_FAILED`. Invalid URLs and cursors retain argument-validation semantics, with handled `invalid_url` and `invalid_cursor` errors mapped to `INVALID_ARGUMENT`. Other known fetch errors retain their uppercase code, including `CURSOR_EXPIRED`, `RESOURCE_TOO_LARGE`, and `UNSUPPORTED_CONTENT_TYPE`.
+
+Compact output preserves explicit structured error codes, and `then_run` propagates a nested error code to the overall failed result. HTTP response statuses, including 404 and 500, remain response metadata. No automatic retry is introduced.
+
 ## Retention and Pagination
 
 Raw non-HTML bodies have a separate byte ceiling from extracted text documents. Text documents are process-local and bounded by size, count, and TTL in `MCP_CONFIG.web`; these remain code-owned limits. Cursors address retained documents. Cursor reads tokenize a bounded local character window, so unusually compressible text can return less than the requested token ceiling while pagination still reconstructs retained content.

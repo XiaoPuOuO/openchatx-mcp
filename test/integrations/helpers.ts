@@ -31,6 +31,8 @@ const TEST_TOOLS = {
   review: true,
   shell: true,
   applyPatch: true,
+  fileRead: true,
+  fileWrite: true,
   clones: true,
   subagents: true,
   web: true,

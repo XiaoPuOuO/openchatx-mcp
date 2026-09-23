@@ -19,7 +19,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(connected.client.getDiscoverResult())
 
   const tools = await connected.client.listTools()
-  for (const tool of tools.tools) {
+  for (const tool of tools.tools.filter((tool) => tool.name !== "file_write")) {
     assert.equal(tool.title, undefined)
     assert.equal((tool as unknown as Record<string, unknown>)._meta, undefined)
   }
@@ -30,6 +30,8 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "shell_run",
       "shell_poll",
       "apply_patch",
+      "file_read",
+      "file_write",
       "shell_reset",
       "shell_list",
       "shell_close",
@@ -83,9 +85,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
+  const fileWrite = tools.tools.find((tool) => tool.name === "file_write")
   const subagentResult = tools.tools.find((tool) => tool.name === "subagent_result")
   const computerDrag = tools.tools.find((tool) => tool.name === "computer_drag")
-  assert.ok(shellRun && shellPoll && fetchUrl && subagentResult && computerDrag)
+  assert.ok(shellRun && shellPoll && fetchUrl && fileWrite && subagentResult && computerDrag)
 
   const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)
     .yield_time_ms
@@ -107,6 +110,17 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.equal(webCompact?.default, false)
   assert.deepEqual(webFormat?.enum, ["markdown", "html"])
   assert.equal(fetchUrl.outputSchema, undefined)
+  assert.deepEqual((fileWrite as unknown as Record<string, unknown>)._meta, {
+    "openai/fileParams": ["file"],
+  })
+  const fileInput = fileWrite.inputSchema.properties?.file as Record<string, unknown>
+  assert.deepEqual(fileInput.required, ["download_url", "file_id"])
+  assert.deepEqual(Object.keys(fileInput.properties as Record<string, unknown>), [
+    "download_url",
+    "file_id",
+    "mime_type",
+    "file_name",
+  ])
   assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
   assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
   const dragProperties = computerDrag.inputSchema.properties as Record<
@@ -138,6 +152,8 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
         review: false,
         shell: false,
         applyPatch: false,
+        fileRead: false,
+        fileWrite: false,
         clones: false,
         subagents: false,
         web: false,
@@ -155,6 +171,8 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
     review: true,
     shell: true,
     applyPatch: true,
+    fileRead: true,
+    fileWrite: true,
     clones: true,
     subagents: true,
     web: true,
@@ -314,6 +332,8 @@ test("publishes only start_here when every optional tool group is disabled", {
         review: false,
         shell: false,
         applyPatch: false,
+        fileRead: false,
+        fileWrite: false,
         clones: false,
         subagents: false,
         web: false,
@@ -332,6 +352,25 @@ test("publishes only start_here when every optional tool group is disabled", {
     tools.tools.map((tool) => tool.name),
     ["start_here"]
   )
+})
+
+test("file_read and file_write can be enabled independently", { timeout: 10_000 }, async (t) => {
+  for (const [fileRead, fileWrite] of [
+    [false, true],
+    [true, false],
+  ] as const) {
+    const running = await startMcpHttpServer({ profile: { tools: { fileRead, fileWrite } } })
+    t.after(() => running.close())
+    const connected = await connectClient(
+      running.url,
+      `file-tool-toggle-${String(fileRead)}-${String(fileWrite)}`
+    )
+    t.after(() => connected.client.close())
+
+    const names = (await connected.client.listTools()).tools.map((tool) => tool.name)
+    assert.equal(names.includes("file_read"), fileRead)
+    assert.equal(names.includes("file_write"), fileWrite)
+  }
 })
 
 test("asks once for a Shellby review after sustained tool use", { timeout: 10_000 }, async (t) => {

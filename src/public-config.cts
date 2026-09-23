@@ -44,6 +44,8 @@ const publicConfigSchema = z.object({
     review: z.boolean().default(true),
     shell: z.boolean().default(true),
     apply_patch: z.boolean().default(true),
+    file_read: z.boolean().default(true),
+    file_write: z.boolean().default(true),
     clones: z.boolean().default(true),
     subagents: z.boolean().default(true),
     web: z.boolean().default(true),

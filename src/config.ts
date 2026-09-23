@@ -151,6 +151,10 @@ export const MCP_CONFIG = {
     shell: publicConfig.tools.shell,
     /** Enables the first-class apply_patch file-editing tool. */
     applyPatch: publicConfig.tools.apply_patch,
+    /** Enables local file export through MCP binary content. */
+    fileRead: publicConfig.tools.file_read,
+    /** Enables writing ChatGPT file inputs to the local filesystem. */
+    fileWrite: publicConfig.tools.file_write,
     /** Enables self-cloning agent tools. */
     clones: publicConfig.tools.clones,
     /** Enables delegated ChatGPT subagent tools. */

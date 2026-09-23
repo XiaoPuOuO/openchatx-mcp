@@ -4,6 +4,12 @@ const BARE_STRING_PATTERN = /^[A-Za-z0-9_./:@%+,-]+$/u
 
 export function compactToolResult(toolName: string, result: unknown): unknown {
   if (!isRecord(result) || result.structuredContent === undefined) return result
+  if (
+    result.isError === true &&
+    isRecord(result.structuredContent) &&
+    typeof result.structuredContent.error_code === "string"
+  )
+    return result
   const rendered = renderToolStructuredContent(toolName, result.structuredContent)
   const compact = { ...result }
   compact.structuredContent = undefined

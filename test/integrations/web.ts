@@ -9,6 +9,109 @@ import { compactField, connectClient, startMcpHttpServer, toolText } from "./hel
 const LIVE_WEB_TEST_ENABLED = process.env.RUN_LIVE_WEB_TESTS === "1" && !process.env.CI
 const liveWebTest = LIVE_WEB_TEST_ENABLED ? test : test.skip
 
+for (const toolOutput of ["compact", "structured"] as const) {
+  test(`fetch_url preserves error codes in ${toolOutput} output and chains`, {
+    timeout: 10_000,
+  }, async (t) => {
+    const webPageOpener = new WebPageOpener({
+      renderPage: async (url) => {
+        switch (new URL(url).pathname) {
+          case "/refused":
+            throw new WebOpenError("connection_refused", "page.goto: net::ERR_CONNECTION_REFUSED")
+          case "/broken":
+            throw new Error("Browser launch failed")
+          default:
+            return { url, title: "Fixture", content: "retained body", status: 404 }
+        }
+      },
+    })
+    const running = await startMcpHttpServer({ webPageOpener, profile: { toolOutput } })
+    t.after(() => running.close())
+    const connected = await connectClient(running.url, `fetch-errors-${toolOutput}`)
+    t.after(() => connected.client.close())
+
+    for (const [path, errorCode] of [
+      ["/refused", "CONNECTION_REFUSED"],
+      ["/broken", "OPEN_FAILED"],
+    ]) {
+      const result = await connected.client.callTool({
+        name: "fetch_url",
+        arguments: { url: `https://example.com${path}` },
+      })
+      assert.equal(result.isError, true)
+      assert.deepEqual(result.structuredContent, { error_code: errorCode })
+    }
+
+    const invalidCursor = await connected.client.callTool({
+      name: "fetch_url",
+      arguments: { url: "https://example.com/", cursor: "invalid" },
+    })
+    assert.equal(invalidCursor.isError, true)
+    assert.deepEqual(invalidCursor.structuredContent, { error_code: "INVALID_ARGUMENT" })
+    assert.match(toolText(invalidCursor), /invalid_cursor/u)
+
+    const invalidUrl = await connected.client.callTool({
+      name: "fetch_url",
+      arguments: { url: "file:///tmp/fixture" },
+    })
+    assert.equal(invalidUrl.isError, true)
+    assert.match(toolText(invalidUrl), /HTTP or HTTPS/u)
+
+    const httpError = await connected.client.callTool({
+      name: "fetch_url",
+      arguments: { url: "https://example.com/missing" },
+    })
+    assert.notEqual(httpError.isError, true)
+    if (toolOutput === "structured") {
+      assert.equal((httpError.structuredContent as { status: number }).status, 404)
+    } else {
+      assert.equal(compactField(toolText(httpError), "status"), "404")
+    }
+
+    const chained = await connected.client.callTool({
+      name: "fetch_url",
+      arguments: {
+        url: "https://example.com/missing",
+        then_run: { fetch_url: { url: "https://example.com/refused" } },
+      },
+    })
+    assert.equal(chained.isError, true)
+    assert.equal(
+      (chained.structuredContent as { error_code: string }).error_code,
+      "CONNECTION_REFUSED"
+    )
+    assert.match(toolText(chained), /ERR_CONNECTION_REFUSED/u)
+  })
+}
+
+liveWebTest(
+  "classifies a real refused connection through fetch_url",
+  { timeout: 60_000 },
+  async (t) => {
+    const pageServer = createServer()
+    await new Promise<void>((resolve, reject) => {
+      pageServer.once("error", reject)
+      pageServer.listen(0, "127.0.0.1", resolve)
+    })
+    t.after(() => pageServer.close())
+    const address = pageServer.address()
+    assert.ok(address && typeof address !== "string")
+    const running = await startMcpHttpServer()
+    t.after(() => running.close())
+    const connected = await connectClient(running.url, "fetch-refused-live")
+    t.after(() => connected.client.close())
+    await new Promise<void>((resolve) => pageServer.close(() => resolve()))
+
+    const result = await connected.client.callTool({
+      name: "fetch_url",
+      arguments: { url: `http://127.0.0.1:${address.port}/` },
+    })
+    assert.equal(result.isError, true)
+    assert.deepEqual(result.structuredContent, { error_code: "CONNECTION_REFUSED" })
+    assert.match(toolText(result), /connection_refused:.*ERR_CONNECTION_REFUSED/u)
+  }
+)
+
 liveWebTest(
   "renders a real localhost page through the default web stack",
   { timeout: 60_000 },

@@ -8,6 +8,7 @@ import type { PeekabooClient } from "../tools/computer/peekaboo.js"
 import { registerCloneTools } from "../tools/delegation/clone-tools.js"
 import type { ChatGptDelegationService } from "../tools/delegation/contracts.js"
 import { registerSubagentTools } from "../tools/delegation/subagent-tools.js"
+import { registerFileReadTool, registerFileWriteTool } from "../tools/file/file-tools.js"
 import { registerImageTools } from "../tools/image/image-tools.js"
 import {
   createReviewPromptTracker,
@@ -104,6 +105,8 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
     : undefined
   if (shells) registerShellExecutionTools(server, shells)
   if (profile.tools.applyPatch) registerApplyPatchTool(server)
+  if (profile.tools.fileRead) registerFileReadTool(server)
+  if (profile.tools.fileWrite) registerFileWriteTool(server)
   if (shells) registerShellManagementTools(server, shells)
   if (profile.tools.subagents)
     registerSubagentTools(server, requireCapabilityService(options.chatGptDelegation, "subagent"))

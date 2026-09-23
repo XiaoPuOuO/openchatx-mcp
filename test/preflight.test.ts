@@ -67,6 +67,8 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
       "review",
       "shell",
       "apply_patch",
+      "file_read",
+      "file_write",
       "clones",
       "subagents",
       "web",

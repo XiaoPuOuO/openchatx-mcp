@@ -78,6 +78,8 @@ test("live MCP subagent_run/subagent_result preserves response and context acros
           review: false,
           shell: false,
           applyPatch: false,
+          fileRead: false,
+          fileWrite: false,
           clones: false,
           subagents: true,
           web: false,

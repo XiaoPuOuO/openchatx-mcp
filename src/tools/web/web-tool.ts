@@ -93,15 +93,20 @@ export function registerWebTool(server: McpServer, webPageOpener: WebPageOpener)
           content: [],
         }
       } catch (error) {
-        const text =
-          error instanceof WebOpenError
-            ? `${error.code}: ${error.message}`
-            : `open_failed: ${error instanceof Error ? error.message : String(error)}`
-        return {
-          isError: true,
-          content: [{ type: "text" as const, text }],
-        }
+        return webErrorResult(error)
       }
     }
   )
+}
+
+function webErrorResult(error: unknown) {
+  const code = error instanceof WebOpenError ? error.code : "open_failed"
+  const errorCode =
+    code === "invalid_url" || code === "invalid_cursor" ? "INVALID_ARGUMENT" : code.toUpperCase()
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    isError: true,
+    structuredContent: { error_code: errorCode },
+    content: [{ type: "text" as const, text: `${code}: ${message}` }],
+  }
 }

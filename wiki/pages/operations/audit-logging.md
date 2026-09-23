@@ -31,9 +31,10 @@ Session aliases identify only the conversation that made the MCP request. The au
 - Failed `apply_patch` calls may retain the bounded failure message and up to 32,000 patch characters.
 - Audit receives handler results directly at the registration boundary, before HTTP serialization. It does not buffer or truncate the HTTP response. Input/failure persistence limits above still apply.
 - Computer Use keeps a whitelist of structured metadata such as snapshot ID, application/window identity, capture mode, and element counts. Screenshot bytes and inspection trees are excluded from persisted output.
+- `file_write` retains destination path and file metadata while excluding the temporary download URL. Embedded binary resource blobs returned by `file_read` are excluded from persisted output and output-token accounting.
 - Transport completion records calls never claimed by a handler using request metadata and HTTP completion state. It adds no generic error message or replacement note; HTTP failures and closed connections still receive the existing failure marker. Remote authorization failures occur before audit request creation.
 
-The logger records serialized tool arguments as model-facing `in` tokens. When a model-facing result is available, `out` counts the final projected text plus any structured result after compact/structured projection and completion-event, human-steering, and review-notice injection, excluding image payloads. Counting has no audit byte cap; ordinary output is counted without being persisted. These are MCP I/O counts, not model-inference usage (`src/server/audit/audit-log.ts`, `src/server/audit/audit-format.ts`, `src/tokenizer.ts`, `test/server/audit-log.test.ts`).
+The logger records serialized tool arguments as model-facing `in` tokens. When a model-facing result is available, `out` counts the final projected text plus any structured result after compact/structured projection and completion-event, human-steering, and review-notice injection, excluding image, audio, and embedded binary resource payloads. Counting has no audit byte cap; ordinary output is counted without being persisted. These are MCP I/O counts, not model-inference usage (`src/server/audit/audit-log.ts`, `src/server/audit/audit-format.ts`, `src/tokenizer.ts`, `test/server/audit-log.test.ts`).
 
 ## Status Markers and Sensitivity
 

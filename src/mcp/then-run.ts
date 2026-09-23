@@ -51,6 +51,16 @@ export function mergeThenRunResult(result: unknown, nextResult: unknown): unknow
   return {
     ...result,
     ...(nextResult.isError === true ? { isError: true } : {}),
+    ...(nextResult.isError === true &&
+    isRecord(nextResult.structuredContent) &&
+    typeof nextResult.structuredContent.error_code === "string"
+      ? {
+          structuredContent: {
+            ...(isRecord(result.structuredContent) ? result.structuredContent : {}),
+            error_code: nextResult.structuredContent.error_code,
+          },
+        }
+      : {}),
     content: mergeContent(result.content, nextResult.content),
   }
 }

@@ -185,6 +185,7 @@ export function registerSubagentTools(
       return {
         structuredContent: { turns: results },
         content: [],
+        isError: results.some((result) => result.status === "failed"),
       }
     }
   )

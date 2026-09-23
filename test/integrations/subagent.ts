@@ -8,6 +8,111 @@ import {
 } from "../../src/tools/delegation/contracts.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
+for (const toolOutput of ["compact", "structured"] as const) {
+  test(`subagent_result reports batch failures in ${toolOutput} output and stops chaining`, {
+    timeout: 10_000,
+  }, async (t) => {
+    const polled: string[] = []
+    const unused = async (): Promise<never> => {
+      throw new Error("unused")
+    }
+    const chatGptDelegation: ChatGptDelegationService = {
+      ask: unused,
+      cloneSelf: unused,
+      cloneRun: unused,
+      async poll(turnId) {
+        polled.push(turnId)
+        switch (turnId) {
+          case "completed":
+            return { status: "completed", response: "preserved response" }
+          case "running":
+            return { status: "running", activity: "Working", activityAgeMs: 100 }
+          case "failed":
+            return { status: "failed", errorCode: "AGENT_TARGET_LOST" }
+          case "unexpected":
+            throw new Error("private backend details")
+          default:
+            throw new ChatGptDelegationError("UNKNOWN_TURN", `Unknown agent turn: ${turnId}`)
+        }
+      },
+      drainEvents: () => [],
+      dispose: async () => {},
+    }
+    const running = await startMcpHttpServer({
+      chatGptDelegation,
+      profile: { toolOutput },
+    })
+    t.after(() => running.close())
+    const connected = await connectClient(running.url, `subagent-errors-${toolOutput}`)
+    t.after(() => connected.client.close())
+
+    const cases = [
+      { turnIds: ["completed"], failed: false },
+      { turnIds: ["running"], failed: false },
+      { turnIds: ["completed", "running"], failed: false },
+      { turnIds: ["missing"], failed: true },
+      { turnIds: ["completed", "missing"], failed: true },
+      { turnIds: ["running", "missing"], failed: true },
+      { turnIds: ["failed"], failed: true },
+      { turnIds: ["unexpected"], failed: true },
+    ]
+    for (const { turnIds, failed } of cases) {
+      const result = await connected.client.callTool({
+        name: "subagent_result",
+        arguments: { turn_ids: turnIds, wait_ms: 0 },
+      })
+      assert.equal(result.isError === true, failed, turnIds.join(","))
+      if (toolOutput === "structured") {
+        const { turns } = result.structuredContent as {
+          turns: Array<{
+            turn_id: string
+            status: string
+            response?: string
+            error?: string
+          }>
+        }
+        assert.deepEqual(
+          turns.map((turn) => turn.turn_id),
+          turnIds
+        )
+        assert.equal(
+          turns.some((turn) => turn.status === "failed"),
+          failed
+        )
+        if (turnIds.includes("completed"))
+          assert.equal(
+            turns.find((turn) => turn.turn_id === "completed")?.response,
+            "preserved response"
+          )
+        if (turnIds.includes("missing"))
+          assert.match(
+            turns.find((turn) => turn.turn_id === "missing")?.error ?? "",
+            /UNKNOWN_TURN/u
+          )
+      } else {
+        assert.equal(result.structuredContent, undefined)
+        if (turnIds.includes("completed")) assert.match(toolText(result), /preserved response/u)
+        if (turnIds.includes("missing")) assert.match(toolText(result), /UNKNOWN_TURN/u)
+      }
+      assert.doesNotMatch(JSON.stringify(result), /private backend details/u)
+    }
+
+    for (const turnId of ["missing", "completed"]) {
+      polled.length = 0
+      const result = await connected.client.callTool({
+        name: "subagent_result",
+        arguments: {
+          turn_ids: [turnId],
+          wait_ms: 0,
+          then_run: { subagent_result: { turn_ids: ["running"], wait_ms: 0 } },
+        },
+      })
+      assert.equal(result.isError === true, turnId === "missing")
+      assert.deepEqual(polled, turnId === "missing" ? ["missing"] : ["completed", "running"])
+    }
+  })
+}
+
 test("delivers a completed subagent event on the next MCP response exactly once", {
   timeout: 10_000,
 }, async (t) => {

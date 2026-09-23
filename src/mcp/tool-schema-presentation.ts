@@ -125,7 +125,8 @@ export function prepareToolRegistration(
   const acceptsInput = config.inputSchema !== undefined
   config.inputSchema = withThenRunSchema(name, config.inputSchema)
 
-  const nativeContent = name.startsWith("computer_") || name === "image_view"
+  const nativeContent =
+    name.startsWith("computer_") || name === "image_view" || name === "file_read"
   if (!nativeContent && !structuredOutput) config.outputSchema = undefined
 
   const inputSchema = config.inputSchema instanceof z.ZodType ? config.inputSchema : undefined

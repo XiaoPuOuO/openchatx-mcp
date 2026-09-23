@@ -31,6 +31,7 @@ const CHARSET_PATTERN = /(?:^|;)\s*charset\s*=\s*["']?([^;"']+)/iu
 const HIDDEN_STYLE_PATTERN =
   /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/iu
 const PDF_PAGE_LIMIT = 500
+const CONNECTION_REFUSED_PATTERN = /^page\.goto: net::ERR_CONNECTION_REFUSED\b/u
 
 type CapturedResourceKind = "pdf" | "image" | "text" | "unsupported"
 type MediaKind = "html" | CapturedResourceKind | "generic"
@@ -209,7 +210,7 @@ export async function acquireWebResource(
     if (capturedError) throw capturedError
     if (capturedResource) return await convertCapturedResource(capturedResource)
 
-    if (navigationError) throw navigationError
+    if (navigationError) throw navigationFailure(navigationError)
     if (!response) throw new Error("Navigation completed without an HTTP response.")
 
     await page.waitForLoadState("domcontentloaded", { timeout: 30_000 })
@@ -549,4 +550,13 @@ function normalizeWebUrl(value: string): string {
 
 function webOpenError(code: WebOpenError["code"], message: string, cause: unknown): WebOpenError {
   return new WebOpenError(code, message, { cause })
+}
+
+function navigationFailure(error: unknown): WebOpenError {
+  const message = stripVTControlCharacters(error instanceof Error ? error.message : String(error))
+  return webOpenError(
+    CONNECTION_REFUSED_PATTERN.test(message) ? "connection_refused" : "open_failed",
+    message,
+    error
+  )
 }
