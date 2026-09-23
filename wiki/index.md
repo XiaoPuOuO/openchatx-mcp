@@ -6,6 +6,7 @@
 - [Architecture Map](./pages/architecture-map.md) — Process-level architecture and request flow across Shellby's HTTP boundary, shared runtime services, and capability handlers.
 - [Computer Use](./pages/computer-use.md) — Focused Computer Use execution through Peekaboo, including snapshots, coordinates, background delivery, and cursor-host ownership.
 - [HTTP Transport](./pages/http-transport.md) — Local HTTP/MCP routing, ngrok trust boundary, remote owner binding, request lifetime, and shared process state.
+- [MCP Tool Registration Boundary](./pages/mcp-tool-registration-boundary.md) — How the registerTool monkeypatch connects tool registration to Shellby's dispatch pipeline, including installation order, validation, notices, audit, and then_run.
 - [MCP Tool Surface](./pages/mcp-tool-surface.md) — MCP registration, startup prompt loading, result projection, and routing to capability contracts.
 - [Operations](./pages/operations/index.md) — Operational setup, validation, logging, and secret-handling knowledge for running and maintaining Shellby MCP.
 - [Persistent Shell Runtime](./pages/persistent-shell-runtime.md) — Persistent shell manager and session internals, including lifecycle, transcripts, concurrency, polling, and recovery.

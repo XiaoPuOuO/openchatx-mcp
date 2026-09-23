@@ -10,6 +10,9 @@
     "pages/http-transport.md": {
       "fingerprint": "sha256:45f9d1e2663b723f3356e882790175b7be7a2955ffc2d534095c06a7436c5239"
     },
+    "pages/mcp-tool-registration-boundary.md": {
+      "fingerprint": "sha256:73ad626b2d76af1b0770cd1e00face679a7fe12c7de6cfc3f831976386bc2a80"
+    },
     "pages/mcp-tool-surface.md": {
       "fingerprint": "sha256:b6d8a0b20d537bed5cca2eb9bd5410bd5bd01b7f2e96ad274cbb051d4afa0062"
     },

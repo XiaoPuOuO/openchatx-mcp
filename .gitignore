@@ -7,6 +7,6 @@ dist/
 *.log
 /wiki/_private/
 /test/live/artifacts/
-
+MEMORY.md
 
 t.*

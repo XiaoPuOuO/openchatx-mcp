@@ -51,6 +51,8 @@ The optional `AgentObserver` owns observed agent/call state and queued human ins
 
 ## Request Lifecycle
 
+Tool registration enters a shared execution pipeline through an instance-level `McpServer.registerTool` override. The factory installs it before registering any tool. [MCP Tool Registration Boundary](./mcp-tool-registration-boundary.md) shows both phases and the ordering contract.
+
 1. `src/config.ts` loads `.shellby/config.toml` through the shared forgiving loader; `src/index.ts` prepares durable/process-level state and composes only the runtime services required by enabled tool groups (`src/config.ts`, `src/index.ts`).
 2. `src/mcp/server-factory.ts` binds the process-level capability services into one `McpServerFactory`, snapshots its immutable MCP runtime profile, and owns the process-local review tracker. `src/server/http-server.ts` receives that factory plus transport concerns such as auth, audit, and the optional observer.
 3. `src/server/http-server.ts` accepts an MCP request, applies the HTTP/ownership boundary, and routes it through `createMcpHandler`. The handler selects modern `2026-07-28` or stateless legacy serving and obtains a short-lived MCP server from the bound factory, passing the same HTTP-owned observer used by dashboard routes. `src/mcp/server-factory.ts` registers `start_here` plus profile-enabled tool groups; each capability module owns its public contract and domain behavior.
@@ -62,6 +64,7 @@ The optional `AgentObserver` owns observed agent/call state and queued human ins
 - [UI Dashboard Wiki](../../ui/wiki/index.md)
 - [HTTP Transport](./http-transport.md)
 - [MCP Tool Surface](./mcp-tool-surface.md)
+- [MCP Tool Registration Boundary](./mcp-tool-registration-boundary.md)
 - [Configuration and Startup](./operations/configuration-and-startup.md)
 - [Computer Use](./computer-use.md)
 - [Browser ChatGPT Subagents](./subagents/browser-chatgpt-subagents.md)
