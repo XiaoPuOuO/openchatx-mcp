@@ -1,7 +1,6 @@
 import { appendFileSync, chmodSync, existsSync } from "node:fs"
 
 import { getAgentIdentity } from "../../agent/context.js"
-import { toolResultFailed } from "../../mcp/then-run.js"
 import { countTokens } from "../../tokenizer.js"
 import {
   errorMessage,
@@ -29,12 +28,12 @@ export class McpAuditLogger {
   startRequest(payload: unknown): McpAuditRequest {
     return createAuditRequest(
       payload,
-      (toolName, argumentsValue, via) => this.startToolCall(toolName, argumentsValue, via),
+      (toolName, argumentsValue) => this.startToolCall(toolName, argumentsValue),
       () => this.appendToolList()
     )
   }
 
-  private startToolCall(toolName: string, argumentsValue: unknown, via?: "then_run"): McpAuditCall {
+  private startToolCall(toolName: string, argumentsValue: unknown): McpAuditCall {
     const identity = getAgentIdentity()
     let agentLabel: string | undefined
     if (identity) {
@@ -57,6 +56,9 @@ export class McpAuditLogger {
         )
         const httpStatus = input.httpStatus ?? 200
         const state = input.state ?? "finished"
+        const exitCode = toolResponse.structuredContent?.exit_code
+        const shellFailed =
+          toolName === "shell_run" && typeof exitCode === "number" && exitCode !== 0
 
         this.append(
           formatAuditEntry({
@@ -71,11 +73,10 @@ export class McpAuditLogger {
               toolResponse.modelOutput !== undefined
                 ? countTokens(toolResponse.modelOutput)
                 : undefined,
-            toolFailed: toolResponse.failed || toolResultFailed(toolName, input.toolResult),
+            toolFailed: toolResponse.failed || shellFailed,
             failureMessage: toolResponse.failureMessage,
             responseSummary: toolResponse,
             agentLabel,
-            via,
           })
         )
       },

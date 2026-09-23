@@ -57,8 +57,8 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     arguments: { agents: [{ agent_id: "audit-check", prompt: "Inspect the audit path." }] },
   })
   await connected.client.callTool({
-    name: "shell_list",
-    arguments: { then_run: { skill_list: {} } },
+    name: "skill_list",
+    arguments: {},
   })
 
   const log = await readFile(auditPath, "utf8")
@@ -67,7 +67,7 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   assert.match(log, /subagent_run/u)
   assert.match(log, /audit-check/u)
   assert.match(log, /Inspect the audit path\./u)
-  assert.match(log, /--- # skill_list [\s\S]*?via: then_run/u)
+  assert.match(log, /--- # skill_list /u)
   assert.match(log, /session: "agent-1"/u)
   assert.doesNotMatch(log, /child-session/u)
 })

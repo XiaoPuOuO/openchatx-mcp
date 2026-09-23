@@ -9,10 +9,9 @@ import {
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 for (const toolOutput of ["compact", "structured"] as const) {
-  test(`subagent_result reports batch failures in ${toolOutput} output and stops chaining`, {
+  test(`subagent_result reports batch failures in ${toolOutput} output`, {
     timeout: 10_000,
   }, async (t) => {
-    const polled: string[] = []
     const unused = async (): Promise<never> => {
       throw new Error("unused")
     }
@@ -21,7 +20,6 @@ for (const toolOutput of ["compact", "structured"] as const) {
       cloneSelf: unused,
       cloneRun: unused,
       async poll(turnId) {
-        polled.push(turnId)
         switch (turnId) {
           case "completed":
             return { status: "completed", response: "preserved response" }
@@ -95,20 +93,6 @@ for (const toolOutput of ["compact", "structured"] as const) {
         if (turnIds.includes("missing")) assert.match(toolText(result), /UNKNOWN_TURN/u)
       }
       assert.doesNotMatch(JSON.stringify(result), /private backend details/u)
-    }
-
-    for (const turnId of ["missing", "completed"]) {
-      polled.length = 0
-      const result = await connected.client.callTool({
-        name: "subagent_result",
-        arguments: {
-          turn_ids: [turnId],
-          wait_ms: 0,
-          then_run: { subagent_result: { turn_ids: ["running"], wait_ms: 0 } },
-        },
-      })
-      assert.equal(result.isError === true, turnId === "missing")
-      assert.deepEqual(polled, turnId === "missing" ? ["missing"] : ["completed", "running"])
     }
   })
 }

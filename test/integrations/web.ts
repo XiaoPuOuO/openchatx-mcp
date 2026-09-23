@@ -10,7 +10,7 @@ const LIVE_WEB_TEST_ENABLED = process.env.RUN_LIVE_WEB_TESTS === "1" && !process
 const liveWebTest = LIVE_WEB_TEST_ENABLED ? test : test.skip
 
 for (const toolOutput of ["compact", "structured"] as const) {
-  test(`fetch_url preserves error codes in ${toolOutput} output and chains`, {
+  test(`fetch_url preserves error codes in ${toolOutput} output`, {
     timeout: 10_000,
   }, async (t) => {
     const webPageOpener = new WebPageOpener({
@@ -67,20 +67,6 @@ for (const toolOutput of ["compact", "structured"] as const) {
     } else {
       assert.equal(compactField(toolText(httpError), "status"), "404")
     }
-
-    const chained = await connected.client.callTool({
-      name: "fetch_url",
-      arguments: {
-        url: "https://example.com/missing",
-        then_run: { fetch_url: { url: "https://example.com/refused" } },
-      },
-    })
-    assert.equal(chained.isError, true)
-    assert.equal(
-      (chained.structuredContent as { error_code: string }).error_code,
-      "CONNECTION_REFUSED"
-    )
-    assert.match(toolText(chained), /ERR_CONNECTION_REFUSED/u)
   })
 }
 

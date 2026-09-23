@@ -2,7 +2,7 @@
   "version": 1,
   "pages": {
     "pages/architecture-map.md": {
-      "fingerprint": "sha256:dad39c5aa13c0602474344c6c9ac59d49ea3d2d1187a599defc0b3ab6725a965"
+      "fingerprint": "sha256:2d755a735a5743ce17b47e5caaf2afae68fe3e134e55373bda7c44cfea36d1af"
     },
     "pages/computer-use.md": {
       "fingerprint": "sha256:f09a8e4dbd4a8f22f95f64853ee2aa6c435f3893e680324aa52fe027bde90cf3"
@@ -11,10 +11,10 @@
       "fingerprint": "sha256:45f9d1e2663b723f3356e882790175b7be7a2955ffc2d534095c06a7436c5239"
     },
     "pages/mcp-tool-registration-boundary.md": {
-      "fingerprint": "sha256:73ad626b2d76af1b0770cd1e00face679a7fe12c7de6cfc3f831976386bc2a80"
+      "fingerprint": "sha256:0d9415f8ea6f4bf67261563e91813a7460141f197fb926b4357953cd0d1765d3"
     },
     "pages/mcp-tool-surface.md": {
-      "fingerprint": "sha256:b6d8a0b20d537bed5cca2eb9bd5410bd5bd01b7f2e96ad274cbb051d4afa0062"
+      "fingerprint": "sha256:c3c0a9bbfdaaa613424984ba100bc825b31f65ea41b1ecf29c7e19bea8bf2a36"
     },
     "pages/operations/audit-logging.md": {
       "fingerprint": "sha256:20999e1da006b6a0eec14b49116be235726970c91124de03b1da0b5cd1b1c9d7"
@@ -56,13 +56,13 @@
       "fingerprint": "sha256:5cae3854bfb5d37471e44c4bf45ae7a4a20247a5f175f526d4ffd7ab454ddd7b"
     },
     "pages/tools/fetch-url.md": {
-      "fingerprint": "sha256:64f76ed2f9ab651caca0cfe90c9a01654f9fa2099dc1eefaf5e6bdc941b69b63"
+      "fingerprint": "sha256:2e6374750bd96e5a14f632dfe8f8c6b08cb7705dd4dd4c19225ba4a95c9e1b38"
     },
     "pages/tools/shell-run.md": {
       "fingerprint": "sha256:9957bb68b55bd6723f870f8d5908169ac7bcef110fa796ea0614e4d4330f493e"
     },
     "pages/tools/subagent.md": {
-      "fingerprint": "sha256:29873370ac262a65256bb829fcccc8d5a21c7b61e503acfc3c3837334d0cc588"
+      "fingerprint": "sha256:e19fcc90491a4b4c8ba055ce4638eb90f9a916b47378a70ea5a44d71126a2b95"
     },
     "pages/workspace-tooling.md": {
       "fingerprint": "sha256:b0972959f0badb15ad79dc1776bd2c6dd817d636ee7baa53ad5a1cdb78d3cbe8"

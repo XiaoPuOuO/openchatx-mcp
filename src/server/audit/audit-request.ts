@@ -13,7 +13,6 @@ export interface McpAuditCall {
 
 export interface McpAuditRequest {
   claimTool(requestId: RequestId, toolName: string): McpAuditCall | undefined
-  startNestedTool(toolName: string, argumentsValue: unknown): McpAuditCall
   finishTransport(input: { httpStatus: number; state: "finished" | "closed" }): void
 }
 
@@ -26,7 +25,7 @@ interface PendingAuditCall {
 
 export function createAuditRequest(
   payload: unknown,
-  startToolCall: (toolName: string, argumentsValue: unknown, via?: "then_run") => McpAuditCall,
+  startToolCall: (toolName: string, argumentsValue: unknown) => McpAuditCall,
   onToolList: () => void
 ): McpAuditRequest {
   const pending: PendingAuditCall[] = []
@@ -53,9 +52,6 @@ export function createAuditRequest(
       if (!match) return
       match.claimed = true
       return match.call
-    },
-    startNestedTool(toolName, argumentsValue) {
-      return startToolCall(toolName, argumentsValue, "then_run")
     },
     finishTransport({ httpStatus, state }) {
       for (const item of pending) {

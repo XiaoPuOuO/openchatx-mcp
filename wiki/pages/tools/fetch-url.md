@@ -26,7 +26,7 @@ HTML uses the CloakBrowser render path and can return Markdown, cleaned HTML, or
 
 Handled fetch failures return `isError: true` and `structuredContent.error_code` alongside the detailed text. Chromium navigation failures with `ERR_CONNECTION_REFUSED` return `CONNECTION_REFUSED`; other unclassified runtime failures return `OPEN_FAILED`. Invalid URLs and cursors retain argument-validation semantics, with handled `invalid_url` and `invalid_cursor` errors mapped to `INVALID_ARGUMENT`. Other known fetch errors retain their uppercase code, including `CURSOR_EXPIRED`, `RESOURCE_TOO_LARGE`, and `UNSUPPORTED_CONTENT_TYPE`.
 
-Compact output preserves explicit structured error codes, and `then_run` propagates a nested error code to the overall failed result. HTTP response statuses, including 404 and 500, remain response metadata. No automatic retry is introduced.
+Compact output preserves explicit structured error codes. HTTP response statuses, including 404 and 500, remain response metadata. No automatic retry is introduced.
 
 ## Retention and Pagination
 

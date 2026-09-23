@@ -1,8 +1,3 @@
-import { z } from "zod"
-
-import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
-import { withThenRunSchema } from "./then-run.js"
-
 const SCHEMA_KEY_ORDER = [
   "description",
   "type",
@@ -98,8 +93,6 @@ export interface ToolRegistrationConfig {
 
 export interface PreparedToolRegistration {
   acceptsInput: boolean
-  inputSchema?: z.ZodType
-  outputSchema?: z.ZodType
   nativeContent: boolean
 }
 
@@ -113,8 +106,8 @@ interface StandardSchemaJsonSource {
 /**
  * Apply Shellby's model-facing registration rules to one tool config.
  *
- * This owns the public schema projection contract: `then_run` exposure, compact-output
- * schema visibility, native-content exceptions, annotation pruning, and JSON Schema
+ * This owns the public schema projection contract: compact-output schema visibility,
+ * native-content exceptions, annotation pruning, and JSON Schema
  * canonicalization. Runtime dispatch should use only the returned execution metadata.
  */
 export function prepareToolRegistration(
@@ -123,20 +116,17 @@ export function prepareToolRegistration(
   structuredOutput: boolean
 ): PreparedToolRegistration {
   const acceptsInput = config.inputSchema !== undefined
-  config.inputSchema = withThenRunSchema(name, config.inputSchema)
 
   const nativeContent =
     name.startsWith("computer_") || name === "image_view" || name === "file_read"
   if (!nativeContent && !structuredOutput) config.outputSchema = undefined
 
-  const inputSchema = config.inputSchema instanceof z.ZodType ? config.inputSchema : undefined
-  const outputSchema = config.outputSchema instanceof z.ZodType ? config.outputSchema : undefined
-  canonicalizeStandardSchema(config.inputSchema, name !== START_HERE_TOOL_NAME)
+  canonicalizeStandardSchema(config.inputSchema)
   canonicalizeStandardSchema(config.outputSchema)
 
   config.annotations = compactToolAnnotations(config.annotations)
 
-  return { acceptsInput, inputSchema, outputSchema, nativeContent }
+  return { acceptsInput, nativeContent }
 }
 
 export function compactToolAnnotations(value: unknown): unknown {
@@ -175,7 +165,7 @@ export function canonicalizeJsonSchema(value: unknown): unknown {
   return result
 }
 
-function canonicalizeStandardSchema(schema: unknown, projectThenRun = false): void {
+function canonicalizeStandardSchema(schema: unknown): void {
   if (!isRecord(schema) || canonicalizedSchemas.has(schema)) return
   const standard = schema["~standard"]
   if (!isStandardSchemaJsonSource(standard)) return
@@ -184,26 +174,10 @@ function canonicalizeStandardSchema(schema: unknown, projectThenRun = false): vo
   const input = source.jsonSchema.input
   const output = source.jsonSchema.output
   source.jsonSchema = {
-    input: (options) =>
-      projectThenRunSchema(canonicalizeJsonSchema(input(options)), projectThenRun),
+    input: (options) => canonicalizeJsonSchema(input(options)),
     output: (options) => canonicalizeJsonSchema(output(options)),
   }
   canonicalizedSchemas.add(schema)
-}
-
-function projectThenRunSchema(schema: unknown, enabled: boolean): unknown {
-  if (!enabled || !isRecord(schema) || !isRecord(schema.properties)) return schema
-  const thenRun = schema.properties.then_run
-  if (!isRecord(thenRun)) return schema
-
-  schema.properties.then_run = {
-    ...(typeof thenRun.description === "string" ? { description: thenRun.description } : {}),
-    type: "object",
-    properties: {
-      "[toolName: string]": { type: ["object"] },
-    },
-  }
-  return schema
 }
 
 function shouldStripSchemaEntry(

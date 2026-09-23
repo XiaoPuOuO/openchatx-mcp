@@ -65,22 +65,12 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     (startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum,
     ["code-review", "coding", "general"]
   )
-  assert.equal("then_run" in (startHere.inputSchema.properties as Record<string, unknown>), false)
-  for (const tool of tools.tools.filter((tool) => tool.name !== "start_here")) {
-    const thenRun = (tool.inputSchema.properties as Record<string, Record<string, unknown>>)
-      .then_run
-    assert.equal(
-      thenRun?.description,
-      "Exactly one entry. Key is the Shellby tool name; value is that tool's arguments. May nest then_run.",
-      tool.name
-    )
-    assert.equal(thenRun?.type, "object", tool.name)
-    assert.equal(thenRun?.required, undefined, tool.name)
-    const thenRunProperties = thenRun?.properties as
-      | Record<string, Record<string, unknown>>
-      | undefined
-    assert.deepEqual(thenRunProperties?.["[toolName: string]"]?.type, ["object"], tool.name)
-  }
+  assert.deepEqual(Object.keys(startHere.inputSchema.properties ?? {}), ["mode", "task_id"])
+  const shellList = tools.tools.find((tool) => tool.name === "shell_list")
+  const skillUse = tools.tools.find((tool) => tool.name === "skill_use")
+  assert.ok(shellList && skillUse)
+  assert.deepEqual(Object.keys(shellList.inputSchema.properties ?? {}), [])
+  assert.deepEqual(Object.keys(skillUse.inputSchema.properties ?? {}), ["name"])
 
   const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
@@ -229,100 +219,6 @@ test("one HTTP observer drives dashboard state and tool observation", {
   assert.equal(local?.recent[0]?.tool, "shell_list")
 })
 
-test("runs nested then_run calls through one compact response", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer()
-  t.after(() => running.close())
-  const connected = await connectClient(
-    running.url,
-    "then-run-client",
-    undefined,
-    false,
-    "then-run-session"
-  )
-  t.after(() => connected.client.close())
-
-  await connected.client.callTool({
-    name: "start_here",
-    arguments: { mode: "general", task_id: "then-run" },
-  })
-  const result = await connected.client.callTool({
-    name: "shell_list",
-    arguments: {
-      then_run: {
-        skill_list: {
-          then_run: {
-            shell_list: {},
-          },
-        },
-      },
-    },
-  })
-
-  assert.equal(result.isError, undefined)
-  const textItems = result.content.filter((item) => item.type === "text")
-  assert.equal(textItems.length, 1)
-  const text = toolText(result)
-  assert.equal((text.match(/count=/gu) ?? []).length, 2)
-  assert.match(text, /skills:/u)
-  assert.doesNotMatch(text, /then_run/u)
-})
-
-test("rejects start_here as a then_run target", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer()
-  t.after(() => running.close())
-  const connected = await connectClient(
-    running.url,
-    "then-run-start-client",
-    undefined,
-    false,
-    "then-run-start-session"
-  )
-  t.after(() => connected.client.close())
-
-  await connected.client.callTool({
-    name: "start_here",
-    arguments: { mode: "general", task_id: "then-run-start" },
-  })
-  const result = await connected.client.callTool({
-    name: "shell_list",
-    arguments: { then_run: { start_here: { mode: "general", task_id: "nested-start" } } },
-  })
-
-  assert.equal(result.isError, true)
-  assert.match(toolText(result), /Unknown then_run tool: start_here/u)
-})
-
-test("stops then_run after a nonzero shell exit", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer()
-  t.after(() => running.close())
-  const connected = await connectClient(
-    running.url,
-    "then-run-shell-failure-client",
-    undefined,
-    false,
-    "then-run-shell-failure-session"
-  )
-  t.after(() => connected.client.close())
-
-  await connected.client.callTool({
-    name: "start_here",
-    arguments: { mode: "general", task_id: "then-run-shell-failure" },
-  })
-  const result = await connected.client.callTool({
-    name: "shell_run",
-    arguments: {
-      request_id: "expected-failure",
-      command: "false",
-      then_run: { skill_list: {} },
-    },
-  })
-
-  assert.equal(result.isError, undefined)
-  const text = toolText(result)
-  assert.match(text, /exit_code=1/u)
-  assert.doesNotMatch(text, /skills:/u)
-})
-
 test("publishes only start_here when every optional tool group is disabled", {
   timeout: 10_000,
 }, async (t) => {
@@ -442,8 +338,8 @@ test("preserves structured tool output when configured", { timeout: 10_000 }, as
 
   const result = await connected.client.callTool({
     name: "shell_list",
-    arguments: { then_run: { skill_list: {} } },
+    arguments: {},
   })
   assert.ok(result.structuredContent)
-  assert.match(toolText(result), /skills:/u)
+  assert.equal(typeof (result.structuredContent as { count: number }).count, "number")
 })

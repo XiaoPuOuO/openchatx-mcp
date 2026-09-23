@@ -32,7 +32,7 @@ Pass one to three returned `turn_id` values. Results are retrieved concurrently 
 - `completed`: includes `response`;
 - `failed`: includes `error`.
 
-The MCP result sets `isError: true` whenever any returned turn has `status: failed`, including unknown turn IDs and polling failures. Mixed batches preserve every turn and any successful responses. Batches containing only running or completed turns set `isError: false`. This applies in compact and structured output modes, and a failed batch stops `then_run` chaining.
+The MCP result sets `isError: true` whenever any returned turn has `status: failed`, including unknown turn IDs and polling failures. Mixed batches preserve every turn and any successful responses. Batches containing only running or completed turns set `isError: false`. This applies in compact and structured output modes.
 
 `wait_ms` defaults to 30 seconds and waits on the local settlement promise only. Use `0` only for an immediate status check. This wait does not impose a generation deadline; no-progress recovery is separate. It never polls or reloads ChatGPT.
 

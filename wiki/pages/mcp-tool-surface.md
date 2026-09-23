@@ -30,7 +30,7 @@ Prompt loading returns `shared.md` first, then the selected mode. Contents are r
 
 ## Result Boundary
 
-`src/mcp/tool-schema-presentation.ts` owns model-facing JSON Schema projection, redundant annotation pruning, compact-output schema visibility, and native-content exceptions while retaining Zod runtime validation. `src/mcp/tool-registration-boundary.ts` owns runtime dispatch concerns: startup gating, nested `then_run`, output validation/projection, audit/observer lifecycle, and post-call notices. [Tool Naming and Schema Design](./tool-naming-and-schema-design.md) owns rationale and projection caveats.
+`src/mcp/tool-schema-presentation.ts` owns model-facing JSON Schema projection, redundant annotation pruning, compact-output schema visibility, and native-content exceptions while preserving declared input fields. The SDK validates inputs and published output schemas. `src/mcp/tool-registration-boundary.ts` owns startup gating, result projection, audit/observer lifecycle, and post-call notices. [Tool Naming and Schema Design](./tool-naming-and-schema-design.md) owns rationale and projection caveats.
 
 With `mcp.tool_output = "compact"`, ordinary tools omit public output schemas and render typed results through `src/mcp/tool-output.ts`. Structured mode preserves native structured results and output schemas. `computer_*`, `image_view`, and `file_read` preserve native MCP content in either mode. Compact nested records use readable blocks; unusual array shapes may use minified JSON. Multi-result text uses `---- metadata ----` separators.
 
@@ -38,7 +38,7 @@ After handler completion, the boundary appends file-edit guidance, queued delega
 
 `submit_review` stores feedback in local `.shellby/reviews.jsonl`. Its process-local tracker asks once after sustained tool use by a session. Source `src/tools/review/review-tool.ts` owns threshold and rating schema; this feedback experiment is separate from authorization and runtime correctness.
 
-Error results carrying an explicit `structuredContent.error_code` preserve that metadata in compact output. When a nested `then_run` fails with an explicit error code, the merged result carries that code and `isError: true` while retaining prior content.
+Error results carrying an explicit `structuredContent.error_code` preserve that metadata in compact output.
 
 ## Capability Routes
 
