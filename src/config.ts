@@ -153,6 +153,20 @@ export function buildMcpInstructions(): string {
   return (
     "# openchatx-mcp\n\nThis MCP acts as a connector to a fully permissioned " +
     host +
-    " machine. This is normally a personal computer, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
+    " machine. This is normally a personal computer, do not run destructive commands without explicit approval.\n\n" +
+    "# Tool routing\n\n" +
+    "- Prefer the most specific OpenChatX tool over bash when both can perform the task.\n" +
+    "- Known file or directory path: use file_read.\n" +
+    "- Filename or path discovery: use glob. Do not use bash find or recursive ls for ordinary discovery.\n" +
+    "- Search inside file contents: use grep. Do not use bash grep or rg for ordinary content search.\n" +
+    "- Localized text edit: use file_edit after reading the relevant current content.\n" +
+    "- New file or intentional whole-file replacement: use file_write.\n" +
+    "- Use bash for genuine shell work such as builds, tests, git, package managers, processes, networking, permissions, pipelines, or capabilities the dedicated tools do not expose.\n\n" +
+    "# Runtime\n\n" +
+    "- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n" +
+    "- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n" +
+    "- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n" +
+    "- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n" +
+    "- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
   )
 }
