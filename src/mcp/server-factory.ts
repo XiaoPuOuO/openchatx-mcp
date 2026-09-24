@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server"
 import type { AgentObserver } from "../agent/observer.js"
+import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
@@ -7,6 +8,7 @@ import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
+import { registerCapabilityHealthTool } from "../tools/capabilities/health-tool.js"
 import { registerCatalogTools } from "../tools/catalog/catalog-tools.js"
 import {
   registerFileEditTool,
@@ -40,6 +42,7 @@ export interface CreateMcpServerOptions {
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
   jobManager?: JobManager
+  capabilityHealth?: CapabilityHealthService
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -52,6 +55,7 @@ export interface McpCapabilityServices {
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
   jobManager?: JobManager
+  capabilityHealth?: CapabilityHealthService
 }
 
 export interface McpRuntimeProfile {
@@ -123,9 +127,10 @@ function registerToolboxRuntime(
   options: CreateMcpServerOptions,
   registry: ToolboxRegistry
 ): void {
-  registerBuiltinToolbox(server, registry, "system", () =>
+  registerBuiltinToolbox(server, registry, "system", () => {
     registerStartHereTool(server, () => buildCapabilityCatalog(options, registry))
-  )
+    if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
+  })
   registerBuiltinToolbox(server, registry, "shell", () => {
     registerBashTool(server, options.bashProcessManager)
     if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
@@ -191,6 +196,7 @@ function registerDirectRuntime(
   profile: McpRuntimeProfile
 ): void {
   registerStartHereTool(server)
+  if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
   if (profile.tools.shell) {
     registerBashTool(server, options.bashProcessManager)
     if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)

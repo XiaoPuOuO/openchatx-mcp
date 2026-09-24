@@ -36,6 +36,22 @@ export interface AgentChangedEvent {
   agent: Agent
 }
 
+export type CapabilityHealthStatus = "healthy" | "degraded" | "unavailable" | "disabled"
+
+export interface CapabilityHealthComponent {
+  id: string
+  kind: "runtime" | "tunnel" | "mcp" | "toolbox" | "provider"
+  name: string
+  status: CapabilityHealthStatus
+  detail?: string
+}
+
+export interface CapabilityHealthSnapshot {
+  status: "healthy" | "degraded"
+  checkedAt: string
+  components: CapabilityHealthComponent[]
+}
+
 interface McpServerBase {
   enabled: boolean
   description?: string

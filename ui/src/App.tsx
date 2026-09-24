@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
+import { CapabilityHealthPanel } from "./features/dashboard/CapabilityHealthPanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
@@ -98,6 +99,7 @@ function Dashboard({
       </header>
 
       <div className="mx-auto max-w-[1500px] px-5 py-6 lg:px-8">
+        <CapabilityHealthPanel />
         {error ? (
           <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}

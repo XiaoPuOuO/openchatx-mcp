@@ -59,6 +59,18 @@ export class SubagentRuntime {
     if (this.reloadTimer) clearTimeout(this.reloadTimer)
   }
 
+  providerSummaries() {
+    return Object.entries(this.config.providers)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, provider]) => ({
+        id,
+        enabled: provider.enabled,
+        profileCount: Object.values(this.config.models).filter(
+          (model) => model.provider === id && model.enabled
+        ).length,
+      }))
+  }
+
   profiles() {
     return Object.entries(this.config.models)
       .filter(([, profile]) => profile.enabled && this.config.providers[profile.provider]?.enabled)

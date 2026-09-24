@@ -2,6 +2,7 @@ import type {
   Agent,
   AgentChangedEvent,
   AgentInstruction,
+  CapabilityHealthSnapshot,
   McpServerMap,
   SubagentConfig,
   ToolboxSnapshot,
@@ -27,6 +28,28 @@ export async function fetchAgents(): Promise<Agent[]> {
   if (!response.ok) throw new Error(`Failed to load agents (${response.status})`)
   const body = (await response.json()) as { agents?: Agent[] }
   return body.agents ?? []
+}
+
+export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot> {
+  if (MOCK_DASHBOARD) {
+    return {
+      status: "healthy",
+      checkedAt: new Date().toISOString(),
+      components: [
+        { id: "openchatx", kind: "runtime", name: "OpenChatX Runtime", status: "healthy" },
+        {
+          id: "tunnel",
+          kind: "tunnel",
+          name: "OpenAI Secure MCP Tunnel",
+          status: "healthy",
+          detail: "profile openchatx",
+        },
+      ],
+    }
+  }
+  const response = await fetch("/ui/api/health")
+  if (!response.ok) throw new Error(`Failed to load capability health (${response.status})`)
+  return (await response.json()) as CapabilityHealthSnapshot
 }
 
 export function subscribeToAgents(

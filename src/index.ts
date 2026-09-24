@@ -3,6 +3,7 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { createAgentObserver } from "./agent/observer.js"
 import { OpenChatXAuthStore } from "./auth/store.js"
+import { CapabilityHealthService } from "./capabilities/health.js"
 import { MCP_CONFIG } from "./config.js"
 import { createExternalMcpRegistry } from "./external-mcp/registry.js"
 import { JobManager } from "./jobs/job-manager.js"
@@ -34,6 +35,7 @@ const interactiveShellManager = new InteractiveShellManager(
 )
 const bashProcessManager = new BashProcessManager()
 const jobManager = new JobManager()
+const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -46,6 +48,7 @@ try {
       webPageOpener,
       subagentRuntime,
       jobManager,
+      capabilityHealth,
     }),
     auditLogger,
     authStore,
@@ -53,6 +56,7 @@ try {
     toolboxRegistry,
     subagentRuntime,
     externalMcp,
+    capabilityHealth,
   })
 } catch (error) {
   await closeRuntimeServices()
