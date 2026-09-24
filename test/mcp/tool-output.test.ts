@@ -40,13 +40,13 @@ test("formats top-level output blocks with a shared boundary", () => {
 
 test("formats global tool events as notices", () => {
   const result = appendToolEvents({ content: [{ type: "text", text: "Done." }] }, [
-    "Use the `apply_patch` MCP tool over `shell_run` for file changes.",
+    "Use the `apply_patch` MCP tool over `bash` for file changes.",
     "agent_finished agent_id=reviewer turn_id=reviewer_turn_1",
   ]) as { content: Array<{ type: string; text: string }> }
 
   assert.equal(
     result.content[0]?.text,
-    "Done.\n\n**Notice:** Use the `apply_patch` MCP tool over `shell_run` for file changes.\n**Notice:** agent_finished agent_id=reviewer turn_id=reviewer_turn_1"
+    "Done.\n\n**Notice:** Use the `apply_patch` MCP tool over `bash` for file changes.\n**Notice:** agent_finished agent_id=reviewer turn_id=reviewer_turn_1"
   )
 })
 
@@ -105,7 +105,7 @@ test("falls back to minified JSON for unusual nested arrays", () => {
 })
 
 test("compact result preserves existing content and removes structuredContent", () => {
-  const compact = compactToolResult("shell_run", {
+  const compact = compactToolResult("bash", {
     structuredContent: { status: "completed", output: "hello" },
     content: [{ type: "text", text: "Command finished." }],
   }) as { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }
@@ -147,49 +147,13 @@ const longSkillDescription =
 
 const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expected: string }> = [
   {
-    tool: "shell_run",
+    tool: "bash",
     structuredContent: {
-      status: "completed",
       cwd: "/workspace",
-      output: "line one\nline two",
       exit_code: 1,
-      commands: [
-        { run: 1, command: "npm run lint", status: "completed", exit_code: 0 },
-        { run: 2, command: "npm run typecheck…", path: "./api", status: "completed", exit_code: 1 },
-      ],
+      output: "line one\nline two",
     },
-    expected:
-      'status=completed cwd=/workspace exit_code=1\n\ncommands:\n\n- run=1 exit_code=0 command="npm run lint"\n- run=2 exit_code=1 command="npm run typecheck…" path=./api\n\noutput:\n\nline one\nline two',
-  },
-  {
-    tool: "shell_poll",
-    structuredContent: { status: "running", output: "chunk one\nchunk two", next_cursor: 8 },
-    expected: "status=running next_cursor=8\n\noutput:\n\nchunk one\nchunk two",
-  },
-  {
-    tool: "shell_poll",
-    structuredContent: {
-      status: "running",
-      output: "---- run=1 ----\n\nfinished",
-      next_cursor: 24,
-      commands: [
-        {
-          run: 1,
-          command: "printf finished",
-          status: "completed",
-          exit_code: 0,
-          dropped_output_bytes: 10,
-        },
-        { run: 2, command: "sleep 10", status: "running", exit_code: null },
-        { run: 3, command: "pwd", status: "queued", exit_code: null },
-        { run: 4, command: "sleep 100", status: "timed_out", exit_code: null },
-        { run: 5, command: "missing", status: "failed", exit_code: null },
-        { run: 6, command: "sleep 1", status: "reset", exit_code: null },
-        { run: 7, command: "kill -TERM $$", status: "completed", exit_code: null },
-      ],
-    },
-    expected:
-      'status=running next_cursor=24\n\ncommands:\n\n- run=1 exit_code=0 command="printf finished" dropped_output_bytes=10\n- run=2 status=running command="sleep 10"\n- run=3 status=queued command=pwd\n- run=4 status=timed_out command="sleep 100"\n- run=5 status=failed command=missing\n- run=6 status=reset command="sleep 1"\n- run=7 status=completed command="kill -TERM $$"\n\noutput:\n\n---- run=1 ----\n\nfinished',
+    expected: "cwd=/workspace exit_code=1\n\noutput:\n\nline one\nline two",
   },
   {
     tool: "apply_patch",
@@ -201,27 +165,6 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
     },
     expected:
       "status=failed exit_code=1 output_dropped=true\n\noutput:\n\nInvalid Context 0:\nexpected line",
-  },
-  {
-    tool: "shell_reset",
-    structuredContent: { shell_generation: 2, state_lost: true, status: "ready" },
-    expected: "shell_generation=2 state_lost=true status=ready",
-  },
-  {
-    tool: "shell_list",
-    structuredContent: {
-      shells: [{ shell_id: "default", status: "idle", can_close: false, idle_ms: 50 }],
-      count: 1,
-      limit: 4,
-      idle_timeout_ms: 300_000,
-    },
-    expected:
-      "count=1 limit=4 idle_timeout_ms=300000\n\nshells:\n\n- shell_id=default status=idle can_close=false idle_ms=50",
-  },
-  {
-    tool: "shell_close",
-    structuredContent: { shell_id: "review", closed: true },
-    expected: "shell_id=review closed=true",
   },
   {
     tool: "fetch_url",

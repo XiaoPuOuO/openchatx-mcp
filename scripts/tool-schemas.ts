@@ -4,25 +4,31 @@ import { MCP_CONFIG } from "../src/config.js"
 import { createExternalMcpRegistry } from "../src/external-mcp/registry.js"
 import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
+import { loadSubagentConfig } from "../src/subagents/config.js"
+import { SubagentRuntime } from "../src/subagents/runtime.js"
 import { countTokens, OUTPUT_TOKEN_ENCODING } from "../src/tokenizer.js"
-import { createShellSession } from "../src/tools/shell/session.js"
-import { createShellSessionManager } from "../src/tools/shell/session-manager.js"
+import { ToolboxRegistry } from "../src/toolbox/registry.js"
+import { InteractiveShellManager } from "../src/tools/shell/interactive-shell.js"
 import { WebPageOpener } from "../src/tools/web/web-open.js"
 
 const requestedNames = new Set(process.argv.slice(2))
-const shells = MCP_CONFIG.tools.shell
-  ? createShellSessionManager({
-      createShell: () => createShellSession({ cwd: MCP_CONFIG.workspace }),
-    })
-  : undefined
 const externalMcp = await createExternalMcpRegistry(MCP_CONFIG.externalMcp.configFile)
-const webPageOpener = MCP_CONFIG.tools.web ? new WebPageOpener() : undefined
+const toolboxRegistry = new ToolboxRegistry(MCP_CONFIG.toolboxes.root)
+await toolboxRegistry.start()
+const interactiveShellManager = new InteractiveShellManager(
+  MCP_CONFIG.workspace,
+  MCP_CONFIG.shell.path
+)
+const subagentRuntime = new SubagentRuntime(loadSubagentConfig(MCP_CONFIG.subagents.configFile))
+const webPageOpener = new WebPageOpener()
 const running = await startMcpHttpServer(
   {
     createMcpServer: createMcpServerFactory({
-      shellManager: shells,
       externalMcp,
+      toolboxRegistry,
+      interactiveShellManager,
       webPageOpener,
+      subagentRuntime,
     }),
   },
   { port: 0 }
@@ -54,5 +60,9 @@ try {
 } finally {
   await client.close().catch(() => undefined)
   await running.close()
-  await Promise.allSettled([shells?.close() ?? Promise.resolve(), externalMcp.close()])
+  await Promise.allSettled([
+    interactiveShellManager.close(),
+    toolboxRegistry.close(),
+    externalMcp.close(),
+  ])
 }

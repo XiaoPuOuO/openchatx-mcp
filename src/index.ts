@@ -12,8 +12,6 @@ import { loadSubagentConfig } from "./subagents/config.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
 import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
-import { createShellSession } from "./tools/shell/session.js"
-import { createShellSessionManager } from "./tools/shell/session-manager.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
 
 const auditLogPath = fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
@@ -32,16 +30,10 @@ const interactiveShellManager = new InteractiveShellManager(
   MCP_CONFIG.shell.path
 )
 
-const shells = createShellSessionManager({
-  createShell: (initialState) => createShellSession({ cwd: MCP_CONFIG.workspace, initialState }),
-})
-
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
-  await shells?.startDefault()
   running = await startMcpHttpServer({
     createMcpServer: createMcpServerFactory({
-      shellManager: shells,
       externalMcp,
       toolboxRegistry,
       interactiveShellManager,
@@ -62,9 +54,7 @@ console.log(`Local shell MCP server: ${running.url}`)
 console.log(`Agent dashboard: http://${running.host}:${running.port}/ui`)
 console.log("Remote MCP authentication: trusted ChatGPT origin + bound OpenAI subject")
 console.log(`Default workspace: ${MCP_CONFIG.workspace}`)
-console.log(
-  `Shell tools: ${shells ? `enabled (${MCP_CONFIG.shell.path}, max ${shells.maximumShells})` : "disabled"}`
-)
+console.log(`Shell tools: bash + terminal (${MCP_CONFIG.shell.path})`)
 console.log(`Agent MCP audit log: ${auditLogPath}`)
 console.log(
   `External MCPs: ${externalMcp.connectedServers.length} connected, ${externalMcp.toolCount} tools`
@@ -85,7 +75,6 @@ const shutdown = async (signal: string) => {
 
 async function closeRuntimeServices(): Promise<void> {
   await Promise.allSettled([
-    shells.close(),
     interactiveShellManager.close(),
     externalMcp.close(),
     toolboxRegistry.close(),

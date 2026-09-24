@@ -30,15 +30,12 @@ function summarizeTool(tool: string, input: unknown): string {
 
 function summarizeKnownTool(tool: string, record: Record<string, unknown>): string | undefined {
   switch (tool) {
-    case "shell_run":
-      if (typeof record.command === "string") return singleLine(record.command, 140)
-      if (Array.isArray(record.commands)) return `${record.commands.length} parallel commands`
-      return undefined
-    case "shell_poll": {
-      const shell = typeof record.shell_id === "string" ? record.shell_id : "default"
-      const request = typeof record.request_id === "string" ? record.request_id : ""
-      return request ? `${shell}/${request}` : shell
-    }
+    case "bash":
+      return typeof record.command === "string" ? singleLine(record.command, 140) : undefined
+    case "terminal":
+      if (typeof record.session_id === "string")
+        return `${String(record.action ?? "terminal")}: ${record.session_id}`
+      return typeof record.action === "string" ? record.action : undefined
     case "apply_patch":
       return typeof record.cwd === "string" ? record.cwd : "Applying patch"
     case "fetch_url":
@@ -55,15 +52,8 @@ function formatToolDetail(
   input: unknown
 ): Pick<ToolCallPresentation, "detail" | "detailLanguage"> {
   const record = asRecord(input)
-  if (tool === "shell_run" && record) {
-    if (typeof record.command === "string")
-      return { detail: record.command, detailLanguage: "bash" }
-    if (Array.isArray(record.commands)) {
-      const commands = record.commands
-        .map((item) => asRecord(item)?.command)
-        .filter((command): command is string => typeof command === "string")
-      if (commands.length > 0) return { detail: commands.join("\n\n"), detailLanguage: "bash" }
-    }
+  if (tool === "bash" && record && typeof record.command === "string") {
+    return { detail: record.command, detailLanguage: "bash" }
   }
   if (tool === "apply_patch" && record && typeof record.patch === "string") {
     return { detail: record.patch, detailLanguage: "diff" }

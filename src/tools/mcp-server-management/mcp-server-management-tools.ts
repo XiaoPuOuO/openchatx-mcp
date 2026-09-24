@@ -8,6 +8,7 @@ import {
   loadExternalMcpConfig,
   saveExternalMcpConfig,
 } from "../../external-mcp/config.js"
+import { toToolError } from "../../mcp/tool-error.js"
 
 const actionSchema = z.enum(["create", "update", "delete", "enable", "disable"])
 
@@ -50,7 +51,7 @@ export function registerMcpServerManagementTools(
           content: [],
         }
       } catch (error) {
-        return toolError(error)
+        throw toToolError(error, "MCP_SERVER_MANAGE_FAILED")
       }
     }
   )
@@ -87,7 +88,7 @@ export function registerMcpServerManagementTools(
           ],
         }
       } catch (error) {
-        return toolError(error)
+        throw toToolError(error, "MCP_SERVER_MANAGE_FAILED")
       }
     }
   )
@@ -190,16 +191,4 @@ function redactConfig(config: ExternalMcpConfig) {
 
 function redactRecord(record: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.keys(record).map((key) => [key, "<redacted>"]))
-}
-
-function toolError(error: unknown) {
-  return {
-    isError: true,
-    content: [
-      {
-        type: "text" as const,
-        text: `MCP_SERVER_MANAGE_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    ],
-  }
 }

@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { ToolError, toToolError } from "../../mcp/tool-error.js"
 import { WebOpenError, type WebPageOpener } from "./web-open.js"
 
 export function registerWebTool(server: McpServer, webPageOpener: WebPageOpener): void {
@@ -93,20 +94,17 @@ export function registerWebTool(server: McpServer, webPageOpener: WebPageOpener)
           content: [],
         }
       } catch (error) {
-        return webErrorResult(error)
+        throw webToolError(error)
       }
     }
   )
 }
 
-function webErrorResult(error: unknown) {
+function webToolError(error: unknown): ToolError {
   const code = error instanceof WebOpenError ? error.code : "open_failed"
   const errorCode =
     code === "invalid_url" || code === "invalid_cursor" ? "INVALID_ARGUMENT" : code.toUpperCase()
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    isError: true,
-    structuredContent: { error_code: errorCode },
-    content: [{ type: "text" as const, text: `${code}: ${message}` }],
-  }
+  if (error instanceof WebOpenError)
+    return new ToolError(errorCode, error.message, { cause: error })
+  return toToolError(error, errorCode)
 }

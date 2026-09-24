@@ -1,10 +1,11 @@
-import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
+import type { CallToolResult, McpServer, ServerContext } from "@modelcontextprotocol/server"
 
 import { getAgentIdentity } from "../agent/context.js"
 import type { AgentObserver } from "../agent/observer.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
+import { ToolError, toToolError } from "./tool-error.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
 import {
   type PreparedToolRegistration,
@@ -44,9 +45,10 @@ export function installToolRegistrationBoundary(
     try {
       const agent = getAgentIdentity()
       if (agent && name !== START_HERE_TOOL_NAME && !agent.taskSlug) {
-        const result = startupRequiredResult()
-        auditCall?.finish({ toolResult: result, modelResult: result })
-        return result
+        throw new ToolError(
+          "INITIALIZATION_REQUIRED",
+          "openchatx-mcp has not been initialized for this conversation. Call `start_here` first, and follow the instructions."
+        )
       }
 
       observedCallId = options.agentObserver?.startTool(agent, name, input)
@@ -64,7 +66,7 @@ export function installToolRegistrationBoundary(
     } catch (error) {
       const agent = getAgentIdentity()
       options.agentObserver?.failTool(agent, observedCallId)
-      const result = toolError(error instanceof Error ? error.message : String(error))
+      const result = formatToolError(error, structuredOutput)
       auditCall?.finish({ error, modelResult: result })
       return result
     }
@@ -100,27 +102,17 @@ function collectToolEvents(
   options: ToolRegistrationBoundaryOptions
 ): string[] {
   return [
-    ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
+    ...(name === "bash" ? shellRunFileEditNotices(input) : []),
     ...(options.agentObserver?.drainInstructions(agent) ?? []),
   ]
 }
 
-function toolError(text: string) {
+function formatToolError(error: unknown, structuredOutput: boolean): CallToolResult {
+  const failure = toToolError(error)
   return {
     isError: true,
-    content: [{ type: "text" as const, text }],
-  }
-}
-
-function startupRequiredResult() {
-  return {
-    isError: true,
-    content: [
-      {
-        type: "text" as const,
-        text: "openchatx-mcp has not been initialized for this conversation. Call `start_here` first, and follow the instructions.",
-      },
-    ],
+    ...(structuredOutput ? { structuredContent: { error_code: failure.code } } : {}),
+    content: [{ type: "text" as const, text: `${failure.code}: ${failure.message}` }],
   }
 }
 

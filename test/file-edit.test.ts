@@ -81,27 +81,7 @@ test("file_edit preserves CRLF when model input uses LF", async (t) => {
   assert.equal(await readFile(path, "utf8"), "one\r\ntwo\r\n")
 })
 
-test("file_edit can create a new file when oldString is empty", async (t) => {
-  const root = await tempDir(t, "openchatx-file-edit-create-")
-  const path = join(root, "nested", "created.txt")
-  const client = await connectedFileEdit(t)
-
-  const result = await client.callTool({
-    name: "file_edit",
-    arguments: {
-      filePath: path,
-      oldString: "",
-      newString: "created\n",
-    },
-  })
-  assert.equal(result.isError, undefined)
-  assert.equal(await readFile(path, "utf8"), "created\n")
-  const output = result.structuredContent as { created?: boolean; diff: string }
-  assert.equal(output.created, true)
-  assert.match(output.diff, /\+created/u)
-})
-
-test("file_edit uses conservative line-trimmed matching when exact whitespace differs", async (t) => {
+test("file_edit requires exact whitespace", async (t) => {
   const root = await tempDir(t, "openchatx-file-edit-trimmed-")
   const path = join(root, "example.ts")
   await writeFile(path, "function demo() {\n  const value = 1\n  return value\n}\n")
@@ -115,9 +95,9 @@ test("file_edit uses conservative line-trimmed matching when exact whitespace di
       newString: "  const value = 2\n  return value",
     },
   })
-  assert.equal(result.isError, undefined)
+  assert.equal(result.isError, true)
   assert.equal(
     await readFile(path, "utf8"),
-    "function demo() {\n  const value = 2\n  return value\n}\n"
+    "function demo() {\n  const value = 1\n  return value\n}\n"
   )
 })

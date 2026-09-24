@@ -94,46 +94,28 @@ export const MCP_CONFIG = {
     /** Maximum number of fetched documents retained in the cache. */
     documentLimit: 20,
   },
-  /** Persistent shell execution, output, and lifecycle settings. */
+  /** Shell and terminal execution settings. */
   shell: {
-    /** Shell executable used for persistent command sessions. */
+    /** Shell executable used by bash and terminal tools. */
     path: publicConfig.shell.path,
     /** Whether supported shell commands are rewritten through RTK. */
     rtk: publicConfig.shell.rtk,
     /** RTK executable resolved from PATH when available. */
     rtkExecutable,
-    /** Rolling shell-wide character retention available to shell_poll cursors. */
+    /** Rolling character retention used by interactive terminal sessions. */
     transcriptChars: 1024 * 1024,
-    /** Maximum stdout/stderr bytes retained for one command before excess is dropped. */
-    commandTranscriptBytes: 256 * 1024,
-    /** Default model-output token budget for one shell_run or shell_poll response. */
+    /** Default model-output token budget for bash/terminal responses. */
     defaultOutputTokens: 2_000,
-    /** Maximum model-output token budget a shell caller may request per response. */
+    /** Maximum model-output token budget a bash/terminal caller may request. */
     maxOutputTokens: 18_000,
-    /** Default time shell_run waits before returning a still-running command. */
-    defaultWaitMs: 10_000,
-    /** Maximum shell_run wait accepted from callers. */
-    maxWaitMs: 270_000,
-    /** Default time shell_poll waits for additional output or completion. */
-    defaultPollWaitMs: 40_000,
-    /** Maximum shell_poll wait accepted from callers. */
-    maxPollWaitMs: 270_000,
-    /** Maximum time allowed for a newly created shell to become ready. */
+    /** Maximum time allowed for a newly created terminal to become ready. */
     readyTimeoutMs: 10_000,
-    /** Grace period before force-killing a shell process that did not stop. */
+    /** Grace period before force-killing a terminal process that did not stop. */
     stopGraceMs: 500,
-    /** Maximum completed command records retained per shell for lookup and polling. */
-    recordLimit: 1_024,
-    /** Maximum number of simultaneously retained shell sessions. */
-    maxShells: 8,
-    /** Idle time before a named shell is hibernated or evicted. */
-    idleTimeoutMs: 5 * 60 * 1000,
-    /** Time cached shell state remains restorable after hibernation. */
-    cacheTimeoutMs: 24 * 60 * 60 * 1000,
   },
   /** Feature flags controlling which MCP tool groups are registered. */
   tools: {
-    /** Enables persistent shell execution and management tools. */
+    /** Enables bash and terminal tools. */
     shell: publicConfig.tools.shell,
     /** Enables the first-class apply_patch file-editing tool. */
     applyPatch: publicConfig.tools.apply_patch,

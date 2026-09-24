@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { toToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
 
 const kindSchema = z.enum(["toolbox", "tool", "skill"])
@@ -64,15 +65,7 @@ export function registerToolboxManagementTools(server: McpServer, registry: Tool
           content: [],
         }
       } catch (error) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text: `TOOLBOX_MANAGE_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-        }
+        throw toToolError(error, "TOOLBOX_MANAGE_FAILED")
       }
     }
   )

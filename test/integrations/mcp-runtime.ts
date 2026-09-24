@@ -18,7 +18,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(connected.client.getDiscoverResult())
 
   const tools = await connected.client.listTools()
-  for (const tool of tools.tools.filter((tool) => tool.name !== "file_write")) {
+  for (const tool of tools.tools) {
     assert.equal(tool.title, undefined)
     assert.equal((tool as unknown as Record<string, unknown>)._meta, undefined)
   }
@@ -26,15 +26,12 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     tools.tools.map((tool) => tool.name),
     [
       "start_here",
-      "shell_run",
-      "shell_poll",
+      "bash",
+      "terminal",
       "apply_patch",
       "file_read",
       "file_write",
       "file_edit",
-      "shell_reset",
-      "shell_list",
-      "shell_close",
       "fetch_url",
       "skill_list",
       "skill_use",
@@ -49,46 +46,31 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     ["code-review", "coding", "general"]
   )
   assert.deepEqual(Object.keys(startHere.inputSchema.properties ?? {}), ["mode", "task_id"])
-  const shellList = tools.tools.find((tool) => tool.name === "shell_list")
+  const bash = tools.tools.find((tool) => tool.name === "bash")
   const skillUse = tools.tools.find((tool) => tool.name === "skill_use")
-  assert.ok(shellList && skillUse)
-  assert.deepEqual(Object.keys(shellList.inputSchema.properties ?? {}), [])
+  assert.ok(bash && skillUse)
   assert.deepEqual(Object.keys(skillUse.inputSchema.properties ?? {}), ["name"])
 
-  const shellRun = tools.tools.find((tool) => tool.name === "shell_run")
-  const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
   const fileWrite = tools.tools.find((tool) => tool.name === "file_write")
-  assert.ok(shellRun && shellPoll && fetchUrl && fileWrite)
+  assert.ok(bash && fetchUrl && fileWrite)
 
-  const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)
-    .yield_time_ms
-  const pollYield = (shellPoll.inputSchema.properties as Record<string, Record<string, unknown>>)
-    .yield_time_ms
+  const bashProperties = bash.inputSchema.properties as Record<string, Record<string, unknown>>
+  assert.equal(bashProperties.timeout_ms?.default, 120_000)
+  assert.equal(bashProperties.timeout_ms?.maximum, 15 * 60_000)
+  assert.equal(bashProperties.max_output_tokens?.default, MCP_CONFIG.shell.defaultOutputTokens)
+  assert.equal(bashProperties.max_output_tokens?.maximum, MCP_CONFIG.shell.maxOutputTokens)
   const webProperties = fetchUrl.inputSchema.properties as Record<string, Record<string, unknown>>
   const webTokens = webProperties.max_output_tokens
   const webCompact = webProperties.compact
   const webFormat = webProperties.format
-  assert.equal(runYield?.default, MCP_CONFIG.shell.defaultWaitMs)
-  assert.equal(runYield?.maximum, MCP_CONFIG.shell.maxWaitMs)
-  assert.equal(pollYield?.default, MCP_CONFIG.shell.defaultPollWaitMs)
-  assert.equal(pollYield?.maximum, MCP_CONFIG.shell.maxPollWaitMs)
   assert.equal(webTokens?.default, MCP_CONFIG.web.defaultOutputTokens)
   assert.equal(webTokens?.maximum, MCP_CONFIG.web.maxOutputTokens)
   assert.equal(webCompact?.default, false)
   assert.deepEqual(webFormat?.enum, ["markdown", "html"])
   assert.equal(fetchUrl.outputSchema, undefined)
-  assert.deepEqual((fileWrite as unknown as Record<string, unknown>)._meta, {
-    "openai/fileParams": ["file"],
-  })
-  const fileInput = fileWrite.inputSchema.properties?.file as Record<string, unknown>
-  assert.deepEqual(fileInput.required, ["download_url", "file_id"])
-  assert.deepEqual(Object.keys(fileInput.properties as Record<string, unknown>), [
-    "download_url",
-    "file_id",
-    "mime_type",
-    "file_name",
-  ])
+  assert.deepEqual(Object.keys(fileWrite.inputSchema.properties ?? {}), ["filePath", "content"])
+  assert.equal(fileWrite.outputSchema, undefined)
 })
 
 test("bound MCP factories snapshot identity, tool groups, and output mode", {
@@ -167,7 +149,7 @@ test("one HTTP observer drives dashboard state and tool observation", {
     name: "start_here",
     arguments: { mode: "general", task_id: "observer-composition" },
   })
-  await connected.client.callTool({ name: "shell_list", arguments: {} })
+  await connected.client.callTool({ name: "bash", arguments: { command: "printf observed" } })
 
   const response = await fetch(`http://${running.host}:${running.port}/ui/api/agents`)
   assert.equal(response.status, 200)
@@ -176,8 +158,8 @@ test("one HTTP observer drives dashboard state and tool observation", {
   }
   const local = agentObserver.listAgents()[0]
   assert.equal(body.agents[0]?.id, local?.id)
-  assert.equal(body.agents[0]?.recent[0]?.tool, "shell_list")
-  assert.equal(local?.recent[0]?.tool, "shell_list")
+  assert.equal(body.agents[0]?.recent[0]?.tool, "bash")
+  assert.equal(local?.recent[0]?.tool, "bash")
 })
 
 test("publishes only start_here when every optional tool group is disabled", {
@@ -234,16 +216,16 @@ test("publishes ordinary tool results only through the compact MCP surface", {
   const connected = await connectClient(running.url, "compact-output-client")
   t.after(() => connected.client.close())
 
-  const shellList = (await connected.client.listTools()).tools.find(
-    (tool) => tool.name === "shell_list"
-  )
-  assert.ok(shellList)
-  assert.equal(shellList.outputSchema, undefined)
-  assert.equal("structured" in (shellList.inputSchema.properties as Record<string, unknown>), false)
+  const bash = (await connected.client.listTools()).tools.find((tool) => tool.name === "bash")
+  assert.ok(bash)
+  assert.equal(bash.outputSchema, undefined)
 
-  const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  const result = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf compact" },
+  })
   assert.equal(result.structuredContent, undefined)
-  assert.match(toolText(result), /count=\d+ limit=\d+/u)
+  assert.match(toolText(result), /output=compact/u)
 })
 
 test("preserves structured tool output when configured", { timeout: 10_000 }, async (t) => {
@@ -252,15 +234,10 @@ test("preserves structured tool output when configured", { timeout: 10_000 }, as
   const connected = await connectClient(running.url, "structured-output-client")
   t.after(() => connected.client.close())
 
-  const shellList = (await connected.client.listTools()).tools.find(
-    (tool) => tool.name === "shell_list"
-  )
-  assert.ok(shellList?.outputSchema)
-
   const result = await connected.client.callTool({
-    name: "shell_list",
-    arguments: {},
+    name: "bash",
+    arguments: { command: "printf structured" },
   })
   assert.ok(result.structuredContent)
-  assert.equal(typeof (result.structuredContent as { count: number }).count, "number")
+  assert.equal((result.structuredContent as { output: string }).output, "structured")
 })

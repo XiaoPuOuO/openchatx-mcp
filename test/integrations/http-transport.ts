@@ -3,11 +3,12 @@ import test from "node:test"
 
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 import {
-  callUntilComplete,
+  compactField,
   connectClient,
   connectLegacyClient,
   postWithHost,
   startMcpHttpServer,
+  toolText,
 } from "./helpers.js"
 
 test("keeps the stateless 2025-era fallback available", { timeout: 10_000 }, async (t) => {
@@ -34,16 +35,18 @@ test("continues serving an existing client after an HTTP server restart", {
     await activeServer.close()
   })
 
-  assert.equal(
-    (await callUntilComplete(connection.client, "before-restart", "printf before")).output,
-    "before"
-  )
+  const before = await connection.client.callTool({
+    name: "bash",
+    arguments: { command: "printf before" },
+  })
+  assert.equal(compactField(toolText(before), "output"), "before")
   await firstServer.close()
   activeServer = await startMcpHttpServer({ port })
-  assert.equal(
-    (await callUntilComplete(connection.client, "after-restart", "printf after")).output,
-    "after"
-  )
+  const after = await connection.client.callTool({
+    name: "bash",
+    arguments: { command: "printf after" },
+  })
+  assert.equal(compactField(toolText(after), "output"), "after")
 })
 
 test("rejects a mismatched HTTP Host", { timeout: 10_000 }, async (t) => {

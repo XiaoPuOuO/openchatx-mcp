@@ -25,7 +25,7 @@ export function registerApplyPatchTool(server: McpServer): void {
     "apply_patch",
     {
       description:
-        "Use `apply_patch` for structural or multi-file changes, or to create, delete, move, or rename files. For one existing text file with an exact oldString/newString replacement, prefer `file_edit`. A patch may contain multiple file operations and update hunks; use `@@ <context>` to scope a hunk when needed.",
+        "Apply an explicit structured patch when the task is naturally expressed as a patch: coordinated multi-file changes, file moves/deletions, or a patch supplied by the user. Do not use this as the default file editor. For localized changes to an existing text file use `file_edit`; for creating or completely rewriting a text file use `file_write`. A patch may contain multiple file operations and update hunks; use `@@ <context>` to scope a hunk when needed.",
       inputSchema: z.object({
         patch: z
           .string()

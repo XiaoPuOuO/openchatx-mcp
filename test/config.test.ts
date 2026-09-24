@@ -9,7 +9,7 @@ import { initializeOpenChatXConfig } from "../scripts/workspace-setup.js"
 import { DEFAULT_PUBLIC_CONFIG, loadPublicConfig } from "../src/public-config.cjs"
 import { tempDir } from "./helpers/temp.js"
 
-test("loads and validates Shellby TOML config", async (t) => {
+test("loads and validates OpenChatX TOML config", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-config-"))
   t.after(() => rm(root, { recursive: true, force: true }))
   const path = join(root, "config.toml")

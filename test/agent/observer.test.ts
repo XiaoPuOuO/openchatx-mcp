@@ -8,11 +8,11 @@ test("tracks current and recent tool activity for one agent", () => {
   const observer = createAgentObserver(() => timestamp)
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "dashboard" }
 
-  const callId = observer.startTool(agent, "shell_run", { command: "npm test" })
+  const callId = observer.startTool(agent, "bash", { command: "npm test" })
   assert.ok(callId)
   assert.deepEqual(observer.listAgents()[0]?.current, {
     id: callId,
-    tool: "shell_run",
+    tool: "bash",
     summary: "npm test",
     detail: "npm test",
     detailLanguage: "bash",
@@ -33,7 +33,7 @@ test("queues and delivers steering instructions once", () => {
   const observer = createAgentObserver(() => timestamp)
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "dashboard" }
 
-  observer.startTool(agent, "shell_run", { command: "npm test" })
+  observer.startTool(agent, "bash", { command: "npm test" })
   const instruction = observer.queueInstruction("agent-1", " Focus only on the dashboard. ")
   assert.equal(instruction?.message, "Focus only on the dashboard.")
 
@@ -49,7 +49,7 @@ test("cancels queued steering instructions before delivery", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
 
-  observer.startTool(agent, "shell_run", { command: "pwd" })
+  observer.startTool(agent, "bash", { command: "pwd" })
   const instruction = observer.queueInstruction("agent-1", "Do not run tests")
   assert.ok(instruction)
   assert.equal(observer.cancelInstruction("agent-1", instruction.id), true)
@@ -61,7 +61,7 @@ test("does not cancel an instruction after it is delivered", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
 
-  observer.startTool(agent, "shell_run", { command: "pwd" })
+  observer.startTool(agent, "bash", { command: "pwd" })
   const instruction = observer.queueInstruction("agent-1", "Keep going")
   assert.ok(instruction)
   assert.deepEqual(observer.drainInstructions(agent), ["Human instruction: Keep going"])
@@ -73,8 +73,8 @@ test("keeps steering instructions scoped to the intended agent", () => {
   const first: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
   const second: AgentIdentity = { sessionId: "session-b", agent: "agent-2" }
 
-  observer.startTool(first, "shell_run", { command: "pwd" })
-  observer.startTool(second, "shell_run", { command: "pwd" })
+  observer.startTool(first, "bash", { command: "pwd" })
+  observer.startTool(second, "bash", { command: "pwd" })
   observer.queueInstruction("agent-2", "Second agent only")
 
   assert.deepEqual(observer.drainInstructions(first), [])
@@ -99,7 +99,7 @@ test("keeps concurrent tool calls from the same agent", () => {
   const observer = createAgentObserver(() => timestamp)
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
 
-  const first = observer.startTool(agent, "shell_run", { command: "npm test" })
+  const first = observer.startTool(agent, "bash", { command: "npm test" })
   timestamp = 3_100
   const second = observer.startTool(agent, "fetch_url", { url: "https://example.com" })
   assert.equal(observer.listAgents()[0]?.current?.id, second)

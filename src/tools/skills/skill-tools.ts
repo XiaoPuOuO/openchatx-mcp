@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import { MCP_CONFIG } from "../../config.js"
+import { ToolError, toToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
 import {
   isValidSkillName,
@@ -48,7 +49,7 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
           content: [],
         }
       } catch (error) {
-        return skillToolError(error)
+        throw skillToolError(error)
       }
     }
   )
@@ -94,19 +95,13 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
           content: [],
         }
       } catch (error) {
-        return skillToolError(error)
+        throw skillToolError(error)
       }
     }
   )
 }
 
-function skillToolError(error: unknown) {
-  const text =
-    error instanceof SkillCatalogError
-      ? `${error.code}: ${error.message}`
-      : `skill_failed: ${error instanceof Error ? error.message : String(error)}`
-  return {
-    isError: true,
-    content: [{ type: "text" as const, text }],
-  }
+function skillToolError(error: unknown): ToolError {
+  if (error instanceof SkillCatalogError) return new ToolError(error.code, error.message, error)
+  return toToolError(error, "SKILL_FAILED")
 }

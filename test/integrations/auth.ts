@@ -37,21 +37,25 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", {
 
   const local = await connectClient(running.url, "local-auth-bypass")
   t.after(() => local.client.close())
-  assert.ok((await local.client.callTool({ name: "shell_list", arguments: {} })).content)
+  assert.ok(
+    (await local.client.callTool({ name: "bash", arguments: { command: "printf local" } })).content
+  )
 
   const discovery = await connectClient(running.url, "remote-discovery", undefined, true)
   t.after(() => discovery.client.close())
   assert.ok((await discovery.client.listTools()).tools.length > 0)
   assert.equal((await authStore.readState()).subject, null)
   await assert.rejects(
-    () => discovery.client.callTool({ name: "shell_list", arguments: {} }),
+    () => discovery.client.callTool({ name: "bash", arguments: { command: "printf denied" } }),
     /403|denied/iu
   )
   assert.equal((await authStore.readState()).subject, null)
 
   const owner = await connectClient(running.url, "remote-owner", "subject-a", true)
   t.after(() => owner.client.close())
-  assert.ok((await owner.client.callTool({ name: "shell_list", arguments: {} })).content)
+  assert.ok(
+    (await owner.client.callTool({ name: "bash", arguments: { command: "printf owner" } })).content
+  )
   assert.equal((await authStore.readState()).subject, "subject-a")
 
   const sameOwner = await connectClient(
@@ -61,12 +65,15 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", {
     true
   )
   t.after(() => sameOwner.client.close())
-  assert.ok((await sameOwner.client.callTool({ name: "shell_list", arguments: {} })).content)
+  assert.ok(
+    (await sameOwner.client.callTool({ name: "bash", arguments: { command: "printf owner" } }))
+      .content
+  )
 
   const otherSubject = await connectClient(running.url, "remote-other-subject", "subject-b", true)
   t.after(() => otherSubject.client.close())
   await assert.rejects(
-    () => otherSubject.client.callTool({ name: "shell_list", arguments: {} }),
+    () => otherSubject.client.callTool({ name: "bash", arguments: { command: "printf denied" } }),
     /403|denied/iu
   )
 })
@@ -81,7 +88,7 @@ test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, as
   const remoteUrl = `http://${running.host}:${port}/mcp`
 
   const owner = await connectClient(remoteUrl, "remote-owner-before-restart", "subject-a", true)
-  await owner.client.callTool({ name: "shell_list", arguments: {} })
+  await owner.client.callTool({ name: "bash", arguments: { command: "printf before" } })
   await owner.client.close()
   await running.close()
 
@@ -100,5 +107,8 @@ test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, as
     true
   )
   t.after(() => afterRestart.client.close())
-  assert.ok((await afterRestart.client.callTool({ name: "shell_list", arguments: {} })).content)
+  assert.ok(
+    (await afterRestart.client.callTool({ name: "bash", arguments: { command: "printf after" } }))
+      .content
+  )
 })

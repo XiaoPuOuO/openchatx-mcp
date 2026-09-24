@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { readFile, writeFile } from "node:fs/promises"
-import { createServer } from "node:http"
 import { join } from "node:path"
 import test from "node:test"
 
@@ -27,23 +26,11 @@ test("file_read rejects ordinary binary files", {
   assert.match(toolText(result), /Cannot read binary file/u)
 })
 
-test("file_write downloads a ChatGPT file input to the requested local path", {
+test("file_write creates and overwrites text while returning a diff", {
   timeout: 10_000,
 }, async (t) => {
-  const root = await tempDir(t, "shellby-file-write-")
-  const path = join(root, "received.bin")
-  const expected = Buffer.from([255, 0, 128, 64, 32, 16])
-  const source = createServer((_request, response) => {
-    response.writeHead(200, { "content-type": "application/octet-stream" })
-    response.end(expected)
-  })
-  await new Promise<void>((resolve, reject) => {
-    source.once("error", reject)
-    source.listen(0, "127.0.0.1", () => resolve())
-  })
-  t.after(() => new Promise<void>((resolve) => source.close(() => resolve())))
-  const address = source.address()
-  assert.ok(address && typeof address === "object")
+  const root = await tempDir(t, "openchatx-file-write-")
+  const path = join(root, "nested", "example.txt")
 
   const running = await startMcpHttpServer()
   t.after(() => running.close())
@@ -52,17 +39,20 @@ test("file_write downloads a ChatGPT file input to the requested local path", {
 
   const result = await connected.client.callTool({
     name: "file_write",
-    arguments: {
-      file: {
-        download_url: `http://127.0.0.1:${address.port}/payload.bin`,
-        file_id: "file_test",
-        mime_type: "application/octet-stream",
-        file_name: "payload.bin",
-      },
-      path,
-    },
+    arguments: { filePath: path, content: "first\n" },
   })
   assert.equal(result.isError, undefined)
-  assert.deepEqual(await readFile(path), expected)
-  assert.match(toolText(result), /Wrote received\.bin \(6 bytes\)/u)
+  assert.equal(await readFile(path, "utf8"), "first\n")
+  assert.match(toolText(result), /\+first/u)
+  assert.match(toolText(result), /created=true/u)
+
+  const overwritten = await connected.client.callTool({
+    name: "file_write",
+    arguments: { filePath: path, content: "second\n" },
+  })
+  assert.equal(overwritten.isError, undefined)
+  assert.equal(await readFile(path, "utf8"), "second\n")
+  assert.match(toolText(overwritten), /-first/u)
+  assert.match(toolText(overwritten), /\+second/u)
+  assert.match(toolText(overwritten), /created=false/u)
 })

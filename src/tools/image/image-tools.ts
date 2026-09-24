@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { ToolError, toToolError } from "../../mcp/tool-error.js"
 import { encodeImageForMcp, formatBytes, ImageEncodingError } from "./image-encoding.js"
 
 export function registerImageTools(server: McpServer): void {
@@ -45,14 +46,10 @@ export function registerImageTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        const text =
-          error instanceof ImageEncodingError
-            ? `${error.code}: ${error.message}`
-            : `IMAGE_VIEW_FAILED: ${error instanceof Error ? error.message : String(error)}`
-        return {
-          isError: true,
-          content: [{ type: "text" as const, text }],
-        }
+        if (error instanceof ImageEncodingError)
+          // biome-ignore lint/style/useErrorCause: ToolError stores the original error as its cause.
+          throw new ToolError(error.code, error.message, error)
+        throw toToolError(error, "IMAGE_VIEW_FAILED")
       }
     }
   )

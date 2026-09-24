@@ -8,6 +8,7 @@ import * as pty from "node-pty"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { toToolError } from "../../mcp/tool-error.js"
 import { createTranscriptBuffer, type TranscriptBuffer } from "./transcript.js"
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/u
@@ -171,7 +172,7 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
       session_id: sessionId,
       cwd: z.string().min(1).optional(),
       command: z.string().min(1).optional(),
-      yield_time_ms: waitMs,
+      wait_ms: waitMs,
       max_output_tokens: maxOutputTokens,
     }),
     z.object({
@@ -180,14 +181,14 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
       input: z.string(),
       enter: z.boolean().default(false),
       cursor: z.int().nonnegative().optional(),
-      yield_time_ms: waitMs,
+      wait_ms: waitMs,
       max_output_tokens: maxOutputTokens,
     }),
     z.object({
       action: z.literal("read"),
       session_id: sessionId,
       cursor: z.int().nonnegative(),
-      yield_time_ms: waitMs,
+      wait_ms: waitMs,
       max_output_tokens: maxOutputTokens,
     }),
     z.object({
@@ -219,7 +220,7 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
             sessionId: input.session_id,
             cwd: input.cwd,
             command: input.command,
-            waitMs: input.yield_time_ms,
+            waitMs: input.wait_ms,
             maxOutputTokens: input.max_output_tokens,
             signal: context.mcpReq.signal,
           })
@@ -232,7 +233,7 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
             text: input.input,
             enter: input.enter,
             cursor: input.cursor,
-            waitMs: input.yield_time_ms,
+            waitMs: input.wait_ms,
             maxOutputTokens: input.max_output_tokens,
             signal: context.mcpReq.signal,
           })
@@ -243,7 +244,7 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
           manager.poll({
             sessionId: input.session_id,
             cursor: input.cursor,
-            waitMs: input.yield_time_ms,
+            waitMs: input.wait_ms,
             maxOutputTokens: input.max_output_tokens,
             signal: context.mcpReq.signal,
           })
@@ -372,15 +373,7 @@ async function interactiveResult(operation: () => Promise<Record<string, unknown
     const structuredContent = await operation()
     return { structuredContent, content: [] }
   } catch (error) {
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text" as const,
-          text: `INTERACTIVE_SHELL_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-    }
+    throw toToolError(error, "INTERACTIVE_SHELL_FAILED")
   }
 }
 

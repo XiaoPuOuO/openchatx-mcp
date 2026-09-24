@@ -6,6 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { ToolError, toToolError } from "../../mcp/tool-error.js"
 
 const RESULT_LIMIT = 100
 const STDOUT_LIMIT_BYTES = 4 * 1024 * 1024
@@ -41,14 +42,16 @@ export function registerSearchTools(server: McpServer): void {
       try {
         const searchRoot = resolveSearchPath(path)
         const info = await stat(searchRoot)
-        if (!info.isDirectory()) return toolError(`glob path must be a directory: ${searchRoot}`)
+        if (!info.isDirectory())
+          throw new ToolError("GLOB_FAILED", `glob path must be a directory: ${searchRoot}`)
 
         const result = await runRg(
           ["--files", "--hidden", "-g", pattern],
           searchRoot,
           context.mcpReq.signal
         )
-        if (result.code !== 0 && result.code !== 1) return toolError(result.stderr || "glob failed")
+        if (result.code !== 0 && result.code !== 1)
+          throw new ToolError("GLOB_FAILED", result.stderr || "glob failed")
 
         const relativeFiles = result.stdout.split("\n").filter(Boolean)
         const rows = await Promise.all(
@@ -80,7 +83,7 @@ export function registerSearchTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return toolError(error instanceof Error ? error.message : String(error))
+        throw toToolError(error, "GLOB_FAILED")
       }
     }
   )
@@ -132,7 +135,8 @@ export function registerSearchTools(server: McpServer): void {
         args.push(pattern, target)
 
         const result = await runRg(args, cwd, context.mcpReq.signal)
-        if (result.code !== 0 && result.code !== 1) return toolError(result.stderr || "grep failed")
+        if (result.code !== 0 && result.code !== 1)
+          throw new ToolError("GREP_FAILED", result.stderr || "grep failed")
 
         const allMatches = parseRgMatches(result.stdout, cwd)
         const truncated = allMatches.length > RESULT_LIMIT
@@ -144,7 +148,7 @@ export function registerSearchTools(server: McpServer): void {
           content: [{ type: "text" as const, text: output }],
         }
       } catch (error) {
-        return toolError(error instanceof Error ? error.message : String(error))
+        throw toToolError(error, "GREP_FAILED")
       }
     }
   )
@@ -244,13 +248,6 @@ async function runRg(
       resolvePromise({ code: code ?? 1, stdout, stderr: stderr.trim() })
     })
   })
-}
-
-function toolError(text: string) {
-  return {
-    isError: true,
-    content: [{ type: "text" as const, text }],
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

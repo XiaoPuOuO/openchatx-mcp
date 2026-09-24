@@ -1,7 +1,7 @@
 import { asRecord } from "../../utils.js"
 
 const MAX_INLINE_ARGUMENT_CHARS = 600
-const MAX_SHELL_COMMAND_CHARS = 2_000
+const MAX_COMMAND_CHARS = 2_000
 const MAX_FAILED_PATCH_CHARS = 32_000
 const MAX_FAILED_MESSAGE_CHARS = 1_000
 const SLOW_CALL_MS = 5_000
@@ -123,10 +123,8 @@ function formatArguments(
       return formatApplyPatchArguments(argumentsRecord, toolFailed, failureMessage)
     case "file_write":
       return formatFileWriteArguments(argumentsRecord, toolFailed, failureMessage)
-    case "shell_run":
-      return formatShellRunArguments(argumentsRecord, toolFailed, failureMessage)
-    case "shell_poll":
-      return formatShellPollArguments(argumentsRecord, toolFailed, failureMessage)
+    case "bash":
+      return formatBashArguments(argumentsRecord, toolFailed, failureMessage)
     default:
       return formatGenericArguments(value)
   }
@@ -137,12 +135,13 @@ function formatFileWriteArguments(
   toolFailed: boolean,
   failureMessage?: string
 ): string {
-  const file = asRecord(argumentsRecord.file)
   const fields = [
-    typeof argumentsRecord.path === "string" ? `path: ${yamlString(argumentsRecord.path)}` : "",
-    file && typeof file.file_id === "string" ? `file_id: ${yamlString(file.file_id)}` : "",
-    file && typeof file.file_name === "string" ? `file_name: ${yamlString(file.file_name)}` : "",
-    file && typeof file.mime_type === "string" ? `mime_type: ${yamlString(file.mime_type)}` : "",
+    typeof argumentsRecord.filePath === "string"
+      ? `filePath: ${yamlString(argumentsRecord.filePath)}`
+      : "",
+    typeof argumentsRecord.content === "string"
+      ? `content_chars: ${argumentsRecord.content.length}`
+      : "",
   ].filter(Boolean)
   if (toolFailed && failureMessage)
     fields.push(`message: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`)
@@ -164,67 +163,26 @@ function formatApplyPatchArguments(
   return `${summary}${message}\npatch: |-\n${indentBlock(truncate(patch, MAX_FAILED_PATCH_CHARS))}`
 }
 
-function formatShellRunArguments(
+function formatBashArguments(
   argumentsRecord: Record<string, unknown>,
   toolFailed: boolean,
   failureMessage?: string
 ): string {
-  const hasCommand = Object.hasOwn(argumentsRecord, "command")
-  const hasCommands = Object.hasOwn(argumentsRecord, "commands")
-  const inputShape = shellInputShape(hasCommand, hasCommands)
   const command = typeof argumentsRecord.command === "string" ? argumentsRecord.command : ""
-  const commands = Array.isArray(argumentsRecord.commands) ? argumentsRecord.commands : null
-  const shellId =
-    typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
-  const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
-  const cwd =
-    typeof argumentsRecord.cwd === "string" ? `\ncwd: ${yamlString(argumentsRecord.cwd)}` : ""
+  const workdir =
+    typeof argumentsRecord.workdir === "string"
+      ? `workdir: ${yamlString(argumentsRecord.workdir)}`
+      : ""
   const message =
     toolFailed && failureMessage
-      ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`
+      ? `message: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`
       : ""
-  const fields: string[] = [`shell: ${yamlString(`${shellId}/${requestId}`)}`]
-  pushExplicitNumberArgument(fields, argumentsRecord, "yield_time_ms")
+  const fields: string[] = []
+  if (workdir) fields.push(workdir)
+  pushExplicitNumberArgument(fields, argumentsRecord, "timeout_ms")
   pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
-  if (inputShape === "both" || inputShape === "neither") fields.push(`input: ${inputShape}`)
-  if (cwd) fields.push(cwd.slice(1))
-  if (message) fields.push(message.slice(1))
-  if (hasCommand)
-    fields.push(`command: |-\n${indentBlock(truncate(command, MAX_SHELL_COMMAND_CHARS))}`)
-  if (hasCommands)
-    fields.push(
-      `commands: |-\n${indentBlock(truncate(JSON.stringify(commands ?? argumentsRecord.commands, null, 2), MAX_SHELL_COMMAND_CHARS))}`
-    )
-  return fields.join("\n")
-}
-
-function shellInputShape(
-  hasCommand: boolean,
-  hasCommands: boolean
-): "both" | "command" | "commands" | "neither" {
-  if (hasCommand && hasCommands) return "both"
-  if (hasCommand) return "command"
-  if (hasCommands) return "commands"
-  return "neither"
-}
-
-function formatShellPollArguments(
-  argumentsRecord: Record<string, unknown>,
-  toolFailed: boolean,
-  failureMessage?: string
-): string {
-  const shellId =
-    typeof argumentsRecord.shell_id === "string" ? argumentsRecord.shell_id : "default"
-  const requestId = typeof argumentsRecord.request_id === "string" ? argumentsRecord.request_id : ""
-  const cursor = typeof argumentsRecord.cursor === "number" ? argumentsRecord.cursor : 0
-  const message =
-    toolFailed && failureMessage
-      ? `\nmessage: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`
-      : ""
-  const fields = [`shell: ${yamlString(`${shellId}/${requestId}`)}`, `cursor: ${cursor}`]
-  pushExplicitNumberArgument(fields, argumentsRecord, "yield_time_ms")
-  pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
-  if (message) fields.push(message.slice(1))
+  if (message) fields.push(message)
+  if (command) fields.push(`command: |-\n${indentBlock(truncate(command, MAX_COMMAND_CHARS))}`)
   return fields.join("\n")
 }
 
@@ -248,30 +206,16 @@ function formatResponseSummary(toolName: string, summary: ToolResponseSummary): 
   const value = summary.structuredContent
   if (!value) return ""
 
-  switch (toolName) {
-    case "shell_run":
-    case "shell_poll":
-      return formatShellResponseSummary(value)
-    default:
-      return toolName.startsWith("computer_") ? formatComputerResponseSummary(value) : ""
+  if (toolName === "bash") {
+    const parts = [
+      typeof value.exit_code === "number" ? `exit_code=${value.exit_code}` : "",
+      typeof value.cwd === "string" ? `cwd=${yamlString(value.cwd)}` : "",
+      value.timed_out === true ? "timed_out=true" : "",
+      value.output_truncated === true ? "output_truncated=true" : "",
+    ].filter(Boolean)
+    return parts.length ? `result: ${parts.join(" ")}` : ""
   }
-}
-
-function formatShellResponseSummary(value: Record<string, unknown>): string {
-  const parts = [
-    typeof value.status === "string" ? `status=${yamlString(value.status)}` : "",
-    typeof value.exit_code === "number" || value.exit_code === null
-      ? `exit_code=${value.exit_code}`
-      : "",
-    typeof value.cwd === "string" ? `cwd=${yamlString(value.cwd)}` : "",
-    typeof value.next_cursor === "number" ? `next_cursor=${value.next_cursor}` : "",
-    typeof value.output_truncated === "boolean" ? `output_truncated=${value.output_truncated}` : "",
-    typeof value.output_dropped === "boolean" ? `output_dropped=${value.output_dropped}` : "",
-    typeof value.dropped_output_bytes === "number"
-      ? `dropped_output_bytes=${value.dropped_output_bytes}`
-      : "",
-  ].filter(Boolean)
-  return parts.length ? `result: ${parts.join(" ")}` : ""
+  return toolName.startsWith("computer_") ? formatComputerResponseSummary(value) : ""
 }
 
 function formatComputerResponseSummary(value: Record<string, unknown>): string {

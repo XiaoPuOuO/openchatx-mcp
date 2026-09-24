@@ -1,11 +1,12 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises"
-import { basename, dirname, extname, isAbsolute, resolve } from "node:path"
+import { dirname, extname, isAbsolute, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { toToolError } from "../../mcp/tool-error.js"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_READ_BYTES = 50 * 1024
@@ -41,13 +42,6 @@ const BINARY_EXTENSIONS = new Set([
   ".pyc",
   ".pyo",
 ])
-
-const openAiFileSchema = z.object({
-  download_url: z.url(),
-  file_id: z.string(),
-  mime_type: z.string().optional(),
-  file_name: z.string().optional(),
-})
 
 export function registerFileReadTool(server: McpServer): void {
   server.registerTool(
@@ -91,7 +85,7 @@ export function registerFileReadTool(server: McpServer): void {
           ctx.mcpReq.signal
         )
       } catch (error) {
-        return toolError("FILE_READ_FAILED", error)
+        throw toToolError(error, "FILE_READ_FAILED")
       }
     }
   )
@@ -202,13 +196,19 @@ export function registerFileWriteTool(server: McpServer): void {
   server.registerTool(
     "file_write",
     {
-      description: "Write a ChatGPT file to the local filesystem.",
+      description:
+        "Create a text file or completely overwrite an existing text file. Use this when you know the full desired file contents or when a change is large enough that exact replacement with file_edit is less clear. For small or localized changes to an existing file, use file_edit instead. Returns the resulting diff.",
       inputSchema: z.object({
-        file: openAiFileSchema,
-        path: z
+        filePath: z
           .string()
           .min(1)
-          .describe("Local destination path. Relative paths resolve from the workspace."),
+          .describe("The file to create or overwrite. Relative paths resolve from the workspace."),
+        content: z.string().describe("The complete text content to write to the file."),
+      }),
+      outputSchema: z.object({
+        path: z.string(),
+        diff: z.string(),
+        created: z.boolean(),
       }),
       annotations: {
         readOnlyHint: false,
@@ -216,27 +216,31 @@ export function registerFileWriteTool(server: McpServer): void {
         idempotentHint: true,
         openWorldHint: false,
       },
-      _meta: {
-        "openai/fileParams": ["file"],
-      },
     },
-    async ({ file, path }, ctx) => {
-      const filePath = resolveLocalPath(path)
+    async ({ filePath: inputPath, content }, ctx) => {
+      const filePath = resolveLocalPath(inputPath)
       try {
-        const response = await fetch(file.download_url, { signal: ctx.mcpReq.signal })
-        if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}.`)
-        const data = Buffer.from(await response.arrayBuffer())
-        await writeFile(filePath, data, { signal: ctx.mcpReq.signal })
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Wrote ${basename(filePath)} (${data.byteLength} bytes) to ${filePath}.`,
-            },
-          ],
-        }
+        return await withFileEditLock(filePath, async () => {
+          let before = ""
+          let created = false
+          try {
+            const info = await stat(filePath)
+            if (info.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+            before = await readFile(filePath, { encoding: "utf8", signal: ctx.mcpReq.signal })
+          } catch (error) {
+            if (!isFsError(error, "ENOENT")) throw error
+            created = true
+          }
+          await mkdir(dirname(filePath), { recursive: true })
+          await writeFile(filePath, content, { encoding: "utf8", signal: ctx.mcpReq.signal })
+          const diff = createCompactDiff(before, content)
+          return {
+            structuredContent: { path: filePath, diff, created },
+            content: [{ type: "text" as const, text: `File written successfully.\n\n${diff}` }],
+          }
+        })
       } catch (error) {
-        return toolError("FILE_WRITE_FAILED", error)
+        throw toToolError(error, "FILE_WRITE_FAILED")
       }
     }
   )
@@ -247,7 +251,7 @@ export function registerFileEditTool(server: McpServer): void {
     "file_edit",
     {
       description:
-        "Edit one existing text file by replacing oldString with newString. Parameters mirror OpenCode's edit tool. Exact matches are preferred; line-trimmed matching is used as a conservative fallback. Use replaceAll only when every occurrence should change.",
+        "Modify an existing text file using an exact string replacement. This is the primary tool for small and localized code edits. Read the relevant file content first, preserve exact whitespace and indentation, and include enough surrounding text for oldString to be unique. Use replaceAll only when every occurrence should change. For a new file or a large whole-file rewrite, use file_write. Returns the resulting diff.",
       inputSchema: z.object({
         filePath: z
           .string()
@@ -255,7 +259,8 @@ export function registerFileEditTool(server: McpServer): void {
           .describe("File to edit. Relative paths resolve from the configured workspace."),
         oldString: z
           .string()
-          .describe("The text to replace. Leave empty only when creating a new file."),
+          .min(1)
+          .describe("The exact text to replace. It must be unique unless replaceAll is true."),
         newString: z.string().describe("Replacement text. Must differ from oldString."),
         replaceAll: z
           .boolean()
@@ -267,7 +272,6 @@ export function registerFileEditTool(server: McpServer): void {
         path: z.string(),
         replacements: z.number(),
         diff: z.string(),
-        created: z.boolean().optional(),
       }),
       annotations: {
         readOnlyHint: false,
@@ -287,7 +291,7 @@ export function registerFileEditTool(server: McpServer): void {
           signal: ctx.mcpReq.signal,
         })
       } catch (error) {
-        return toolError("FILE_EDIT_FAILED", error)
+        throw toToolError(error, "FILE_EDIT_FAILED")
       }
     }
   )
@@ -304,31 +308,7 @@ async function editLocalFile(input: {
     throw new Error("No changes to apply: oldString and newString are identical.")
   }
 
-  return withFileEditLock(input.filePath, async () => {
-    if (input.oldString === "") return createFileFromEdit(input)
-    return editExistingFile(input)
-  })
-}
-
-async function createFileFromEdit(input: {
-  filePath: string
-  newString: string
-  signal: AbortSignal
-}) {
-  try {
-    const info = await stat(input.filePath)
-    if (info.isDirectory()) throw new Error(`Path is a directory, not a file: ${input.filePath}`)
-    throw new Error(
-      "oldString cannot be empty when editing an existing file. Provide the exact text to replace."
-    )
-  } catch (error) {
-    if (!isFsError(error, "ENOENT")) throw error
-  }
-
-  await mkdir(dirname(input.filePath), { recursive: true })
-  await writeFile(input.filePath, input.newString, { encoding: "utf8", signal: input.signal })
-  const diff = createCompactDiff("", input.newString)
-  return editResult(input.filePath, 0, diff, true)
+  return withFileEditLock(input.filePath, () => editExistingFile(input))
 }
 
 async function editExistingFile(input: {
@@ -345,33 +325,32 @@ async function editExistingFile(input: {
   const lineEnding = content.includes("\r\n") ? "\r\n" : "\n"
   const oldText = convertLineEndings(input.oldString, lineEnding)
   const newText = convertLineEndings(input.newString, lineEnding)
-  const match = findEditableMatch(content, oldText, input.replaceAll)
-  if (!match) {
+  const occurrences = countOccurrences(content, oldText)
+  if (occurrences === 0) {
     throw new Error(
       "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings."
     )
   }
-  if (!input.replaceAll && match.occurrences > 1) {
+  if (!input.replaceAll && occurrences > 1) {
     throw new Error(
       "Found multiple matches for oldString. Provide more surrounding context to make the match unique."
     )
   }
 
   const next = input.replaceAll
-    ? content.replaceAll(match.text, newText)
-    : replaceOnce(content, match.text, newText)
+    ? content.replaceAll(oldText, newText)
+    : replaceOnce(content, oldText, newText)
   await writeFile(input.filePath, next, { encoding: "utf8", signal: input.signal })
-  const replacements = input.replaceAll ? match.occurrences : 1
+  const replacements = input.replaceAll ? occurrences : 1
   return editResult(input.filePath, replacements, createCompactDiff(content, next))
 }
 
-function editResult(filePath: string, replacements: number, diff: string, created = false) {
+function editResult(filePath: string, replacements: number, diff: string) {
   return {
     structuredContent: {
       path: filePath,
       replacements,
       diff,
-      ...(created ? { created: true } : {}),
     },
     content: [{ type: "text" as const, text: `Edit applied successfully.\n\n${diff}` }],
   }
@@ -411,34 +390,6 @@ function countOccurrences(content: string, search: string) {
     count += 1
   }
   return count
-}
-
-function findEditableMatch(
-  content: string,
-  search: string,
-  replaceAll: boolean
-): { text: string; occurrences: number } | undefined {
-  const exact = countOccurrences(content, search)
-  if (exact > 0) return { text: search, occurrences: exact }
-  if (replaceAll) return undefined
-
-  const sourceLines = content.split("\n")
-  const searchLines = search.split("\n")
-  if (searchLines.at(-1) === "") searchLines.pop()
-  if (searchLines.length === 0) return undefined
-
-  const candidates: string[] = []
-  for (let start = 0; start <= sourceLines.length - searchLines.length; start += 1) {
-    const matches = searchLines.every(
-      (line, offset) => (sourceLines[start + offset] ?? "").trim() === line.trim()
-    )
-    if (matches) candidates.push(sourceLines.slice(start, start + searchLines.length).join("\n"))
-  }
-  if (candidates.length === 0) return undefined
-  const distinct = [...new Set(candidates)]
-  const first = distinct[0]
-  if (!first) return undefined
-  return { text: first, occurrences: candidates.length }
 }
 
 function createCompactDiff(before: string, after: string): string {
@@ -529,16 +480,4 @@ function isFsError(error: unknown, code: string): error is NodeJS.ErrnoException
 
 function resolveLocalPath(path: string): string {
   return isAbsolute(path) ? path : resolve(MCP_CONFIG.workspace, path)
-}
-
-function toolError(code: string, error: unknown) {
-  return {
-    isError: true,
-    content: [
-      {
-        type: "text" as const,
-        text: `${code}: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    ],
-  }
 }

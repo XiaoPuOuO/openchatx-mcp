@@ -9,8 +9,6 @@ import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 
 import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { ToolboxRegistry } from "../src/toolbox/registry.js"
-import { createShellSession } from "../src/tools/shell/session.js"
-import { createShellSessionManager } from "../src/tools/shell/session-manager.js"
 import { tempDir } from "./helpers/temp.js"
 
 test("loads a custom TypeScript toolbox tool and exposes it through MCP", async (t) => {
@@ -158,14 +156,9 @@ test("built-in tools are filtered by toolbox settings instead of legacy tool fla
 
   const registry = new ToolboxRegistry(root)
   await registry.reload()
-  const workspace = await tempDir(t, "openchatx-builtin-workspace-")
-  const shells = createShellSessionManager({
-    createShell: (initialState) => createShellSession({ cwd: workspace, initialState }),
-  })
-  t.after(() => shells.close())
 
   const factory = createMcpServerFactory(
-    { shellManager: shells, toolboxRegistry: registry },
+    { toolboxRegistry: registry },
     {
       tools: {
         shell: false,

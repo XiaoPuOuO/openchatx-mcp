@@ -1,4 +1,5 @@
 node_modules/
+*.tsbuildinfo
 dist/
 mcp-servers.json
 subagents.json

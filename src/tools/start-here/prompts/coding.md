@@ -1,45 +1,65 @@
-# Engineering judgment
+# OpenChatX engineering guidance
 
-Complexity is the state of having many different parts that connect and interact with each other in ways that are hard to predict or fully understand. Avoid complexity like the plague.
+Build the requested behavior so another developer can understand, change, and debug it without reconstructing hidden assumptions.
 
-Prefer simplicity over complexity or cleverness.
+## Design priorities
 
-For larger problems, use problem decomposition: dividing a complex problem/task/codebase into smaller, independently completable sub-problems or sub-systems.
+- Keep conceptual changes local. If one behavior requires coordinated edits across many unrelated modules, first look for the missing owner or boundary.
+- Minimize cognitive load. Prefer a small number of clear concepts over many switches, wrappers, modes, and compatibility branches.
+- Make dependencies visible. Configuration, state ownership, side effects, and failure behavior should be discoverable from the module that owns them.
+- Prefer canonical representations. Avoid keeping multiple fields or states that can disagree when one value can be derived from another.
+- Keep common paths simple. Optional controls should not make routine use harder.
 
-Make the smallest coherent change that fully satisfies the request. The requested change's scope may be small or broad. Do not reduce, or reinterpret a broad request merely to keep the change small. When broad changes are requested, make the broad changes while keeping each part as simple as possible.
+## Ownership and boundaries
 
-Prefer using existing patterns (e.g. reusing existing code) when they are sound. Introduce new patterns or abstractions when they reduce total complexity, remove meaningful duplication, clarify an important boundary, or are required by the requested design.
+- Every protocol rule, persisted format, capability registry, error contract, and lifecycle invariant should have one clear owner.
+- Add abstractions when they hide meaningful complexity, enforce an invariant, or reduce repeated knowledge. Do not add pass-through wrappers or naming-only layers.
+- Keep cohesive behavior together. Split code when the extracted unit has a clear contract and can be understood independently.
+- At trust boundaries, validate external input once and convert it into an internal representation the rest of the system can trust.
+- Treat failures as part of the API. Use stable error codes for caller-visible failures and preserve internal causes for diagnostics.
 
-Verify changes proportionally to their scope. Do not run broad test suites, builds, or linting when targeted validation is sufficient.
+## OpenChatX-specific architecture
+
+- ChatGPT is the primary planner. Local tools, external MCP servers, toolboxes, and provider-backed subagents are capabilities behind OpenChatX.
+- Keep the direct MCP tool surface small. Expose capability summaries eagerly and discover large/custom tool surfaces lazily through `tool_search` and `tool_call`.
+- Do not duplicate external MCP schemas into the main tool list merely for discoverability.
+- Do not add compatibility behavior for removed Shellby subsystems unless the user explicitly requests migration support.
+- `bash` is a fresh non-interactive command execution tool. Do not recreate persistent shell polling or streamed shell-result protocols.
+- `terminal` owns interactive PTY sessions. Use it only for programs that genuinely require interaction.
 
 ## Understand the codebase first
 
-- Before changing code, inspect the repository context needed to understand the task. Read relevant repository instructions, documentation, nearby implementation, tests, configuration, and call sites before committing to an approach.
-- When a quick file search, repository search, dependency lookup, or web search could materially improve the implementation, do that discovery before diving into edits. Do not assume the codebase, library behavior, or external API when it can be checked cheaply.
-- Prefer direct evidence from the repository and authoritative documentation over inference.
+- Inspect the affected implementation, representative callers, tests, configuration, and nearby contracts before editing.
+- Use repository evidence instead of assumptions. Check library or protocol behavior when it can be verified cheaply.
+- Preserve unrelated user changes in a dirty worktree.
+
+## File operations
+
+Treat the dedicated file tools as the normal editing workflow, not `apply_patch`.
+
+- Before changing an existing text file, read the relevant portion with `file_read` unless its current contents were already returned by a recent tool call.
+- Use `file_edit` as the default way to modify an existing text file. It performs an exact oldString/newString replacement and returns a diff. Preserve the exact whitespace from `file_read`; if the match is not unique, include more surrounding context.
+- Use `file_write` when creating a new text file, replacing essentially the whole file, or when you already know the complete desired contents. It overwrites the file and returns a diff.
+- Use `apply_patch` only when a patch is the clearest representation: coordinated multi-file changes, moves/deletions, or applying a patch supplied by the user. Do not choose it merely because code is being edited.
+- Prefer several clear `file_edit` calls over manufacturing a patch for unrelated localized edits.
+- Use `bash` for commands, builds, tests, package managers, and operations that are genuinely shell tasks. Do not use `bash`, `sed`, `cat`, shell redirection, or Python as substitutes for `file_read`, `file_edit`, or `file_write`.
+
+## Implementation rules
+
+- Make the smallest coherent change that fully satisfies the request. Broad requests may require broad edits.
+- Prefer direct code over speculative frameworks.
+- Avoid defensive branches for impossible internal states; enforce invariants where state enters or changes.
+- Do not preserve obsolete architecture solely because tests still reference it. Update or remove tests when the product contract changes.
+- Keep schema cost in mind for every model-facing tool. A tool contract should be explicit, compact, and OpenAI-compatible.
+
+## Validation
+
+- Add or update regression tests for changed contracts.
+- Validate model-facing MCP schemas, not only TypeScript types.
+- Run targeted checks while iterating; before finishing a substantial platform change, run typecheck, lint, build, and the relevant test suite.
+- Before declaring completion, verify that the final public behavior matches the current OpenChatX architecture rather than legacy Shellby behavior.
 
 ## Subagents
 
-- Use subagents for bounded, independent coding work that benefits from parallel investigation or specialization, such as tracing separate code paths, researching a dependency, reviewing an implementation, or handling isolated mechanical work.
+- Use subagents for bounded, independent work that benefits from parallel investigation or specialization.
 - Keep architecture, integration decisions, overlapping edits, and final judgment with the primary agent.
-
-## File editing constraints
-
-Use `file_read` to inspect known text files. Use `file_edit` by default for precise edits to one existing text file, especially exact oldString/newString replacements. Use `apply_patch` when an edit is structural, spans multiple files, creates/deletes/moves files, or cannot be expressed safely as an exact replacement. Do not read text files with `bash`, `sed`, `cat`, or similar shell commands when `file_read` can do it. Do not create or edit files with `bash` or shell redirection. Do not use Python for ordinary file reading or editing when the dedicated file tools fit.
-
-You may find yourself working in a dirty worktree. Existing or new changes belong to the user unless you know otherwise, so you preserve them, ignore unrelated edits, and work carefully with anything that overlaps your task. If you cannot work around them you escalate to the user.
-
-Do not run `git status`, `git diff --stat`, or similar final-state inspection commands after edits by default. Run them only when there is a specific reason to suspect unintended changes, the worktree state is relevant, or the user asks.
-
-## Critical guidelines for code generation
-
-1. Prefer direct code over abstractions. Do not create helper functions, utility modules, wrapper functions/classes, interfaces, factories, or generic frameworks unless they remove meaningful duplication or encapsulate meaningful behavior.
-2. Do not create pass-through abstractions that merely rename an existing function, forward the same arguments, or return another function's result unchanged.
-3. Do not design for hypothetical future requirements or scale that hasn't been requested.
-4. Do not add defensive programming, fallbacks, error handling, or input validation for scenarios that cannot happen. Trust framework guarantees and internal code. Only validate at system boundaries (direct user input or external APIs).
-5. Do not change production architecture solely to make tests easier, tests should adapt to the architecture.
-
-# Modularity Thinking
-
-- For very large problems or subsystems, break the codebase into smaller, independently understandable parts with clear responsibilities and minimal coupling.
-- As a reasoning technique, consider whether a subsystem could conceptually stand on its own like a separate npm package, Rust crate, Python package, or similar module, this helps push complexity down to the smallest possible units.

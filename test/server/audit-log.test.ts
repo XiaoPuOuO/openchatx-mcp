@@ -23,12 +23,8 @@ test("writes one compact YAML document for a shell command", async (t) => {
     id: 1,
     method: "tools/call",
     params: {
-      name: "shell_run",
-      arguments: {
-        shell_id: "api-audit",
-        request_id: "scan-1",
-        command: "rg -n foo src",
-      },
+      name: "bash",
+      arguments: { command: "rg -n foo src", workdir: "/workspace" },
     },
   })
   assert.ok(call)
@@ -39,8 +35,8 @@ test("writes one compact YAML document for a shell command", async (t) => {
   assert.equal(
     await readFile(file, "utf8"),
     [
-      "--- # shell_run - 275ms - 23 in - Aug 7 8:58 PM",
-      'shell: "api-audit/scan-1"',
+      "--- # bash - 275ms - 15 in - Aug 7 8:58 PM",
+      'workdir: "/workspace"',
       "command: |-",
       "  rg -n foo src",
       "",
@@ -60,13 +56,13 @@ test("logs shell output token count", async (t) => {
   const [call] = claimAuditToolCalls(logger, {
     method: "tools/call",
     params: {
-      name: "shell_run",
-      arguments: { shell_id: "default", request_id: "tokens", command: "printf 'hello world'" },
+      name: "bash",
+      arguments: { command: "printf 'hello world'", workdir: "/workspace" },
     },
   })
   assert.ok(call)
   const output = "hello world"
-  const structuredContent = { status: "completed", exit_code: 0, cwd: "/workspace", output }
+  const structuredContent = { exit_code: 0, cwd: "/workspace", output }
   call.finish({
     toolResult: { structuredContent },
     modelResult: { content: [{ type: "text", text: output }] },
@@ -74,17 +70,17 @@ test("logs shell output token count", async (t) => {
 
   const log = await readFile(file, "utf8")
   const inputTokens = countTokens(
-    JSON.stringify({ shell_id: "default", request_id: "tokens", command: "printf 'hello world'" })
+    JSON.stringify({ command: "printf 'hello world'", workdir: "/workspace" })
   )
   const outputTokens = countTokens(output)
   assert.match(
     log,
-    new RegExp(`--- # shell_run - 0ms - ${inputTokens} in / ${outputTokens} out - Aug 13 7:13 PM`)
+    new RegExp(`--- # bash - 0ms - ${inputTokens} in / ${outputTokens} out - Aug 13 7:13 PM`)
   )
-  assert.match(log, /result: status="completed" exit_code=0 cwd="\/workspace"/u)
+  assert.match(log, /result: exit_code=0 cwd="\/workspace"/u)
 })
 
-test("does not persist file download URLs or tokenize embedded file blobs", async (t) => {
+test("does not persist file_write content in the audit log", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -97,45 +93,18 @@ test("does not persist file download URLs or tokenize embedded file blobs", asyn
     params: {
       name: "file_write",
       arguments: {
-        file: {
-          download_url: "https://files.example.test/secret-token",
-          file_id: "file_123",
-          file_name: "payload.bin",
-          mime_type: "application/octet-stream",
-        },
-        path: "/tmp/payload.bin",
+        filePath: "/tmp/payload.txt",
+        content: "secret file contents",
       },
     },
   })
   assert.ok(writeCall)
-  writeCall.finish({ modelResult: { content: [{ type: "text", text: "Wrote payload.bin." }] } })
-
-  const [readCall] = claimAuditToolCalls(logger, {
-    method: "tools/call",
-    params: { name: "file_read", arguments: { path: "/tmp/payload.bin" } },
-  })
-  assert.ok(readCall)
-  readCall.finish({
-    modelResult: {
-      content: [
-        {
-          type: "resource",
-          resource: {
-            uri: "file:///tmp/payload.bin",
-            mimeType: "application/octet-stream",
-            blob: "A".repeat(10_000),
-          },
-        },
-      ],
-    },
-  })
+  writeCall.finish({ modelResult: { content: [{ type: "text", text: "File written." }] } })
 
   const log = await readFile(file, "utf8")
-  assert.doesNotMatch(log, /secret-token/u)
-  assert.doesNotMatch(log, /A{100}/u)
-  assert.match(log, /file_id: "file_123"/u)
-  assert.match(log, /file_name: "payload.bin"/u)
-  assert.match(log, /--- # file_read - 0ms - \d+ in - Sep 22 8:00 PM/u)
+  assert.doesNotMatch(log, /secret file contents/u)
+  assert.match(log, /filePath: "\/tmp\/payload\.txt"/u)
+  assert.match(log, /content_chars: 20/u)
 })
 
 test("puts audit heading before entry details with time last", async (t) => {
@@ -147,14 +116,14 @@ test("puts audit heading before entry details with time last", async (t) => {
   )
   const [call] = claimAuditToolCalls(logger, {
     method: "tools/call",
-    params: { name: "shell_list", arguments: {} },
+    params: { name: "toolbox_list", arguments: {} },
   })
   assert.ok(call)
   call.finish({ httpStatus: 200, state: "finished" })
 
   assert.equal(
     await readFile(file, "utf8"),
-    "--- # shell_list - 0ms - 1 in - Aug 18 6:25 PM\nargs: {}\n\n"
+    "--- # toolbox_list - 0ms - 1 in - Aug 18 6:25 PM\nargs: {}\n\n"
   )
 })
 
@@ -165,7 +134,7 @@ test("aliases audit sessions in first-seen order without logging raw ids", async
     () => new Date(2026, 7, 18, 18, 30, 0),
     () => 0
   )
-  const request = { method: "tools/call", params: { name: "shell_list", arguments: {} } }
+  const request = { method: "tools/call", params: { name: "toolbox_list", arguments: {} } }
 
   const firstContext = runWithAgent("raw-session-a", () => ({
     identity: getAgentIdentity()!,
@@ -211,7 +180,7 @@ test("adds the successful start_here task slug to later audit session aliases", 
     setAgentTaskSlug("audit-session-labels")
     const [shellList] = claimAuditToolCalls(logger, {
       method: "tools/call",
-      params: { name: "shell_list", arguments: {} },
+      params: { name: "toolbox_list", arguments: {} },
     })
     assert.ok(shellList)
     shellList.finish({
@@ -232,12 +201,12 @@ test("adds the successful start_here task slug to later audit session aliases", 
   )
   assert.match(
     log,
-    new RegExp(`--- # shell_list[\\s\\S]*?session: "${agent}/audit-session-labels"`)
+    new RegExp(`--- # toolbox_list[\\s\\S]*?session: "${agent}/audit-session-labels"`)
   )
   assert.doesNotMatch(log, /raw-session-task-slug/u)
 })
 
-test("keeps shell-specific yield and output arguments in the tool body", async (t) => {
+test("keeps bash execution arguments in the tool body", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(
     file,
@@ -247,12 +216,11 @@ test("keeps shell-specific yield and output arguments in the tool body", async (
   const [call] = claimAuditToolCalls(logger, {
     method: "tools/call",
     params: {
-      name: "shell_run",
+      name: "bash",
       arguments: {
-        shell_id: "default",
-        request_id: "markers",
         command: "pwd",
-        yield_time_ms: 1_000,
+        workdir: "/workspace",
+        timeout_ms: 1_000,
         max_output_tokens: 4_096,
       },
     },
@@ -261,32 +229,10 @@ test("keeps shell-specific yield and output arguments in the tool body", async (
   call.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /^--- # shell_run - 0ms - \d+ in - Aug 14 8:11 AM$/mu)
+  assert.match(log, /^--- # bash - 0ms - \d+ in - Aug 14 8:11 AM$/mu)
   assert.match(
     log,
-    /shell: "default\/markers"\nyield_time_ms: 1000\nmax_output_tokens: 4096\ncommand: \|-\n {2}pwd/u
-  )
-
-  const [poll] = claimAuditToolCalls(logger, {
-    method: "tools/call",
-    params: {
-      name: "shell_poll",
-      arguments: {
-        shell_id: "default",
-        request_id: "markers",
-        cursor: 42,
-        yield_time_ms: 5_000,
-        max_output_tokens: 8_192,
-      },
-    },
-  })
-  assert.ok(poll)
-  poll.finish({ httpStatus: 200, state: "finished" })
-
-  const finalLog = await readFile(file, "utf8")
-  assert.match(
-    finalLog,
-    /shell: "default\/markers"\ncursor: 42\nyield_time_ms: 5000\nmax_output_tokens: 8192/u
+    /workdir: "\/workspace"\ntimeout_ms: 1000\nmax_output_tokens: 4096\ncommand: \|-\n {2}pwd/u
   )
 })
 
@@ -303,7 +249,7 @@ test("audits batched tool calls independently", async (t) => {
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
-      params: { name: "shell_list", arguments: { first: true } },
+      params: { name: "toolbox_list", arguments: { first: true } },
     },
     {
       jsonrpc: "2.0",
@@ -325,7 +271,7 @@ test("audits batched tool calls independently", async (t) => {
   assert.match(
     log,
     new RegExp(
-      `shell_list - 0ms - ${countTokens(JSON.stringify({ first: true }))} in / ${countTokens(firstOutput)} out - Aug 14 12:30 AM`
+      `toolbox_list - 0ms - ${countTokens(JSON.stringify({ first: true }))} in / ${countTokens(firstOutput)} out - Aug 14 12:30 AM`
     )
   )
   assert.match(
@@ -348,18 +294,18 @@ test("correlates same-name batched calls by MCP request id", async (t) => {
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
-      params: { name: "shell_list", arguments: { marker: "first" } },
+      params: { name: "toolbox_list", arguments: { marker: "first" } },
     },
     {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
-      params: { name: "shell_list", arguments: { marker: "second" } },
+      params: { name: "toolbox_list", arguments: { marker: "second" } },
     },
   ])
 
-  const second = auditRequest.claimTool(2, "shell_list")
-  const first = auditRequest.claimTool(1, "shell_list")
+  const second = auditRequest.claimTool(2, "toolbox_list")
+  const first = auditRequest.claimTool(1, "toolbox_list")
   assert.ok(second)
   assert.ok(first)
   second.finish()
@@ -377,7 +323,7 @@ test("creates and repairs audit logs with owner-only permissions", async (t) => 
   const newLogger = new McpAuditLogger(newFile)
   const [call] = claimAuditToolCalls(newLogger, {
     method: "tools/call",
-    params: { name: "shell_list", arguments: {} },
+    params: { name: "toolbox_list", arguments: {} },
   })
   assert.ok(call)
   call.finish({ httpStatus: 200, state: "finished" })
@@ -457,7 +403,7 @@ test("logs apply_patch bodies only when the tool fails", async (t) => {
   assert.match(log, /message: "apply_patch_failed: apply_patch request was aborted\."/u)
 })
 
-test("logs shell tool errors with their MCP failure reason", async (t) => {
+test("logs bash failures with their output", async (t) => {
   const file = await auditFile(t)
 
   const logger = new McpAuditLogger(
@@ -465,90 +411,29 @@ test("logs shell tool errors with their MCP failure reason", async (t) => {
     () => new Date(2026, 7, 11, 22, 50, 0),
     () => 100
   )
-  const [poll] = claimAuditToolCalls(logger, {
+  const [call] = claimAuditToolCalls(logger, {
     method: "tools/call",
     params: {
-      name: "shell_poll",
-      arguments: { shell_id: "parallel", request_id: "missing", cursor: 0 },
+      name: "bash",
+      arguments: { command: "false", workdir: "/workspace" },
     },
   })
-  assert.ok(poll)
-  poll.finish({
+  assert.ok(call)
+  call.finish({
     toolResult: {
-      isError: true,
-      content: [
-        { type: "text", text: "unknown_request: No retained command for request_id missing." },
-      ],
+      structuredContent: {
+        exit_code: 1,
+        cwd: "/workspace",
+        output: "failed test output",
+      },
     },
+    modelResult: { content: [{ type: "text", text: "failed test output" }] },
   })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /--- # ! shell_poll - .* - Aug 11 10:50 PM/u)
-  assert.match(
-    log,
-    /shell: "parallel\/missing"\ncursor: 0\nmessage: "unknown_request: No retained command for request_id missing\."/u
-  )
-
-  const [childNonzero] = claimAuditToolCalls(logger, {
-    method: "tools/call",
-    params: {
-      name: "shell_run",
-      arguments: {
-        shell_id: "parallel",
-        request_id: "child-nonzero",
-        commands: [{ command: "false" }],
-      },
-    },
-  })
-  assert.ok(childNonzero)
-  const childOutput = "x".repeat(2_000)
-  childNonzero.finish({
-    toolResult: {
-      isError: false,
-      structuredContent: {
-        status: "completed",
-        exit_code: 1,
-        cwd: "/workspace",
-        output: childOutput,
-      },
-    },
-    modelResult: { content: [{ type: "text", text: childOutput }] },
-  })
-
-  const finalLog = await readFile(file, "utf8")
-  assert.match(
-    finalLog,
-    new RegExp(
-      `--- # ! shell_run - 0ms - \\d+ in / ${countTokens(childOutput)} out - Aug 11 10:50 PM\\nshell: "parallel\\/child-nonzero"`
-    )
-  )
-  assert.match(finalLog, /result: status="completed" exit_code=1 cwd="\/workspace"/u)
-
-  const [pollCompletedNonzero] = claimAuditToolCalls(logger, {
-    method: "tools/call",
-    params: {
-      name: "shell_poll",
-      arguments: { shell_id: "parallel", request_id: "child-nonzero", cursor: 0 },
-    },
-  })
-  assert.ok(pollCompletedNonzero)
-  pollCompletedNonzero.finish({
-    toolResult: {
-      isError: false,
-      structuredContent: { status: "completed", exit_code: 1, output: "failed test output" },
-    },
-  })
-
-  const completedPollLog = await readFile(file, "utf8")
-  assert.match(
-    completedPollLog,
-    /--- # shell_poll - 0ms - \d+ in \/ \d+ out - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"/u
-  )
-  assert.doesNotMatch(
-    completedPollLog,
-    /--- # ! shell_poll - 0ms - \d+ in \/ \d+ out - Aug 11 10:50 PM\nshell: "parallel\/child-nonzero"/u
-  )
-  assert.match(completedPollLog, /result: status="completed" exit_code=1/u)
+  assert.match(log, /--- # ! bash - .* - Aug 11 10:50 PM/u)
+  assert.match(log, /message: "failed test output"/u)
+  assert.match(log, /result: exit_code=1 cwd="\/workspace"/u)
 })
 
 test("caps large ordinary tool arguments", async (t) => {
@@ -581,7 +466,7 @@ test("uses Better Comments tags for slow and failed calls", async (t) => {
     () => new Date(2026, 7, 7, 22, 30, 0),
     () => clock
   )
-  const request = { method: "tools/call", params: { name: "shell_list", arguments: {} } }
+  const request = { method: "tools/call", params: { name: "toolbox_list", arguments: {} } }
 
   const [normal] = claimAuditToolCalls(logger, request)
   assert.ok(normal)
@@ -599,9 +484,9 @@ test("uses Better Comments tags for slow and failed calls", async (t) => {
   failed.finish({ httpStatus: 500, state: "closed" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /--- # shell_list - 100ms - 1 in - Aug 7 10:30 PM/u)
-  assert.match(log, /--- # ~ shell_list - 5100ms - 1 in - Aug 7 10:30 PM/u)
-  assert.match(log, /--- # ! shell_list - 50ms - 1 in - HTTP 500 closed - Aug 7 10:30 PM/u)
+  assert.match(log, /--- # toolbox_list - 100ms - 1 in - Aug 7 10:30 PM/u)
+  assert.match(log, /--- # ~ toolbox_list - 5100ms - 1 in - Aug 7 10:30 PM/u)
+  assert.match(log, /--- # ! toolbox_list - 50ms - 1 in - HTTP 500 closed - Aug 7 10:30 PM/u)
   assert.doesNotMatch(log, /--- # \?/u)
 })
 
@@ -625,14 +510,14 @@ test("logs tool calls that never reach a handler without adding a generic error 
   const request = runWithAgent("validation-session", () =>
     logger.startRequest({
       method: "tools/call",
-      params: { name: "shell_run", arguments: { request_id: "x", cwd: "", command: "pwd" } },
+      params: { name: "bash", arguments: { workdir: "", command: "pwd" } },
     })
   )
 
   request.finishTransport({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /--- # shell_run - 0ms - \d+ in - Aug 28 9:00 PM/u)
+  assert.match(log, /--- # bash - 0ms - \d+ in - Aug 28 9:00 PM/u)
   assert.doesNotMatch(log, /tool_rejected|message:|note:/u)
   assert.match(log, /session: "agent-\d+"/u)
 })

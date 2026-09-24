@@ -57,8 +57,15 @@ export class McpAuditLogger {
         const httpStatus = input.httpStatus ?? 200
         const state = input.state ?? "finished"
         const exitCode = toolResponse.structuredContent?.exit_code
-        const shellFailed =
-          toolName === "shell_run" && typeof exitCode === "number" && exitCode !== 0
+        const commandFailed = toolName === "bash" && typeof exitCode === "number" && exitCode !== 0
+        const commandOutput = toolResponse.structuredContent?.output
+        let failureMessage = toolResponse.failureMessage
+        if (!failureMessage && commandFailed) {
+          failureMessage =
+            typeof commandOutput === "string" && commandOutput.trim()
+              ? commandOutput.trim()
+              : `Command exited with code ${exitCode}.`
+        }
 
         this.append(
           formatAuditEntry({
@@ -73,8 +80,8 @@ export class McpAuditLogger {
               toolResponse.modelOutput !== undefined
                 ? countTokens(toolResponse.modelOutput)
                 : undefined,
-            toolFailed: toolResponse.failed || shellFailed,
-            failureMessage: toolResponse.failureMessage,
+            toolFailed: toolResponse.failed || commandFailed,
+            failureMessage,
             responseSummary: toolResponse,
             agentLabel,
           })

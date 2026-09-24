@@ -2,6 +2,7 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import type { ExternalMcpRegistry } from "../../external-mcp/registry.js"
+import { ToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
 
 interface CatalogEntry {
@@ -32,7 +33,10 @@ export function registerCatalogTools(
   })
   const callInput = z.object({
     tool: z.string().min(1).describe("Tool id returned by tool_search."),
-    arguments: z.record(z.string(), z.unknown()).default({}),
+    arguments_json: z
+      .string()
+      .default("{}")
+      .describe("JSON object containing the arguments for the discovered tool."),
   })
 
   const searchCallback = async (input: z.infer<typeof searchInput>) => {
@@ -63,16 +67,12 @@ export function registerCatalogTools(
   }
 
   const callCallback = async (input: z.infer<typeof callInput>, context: ServerContext) => {
+    const argumentsValue = parseToolArguments(input.arguments_json)
     if (input.tool.startsWith("toolbox:")) {
-      return toolboxes.callCustomTool(input.tool, input.arguments, context)
+      return toolboxes.callCustomTool(input.tool, argumentsValue, context)
     }
-    if (input.tool.startsWith("mcp:")) return externalMcp.call(input.tool, input.arguments)
-    return {
-      isError: true,
-      content: [
-        { type: "text" as const, text: `Unknown lazy tool id ${JSON.stringify(input.tool)}.` },
-      ],
-    }
+    if (input.tool.startsWith("mcp:")) return externalMcp.call(input.tool, argumentsValue)
+    throw new ToolError("UNKNOWN_TOOL", `Unknown lazy tool id ${JSON.stringify(input.tool)}.`)
   }
 
   Reflect.apply(server.registerTool, server, [
@@ -104,6 +104,20 @@ export function registerCatalogTools(
     },
     callCallback,
   ])
+}
+
+function parseToolArguments(value: string): Record<string, unknown> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch (error) {
+    // biome-ignore lint/style/useErrorCause: ToolError stores the original error as its cause.
+    throw new ToolError("INVALID_ARGUMENT", "arguments_json must be valid JSON.", error)
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new ToolError("INVALID_ARGUMENT", "arguments_json must decode to a JSON object.")
+  }
+  return Object.fromEntries(Object.entries(parsed))
 }
 
 function catalog(toolboxes: ToolboxRegistry, externalMcp: ExternalMcpRegistry): CatalogEntry[] {

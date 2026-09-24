@@ -6,8 +6,6 @@ import test from "node:test"
 
 import { getAgentIdentity, runWithAgent } from "../../src/agent/context.js"
 import { MCP_CONFIG } from "../../src/config.js"
-import { createShellSession } from "../../src/tools/shell/session.js"
-import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
 import {
   buildStartHereInstructions,
   discoverPromptModes,
@@ -16,13 +14,7 @@ import {
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {
-  const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-"))
-  t.after(() => rm(workspace, { recursive: true, force: true }))
-  const running = await startMcpHttpServer({
-    shellManager: createShellSessionManager({
-      defaultShell: createShellSession({ cwd: workspace }),
-    }),
-  })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
 
   const first = await connectClient(
@@ -41,7 +33,10 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   )
   t.after(() => Promise.all([first.client.close(), second.client.close()]))
 
-  const blocked = await first.client.callTool({ name: "shell_list", arguments: {} })
+  const blocked = await first.client.callTool({
+    name: "bash",
+    arguments: { command: "printf blocked" },
+  })
   assert.equal(blocked.isError, true)
   assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/u)
 
@@ -61,10 +56,16 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   )
   assert.equal(startInstructions, await buildStartHereInstructions("coding"))
 
-  const allowed = await first.client.callTool({ name: "shell_list", arguments: {} })
+  const allowed = await first.client.callTool({
+    name: "bash",
+    arguments: { command: "printf allowed" },
+  })
   assert.equal(allowed.isError, undefined)
 
-  const stillBlocked = await second.client.callTool({ name: "shell_list", arguments: {} })
+  const stillBlocked = await second.client.callTool({
+    name: "bash",
+    arguments: { command: "printf blocked" },
+  })
   assert.equal(stillBlocked.isError, true)
 })
 
@@ -246,13 +247,7 @@ test("derives start_here modes from bundled and local prompt filename slugs", as
 })
 
 test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }, async (t) => {
-  const workspace = await mkdtemp(join(tmpdir(), "shellby-start-here-missing-"))
-  t.after(() => rm(workspace, { recursive: true, force: true }))
-  const running = await startMcpHttpServer({
-    shellManager: createShellSessionManager({
-      defaultShell: createShellSession({ cwd: workspace }),
-    }),
-  })
+  const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(
     running.url,
@@ -269,7 +264,10 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
   })
   assert.equal(failed.isError, true)
 
-  const blocked = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  const blocked = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf blocked" },
+  })
   assert.equal(blocked.isError, true)
   assert.match(blocked.content.find((item) => item.type === "text")?.text ?? "", /start_here/u)
 
@@ -278,7 +276,10 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
     arguments: { mode: "coding", task_id: "retry-startup" },
   })
   assert.equal(toolText(retry), await buildStartHereInstructions("coding"))
-  const allowed = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  const allowed = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf allowed" },
+  })
   assert.equal(allowed.isError, undefined)
 })
 
@@ -290,7 +291,10 @@ test("does not require start_here when no ChatGPT session is provided", {
   const connected = await connectClient(running.url, "startup-local-client")
   t.after(() => connected.client.close())
 
-  const result = await connected.client.callTool({ name: "shell_list", arguments: {} })
+  const result = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf local" },
+  })
   assert.equal(result.isError, undefined)
 
   const instructions = await buildStartHereInstructions("coding")

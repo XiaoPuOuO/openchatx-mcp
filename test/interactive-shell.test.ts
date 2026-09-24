@@ -31,7 +31,7 @@ test("interactive shell provides a real TTY and accepts follow-up input", async 
       action: "create",
       session_id: "prompt-test",
       command: "test -t 0 && test -t 1 && printf 'Name: '; read name; echo HELLO:$name",
-      yield_time_ms: 300,
+      wait_ms: 300,
     },
   })
   assert.equal(started.isError, undefined)
@@ -46,7 +46,7 @@ test("interactive shell provides a real TTY and accepts follow-up input", async 
       input: "Alice",
       enter: true,
       cursor: startData.next_cursor,
-      yield_time_ms: 500,
+      wait_ms: 500,
     },
   })
   assert.equal(written.isError, undefined)
@@ -57,7 +57,7 @@ test("interactive shell provides a real TTY and accepts follow-up input", async 
       action: "read",
       session_id: "prompt-test",
       cursor: writeData.next_cursor,
-      yield_time_ms: 500,
+      wait_ms: 500,
     },
   })
   const combined = `${writeData.output}${(polled.structuredContent as { output: string }).output}`
@@ -69,7 +69,7 @@ test("interactive shell sessions can be closed", async (t) => {
   const client = await connectedInteractiveShell(t, cwd)
   await client.callTool({
     name: "terminal",
-    arguments: { action: "create", session_id: "list-test", yield_time_ms: 50 },
+    arguments: { action: "create", session_id: "list-test", wait_ms: 50 },
   })
   assert.equal(
     (await client.listTools()).tools.some((tool) => tool.name === "terminal"),

@@ -5,8 +5,10 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { signalProcessGroup } from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
+import { toToolError } from "../../mcp/tool-error.js"
 import { tokenPrefix } from "../../tokenizer.js"
 import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
+import { prepareShellCommand } from "./rtk.js"
 
 const MAX_CAPTURE_BYTES = 1024 * 1024
 
@@ -44,7 +46,8 @@ export function registerBashTool(server: McpServer): void {
     async ({ command, workdir, timeout_ms, max_output_tokens }, context) => {
       try {
         const cwd = resolveWorkdir(workdir)
-        const result = await runCommand(command, cwd, timeout_ms, context.mcpReq.signal)
+        const executableCommand = prepareShellCommand(command, cwd, process.env)
+        const result = await runCommand(executableCommand, cwd, timeout_ms, context.mcpReq.signal)
         const bounded = tokenPrefix(withApplyPatchToolHint(result.output), max_output_tokens)
         return {
           structuredContent: {
@@ -57,15 +60,7 @@ export function registerBashTool(server: McpServer): void {
           content: [],
         }
       } catch (error) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text: `BASH_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-        }
+        throw toToolError(error, "BASH_FAILED")
       }
     }
   )

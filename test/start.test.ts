@@ -14,7 +14,7 @@ async function runStartup(
     hard?: boolean
     failCommand?: string
     pm2Args?: string[]
-    fromShellby?: boolean
+    fromOpenChatX?: boolean
     healthInstance?: string
     ngrokEnabled?: boolean
     existingTunnel?: boolean
@@ -85,8 +85,8 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
         PATH: `${join(root, "bin")}${delimiter}${process.env.PATH}`,
         START_TEST_FAIL: options.failCommand ?? "",
         PM2_HOME: join(root, "unrelated-pm2"),
-        name: options.fromShellby ? "openchatx-mcp" : undefined,
-        pm_exec_path: options.fromShellby ? join(root, "dist", "index.js") : undefined,
+        name: options.fromOpenChatX ? "openchatx-mcp" : undefined,
+        pm_exec_path: options.fromOpenChatX ? join(root, "dist", "index.js") : undefined,
       },
       encoding: "utf8",
       timeout: 15_000,
@@ -109,7 +109,7 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
         assert.equal(
           pm2Home,
           join(root, "state", "pm2"),
-          "every PM2 call must use the configured Shellby state directory"
+          "every PM2 call must use the configured OpenChatX state directory"
         )
         assert.equal(cwd, root, "PM2 resolves ecosystem paths from the repository")
       }
@@ -118,9 +118,9 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
   return { root, result, calls }
 }
 
-for (const fromShellby of [false, true]) {
-  test(`ordinary restart ${fromShellby ? "inside Shellby" : "from a terminal"} keeps PM2 and reloads MCP last`, async (t) => {
-    const { result, calls } = await runStartup(t, { restart: true, fromShellby })
+for (const fromOpenChatX of [false, true]) {
+  test(`ordinary restart ${fromOpenChatX ? "inside OpenChatX" : "from a terminal"} keeps PM2 and reloads MCP last`, async (t) => {
+    const { result, calls } = await runStartup(t, { restart: true, fromOpenChatX })
     assert.equal(result.status, 0, result.stderr)
     assert.deepEqual(calls, [
       { command: "npm", args: ["run", "build"], auditExists: true },
@@ -216,11 +216,11 @@ test("hard restart rebuilds before replacing PM2 and clears the audit only after
   ])
 })
 
-test("hard restart inside Shellby fails before build or shutdown", async (t) => {
+test("hard restart inside OpenChatX fails before build or shutdown", async (t) => {
   const { root, result, calls } = await runStartup(t, {
     restart: true,
     hard: true,
-    fromShellby: true,
+    fromOpenChatX: true,
   })
   assert.equal(result.status, 1)
   assert.match(result.stderr, /healthy Terminal.app session/u)
@@ -252,7 +252,7 @@ test("startup does not report success for another copy on the configured port", 
 test("restart reloads services in tunnel then MCP order", async (t) => {
   const { result, calls } = await runStartup(t, {
     restart: true,
-    fromShellby: true,
+    fromOpenChatX: true,
   })
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(
@@ -269,7 +269,7 @@ test("an in-shell build failure leaves services and the audit intact", async (t)
   const { root, result, calls } = await runStartup(t, {
     restart: true,
     failCommand: "npm run",
-    fromShellby: true,
+    fromOpenChatX: true,
   })
   assert.equal(result.status, 7)
   assert.deepEqual(calls, [{ command: "npm", args: ["run", "build"], auditExists: true }])
@@ -296,7 +296,7 @@ for (const failure of ["npm run", "pm2 kill"]) {
   })
 }
 
-test("PM2 operational commands use Shellby's dedicated daemon and preserve CLI arguments", async (t) => {
+test("PM2 operational commands use OpenChatX's dedicated daemon and preserve CLI arguments", async (t) => {
   const packageJson = JSON.parse(
     await readFile(new URL("../package.json", import.meta.url), "utf8")
   ) as { scripts: Record<string, string> }

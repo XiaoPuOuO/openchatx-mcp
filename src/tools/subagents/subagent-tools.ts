@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { toToolError } from "../../mcp/tool-error.js"
 import type { SubagentRuntime } from "../../subagents/runtime.js"
 
 export function registerSubagentTools(server: McpServer, runtime: SubagentRuntime): void {
@@ -62,15 +63,7 @@ export function registerSubagentTools(server: McpServer, runtime: SubagentRuntim
           content: [{ type: "text" as const, text: result.content }],
         }
       } catch (error) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text: `SUBAGENT_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-        }
+        throw toToolError(error, "SUBAGENT_FAILED")
       }
     }
   )

@@ -31,15 +31,15 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     name: "start_here",
     arguments: { mode: "general", task_id: "audit-integration" },
   })
-  await connected.client.callTool({ name: "shell_list", arguments: {} })
+  await connected.client.callTool({ name: "bash", arguments: { command: "printf audit" } })
   await connected.client.callTool({
     name: "skill_list",
     arguments: {},
   })
 
   const log = await readFile(auditPath, "utf8")
-  assert.match(log, /shell_list/u)
-  assert.match(log, /args: \{\}/u)
+  assert.match(log, /--- # bash /u)
+  assert.match(log, /command: \|-/u)
   assert.match(log, /--- # skill_list /u)
   assert.match(log, /session: "agent-1"/u)
   assert.doesNotMatch(log, /child-session/u)

@@ -1,14 +1,12 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import process from "node:process"
 import test, { type TestContext } from "node:test"
 import { MCP_CONFIG } from "../src/config.js"
 import { prepareShellCommand } from "../src/tools/shell/rtk.js"
-import { createShellSession } from "../src/tools/shell/session.js"
-import { runToCompletion } from "./helpers/shell.js"
 
 test("installed RTK default reads preserve source bytes exactly", {
   skip: !MCP_CONFIG.shell.rtkExecutable,
@@ -108,58 +106,6 @@ test("RTK rewriting fails open when disabled, unavailable, unsupported, or opted
     "RTK_DISABLED=1 git status"
   )
   assert.equal(prepareShellCommand("printf hello", root, process.env), "printf hello")
-})
-
-test("rewritten commands preserve persistent shell cwd and exported environment", {
-  timeout: 10_000,
-}, async (t) => {
-  const root = await fakeRtkRoot(t)
-  const child = join(root, "child")
-  const init = spawnSync("git", ["init", "-q", child], { encoding: "utf8" })
-  assert.equal(init.status, 0)
-  useRtk(t, join(root, "rtk"))
-
-  const shell = createShellSession({ cwd: root })
-  t.after(async () => {
-    await shell.close()
-  })
-
-  const first = await runToCompletion(
-    shell,
-    "rtk-state-1",
-    "cd child && export SHELLBY_RTK_STATE=present && git status --short"
-  )
-  assert.equal(first.snapshot.exit_code, 0)
-
-  const second = await runToCompletion(
-    shell,
-    "rtk-state-2",
-    `printf '%s|%s' "$PWD" "$SHELLBY_RTK_STATE"`
-  )
-  assert.equal(second.output, `${await realpath(child)}|present`)
-})
-
-test("parallel RTK execution keeps the original command in caller-visible run metadata", {
-  timeout: 10_000,
-}, async (t) => {
-  const root = await fakeRtkRoot(t)
-  const child = join(root, "child")
-  const init = spawnSync("git", ["init", "-q", child], { encoding: "utf8" })
-  assert.equal(init.status, 0)
-  useRtk(t, join(root, "rtk"))
-
-  const shell = createShellSession({ cwd: root })
-  t.after(async () => {
-    await shell.close()
-  })
-
-  const result = await shell.runCommand({
-    request_id: "rtk-parallel",
-    commands: [{ command: "git status --short", cwd: "child" }],
-    yield_time_ms: MCP_CONFIG.shell.maxWaitMs,
-    max_output_tokens: MCP_CONFIG.shell.defaultOutputTokens,
-  })
-  assert.equal(result.commands?.[0]?.command, "git status --short")
 })
 
 function useRtk(t: TestContext, executable: string): void {

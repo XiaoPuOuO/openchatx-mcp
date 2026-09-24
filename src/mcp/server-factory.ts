@@ -20,12 +20,6 @@ import {
   type InteractiveShellManager,
   registerTerminalTool,
 } from "../tools/shell/interactive-shell.js"
-import type { ShellSessionManager } from "../tools/shell/session-manager.js"
-// import { registerIosShellTool } from "../tools/ios/ios-shell.js"
-import {
-  registerShellExecutionTools,
-  registerShellManagementTools,
-} from "../tools/shell/shell-tools.js"
 import { registerSkillTools } from "../tools/skills/skill-tools.js"
 import { type CapabilityCatalog, registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
@@ -35,7 +29,6 @@ import { registerWebTool } from "../tools/web/web-tool.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
 export interface CreateMcpServerOptions {
-  shellManager?: ShellSessionManager
   externalMcp?: ExternalMcpRegistry
   toolboxRegistry?: ToolboxRegistry
   interactiveShellManager?: InteractiveShellManager
@@ -46,7 +39,6 @@ export interface CreateMcpServerOptions {
 }
 
 export interface McpCapabilityServices {
-  shellManager?: ShellSessionManager
   externalMcp?: ExternalMcpRegistry
   toolboxRegistry?: ToolboxRegistry
   interactiveShellManager?: InteractiveShellManager
@@ -104,14 +96,10 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
     auditRequest: options.auditRequest,
   })
 
-  let shells: ShellSessionManager | undefined
-  if (!options.toolboxRegistry && profile.tools.shell) {
-    shells = requireCapabilityService(options.shellManager, "shell")
-  }
   if (options.toolboxRegistry) {
     registerToolboxRuntime(server, options, options.toolboxRegistry)
   } else {
-    registerLegacyRuntime(server, options, profile, shells)
+    registerDirectRuntime(server, options, profile)
   }
   if (options.toolboxRegistry && options.externalMcp) {
     registerCatalogTools(server, options.toolboxRegistry, options.externalMcp)
@@ -185,19 +173,21 @@ function buildCapabilityCatalog(
   }
 }
 
-function registerLegacyRuntime(
+function registerDirectRuntime(
   server: McpServer,
   options: CreateMcpServerOptions,
-  profile: McpRuntimeProfile,
-  shells: ShellSessionManager | undefined
+  profile: McpRuntimeProfile
 ): void {
   registerStartHereTool(server)
-  if (shells) registerShellExecutionTools(server, shells)
+  if (profile.tools.shell) {
+    registerBashTool(server)
+    if (options.interactiveShellManager)
+      registerTerminalTool(server, options.interactiveShellManager)
+  }
   if (profile.tools.applyPatch) registerApplyPatchTool(server)
   if (profile.tools.fileRead) registerFileReadTool(server)
   if (profile.tools.fileWrite) registerFileWriteTool(server)
   if (profile.tools.fileWrite) registerFileEditTool(server)
-  if (shells) registerShellManagementTools(server, shells)
   if (profile.tools.web)
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (profile.tools.skills) registerSkillTools(server)

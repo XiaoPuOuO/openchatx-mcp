@@ -11,11 +11,11 @@
     },
     "file_write": {
       "enabled": true,
-      "description": "Write a ChatGPT file to the local filesystem."
+      "description": "Create or completely overwrite a text file and return its diff."
     },
     "file_edit": {
       "enabled": true,
-      "description": "Precisely replace text in one existing file."
+      "description": "Precisely replace exact text in an existing file and return its diff."
     }
   },
   "skills": {}

@@ -33,13 +33,18 @@ for (const toolOutput of ["compact", "structured"] as const) {
     for (const [path, errorCode] of [
       ["/refused", "CONNECTION_REFUSED"],
       ["/broken", "OPEN_FAILED"],
-    ]) {
+    ] as const) {
       const result = await connected.client.callTool({
         name: "fetch_url",
         arguments: { url: `https://example.com${path}` },
       })
       assert.equal(result.isError, true)
-      assert.deepEqual(result.structuredContent, { error_code: errorCode })
+      if (toolOutput === "structured") {
+        assert.deepEqual(result.structuredContent, { error_code: errorCode })
+      } else {
+        assert.equal(result.structuredContent, undefined)
+      }
+      assert.match(toolText(result), new RegExp(errorCode, "u"))
     }
 
     const invalidCursor = await connected.client.callTool({
@@ -47,8 +52,12 @@ for (const toolOutput of ["compact", "structured"] as const) {
       arguments: { url: "https://example.com/", cursor: "invalid" },
     })
     assert.equal(invalidCursor.isError, true)
-    assert.deepEqual(invalidCursor.structuredContent, { error_code: "INVALID_ARGUMENT" })
-    assert.match(toolText(invalidCursor), /invalid_cursor/u)
+    if (toolOutput === "structured") {
+      assert.deepEqual(invalidCursor.structuredContent, { error_code: "INVALID_ARGUMENT" })
+    } else {
+      assert.equal(invalidCursor.structuredContent, undefined)
+    }
+    assert.match(toolText(invalidCursor), /INVALID_ARGUMENT/u)
 
     const invalidUrl = await connected.client.callTool({
       name: "fetch_url",

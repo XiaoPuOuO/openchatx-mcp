@@ -99,13 +99,13 @@ export default {
 
   const custom = await client.callTool({
     name: "tool_call",
-    arguments: { tool: "toolbox:demo:hello", arguments: { name: "X" } },
+    arguments: { tool: "toolbox:demo:hello", arguments_json: JSON.stringify({ name: "X" }) },
   })
   assert.equal(custom.content.find((item) => item.type === "text")?.text, "Hello X")
 
   const externalCall = await client.callTool({
     name: "tool_call",
-    arguments: { tool: "mcp:blender:get_scene", arguments: {} },
+    arguments: { tool: "mcp:blender:get_scene", arguments_json: "{}" },
   })
   assert.equal(
     externalCall.content.find((item) => item.type === "text")?.text,
