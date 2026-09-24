@@ -9,7 +9,8 @@
 </p>
 
 <p align="center">
-  為 ChatGPT 打造的本機 MCP 平台，整合本機工具、Toolboxes、Skills、外部 MCP Server 與 Provider-backed Subagents。
+  <strong>把 ChatGPT 變成真正的本機 Agent Runtime。</strong><br>
+  讓 ChatGPT 直接操作你的 Mac、使用本機工具、發現外部 MCP，並調度你自己的模型，只需要一個 MCP 連線。
 </p>
 
 <p align="center">
@@ -17,29 +18,26 @@
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="macOS">
 </p>
 
-<p align="center">
-  <a href="#快速開始">快速開始</a> ·
-  <a href="#操作與維護">操作與維護</a> ·
-  <a href="#安全性">安全性</a> ·
-  <a href="wiki/">維護者 Wiki</a>
-</p>
+> [!NOTE]
+> OpenChatX 跑在一般 ChatGPT 對話裡，不會把 Codex 當成執行後端。換句話說，OpenChatX 本身不會消耗 Codex task 用量；你的 ChatGPT 方案、訊息限制與其他使用政策仍然適用，而且未來可能調整。
 
 > [!CAUTION]
-> openchatx-mcp 會以目前 macOS 使用者的完整權限執行。經授權的 ChatGPT 呼叫可以執行指令、修改檔案、抓取網頁，以及控制支援的應用程式。
+> openchatx-mcp 會以目前 macOS 使用者的權限執行。經授權的 ChatGPT 呼叫可以執行指令、修改檔案、抓取網頁，以及控制已連接的工具與應用程式。
 
 ![openchatx-mcp architecture](docs/assets/openchatx-mcp-architecture.png)
 
-## 功能
+## 為什麼是 OpenChatX
 
-| 功能 | 說明 |
-| --- | --- |
-| Shell / Terminal | 提供非互動式 `bash` 與可互動 PTY Terminal，讓 ChatGPT 能直接操作本機開發環境。 |
-| 檔案工具 | 提供 `file_read`、`file_edit`、`file_write` 與 `apply_patch`。 |
-| MCP 聚合 | 將本機 stdio 與遠端 HTTP MCP Server 聚合到同一個 ChatGPT MCP 連線。 |
-| Capability Catalog | `start_here` 只暴露輕量能力摘要，讓 ChatGPT 知道有哪些 MCP / Subagent / Toolbox，而不載入全部 Tool Schema。 |
-| Toolboxes | 以資料夾為單位的 Plugin 系統，可包含 TypeScript tools 與 skills。 |
-| Provider-backed Subagents | 可把本地 GPU、自架模型或其他 API 當作 ChatGPT 可委派的子 Agent。 |
-| Dashboard | 本機 `/ui` 控制中心，可管理 MCP Servers、Toolboxes、Subagents 等設定。 |
+ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
+
+- **本機執行** — 在 Mac 上跑 shell、改檔案、看圖片、使用互動式 Terminal。
+- **MCP 聚合** — 把本機 stdio 與遠端 HTTP MCP Server 集中到同一個 ChatGPT MCP 連線。
+- **Capability Discovery** — ChatGPT 知道 Blender、Unreal、Browser Automation 等能力存在，但不必一次載入所有 Tool Schema。
+- **Toolboxes** — 用資料夾式 Plugin 加入自己的 TypeScript tools 與 reusable skills。
+- **Provider-backed Subagents** — 把本地 GPU、自架模型或其他 API 當成可委派 worker，ChatGPT 仍然是主要 Planner。
+- **Dashboard** — 從本機 UI 管理 MCP Servers、Toolboxes 與 Subagents。
+
+外部 MCP Tools 與自訂 Toolbox Tools 都採 lazy loading。`start_here` 只提供輕量 Capability Catalog，真正需要某個能力時才透過 `tool_search` 找工具。
 
 ## 系統需求
 
@@ -47,95 +45,66 @@
 - Node.js 22.18.0 或更新版本
 - npm
 - [ngrok](https://ngrok.com/) 帳號與 CLI
-- ChatGPT Plus 或更高方案，並開啟 Developer Mode
+- ChatGPT 帳號或 Workspace 已開放 Developer Mode / Custom MCP
 
-Computer Use 刻意設計成外部 MCP，而不是內建在 openchatx-mcp 裡。
+Computer Use 刻意放在外部 MCP，不綁死在 OpenChatX Core 裡。
 
 ## 快速開始
 
 ### 使用 Coding Agent 安裝
 
-[skills/install-openchatx-mcp/SKILL.md](skills/install-openchatx-mcp/SKILL.md)
+使用內建安裝 Skill：
+
+[`skills/install-openchatx-mcp/SKILL.md`](skills/install-openchatx-mcp/SKILL.md)
 
 ### 手動安裝
 
-> [!TIP]
-> 建議在 Terminal.app 執行第一次安裝，以取得較完整的 macOS 權限環境。
+```bash
+brew install --cask ngrok
+git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+cd openchatx-mcp
+npm ci
 
-1. 安裝 ngrok、clone repository 並安裝 dependencies：
+ngrok config add-authtoken <your-token>
 
-   ```bash
-   brew install --cask ngrok
-   git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
-   cd openchatx-mcp
-   npm ci
-   ```
+npm run setup -- --config-only
+npm run setup
+npm start
+```
 
-2. 登入 ngrok：
+第一次安裝建議從 Terminal.app 執行，讓 macOS 權限處於正常互動式環境。
 
-   ```bash
-   ngrok config add-authtoken <your-token>
-   ```
+### 加到 ChatGPT
 
-   如果還沒有 token，可以到 [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) 取得。
+1. 開啟 **Settings** 並啟用 **Developer Mode**。
 
-3. 建立設定檔：
+   ![開啟 ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
 
-   ```bash
-   npm run setup -- --config-only
-   ```
+   ![啟用 Developer Mode](docs/assets/enable-developer-mode-step-2.png)
 
-   設定檔位於 `.openchatx/config.toml`。
+2. 從 **Plugins** 按 **+**，選擇 **Create app**。
 
-4. 執行 guided setup：
+   ![建立 App](docs/assets/create-chatgpt-plugin-step-1.png)
 
-   ```bash
-   npm run setup
-   ```
+3. 選擇 **Create MCP app**。
 
-5. 第一次啟動請從 Terminal.app 執行：
+   ![建立 MCP App](docs/assets/create-chatgpt-plugin-step-2.png)
 
-   ```bash
-   npm start
-   ```
+4. 填入：
+   - Name：`OpenChatX`
+   - Server URL：`npm run print-url` 輸出的 `https://.../mcp`
+   - Authentication：**No Auth**
 
-   這會啟動 openchatx-mcp 與 ngrok，等待 health check 通過，並輸出公開的 `/mcp` URL。
+   ![設定 OpenChatX](docs/assets/create-chatgpt-plugin-step-3.png)
 
-6. 開啟 ChatGPT Developer Mode，使用剛才輸出的 `https://.../mcp` URL 建立自訂 MCP App，Authentication 選擇 **No Auth**。
+5. 如果希望 ChatGPT 不需要每次 Tool Call 都再次確認，可以把 OpenChatX Plugin 權限設成 **Allow all tools**。
 
-   1. 點擊左下角個人選單，選擇 **Settings**。
-
-      ![從個人選單開啟 ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
-
-   2. 到 **Security & sign-in** 開啟 **Developer Mode**。
-
-      ![在 Security & sign-in 開啟 Developer Mode](docs/assets/enable-developer-mode-step-2.png)
-
-   3. 從左側欄開啟 **Plugins**，按下 **+**，選擇 **Create app**。
-
-      ![開啟 Plugins 並選擇 Create app](docs/assets/create-chatgpt-plugin-step-1.png)
-
-   4. 選擇 **Create MCP app**。
-
-      ![選擇 Create MCP app](docs/assets/create-chatgpt-plugin-step-2.png)
-
-   5. 填入：
-      - Name：`OpenChatX`
-      - Description：例如 `OpenChatX for Computer Agent`
-      - Server URL：`npm run print-url` 輸出的 `https://.../mcp`
-      - Authentication：**No Auth**
-      - 勾選風險確認後按 **Create**
-
-      ![填寫 OpenChatX MCP app 設定並建立](docs/assets/create-chatgpt-plugin-step-3.png)
-
-   6. 開啟 OpenChatX Plugin 權限，選擇 **Allow all tools**。
-
-      ![將 OpenChatX plugin 權限設為 Allow all tools](docs/assets/openchatx-allow-all-tools.png)
+   ![允許 OpenChatX Tools](docs/assets/openchatx-allow-all-tools.png)
 
 > [!IMPORTANT]
-> 第一次受信任的遠端 Tool Call 會把這個 installation 綁定到當前 ChatGPT subject。只有在確定要清除綁定時才使用 `npm run auth:reset`。
+> 第一個受信任的遠端 Tool Call 會把這個 installation 綁定到該 ChatGPT subject。只有在確定要清除綁定時才執行 `npm run auth:reset`。
 
-### 驗證安裝
+### 驗證
 
 ```bash
 npm run status
@@ -143,45 +112,24 @@ curl -fsS http://127.0.0.1:3333/healthz
 npm run print-url
 ```
 
-預設本機 MCP endpoint：`http://127.0.0.1:3333/mcp`
-
-Dashboard 永遠啟用：`http://127.0.0.1:3333/ui`
-
-## External MCP Servers
-
-新安裝預設不會建立任何 MCP Server。可以從 Dashboard 的 **MCP Server** 頁面新增，或自行建立 gitignored 的 `mcp-servers.json`。
-
-本機 Server 使用 stdio，遠端 Server 使用 Streamable HTTP。
-
-```json
-{
-  "open-computer-use": {
-    "type": "local",
-    "command": ["/opt/homebrew/bin/open-computer-use", "mcp"],
-    "enabled": true,
-    "description": "macOS GUI control"
-  },
-  "unreal-engine": {
-    "type": "remote",
-    "url": "http://127.0.0.1:8000/mcp",
-    "enabled": true,
-    "timeout": 300000,
-    "description": "Unreal Engine editor control"
-  }
-}
+```text
+MCP: http://127.0.0.1:3333/mcp
+UI:  http://127.0.0.1:3333/ui
 ```
 
-外部 MCP Tools 採 lazy loading，不會把所有 Tool Schema 一次塞進 ChatGPT 主工具列表。
+## Capability Discovery
 
-`start_here` 會回傳輕量 Capability Catalog，包含 Server ID、名稱、description、availability 與 tool count。
+OpenChatX 不會把每一個外部 MCP 或自訂 Tool Schema 全部直接塞進 ChatGPT。
+
+`start_here` 只回傳精簡 Catalog：
 
 ```text
 External MCP capabilities:
-- blender (Blender): available, 32 tools — 3D modeling and Blender scene control
+- blender (Blender): available, 32 tools — 3D modeling and scene control
 - unreal-engine (Unreal Engine): available, 3 tools — Unreal Editor automation
 ```
 
-需要真正工具時，ChatGPT 可以先限定 MCP Server 搜尋：
+真正需要某個能力時：
 
 ```text
 tool_search(
@@ -191,19 +139,30 @@ tool_search(
 )
 ```
 
-再使用 `tool_call` 呼叫需要的 Tool。
+ChatGPT 再透過 `tool_call` 呼叫找到的 Tool。這樣一開始就知道「自己有什麼能力」，又不用付出幾百個 Tool Schema 的 context 成本。
 
-如果 MCP 已設定但目前無法連線，Capability Catalog 仍會顯示 `configured but unavailable`，而且不會阻止 openchatx-mcp 啟動。
+## External MCP Servers
+
+新安裝預設沒有任何外部 MCP Server。可以從 Dashboard 新增，或建立 gitignored 的 `mcp-servers.json`。
+
+```json
+{
+  "open-computer-use": {
+    "type": "local",
+    "command": ["/opt/homebrew/bin/open-computer-use", "mcp"],
+    "enabled": true,
+    "description": "macOS GUI control"
+  }
+}
+```
+
+MCP 暫時連不上不會阻止 OpenChatX 啟動；Capability Catalog 會把它標成 configured but unavailable。
 
 ## Provider-backed Subagents
 
-Subagents 直接透過 openchatx-mcp 設定的 Provider 執行，不會自動操作其他 ChatGPT conversations。
+OpenChatX 可以把工作委派給你明確設定的其他模型。Provider 不會自動把整個 Model Catalog 暴露給 ChatGPT，而是由你建立 curated Model Profile。
 
-這讓本地 GPU、自架模型與其他模型 API 都能成為 ChatGPT 可委派的 worker，而 ChatGPT 本身仍是主要 Planner。
-
-Provider 不會自動把所有模型暴露給 ChatGPT。使用者自行建立 curated Model Profile，包含 Profile ID、Display Name、Provider Model ID、Description、Context Window、Optional Max Output Tokens 與 Thinking 設定。
-
-新安裝預設沒有 Provider 或 Profile：
+新安裝預設是空的：
 
 ```json
 {
@@ -212,16 +171,14 @@ Provider 不會自動把所有模型暴露給 ChatGPT。使用者自行建立 cu
 }
 ```
 
-可以從 Dashboard 的 **Subagents** 頁面設定，或自行建立 gitignored 的 `subagents.json`。
+可從 Dashboard 或 gitignored 的 `subagents.json` 設定。
 
-- `subagent_list`：列出 Model Profiles 與用途
-- `subagent_run`：把一個任務委派給指定 Profile
+- `subagent_list` — 列出 curated profiles 與用途。
+- `subagent_run` — 把一個任務委派給指定 Profile。
 
-`start_here` 也會把已啟用的 Profiles 以輕量 Capability Summary 呈現給 ChatGPT。
+## Toolboxes
 
-## Toolboxes 與自訂 TypeScript Tools
-
-所有內建 Tool 都屬於某個 Toolbox。使用者自己的 Toolbox 也使用相同 runtime。
+Toolbox 是放在 `toolboxes/` 下的資料夾式 Plugin：
 
 ```text
 toolboxes/
@@ -234,201 +191,83 @@ toolboxes/
             └── SKILL.md
 ```
 
-Dashboard 的 **Toolboxes** 頁面可以管理整個 Toolbox、單一 Tool、Skill，也可以建立 Toolbox / Tool / Skill template。
+Dashboard 可以 Enable / Disable Toolbox、單一 Tool、Skill，也能建立 starter template。自訂 Tools 同樣透過 `tool_search` lazy discovery，再用 `tool_call` 執行。
 
-新安裝不會自動建立 `My Tools` 範例 Toolbox；需要時再自行建立。
-
-User-authored tools 透過 lazy catalog 被發現：
+## File Workflow
 
 ```text
-tool_search(source="toolbox", ...)
-→ tool_call(...)
+read → edit/write → patch only when appropriate
 ```
 
-`toolboxes/` 下的變更會自動 reload，不需要重新啟動 openchatx-mcp process。
-
-## 內建檔案工具
-
-### `file_read`
-
-```text
-file_read({
-  filePath,
-  offset?,
-  limit?
-})
-```
-
-- 回傳帶行號的文字
-- 支援 offset / limit 分頁
-- 單次最多 2000 行
-- 限制單行長度與單次總輸出大小
-- 可讀 directory listing
-- 普通 binary file 會拒絕
-- Image / PDF 使用 native MCP resource transport
-
-### `file_edit`
-
-```text
-file_edit({
-  filePath,
-  oldString,
-  newString,
-  replaceAll?
-})
-```
-
-- Exact match 優先
-- 保守的 whitespace / line-trimmed fallback
-- Ambiguous match 會拒絕
-- 保留 CRLF / LF
-- `oldString=""` 且檔案不存在時可以建立新檔
-- 回傳 compact diff
-
-Agent Guidance 預設：
-
-- 已知文字檔優先 `file_read`
-- 單一既有文字檔精確修改優先 `file_edit`
-- Structural / multi-file / create / delete / move / rename 使用 `apply_patch`
-- 不用 `bash + sed/cat` 取代專用檔案工具
-
-## 操作與維護
-
-| 指令 | 用途 |
-| --- | --- |
-| `npm start` | Build 並啟動或 reload openchatx-mcp、ngrok 與相關服務 |
-| `npm run restart` | Rebuild 並使用現有 PM2 daemon reload services |
-| `npm run restart -- --hard` | Rebuild 並從 Terminal.app 重建專用 PM2 daemon |
-| `npm run status` | 顯示 PM2 process 狀態 |
-| `npm run logs` | 查看 PM2 logs |
-| `npm run print-url` | 顯示公開的 `/mcp` URL 與本機 UI URL |
-| `npm run stop` | 停止 openchatx-mcp 與 ngrok |
-| `npm run auth:reset` | 清除遠端 ChatGPT subject 綁定 |
-
-PM2 使用 `<state_dir>/pm2` 保存自己的 daemon、socket、logs 與 process state，不會與其他專案預設的 `~/.pm2` 混在一起。
-
-### 更新既有安裝
-
-```bash
-git pull
-npm ci
-npm run setup -- --config-only
-npm start
-```
+- `file_read` — 讀文字檔或 Directory，支援帶行號分頁。
+- `file_edit` — 對既有文字檔做 exact replacement，適合局部修改，會回傳 diff。
+- `file_write` — 建立或完整覆寫文字檔，會回傳 diff。
+- `apply_patch` — 真正適合 Patch 的多檔修改、move/delete、或使用者直接提供 Patch。
 
 ## 設定
 
-公開設定檔：`.openchatx/config.toml`
-
-```toml
-state_dir = "~/.openchatx-mcp"
-workspace = "~/Desktop/agent-workspace"
-
-[shell]
-path = "/bin/zsh"
-rtk = false
-
-[ngrok]
-enabled = true
-api_port = 4040
-# url = "https://your-static-domain.ngrok-free.dev"
-pooling_enabled = false
-
-[mcp]
-tool_output = "compact"
+```text
+.openchatx/config.toml   # runtime、workspace、shell、ngrok、MCP output
+mcp-servers.json        # external MCP servers
+subagents.json          # providers 與 curated model profiles
+toolboxes/              # built-in 與 custom toolboxes
 ```
 
-Dashboard 沒有開關，永遠啟用。
-
-其他設定位置：
-
-- External MCP Servers：`mcp-servers.json`
-- Subagent Providers / Profiles：`subagents.json`
-- Toolboxes：`toolboxes/`
-
-### 固定 ngrok URL
-
-建議把 assigned / reserved static ngrok domain 寫進：
+如果希望 PM2 / ngrok 重啟後 ChatGPT Connector URL 不變：
 
 ```toml
 [ngrok]
 url = "https://your-static-domain.ngrok-free.dev"
 ```
 
-這樣 PM2 或 ngrok 重啟後，ChatGPT Connector URL 不需要重新修改。
+Dashboard 永遠可以從 `/ui` 使用。
 
-如果不指定 `ngrok.url`，則由 ngrok 決定公開 endpoint。
+## 操作與維護
 
-### Local-only MCP
+| 指令 | 用途 |
+| --- | --- |
+| `npm start` | Build 並啟動 / reload OpenChatX 與 ngrok |
+| `npm run restart` | Rebuild 並 reload services |
+| `npm run restart -- --hard` | 從 Terminal.app 重建專用 PM2 daemon |
+| `npm run status` | 查看 service 狀態 |
+| `npm run logs` | 查看 logs |
+| `npm run print-url` | 顯示公開 MCP URL 與本機 UI URL |
+| `npm run stop` | 停止 OpenChatX 與 ngrok |
+| `npm run auth:reset` | 確認後清除綁定的 ChatGPT subject |
 
-```toml
-[ngrok]
-enabled = false
-```
-
-然後照常使用 `npm start` 或 `npm run restart`。
-
-## 疑難排解
-
-```bash
-npm run status
-npm run logs
-npm run preflight
-```
-
-如果 PM2 daemon 的 macOS service context 有問題，從新的 Terminal.app session 執行：
-
-```bash
-npm run restart -- --hard
-```
-
-更多啟動與 recovery 細節請看 [Configuration and Startup](wiki/pages/operations/configuration-and-startup.md)。
+更多 recovery 細節請看 [Configuration and Startup](wiki/pages/operations/configuration-and-startup.md)。
 
 ## 安全性
 
-- 內建 ngrok traffic policy 只允許受信任的 ChatGPT remote MCP traffic。
-- Direct localhost MCP access 沒有額外 authentication；不要把本機 endpoint 透過其他不受信任的 proxy 公開。
-- Trusted remote Tool Calls 會綁定到 `<state_dir>/auth.json` 中保存的第一個 ChatGPT subject。
-- OpenChatX 不會從舊的 `~/.shellby/auth.json` 匯入 auth state。
-- `agent-commands.yaml` 可能包含敏感 Tool Input，已 gitignore 並限制權限，請視為私人資料。
+- 只連接你信任的 MCP Servers。
+- localhost MCP endpoint 沒有額外 Authentication；不要透過不受信任的 Proxy 暴露。
+- Trusted remote calls 會綁定到 `<state_dir>/auth.json` 裡的第一個 ChatGPT subject。
+- `agent-commands.yaml` 可能包含敏感 Tool Input，因此預設 gitignored。
 
-安全性問題與範圍請看 [SECURITY.md](SECURITY.md)。
+完整安全模型與回報方式請看 [SECURITY.md](SECURITY.md)。
 
 ## 開發
 
 ```bash
-npm run dev
-npm run ui:dev
 npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run ui:lint
 npm run ui:build
 ```
 
-Clone 後先執行一次 `npm run ui:install` 安裝 Dashboard dependencies。
+- `npm run inspect` — 開啟 MCP Inspector。
+- `npm run schemas` — 印出目前 Published MCP Tool Schemas。
 
-使用 `npm run inspect` 開啟 MCP Inspector，使用 `npm run schemas` 輸出目前 published Tool Schemas。
-
-## 文件
-
-[Maintainer Wiki](wiki/) 包含更深入的實作與維運資訊：
-
-- [Project Overview](wiki/pages/project-overview.md)
-- [Architecture Map](wiki/pages/architecture-map.md)
-- [Configuration and Startup](wiki/pages/operations/configuration-and-startup.md)
-- [MCP Tool Surface](wiki/pages/mcp-tool-surface.md)
-- [Build and Test](wiki/pages/operations/build-and-test.md)
-- [Open Questions and Risks](wiki/pages/project/open-questions-and-risks.md)
-
-## Contributing
-
-送 Pull Request 前請先閱讀 [CONTRIBUTING.md](CONTRIBUTING.md)，並執行上面的開發驗證指令。
+更多實作細節放在 [Maintainer Wiki](wiki/)。
 
 ## License
 
-[MIT](LICENSE)。Vendored `apply_patch` binary 保留 upstream OpenAI Codex license 與 notices，位於 [vendor/apply-patch/](vendor/apply-patch/)。
+[MIT](LICENSE)。
+
+Vendored `apply_patch` binary 保留 upstream OpenAI Codex license 與 notices，位於 [`vendor/apply-patch/`](vendor/apply-patch/)。
 
 ## Attribution
 
-本專案部分程式碼衍生自 [Shellby MCP](https://github.com/Serbyte-Development/shellby-mcp)，原作者為 Serbyte Development，採 MIT License。原始授權聲明保留於 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本專案部分程式碼衍生自 [Shellby MCP](https://github.com/Serbyte-Development/shellby-mcp)，原作者為 Serbyte Development，採 MIT License。原始授權聲明保留於 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
