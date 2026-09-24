@@ -1,4 +1,4 @@
-import { Blocks, BrainCircuit, RefreshCw, Settings, Wifi, WifiOff } from "lucide-react"
+import { Blocks, BrainCircuit, PackageOpen, RefreshCw, Settings, Wifi, WifiOff } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
@@ -6,15 +6,16 @@ import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { CapabilityHealthPanel } from "./features/dashboard/CapabilityHealthPanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
+import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
 
 export function App() {
-  const [view, setView] = useState<"dashboard" | "mcp-servers" | "toolboxes" | "subagents">(
-    "dashboard"
-  )
+  const [view, setView] = useState<
+    "dashboard" | "mcp-servers" | "toolboxes" | "subagents" | "store"
+  >("dashboard")
   if (view === "mcp-servers") {
     return <McpServerManager onBack={() => setView("dashboard")} />
   }
@@ -24,11 +25,15 @@ export function App() {
   if (view === "subagents") {
     return <SubagentManager onBack={() => setView("dashboard")} />
   }
+  if (view === "store") {
+    return <CapabilityStoreManager onBack={() => setView("dashboard")} />
+  }
   return (
     <Dashboard
       onOpenMcpServers={() => setView("mcp-servers")}
       onOpenToolboxes={() => setView("toolboxes")}
       onOpenSubagents={() => setView("subagents")}
+      onOpenStore={() => setView("store")}
     />
   )
 }
@@ -37,10 +42,12 @@ function Dashboard({
   onOpenMcpServers,
   onOpenToolboxes,
   onOpenSubagents,
+  onOpenStore,
 }: {
   onOpenMcpServers: () => void
   onOpenToolboxes: () => void
   onOpenSubagents: () => void
+  onOpenStore: () => void
 }) {
   const { agents, connected, loading, error } = useAgents()
   const { t } = useI18n()
@@ -78,6 +85,10 @@ function Dashboard({
               {connected ? t("dashboard.live") : t("dashboard.reconnecting")}
             </div>
             <LanguageSwitcher />
+            <Button variant="outline" size="sm" onClick={onOpenStore}>
+              <PackageOpen className="size-3.5" />
+              Store
+            </Button>
             <Button variant="outline" size="sm" onClick={onOpenSubagents}>
               <BrainCircuit className="size-3.5" />
               {t("dashboard.subagents")}

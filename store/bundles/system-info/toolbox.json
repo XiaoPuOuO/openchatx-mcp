@@ -1,0 +1,12 @@
+{
+  "name": "System Info",
+  "description": "Local machine information installed from the OpenChatX Capability Store.",
+  "enabled": true,
+  "tools": {
+    "system-info": {
+      "enabled": true,
+      "description": "Report local OS, architecture, hostname, CPU count, and memory."
+    }
+  },
+  "skills": {}
+}

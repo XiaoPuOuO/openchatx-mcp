@@ -13,6 +13,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
+import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { asRecord } from "../utils.js"
@@ -41,6 +42,7 @@ export interface McpHttpServices {
   externalMcp?: ExternalMcpRegistry
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
+  capabilityStore?: CapabilityStoreService
 }
 
 export interface McpHttpProfileOverrides {
@@ -66,6 +68,7 @@ export async function startMcpHttpServer(
     externalMcp,
     capabilityHealth,
     capabilityRegistry,
+    capabilityStore,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -93,14 +96,14 @@ export async function startMcpHttpServer(
   if (agentObserver)
     app.use(
       "/ui",
-      createDashboardRouter(
-        agentObserver,
+      createDashboardRouter(agentObserver, {
         toolboxRegistry,
         subagentRuntime,
         externalMcp,
         capabilityHealth,
-        capabilityRegistry
-      )
+        capabilityRegistry,
+        capabilityStore,
+      })
     )
 
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {

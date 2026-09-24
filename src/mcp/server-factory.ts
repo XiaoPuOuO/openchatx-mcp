@@ -6,6 +6,7 @@ import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
+import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
@@ -30,6 +31,7 @@ import {
 } from "../tools/shell/interactive-shell.js"
 import { registerSkillTools } from "../tools/skills/skill-tools.js"
 import { registerStartHereTool } from "../tools/start-here/start-here.js"
+import { registerStoreTools } from "../tools/store/store-tools.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
 import { registerToolboxManagementTools } from "../tools/toolbox-management/toolbox-management-tools.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
@@ -46,6 +48,7 @@ export interface CreateMcpServerOptions {
   jobManager?: JobManager
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
+  capabilityStore?: CapabilityStoreService
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -60,6 +63,7 @@ export interface McpCapabilityServices {
   jobManager?: JobManager
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
+  capabilityStore?: CapabilityStoreService
 }
 
 export interface McpRuntimeProfile {
@@ -164,6 +168,11 @@ function registerToolboxRuntime(
   registerBuiltinToolbox(server, registry, "mcp-manager", () =>
     registerMcpServerManagementTools(server, MCP_CONFIG.externalMcp.configFile, options.externalMcp)
   )
+  const capabilityStore = options.capabilityStore
+  if (capabilityStore)
+    registerBuiltinToolbox(server, registry, "store", () =>
+      registerStoreTools(server, capabilityStore)
+    )
   const subagentRuntime = options.subagentRuntime
   if (subagentRuntime)
     registerBuiltinToolbox(server, registry, "subagents", () =>
@@ -195,6 +204,7 @@ function registerDirectRuntime(
   if (profile.tools.skills) registerSkillTools(server)
   if (profile.tools.image) registerImageTools(server)
   if (options.jobManager) registerJobTools(server, options.jobManager)
+  if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
 }
 
 function registerBuiltinToolbox(

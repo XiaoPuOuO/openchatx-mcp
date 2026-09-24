@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "id": "system-info",
+      "name": "System Info",
+      "description": "A tiny Toolbox capability that reports the local OS, architecture, hostname, CPU count, and memory.",
+      "kind": "toolbox",
+      "bundle": "system-info",
+      "tags": ["system", "diagnostics", "local"]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { CapabilityStoreService } from "../store/store-service.js"
 import {
   loadSubagentConfig,
   redactSubagentConfig,
@@ -17,39 +18,36 @@ import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import type { AgentObserver } from "./observer.js"
 
+export interface DashboardServices {
+  toolboxRegistry?: ToolboxRegistry
+  subagentRuntime?: SubagentRuntime
+  externalMcp?: ExternalMcpRegistry
+  capabilityHealth?: CapabilityHealthService
+  capabilityRegistry?: CapabilityRegistry
+  capabilityStore?: CapabilityStoreService
+}
+
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
 export function createDashboardRouter(
   agentObserver: AgentObserver,
-  toolboxRegistry?: ToolboxRegistry,
-  subagentRuntime?: SubagentRuntime,
-  externalMcp?: ExternalMcpRegistry,
-  capabilityHealth?: CapabilityHealthService,
-  capabilityRegistry?: CapabilityRegistry
+  services: DashboardServices = {}
 ): Router {
+  const {
+    toolboxRegistry,
+    subagentRuntime,
+    externalMcp,
+    capabilityHealth,
+    capabilityRegistry,
+    capabilityStore,
+  } = services
   const router = Router()
 
   router.get("/api/agents", (_req, res) => {
     res.json({ agents: agentObserver.listAgents() })
   })
 
-  router.get("/api/health", async (_req, res) => {
-    if (!capabilityHealth) {
-      res.status(503).json({ error: "Capability health service is unavailable." })
-      return
-    }
-    res.json(await capabilityHealth.snapshot())
-  })
-
-  router.get("/api/capabilities", (req, res) => {
-    if (!capabilityRegistry) {
-      res.status(503).json({ error: "Capability registry is unavailable." })
-      return
-    }
-    const query = typeof req.query.q === "string" ? req.query.q.trim() : ""
-    res.json({
-      capabilities: query ? capabilityRegistry.search(query) : capabilityRegistry.list(),
-    })
-  })
+  registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
+  registerStoreRoutes(router, capabilityStore)
 
   router.get("/api/events", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream")
@@ -286,6 +284,72 @@ export function createDashboardRouter(
   const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
   router.use(expressStatic(dashboardDir, { index: "index.html" }))
   return router
+}
+
+function registerCapabilityRoutes(
+  router: ReturnType<typeof Router>,
+  capabilityHealth?: CapabilityHealthService,
+  capabilityRegistry?: CapabilityRegistry
+): void {
+  router.get("/api/health", async (_req, res) => {
+    if (!capabilityHealth) {
+      res.status(503).json({ error: "Capability health service is unavailable." })
+      return
+    }
+    res.json(await capabilityHealth.snapshot())
+  })
+
+  router.get("/api/capabilities", (req, res) => {
+    if (!capabilityRegistry) {
+      res.status(503).json({ error: "Capability registry is unavailable." })
+      return
+    }
+    const query = typeof req.query.q === "string" ? req.query.q.trim() : ""
+    res.json({
+      capabilities: query ? capabilityRegistry.search(query) : capabilityRegistry.list(),
+    })
+  })
+}
+
+function registerStoreRoutes(
+  router: ReturnType<typeof Router>,
+  capabilityStore?: CapabilityStoreService
+): void {
+  router.get("/api/store", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    const query = typeof req.query.q === "string" ? req.query.q.trim() : ""
+    res.json({
+      entries: query ? await capabilityStore.search(query) : await capabilityStore.list(),
+    })
+  })
+
+  router.post("/api/store/:id/install", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    try {
+      res.status(201).json({ entry: await capabilityStore.install(req.params.id) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.delete("/api/store/:id", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    try {
+      await capabilityStore.uninstall(req.params.id)
+      res.status(204).end()
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
 }
 
 function preserveRedactedSecrets(existing: SubagentConfig, incoming: unknown): unknown {

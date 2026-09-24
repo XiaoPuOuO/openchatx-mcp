@@ -3,6 +3,7 @@ import type {
   AgentChangedEvent,
   AgentInstruction,
   CapabilityHealthSnapshot,
+  CapabilityStoreEntry,
   McpServerMap,
   SubagentConfig,
   ToolboxSnapshot,
@@ -50,6 +51,48 @@ export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot>
   const response = await fetch("/ui/api/health")
   if (!response.ok) throw new Error(`Failed to load capability health (${response.status})`)
   return (await response.json()) as CapabilityHealthSnapshot
+}
+
+export async function fetchStoreEntries(): Promise<CapabilityStoreEntry[]> {
+  if (MOCK_DASHBOARD) {
+    return [
+      {
+        id: "system-info",
+        name: "System Info",
+        description: "Local machine diagnostics.",
+        kind: "toolbox",
+        bundle: "system-info",
+        tags: ["system", "diagnostics"],
+        installed: false,
+      },
+    ]
+  }
+  const response = await fetch("/ui/api/store")
+  if (!response.ok) throw new Error(`Failed to load Capability Store (${response.status})`)
+  const body = (await response.json()) as { entries?: CapabilityStoreEntry[] }
+  return body.entries ?? []
+}
+
+export async function installStoreEntry(id: string): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(`/ui/api/store/${encodeURIComponent(id)}/install`, {
+    method: "POST",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Capability install failed (${response.status})`)
+  }
+}
+
+export async function uninstallStoreEntry(id: string): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(`/ui/api/store/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Capability uninstall failed (${response.status})`)
+  }
 }
 
 export function subscribeToAgents(

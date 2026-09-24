@@ -1,0 +1,12 @@
+{
+  "name": "Capability Store",
+  "description": "Browse, install, and remove reusable OpenChatX capabilities.",
+  "enabled": true,
+  "builtin": "store",
+  "tools": {
+    "store_list": { "enabled": true, "description": "Browse installable capabilities." },
+    "store_install": { "enabled": true, "description": "Install a capability." },
+    "store_uninstall": { "enabled": true, "description": "Remove a Store-installed capability." }
+  },
+  "skills": {}
+}

@@ -52,6 +52,17 @@ export interface CapabilityHealthSnapshot {
   components: CapabilityHealthComponent[]
 }
 
+export interface CapabilityStoreEntry {
+  id: string
+  name: string
+  description: string
+  kind: "toolbox"
+  bundle: string
+  tags: string[]
+  installed: boolean
+  installedAt?: string
+}
+
 interface McpServerBase {
   enabled: boolean
   description?: string

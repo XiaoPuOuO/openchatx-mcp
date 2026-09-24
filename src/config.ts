@@ -66,6 +66,11 @@ export const MCP_CONFIG = {
   toolboxes: {
     root: fileURLToPath(new URL("../toolboxes/", import.meta.url)),
   },
+  /** Bundled Capability Store catalog and installable bundles. */
+  store: {
+    catalogFile: fileURLToPath(new URL("../store/catalog.json", import.meta.url)),
+    bundleRoot: fileURLToPath(new URL("../store/bundles/", import.meta.url)),
+  },
   /** OpenAI Secure MCP Tunnel client settings. */
   tunnel: {
     /** tunnel-client profile initialized for this OpenChatX installation. */
