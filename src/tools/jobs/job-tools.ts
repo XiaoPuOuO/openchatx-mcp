@@ -3,8 +3,13 @@ import { z } from "zod"
 
 import type { JobManager } from "../../jobs/job-manager.js"
 import { toToolError } from "../../mcp/tool-error.js"
+import type { ProjectRegistry } from "../../projects/project-registry.js"
 
-export function registerJobTools(server: McpServer, jobs: JobManager): void {
+export function registerJobTools(
+  server: McpServer,
+  jobs: JobManager,
+  projects?: ProjectRegistry
+): void {
   server.registerTool(
     "job_start",
     {
@@ -14,6 +19,7 @@ export function registerJobTools(server: McpServer, jobs: JobManager): void {
         label: z.string().min(1).max(120),
         command: z.string().min(1),
         cwd: z.string().min(1).optional(),
+        project_id: z.string().min(1).optional(),
       }),
       annotations: {
         readOnlyHint: false,
@@ -24,8 +30,21 @@ export function registerJobTools(server: McpServer, jobs: JobManager): void {
     },
     async (input) => {
       try {
-        const job = await jobs.start(input.label, input.command, input.cwd)
-        return { structuredContent: { job }, content: [] }
+        if (input.cwd && input.project_id)
+          throw new Error("job_start accepts either cwd or project_id, not both.")
+        const project = input.project_id
+          ? await projects?.resolve(input.project_id, "shell")
+          : undefined
+        if (input.project_id && !project)
+          throw new Error("Project registry is unavailable for project-scoped jobs.")
+        const job = await jobs.start(input.label, input.command, project?.path ?? input.cwd)
+        return {
+          structuredContent: {
+            job,
+            ...(project ? { project: { id: project.id, name: project.name } } : {}),
+          },
+          content: [],
+        }
       } catch (error) {
         throw toToolError(error, "JOB_START_FAILED")
       }

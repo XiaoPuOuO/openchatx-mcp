@@ -9,6 +9,7 @@ import { MCP_CONFIG } from "./config.js"
 import { createExternalMcpRegistry } from "./external-mcp/registry.js"
 import { JobManager } from "./jobs/job-manager.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
+import { ProjectRegistry } from "./projects/project-registry.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
@@ -39,6 +40,7 @@ const interactiveShellManager = new InteractiveShellManager(
 )
 const bashProcessManager = new BashProcessManager()
 const jobManager = new JobManager()
+const projectRegistry = new ProjectRegistry()
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityStore = new CapabilityStoreService(
@@ -66,6 +68,7 @@ try {
       capabilityStore,
       providerHub,
       smartRouter,
+      projectRegistry,
     }),
     auditLogger,
     authStore,

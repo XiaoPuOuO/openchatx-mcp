@@ -5,6 +5,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
+import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { ProviderHub } from "../providers/provider-hub.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
@@ -23,6 +24,7 @@ import {
 import { registerImageTools } from "../tools/image/image-tools.js"
 import { registerJobTools } from "../tools/jobs/job-tools.js"
 import { registerMcpServerManagementTools } from "../tools/mcp-server-management/mcp-server-management-tools.js"
+import { registerProjectTools } from "../tools/projects/project-tools.js"
 import { registerProviderTools } from "../tools/providers/provider-tools.js"
 import { registerSearchTools } from "../tools/search/search-tools.js"
 import type { BashProcessManager } from "../tools/shell/bash-process-manager.js"
@@ -55,6 +57,7 @@ export interface CreateMcpServerOptions {
   capabilityStore?: CapabilityStoreService
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
+  projectRegistry?: ProjectRegistry
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -72,6 +75,7 @@ export interface McpCapabilityServices {
   capabilityStore?: CapabilityStoreService
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
+  projectRegistry?: ProjectRegistry
 }
 
 export interface McpRuntimeProfile {
@@ -169,7 +173,14 @@ function registerToolboxRuntime(
   registerBuiltinToolbox(server, registry, "search", () => registerSearchTools(server))
   const jobManager = options.jobManager
   if (jobManager)
-    registerBuiltinToolbox(server, registry, "jobs", () => registerJobTools(server, jobManager))
+    registerBuiltinToolbox(server, registry, "jobs", () =>
+      registerJobTools(server, jobManager, options.projectRegistry)
+    )
+  const projectRegistry = options.projectRegistry
+  if (projectRegistry)
+    registerBuiltinToolbox(server, registry, "projects", () =>
+      registerProjectTools(server, projectRegistry)
+    )
   registerBuiltinToolbox(server, registry, "toolbox-manager", () =>
     registerToolboxManagementTools(server, registry)
   )
@@ -217,7 +228,8 @@ function registerDirectRuntime(
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (profile.tools.skills) registerSkillTools(server)
   if (profile.tools.image) registerImageTools(server)
-  if (options.jobManager) registerJobTools(server, options.jobManager)
+  if (options.jobManager) registerJobTools(server, options.jobManager, options.projectRegistry)
+  if (options.projectRegistry) registerProjectTools(server, options.projectRegistry)
   if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)

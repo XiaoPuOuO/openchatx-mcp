@@ -1,0 +1,15 @@
+{
+  "name": "Projects",
+  "description": "Register project roots and enforce project-scoped read, write, and shell permissions.",
+  "enabled": true,
+  "builtin": "projects",
+  "tools": {
+    "project_list": { "enabled": true, "description": "List registered projects." },
+    "project_manage": { "enabled": true, "description": "Register or update project permissions." },
+    "project_resolve": {
+      "enabled": true,
+      "description": "Resolve a project root with a permission check."
+    }
+  },
+  "skills": {}
+}
