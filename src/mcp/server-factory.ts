@@ -5,6 +5,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
+import type { ProviderHub } from "../providers/provider-hub.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
@@ -21,6 +22,7 @@ import {
 import { registerImageTools } from "../tools/image/image-tools.js"
 import { registerJobTools } from "../tools/jobs/job-tools.js"
 import { registerMcpServerManagementTools } from "../tools/mcp-server-management/mcp-server-management-tools.js"
+import { registerProviderTools } from "../tools/providers/provider-tools.js"
 import { registerSearchTools } from "../tools/search/search-tools.js"
 import type { BashProcessManager } from "../tools/shell/bash-process-manager.js"
 import { registerBashProcessTool } from "../tools/shell/bash-process-tool.js"
@@ -49,6 +51,7 @@ export interface CreateMcpServerOptions {
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
+  providerHub?: ProviderHub
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -64,6 +67,7 @@ export interface McpCapabilityServices {
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
+  providerHub?: ProviderHub
 }
 
 export interface McpRuntimeProfile {
@@ -178,6 +182,11 @@ function registerToolboxRuntime(
     registerBuiltinToolbox(server, registry, "subagents", () =>
       registerSubagentTools(server, subagentRuntime)
     )
+  const providerHub = options.providerHub
+  if (providerHub)
+    registerBuiltinToolbox(server, registry, "providers", () =>
+      registerProviderTools(server, providerHub)
+    )
 }
 
 function registerDirectRuntime(
@@ -205,6 +214,7 @@ function registerDirectRuntime(
   if (profile.tools.image) registerImageTools(server)
   if (options.jobManager) registerJobTools(server, options.jobManager)
   if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
+  if (options.providerHub) registerProviderTools(server, options.providerHub)
 }
 
 function registerBuiltinToolbox(

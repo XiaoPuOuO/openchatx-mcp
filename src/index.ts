@@ -9,6 +9,7 @@ import { MCP_CONFIG } from "./config.js"
 import { createExternalMcpRegistry } from "./external-mcp/registry.js"
 import { JobManager } from "./jobs/job-manager.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
+import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
 import { CapabilityStoreService } from "./store/store-service.js"
@@ -45,6 +46,7 @@ const capabilityStore = new CapabilityStoreService(
   MCP_CONFIG.toolboxes.root,
   toolboxRegistry
 )
+const providerHub = new ProviderHub(MCP_CONFIG.subagents.configFile, subagentRuntime)
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -60,6 +62,7 @@ try {
       capabilityHealth,
       capabilityRegistry,
       capabilityStore,
+      providerHub,
     }),
     auditLogger,
     authStore,

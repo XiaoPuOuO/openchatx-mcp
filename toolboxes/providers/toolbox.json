@@ -1,0 +1,12 @@
+{
+  "name": "Provider Hub",
+  "description": "Configure and probe hosted or local model providers.",
+  "enabled": true,
+  "builtin": "providers",
+  "tools": {
+    "provider_presets": { "enabled": true, "description": "List Provider Hub presets." },
+    "provider_install": { "enabled": true, "description": "Install a provider preset." },
+    "provider_probe": { "enabled": true, "description": "Probe a configured provider." }
+  },
+  "skills": {}
+}
