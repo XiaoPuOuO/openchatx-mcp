@@ -31,6 +31,8 @@ jobs:
         with:
           node-version: 22.18.0
           cache: npm
+      - name: Install ripgrep
+        run: brew install ripgrep
       - run: npm ci
       - run: npm run setup -- --config-only
       - name: Create default test workspace
