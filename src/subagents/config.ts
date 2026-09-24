@@ -37,6 +37,8 @@ const modelProfileSchema = z.object({
   enabled: z.boolean().default(true),
   context_window: z.number().int().positive(),
   max_output_tokens: z.number().int().positive().optional(),
+  tags: z.array(z.string().min(1)).default([]),
+  cost_tier: z.enum(["low", "medium", "high"]).default("medium"),
   thinking: thinkingSchema.default({ mode: "none" }),
   temperature: z.number().min(0).max(2).optional(),
   extra_body: z.record(z.string(), z.unknown()).optional(),

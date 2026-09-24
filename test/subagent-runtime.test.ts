@@ -86,6 +86,8 @@ test("subagent runtime sends only curated profile settings to an OpenAI-compatib
         description: "Fast chores",
         enabled: true,
         context_window: 131072,
+        tags: [],
+        cost_tier: "medium",
         thinking: {
           mode: "boolean",
           request_field: "enable_thinking",
@@ -139,6 +141,8 @@ test("subagent runtime validates configured thinking effort and optional max out
         enabled: true,
         context_window: 262144,
         max_output_tokens: 12000,
+        tags: [],
+        cost_tier: "medium",
         thinking: {
           mode: "effort",
           request_field: "reasoning_effort",

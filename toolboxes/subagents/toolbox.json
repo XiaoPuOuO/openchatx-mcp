@@ -11,6 +11,14 @@
     "subagent_run": {
       "enabled": true,
       "description": "Delegate a task to one configured model profile."
+    },
+    "subagent_route": {
+      "enabled": true,
+      "description": "Choose the best configured model profile for a task."
+    },
+    "subagent_route_run": {
+      "enabled": true,
+      "description": "Route and run a task through the best configured model profile."
     }
   },
   "skills": {}

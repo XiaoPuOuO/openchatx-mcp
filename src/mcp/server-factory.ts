@@ -8,6 +8,7 @@ import type { JobManager } from "../jobs/job-manager.js"
 import type { ProviderHub } from "../providers/provider-hub.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
+import type { SmartModelRouter } from "../subagents/router.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
@@ -34,6 +35,7 @@ import {
 import { registerSkillTools } from "../tools/skills/skill-tools.js"
 import { registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerStoreTools } from "../tools/store/store-tools.js"
+import { registerSmartRoutingTools } from "../tools/subagents/router-tools.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
 import { registerToolboxManagementTools } from "../tools/toolbox-management/toolbox-management-tools.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
@@ -52,6 +54,7 @@ export interface CreateMcpServerOptions {
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
   providerHub?: ProviderHub
+  smartRouter?: SmartModelRouter
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -68,6 +71,7 @@ export interface McpCapabilityServices {
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
   providerHub?: ProviderHub
+  smartRouter?: SmartModelRouter
 }
 
 export interface McpRuntimeProfile {
@@ -179,9 +183,10 @@ function registerToolboxRuntime(
     )
   const subagentRuntime = options.subagentRuntime
   if (subagentRuntime)
-    registerBuiltinToolbox(server, registry, "subagents", () =>
+    registerBuiltinToolbox(server, registry, "subagents", () => {
       registerSubagentTools(server, subagentRuntime)
-    )
+      if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
+    })
   const providerHub = options.providerHub
   if (providerHub)
     registerBuiltinToolbox(server, registry, "providers", () =>
@@ -215,6 +220,7 @@ function registerDirectRuntime(
   if (options.jobManager) registerJobTools(server, options.jobManager)
   if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
+  if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
 }
 
 function registerBuiltinToolbox(

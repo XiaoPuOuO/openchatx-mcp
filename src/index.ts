@@ -14,6 +14,7 @@ import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
 import { CapabilityStoreService } from "./store/store-service.js"
 import { loadSubagentConfig } from "./subagents/config.js"
+import { SmartModelRouter } from "./subagents/router.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
 import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
@@ -47,6 +48,7 @@ const capabilityStore = new CapabilityStoreService(
   toolboxRegistry
 )
 const providerHub = new ProviderHub(MCP_CONFIG.subagents.configFile, subagentRuntime)
+const smartRouter = new SmartModelRouter(MCP_CONFIG.subagents.configFile, subagentRuntime)
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -63,6 +65,7 @@ try {
       capabilityRegistry,
       capabilityStore,
       providerHub,
+      smartRouter,
     }),
     auditLogger,
     authStore,
