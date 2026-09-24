@@ -2,6 +2,7 @@ import { execFile } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { static as expressStatic, Router } from "express"
 
+import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
@@ -22,7 +23,8 @@ export function createDashboardRouter(
   toolboxRegistry?: ToolboxRegistry,
   subagentRuntime?: SubagentRuntime,
   externalMcp?: ExternalMcpRegistry,
-  capabilityHealth?: CapabilityHealthService
+  capabilityHealth?: CapabilityHealthService,
+  capabilityRegistry?: CapabilityRegistry
 ): Router {
   const router = Router()
 
@@ -36,6 +38,17 @@ export function createDashboardRouter(
       return
     }
     res.json(await capabilityHealth.snapshot())
+  })
+
+  router.get("/api/capabilities", (req, res) => {
+    if (!capabilityRegistry) {
+      res.status(503).json({ error: "Capability registry is unavailable." })
+      return
+    }
+    const query = typeof req.query.q === "string" ? req.query.q.trim() : ""
+    res.json({
+      capabilities: query ? capabilityRegistry.search(query) : capabilityRegistry.list(),
+    })
   })
 
   router.get("/api/events", (req, res) => {

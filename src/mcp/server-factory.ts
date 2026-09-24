@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server"
 import type { AgentObserver } from "../agent/observer.js"
+import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
@@ -8,6 +9,7 @@ import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
+import { registerCapabilityTools } from "../tools/capabilities/capability-tools.js"
 import { registerCapabilityHealthTool } from "../tools/capabilities/health-tool.js"
 import { registerCatalogTools } from "../tools/catalog/catalog-tools.js"
 import {
@@ -27,7 +29,7 @@ import {
   registerTerminalTool,
 } from "../tools/shell/interactive-shell.js"
 import { registerSkillTools } from "../tools/skills/skill-tools.js"
-import { type CapabilityCatalog, registerStartHereTool } from "../tools/start-here/start-here.js"
+import { registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
 import { registerToolboxManagementTools } from "../tools/toolbox-management/toolbox-management-tools.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
@@ -43,6 +45,7 @@ export interface CreateMcpServerOptions {
   subagentRuntime?: SubagentRuntime
   jobManager?: JobManager
   capabilityHealth?: CapabilityHealthService
+  capabilityRegistry?: CapabilityRegistry
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -56,6 +59,7 @@ export interface McpCapabilityServices {
   subagentRuntime?: SubagentRuntime
   jobManager?: JobManager
   capabilityHealth?: CapabilityHealthService
+  capabilityRegistry?: CapabilityRegistry
 }
 
 export interface McpRuntimeProfile {
@@ -127,8 +131,10 @@ function registerToolboxRuntime(
   options: CreateMcpServerOptions,
   registry: ToolboxRegistry
 ): void {
+  const capabilityRegistry = options.capabilityRegistry
   registerBuiltinToolbox(server, registry, "system", () => {
-    registerStartHereTool(server, () => buildCapabilityCatalog(options, registry))
+    registerStartHereTool(server, capabilityRegistry ? () => capabilityRegistry.list() : undefined)
+    if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
     if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
   })
   registerBuiltinToolbox(server, registry, "shell", () => {
@@ -165,37 +171,14 @@ function registerToolboxRuntime(
     )
 }
 
-function buildCapabilityCatalog(
-  options: CreateMcpServerOptions,
-  registry: ToolboxRegistry
-): CapabilityCatalog {
-  return {
-    mcpServers: options.externalMcp?.capabilities() ?? [],
-    subagents:
-      options.subagentRuntime?.profiles().map((profile) => ({
-        id: profile.id,
-        name: profile.name,
-        description: profile.description,
-      })) ?? [],
-    toolboxes: registry
-      .snapshots()
-      .filter((toolbox) => toolbox.enabled && !toolbox.builtin)
-      .map((toolbox) => ({
-        id: toolbox.id,
-        name: toolbox.name,
-        ...(toolbox.description ? { description: toolbox.description } : {}),
-        toolCount: toolbox.tools.filter((tool) => tool.enabled).length,
-        skillCount: toolbox.skills.filter((skill) => skill.enabled).length,
-      })),
-  }
-}
-
 function registerDirectRuntime(
   server: McpServer,
   options: CreateMcpServerOptions,
   profile: McpRuntimeProfile
 ): void {
-  registerStartHereTool(server)
+  const capabilityRegistry = options.capabilityRegistry
+  registerStartHereTool(server, capabilityRegistry ? () => capabilityRegistry.list() : undefined)
+  if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
   if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
   if (profile.tools.shell) {
     registerBashTool(server, options.bashProcessManager)

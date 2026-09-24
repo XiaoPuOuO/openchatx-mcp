@@ -8,6 +8,7 @@ import { z } from "zod"
 
 import { setAgentTaskSlug } from "../../agent/context.js"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
+import type { CapabilityDescriptor } from "../../capabilities/catalog.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
@@ -20,23 +21,7 @@ type PromptSource = {
   prompt: string
 }
 
-export interface CapabilityCatalog {
-  mcpServers: Array<{
-    id: string
-    name: string
-    description?: string
-    available: boolean
-    toolCount: number
-  }>
-  subagents: Array<{ id: string; name: string; description: string }>
-  toolboxes: Array<{
-    id: string
-    name: string
-    description?: string
-    toolCount: number
-    skillCount: number
-  }>
-}
+export type CapabilityCatalog = CapabilityDescriptor[]
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
@@ -90,56 +75,22 @@ export function registerStartHereTool(
 }
 
 export function renderCapabilityCatalog(catalog: CapabilityCatalog): string {
-  const sections: string[] = []
-
-  if (catalog.mcpServers.length > 0) {
-    const lines = catalog.mcpServers.map((server) => {
-      const status = server.available
-        ? `available, ${server.toolCount} tools`
-        : "configured but unavailable"
-      const description = server.description ? ` — ${server.description}` : ""
-      return `- ${server.id} (${server.name}): ${status}${description}`
-    })
-    sections.push(
-      [
-        "External MCP capabilities:",
-        ...lines,
-        'Use tool_search with source="mcp" and server="<id>" to discover only the tools needed for the task, then call them with tool_call.',
-      ].join("\n")
-    )
-  }
-
-  if (catalog.subagents.length > 0) {
-    sections.push(
-      [
-        "Subagent model profiles:",
-        ...catalog.subagents.map(
-          (profile) => `- ${profile.id} (${profile.name}) — ${profile.description}`
-        ),
-        "Use subagent_run only when delegation is useful; choose profiles by their stated purpose.",
-      ].join("\n")
-    )
-  }
-
-  if (catalog.toolboxes.length > 0) {
-    sections.push(
-      [
-        "Custom toolbox capabilities:",
-        ...catalog.toolboxes.map((toolbox) => {
-          const description = toolbox.description ? ` — ${toolbox.description}` : ""
-          return `- ${toolbox.id} (${toolbox.name}): ${toolbox.toolCount} tools, ${toolbox.skillCount} skills${description}`
-        }),
-        'Use tool_search with source="toolbox" to discover custom tools when one of these capabilities fits the task.',
-      ].join("\n")
-    )
-  }
-
-  if (sections.length === 0) return ""
+  if (catalog.length === 0) return ""
+  const lines = catalog.map((capability) => {
+    const detailParts: string[] = [capability.available ? "available" : "unavailable"]
+    if (capability.toolCount !== undefined) detailParts.push(`${capability.toolCount} tools`)
+    if (capability.skillCount !== undefined) detailParts.push(`${capability.skillCount} skills`)
+    if (capability.profileCount !== undefined)
+      detailParts.push(`${capability.profileCount} model profiles`)
+    const description = capability.description ? ` — ${capability.description}` : ""
+    return `- ${capability.id} (${capability.name}): ${detailParts.join(", ")}${description}`
+  })
   return [
     "# Available OpenChatX capabilities",
-    "These are lightweight capability summaries, not the full lazy tool schemas. Use them to know what is available before searching for a tool.",
-    ...sections,
-  ].join("\n\n")
+    "Capabilities are presented as one platform catalog regardless of whether they come from MCP, custom tools, model profiles, or providers.",
+    ...lines,
+    "Use capability_list when you need exact invocation details. Tool-backed capabilities are discovered with tool_search/tool_call; agent capabilities run through subagent_run.",
+  ].join("\n")
 }
 
 export async function buildStartHereInstructions(

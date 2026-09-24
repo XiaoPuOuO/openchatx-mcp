@@ -12,6 +12,10 @@
     "capability_health": {
       "enabled": true,
       "description": "Inspect runtime, tunnel, MCP, toolbox, and provider health."
+    },
+    "capability_list": {
+      "enabled": true,
+      "description": "List or search the unified OpenChatX capability catalog."
     }
   },
   "skills": {}

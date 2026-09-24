@@ -8,6 +8,7 @@ import { runWithAgent } from "../agent/context.js"
 import { createDashboardRouter } from "../agent/dashboard-routes.js"
 import type { AgentObserver } from "../agent/observer.js"
 import { OpenChatXAuthError, type OpenChatXAuthStore } from "../auth/store.js"
+import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
@@ -39,6 +40,7 @@ export interface McpHttpServices {
   subagentRuntime?: SubagentRuntime
   externalMcp?: ExternalMcpRegistry
   capabilityHealth?: CapabilityHealthService
+  capabilityRegistry?: CapabilityRegistry
 }
 
 export interface McpHttpProfileOverrides {
@@ -63,6 +65,7 @@ export async function startMcpHttpServer(
     subagentRuntime,
     externalMcp,
     capabilityHealth,
+    capabilityRegistry,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -95,7 +98,8 @@ export async function startMcpHttpServer(
         toolboxRegistry,
         subagentRuntime,
         externalMcp,
-        capabilityHealth
+        capabilityHealth,
+        capabilityRegistry
       )
     )
 
