@@ -28,6 +28,41 @@ test("tracks current and recent tool activity for one agent", () => {
   assert.equal(snapshot?.recent[0]?.finishedAt, 1_500)
 })
 
+test("failed tool calls preserve the error reason for the dashboard", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "search" }
+
+  const callId = observer.startTool(agent, "glob", {
+    pattern: "**/*.png",
+    path: "/Users/xiaopu",
+  })
+  observer.failTool(agent, callId, new Error("GLOB_FAILED: permission denied"))
+
+  assert.deepEqual(
+    {
+      status: observer.listAgents()[0]?.recent[0]?.status,
+      error: observer.listAgents()[0]?.recent[0]?.error,
+    },
+    {
+      status: "failed",
+      error: "GLOB_FAILED: permission denied",
+    }
+  )
+})
+
+test("failed MCP results preserve their text error for the dashboard", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "patch" }
+
+  const callId = observer.startTool(agent, "apply_patch", { patch: "*** Begin Patch" })
+  observer.failTool(agent, callId, {
+    isError: true,
+    content: [{ type: "text", text: "PATCH_FAILED: invalid patch" }],
+  })
+
+  assert.equal(observer.listAgents()[0]?.recent[0]?.error, "PATCH_FAILED: invalid patch")
+})
+
 test("completed file edits expose the resulting diff for the dashboard", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "edit" }

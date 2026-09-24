@@ -71,5 +71,5 @@ Process-group kill failures such as macOS `EPERM` are deliberately swallowed so 
 - [shell_run](./tools/shell-run.md)
 - [MCP Tool Surface](./mcp-tool-surface.md)
 - [Architecture Map](./architecture-map.md)
-- [Workspace Tooling](./workspace-tooling.md)
+- [State and Skills](./state-and-skills.md)
 - [Open Questions and Risks](./project/open-questions-and-risks.md)

@@ -16,8 +16,6 @@ async function runStartup(
     pm2Args?: string[]
     fromOpenChatX?: boolean
     healthInstance?: string
-    ngrokEnabled?: boolean
-    existingTunnel?: boolean
   } = {}
 ) {
   const root = await realpath(await tempDir(t, "shellby-start-"))
@@ -28,20 +26,15 @@ async function runStartup(
   await copyFile(new URL("../scripts/pm2.ts", import.meta.url), join(root, "scripts", "pm2.ts"))
   await writeFile(
     join(root, "src", "config.ts"),
-    `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, instanceId: "fixture", stateDir: join(root, "state"), workspace: root, ngrok: { enabled: options.ngrokEnabled ?? true }, shell: { rtk: false }, tools: {} })}`
+    `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, instanceId: "fixture", stateDir: join(root, "state"), workspace: root, tunnel: { profile: "openchatx", healthPort: 8080 }, shell: { rtk: false }, tools: {} })}`
   )
   await writeFile(
     join(root, "scripts", "preflight.ts"),
-    `export async function checkPublicRuntime(ngrokEnabled) { if(ngrokEnabled !== ${options.ngrokEnabled ?? true}) throw new Error("wrong ngrok preflight mode"); return { errors: [] }; }
+    `export async function checkPublicRuntime(tunnelProfile) { if(tunnelProfile !== "openchatx") throw new Error("wrong tunnel profile"); return { errors: [] }; }
 export function checkRtkRuntime() {}
 export function printPreflightErrors() {}`
   )
-  await writeFile(
-    join(root, "scripts", "print-url.ts"),
-    options.ngrokEnabled === false
-      ? 'console.log("http://127.0.0.1:3334/mcp")'
-      : 'console.log("https://test.invalid/mcp")'
-  )
+  await writeFile(join(root, "scripts", "print-url.ts"), 'console.log("Tunnel profile: openchatx")')
   await writeFile(join(root, "agent-commands.yaml"), "previous audit\n")
   await writeFile(join(root, "calls.jsonl"), "")
 
@@ -59,7 +52,6 @@ appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({
   pm2Home: process.env.PM2_HOME, cwd: process.cwd()
 }) + "\\n");
 if ([${JSON.stringify(command)} + " " + args[0], ${JSON.stringify(command)} + " " + args.join(" ")].includes(process.env.START_TEST_FAIL)) process.exit(7);
-if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${JSON.stringify(JSON.stringify(options.existingTunnel ? [{ name: "openchatx-ngrok" }, { name: "unrelated-app" }] : []))});
 `,
       { mode: 0o755 }
     )
@@ -130,7 +122,7 @@ for (const fromOpenChatX of [false, true]) {
           "startOrReload",
           "ecosystem.config.cjs",
           "--only",
-          "openchatx-ngrok",
+          "openchatx-tunnel",
           "--update-env",
         ],
         auditExists: false,
@@ -141,61 +133,9 @@ for (const fromOpenChatX of [false, true]) {
         auditExists: false,
       },
     ])
-    assert.match(result.stdout, /https:\/\/test.invalid\/mcp/u)
+    assert.match(result.stdout, /Tunnel profile: openchatx/u)
   })
 }
-
-for (const existingTunnel of [false, true]) {
-  test(`local restart ${existingTunnel ? "removes an existing tunnel" : "works without a tunnel"} before reloading MCP`, async (t) => {
-    const { result, calls } = await runStartup(t, {
-      restart: true,
-      ngrokEnabled: false,
-      existingTunnel,
-    })
-    assert.equal(result.status, 0, result.stderr)
-    assert.deepEqual(
-      calls.map(({ command, args }) => [command, ...args]),
-      [
-        ["npm", "run", "build"],
-        ["pm2", "jlist", "--silent"],
-        ...(existingTunnel ? [["pm2", "delete", "openchatx-ngrok"]] : []),
-        ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
-      ]
-    )
-    assert.match(result.stdout, /ngrok: disabled \(local only\)/u)
-    assert.match(result.stdout, /http:\/\/127.0.0.1:3334\/mcp/u)
-  })
-}
-
-for (const failCommand of ["pm2 jlist", "pm2 delete openchatx-ngrok"]) {
-  test(`local startup stops when tunnel cleanup fails at ${failCommand}`, async (t) => {
-    const { result, calls } = await runStartup(t, {
-      ngrokEnabled: false,
-      existingTunnel: true,
-      failCommand,
-    })
-    assert.equal(result.status, 7)
-    assert.ok(!calls.some(({ args }) => args.includes("startOrReload")))
-    assert.ok(!result.stdout.includes("local only"))
-  })
-}
-
-test("hard restart with ngrok disabled recreates only MCP", async (t) => {
-  const { result, calls } = await runStartup(t, {
-    hard: true,
-    ngrokEnabled: false,
-    existingTunnel: true,
-  })
-  assert.equal(result.status, 0, result.stderr)
-  assert.deepEqual(
-    calls.map(({ command, args }) => [command, ...args]),
-    [
-      ["npm", "run", "build"],
-      ["pm2", "kill"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
-    ]
-  )
-})
 
 test("hard restart rebuilds before replacing PM2 and clears the audit only after shutdown", async (t) => {
   const { result, calls } = await runStartup(t, { restart: true, hard: true })
@@ -205,7 +145,7 @@ test("hard restart rebuilds before replacing PM2 and clears the audit only after
     { command: "pm2", args: ["kill"], auditExists: true },
     {
       command: "pm2",
-      args: ["startOrReload", "ecosystem.config.cjs", "--only", "openchatx-ngrok", "--update-env"],
+      args: ["startOrReload", "ecosystem.config.cjs", "--only", "openchatx-tunnel", "--update-env"],
       auditExists: false,
     },
     {
@@ -236,7 +176,14 @@ test("ordinary startup keeps the PM2 daemon and audit log", async (t) => {
     calls.map(({ command, args }) => [command, ...args]),
     [
       ["npm", "run", "build"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-ngrok", "--update-env"],
+      [
+        "pm2",
+        "startOrReload",
+        "ecosystem.config.cjs",
+        "--only",
+        "openchatx-tunnel",
+        "--update-env",
+      ],
       ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
     ]
   )
@@ -246,7 +193,7 @@ test("startup does not report success for another copy on the configured port", 
   const { result } = await runStartup(t, { healthInstance: "other-copy" })
   assert.equal(result.status, 1)
   assert.match(result.stderr, /another instance using port 3334/u)
-  assert.ok(!result.stdout.includes("https://test.invalid/mcp"))
+  assert.ok(!result.stdout.includes("Tunnel profile: openchatx"))
 })
 
 test("restart reloads services in tunnel then MCP order", async (t) => {
@@ -259,7 +206,14 @@ test("restart reloads services in tunnel then MCP order", async (t) => {
     calls.map(({ command, args }) => [command, ...args]),
     [
       ["npm", "run", "build"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-ngrok", "--update-env"],
+      [
+        "pm2",
+        "startOrReload",
+        "ecosystem.config.cjs",
+        "--only",
+        "openchatx-tunnel",
+        "--update-env",
+      ],
       ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
     ]
   )
@@ -279,7 +233,7 @@ test("an in-shell build failure leaves services and the audit intact", async (t)
 test("a failed tunnel reload leaves MCP running", async (t) => {
   const { result, calls } = await runStartup(t, { restart: true, failCommand: "pm2 startOrReload" })
   assert.equal(result.status, 7)
-  assert.equal(calls.at(-1)?.args[3], "openchatx-ngrok")
+  assert.equal(calls.at(-1)?.args[3], "openchatx-tunnel")
   assert.ok(calls.every(({ args }) => !args.includes("openchatx-mcp")))
 })
 

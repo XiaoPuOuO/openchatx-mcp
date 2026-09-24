@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events"
 
 import type { AgentIdentity } from "./context.js"
-import { presentToolCall, presentToolResult } from "./tool-call-presentation.js"
+import { presentToolCall, presentToolFailure, presentToolResult } from "./tool-call-presentation.js"
 
 type AgentCallStatus = "running" | "completed" | "failed"
 
@@ -13,6 +13,7 @@ interface AgentCallSnapshot {
   detailLanguage?: string
   resultDetail?: string
   resultDetailLanguage?: string
+  error?: string
   startedAt: number
   finishedAt?: number
   status: AgentCallStatus
@@ -49,7 +50,7 @@ export interface AgentObserver {
   listAgents(): AgentSnapshot[]
   startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
   finishTool(agent: AgentIdentity | undefined, callId: string | undefined, result?: unknown): void
-  failTool(agent: AgentIdentity | undefined, callId: string | undefined): void
+  failTool(agent: AgentIdentity | undefined, callId: string | undefined, error?: unknown): void
   queueInstruction(agentId: string, message: string): AgentInstructionSnapshot | undefined
   cancelInstruction(agentId: string, instructionId: string): boolean
   drainInstructions(agent: AgentIdentity | undefined): string[]
@@ -141,7 +142,9 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     agent.taskSlug = identity.taskSlug
     const call: AgentCallSnapshot = {
       ...activeCall,
-      ...(status === "completed" ? presentToolResult(activeCall.tool, result) : {}),
+      ...(status === "completed"
+        ? presentToolResult(activeCall.tool, result)
+        : presentToolFailure(result)),
       status,
       finishedAt: timestamp,
     }
@@ -208,7 +211,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     listAgents,
     startTool,
     finishTool: (agent, callId, result) => settleTool(agent, callId, "completed", result),
-    failTool: (agent, callId) => settleTool(agent, callId, "failed"),
+    failTool: (agent, callId, error) => settleTool(agent, callId, "failed", error),
     queueInstruction,
     cancelInstruction,
     drainInstructions,

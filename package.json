@@ -35,7 +35,7 @@
     "status": "node --import tsx scripts/pm2.ts status",
     "stop": "node --import tsx scripts/pm2.ts stop ecosystem.config.cjs",
     "test": "tsx --test",
-    "tunnel": "node --import tsx scripts/pm2.ts startOrReload ecosystem.config.cjs --only openchatx-ngrok --update-env",
+    "tunnel": "node --import tsx scripts/pm2.ts startOrReload ecosystem.config.cjs --only openchatx-tunnel --update-env",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "ui:build": "npm --prefix ui run build",
     "ui:dev": "npm --prefix ui run dev",

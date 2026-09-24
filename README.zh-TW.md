@@ -47,7 +47,7 @@ ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 - Node.js 22.18.0 或更新版本
 - npm
 - ripgrep（`rg`）
-- [ngrok](https://ngrok.com/) 帳號與 CLI
+- [OpenAI tunnel-client](https://github.com/openai/tunnel-client) 並放入 PATH
 - ChatGPT 帳號或 Workspace 已開放 Developer Mode / Custom MCP
 
 Windows 直接原生執行，不需要 WSL。OpenChatX 會優先使用 PowerShell 7（`pwsh.exe`），若沒有則回退到 Windows PowerShell（`powershell.exe`）。目前內建的 `apply_patch` binary 仍是 macOS-only；Windows 上一般工作流使用 `file_read` / `file_edit` / `file_write`。
@@ -64,82 +64,216 @@ Computer Use 刻意放在外部 MCP，不綁死在 OpenChatX Core 裡。
 
 ### 手動安裝
 
+先把 OpenChatX 專案準備好，但先不要跑完整 `npm run setup`，因為完整 Setup 會檢查 Secure MCP Tunnel 是否已經安裝與設定完成。
+
 macOS：
 
 ```bash
-brew install --cask ngrok
 brew install ripgrep
 git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
 cd openchatx-mcp
 npm ci
-
-ngrok config add-authtoken <your-token>
-
 npm run setup -- --config-only
-npm run setup
-npm start
 ```
 
 Windows PowerShell：
 
 ```powershell
-winget install Ngrok.Ngrok
 winget install BurntSushi.ripgrep.MSVC
 git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
 Set-Location openchatx-mcp
 npm ci
-
-ngrok config add-authtoken <your-token>
-
 npm run setup -- --config-only
-npm run setup
-npm start
 ```
 
 第一次安裝請從正常的外部 Terminal 啟動（macOS 使用 Terminal.app；Windows 使用 PowerShell / Windows Terminal），讓 PM2 runtime 繼承正確的系統權限與環境。
 
-### 加到 ChatGPT
+### 設定 OpenAI Secure MCP Tunnel
 
-1. 開啟 **Settings** 並啟用 **Developer Mode**。
+OpenChatX 現在只支援 OpenAI Secure MCP Tunnel，不再使用 ngrok。OpenChatX 的 MCP Server 只監聽本機 `127.0.0.1:3333`，由 `tunnel-client` 主動建立到 OpenAI 的 outbound HTTPS 連線。
 
-   ![開啟 ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
+#### 1. 安裝 `tunnel-client`
 
-   ![啟用 Developer Mode](docs/assets/enable-developer-mode-step-2.png)
+先開啟 [OpenAI Secure MCP Tunnel 官方文件](https://developers.openai.com/zh-Hant/api/docs/guides/secure-mcp-tunnels)，可以從 Platform 的 **Download tunnel-client** 下載，或直接使用 [`openai/tunnel-client` 最新 Release](https://github.com/openai/tunnel-client/releases/latest)。不要在教學裡固定某個版本，直接使用最新相容版本。
 
-2. 從 **Plugins** 按 **+**，選擇 **Create app**。
+macOS 先確認 CPU 架構：
 
-   ![建立 App](docs/assets/create-chatgpt-plugin-step-1.png)
+```bash
+uname -m
+```
 
-3. 選擇 **Create MCP app**。
+- 顯示 `arm64`：下載 `darwin-arm64`。
+- 顯示 `x86_64`：下載 `darwin-amd64`。
 
-   ![建立 MCP App](docs/assets/create-chatgpt-plugin-step-2.png)
+解壓縮後：
 
-4. 填入：
-   - Name：`OpenChatX`
-   - Server URL：`npm run print-url` 輸出的 `https://.../mcp`
-   - Authentication：**No Auth**
+```bash
+chmod +x tunnel-client
+sudo mv tunnel-client /usr/local/bin/
+tunnel-client --help
+```
 
-   ![設定 OpenChatX](docs/assets/create-chatgpt-plugin-step-3.png)
+如果 macOS 跳出「Apple 無法驗證 tunnel-client 是否為惡意軟體」，先確認檔案是從 OpenAI 官方 Release 下載，再解除 quarantine：
 
-5. 如果希望 ChatGPT 不需要每次 Tool Call 都再次確認，可以把 OpenChatX Plugin 權限設成 **Allow all tools**。
+```bash
+sudo xattr -d com.apple.quarantine /usr/local/bin/tunnel-client
+```
 
-   ![允許 OpenChatX Tools](docs/assets/openchatx-allow-all-tools.png)
+Windows 則下載符合系統架構的 `tunnel-client.exe`，放到 `PATH` 後確認：
+
+```powershell
+tunnel-client --help
+```
+
+#### 2. 在 ChatGPT 開始建立 OpenChatX MCP App
+
+先開啟 **Settings → Developer Mode**，接著到 **Plugins** 按 **+**，選擇 **Create app**，再選 **Create MCP app**。
+
+![開啟 ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
+
+![啟用 Developer Mode](docs/assets/enable-developer-mode-step-2.png)
+
+![建立 App](docs/assets/create-chatgpt-plugin-step-1.png)
+
+![建立 MCP App](docs/assets/create-chatgpt-plugin-step-2.png)
+
+在建立 MCP App 的畫面：
+
+1. 名稱填 `OpenChatX`。
+2. 說明可填 `OpenChatX for Computer Agent`。
+3. 連線切換成 **通道 / Tunnel**。
+4. 按 **建立通道 / Create tunnel**。
+
+![在 ChatGPT 選擇 Tunnel 並建立通道](docs/assets/secure-tunnel-chatgpt-create.png)
+
+#### 3. 在 OpenAI Platform 建立 Tunnel
+
+ChatGPT 會帶你到 Platform 的 [**Tunnels** 設定頁](https://platform.openai.com/settings/organization/tunnels)。建立 Tunnel 時：
+
+1. Name 填 `openchatx`。
+2. Description 可填 `openchatx tunnel`。
+3. Organizations 選擇自己的 Platform Organization。
+4. ChatGPT workspaces 選擇實際要使用 OpenChatX 的 Workspace。
+5. 按 **Create**。
+
+![在 OpenAI Platform 建立 OpenChatX Tunnel](docs/assets/secure-tunnel-platform-create.png)
+
+建立完成後會得到一個 `tunnel_...` ID。先保留這個 ID，等等 Terminal 初始化 profile 時會用到。這個 Tunnel ID 不是 API Key。
+
+#### 4. 建立 Runtime API Key
+
+到 OpenAI Platform 的 [**API keys** 頁面](https://platform.openai.com/settings/organization/api-keys)新增 Secret Key。建議名稱填 `OpenChatX Runtime Key`，方便日後辨識。有效期限請依自己的安全政策選擇；圖片示範使用 **永不 / Never**，適合需要長期常駐的本機 Runtime。Permissions 最簡單可先使用 **All**；如果組織有既定的 Tunnel 權限政策，也可以改成受限 Key。
+
+![建立 OpenChatX Runtime API Key](docs/assets/secure-tunnel-runtime-key.png)
+
+Key 建立後只會完整顯示一次，請自行安全保存。
+
+> [!WARNING]
+> 不要把 API Key 貼進 ChatGPT、不要 Commit 到 Git，也不要放進 OpenChatX Repository。
+
+把 Key 設到準備執行 OpenChatX 的同一個 Terminal。
+
+macOS：
+
+```bash
+export CONTROL_PLANE_API_KEY="<your-runtime-api-key>"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:CONTROL_PLANE_API_KEY="<your-runtime-api-key>"
+```
+
+OpenChatX 不會自動讀取 Repository 裡的 `.env`。重開 Terminal 或重新開機後，如果要重新啟動 OpenChatX，需要再次提供 `CONTROL_PLANE_API_KEY`，或使用你自己的安全 Secret Manager / 環境變數機制。
+
+#### 5. 初始化 OpenChatX Tunnel Profile
+
+把剛才取得的 `tunnel_...` ID 代入：
+
+```bash
+tunnel-client init \
+  --profile openchatx \
+  --tunnel-id <tunnel_id> \
+  --mcp-server-url http://127.0.0.1:3333/mcp
+```
+
+成功後會建立 `openchatx` profile。如果 `tunnel-client` 顯示 `profile "openchatx" already exists`，而且現有 profile 本來就指向正確的 Tunnel，就不用覆蓋；只有確定要重建 profile 時才使用 `--force`。
+
+OpenChatX 預設設定與它一致：
+
+```toml
+[tunnel]
+profile = "openchatx"
+health_port = 8080
+```
+
+接著完成 OpenChatX Setup 並啟動：
+
+```bash
+npm run setup
+npm start
+```
+
+`npm start` 會透過專案自己的 PM2 同時管理：
+
+- `openchatx-mcp`
+- `openchatx-tunnel`
+
+所以正常使用時不需要另外開一個 Terminal 手動維持 `tunnel-client run --profile openchatx`。
+
+#### 6. 驗證 Tunnel 與 OpenChatX
+
+執行：
+
+```bash
+tunnel-client doctor --profile openchatx --explain
+curl -fsS http://127.0.0.1:3333/healthz
+curl -fsS http://127.0.0.1:8080/readyz
+npm run status
+npm run print-url
+```
+
+`doctor` 最後應該看到：
+
+```text
+RESULT ok
+```
+
+Tunnel Client 的本機管理 UI 預設在：
+
+```text
+http://127.0.0.1:8080/ui
+```
+
+#### 7. 回到 ChatGPT 完成 MCP App
+
+回到剛才的 ChatGPT MCP App 建立視窗：
+
+1. Available Tunnel 選擇剛建立的 `openchatx (tunnel_...)`。
+2. 驗證選 **無驗證 / No authentication**。
+3. 閱讀並勾選自訂 MCP Server 的風險確認。
+4. 按 **建立 / Create**。
+
+![選擇 OpenChatX Tunnel 並完成 MCP App](docs/assets/secure-tunnel-chatgpt-finish.png)
+
+如果希望 ChatGPT 不需要每次 Tool Call 都重新詢問，可以把 OpenChatX Plugin 權限設成 **Allow all tools**。
+
+![允許 OpenChatX Tools](docs/assets/openchatx-allow-all-tools.png)
 
 > [!IMPORTANT]
-> 第一個受信任的遠端 Tool Call 會把這個 installation 綁定到該 ChatGPT subject。只有在確定要清除綁定時才執行 `npm run auth:reset`。
+> ChatGPT 要 Discover 或呼叫 OpenChatX Tools 時，`openchatx-tunnel` 必須保持運作。第一個受信任的遠端 Tool Call 會把這個 installation 綁定到該 ChatGPT subject。只有在確定要清除綁定時才執行 `npm run auth:reset`。
 
 ### 驗證
 
 ```bash
 npm run status
 curl -fsS http://127.0.0.1:3333/healthz
+curl -fsS http://127.0.0.1:8080/readyz
 npm run print-url
 ```
 
-```text
-MCP: http://127.0.0.1:3333/mcp
-UI:  http://127.0.0.1:3333/ui
-```
+`npm run print-url` 應該會顯示本機 MCP target、目前使用的 Tunnel profile、Tunnel Client UI，以及 OpenChatX UI。
 
 ## Capability Discovery
 
@@ -225,32 +359,29 @@ read → edit/write → patch only when appropriate
 ## 設定
 
 ```text
-.openchatx/config.toml   # runtime、workspace、shell、ngrok、MCP output
+.openchatx/config.toml   # runtime、state directory、shell、tunnel-client、MCP output
 mcp-servers.json        # external MCP servers
 subagents.json          # providers 與 curated model profiles
 toolboxes/              # built-in 與 custom toolboxes
 ```
 
-如果希望 PM2 / ngrok 重啟後 ChatGPT Connector URL 不變：
+OpenChatX 使用 `[tunnel]` 指定的 `tunnel-client` profile。預設 profile 是 `openchatx`，Tunnel 管理 UI 預設是 `http://127.0.0.1:8080/ui`。
 
-```toml
-[ngrok]
-url = "https://your-static-domain.ngrok-free.dev"
-```
+OpenChatX 的持久化狀態都放在 `state_dir`（預設 `~/.openchatx-mcp`）。Setup 會在這裡建立 `~/.openchatx-mcp/AGENTS.md` 與 `~/.openchatx-mcp/skills/`，而且不會覆蓋已經存在的自訂內容。OpenChatX 不再另外建立 Agent Workspace；shell / file / search / image 工具使用相對路徑時，預設從目前使用者的 Home Directory 開始，必要時可以直接傳絕對路徑。
 
-Dashboard 永遠可以從 `/ui` 使用。
+OpenChatX Dashboard 永遠可以從 `/ui` 使用。
 
 ## 操作與維護
 
 | 指令 | 用途 |
 | --- | --- |
-| `npm start` | Build 並啟動 / reload OpenChatX 與 ngrok |
+| `npm start` | Build 並啟動 / reload OpenChatX 與 tunnel-client |
 | `npm run restart` | Rebuild 並 reload services |
 | `npm run restart -- --hard` | 從外部 Terminal 重建專用 PM2 daemon |
 | `npm run status` | 查看 service 狀態 |
 | `npm run logs` | 查看 logs |
-| `npm run print-url` | 顯示公開 MCP URL 與本機 UI URL |
-| `npm run stop` | 停止 OpenChatX 與 ngrok |
+| `npm run print-url` | 顯示本機 MCP target、Tunnel profile/UI 與 OpenChatX UI |
+| `npm run stop` | 停止 OpenChatX 與 tunnel-client |
 | `npm run auth:reset` | 確認後清除綁定的 ChatGPT subject |
 
 更多 recovery 細節請看 [Configuration and Startup](wiki/pages/operations/configuration-and-startup.md)。

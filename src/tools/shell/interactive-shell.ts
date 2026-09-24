@@ -35,7 +35,7 @@ export class InteractiveShellManager {
   private readonly sessions = new Map<string, InteractiveSession>()
 
   constructor(
-    readonly workspace: string,
+    readonly defaultCwd: string,
     readonly shellPath: string
   ) {}
 
@@ -69,7 +69,7 @@ export class InteractiveShellManager {
       throw new Error(`Interactive shell limit reached (${MAX_INTERACTIVE_SESSIONS}).`)
     }
 
-    const cwd = resolveInteractiveCwd(this.workspace, input.cwd)
+    const cwd = resolveInteractiveCwd(this.defaultCwd, input.cwd)
     const cwdInfo = await stat(cwd)
     if (!cwdInfo.isDirectory()) throw new Error(`Interactive shell cwd is not a directory: ${cwd}`)
 
@@ -375,9 +375,9 @@ async function interactiveResult(operation: () => Promise<Record<string, unknown
   }
 }
 
-function resolveInteractiveCwd(workspace: string, cwd?: string): string {
-  if (!cwd) return workspace
-  return isAbsolute(cwd) ? cwd : resolve(workspace, cwd)
+function resolveInteractiveCwd(defaultCwd: string, cwd?: string): string {
+  if (!cwd) return defaultCwd
+  return isAbsolute(cwd) ? cwd : resolve(defaultCwd, cwd)
 }
 
 function stringEnvironment(env: NodeJS.ProcessEnv): Record<string, string> {

@@ -144,15 +144,15 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
 test("suppresses rapid duplicate skill loads for the same agent", {
   timeout: 10_000,
 }, async (t) => {
-  const workspace = await mkdtemp(join(tmpdir(), "shellby-skill-cooldown-"))
-  const previousWorkspace = MCP_CONFIG.workspace
-  MCP_CONFIG.workspace = workspace
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-skill-cooldown-"))
+  const previousSkillsRoot = MCP_CONFIG.skills.root
+  MCP_CONFIG.skills.root = join(stateDir, "skills")
   t.after(() => {
-    MCP_CONFIG.workspace = previousWorkspace
-    return rm(workspace, { recursive: true, force: true })
+    MCP_CONFIG.skills.root = previousSkillsRoot
+    return rm(stateDir, { recursive: true, force: true })
   })
 
-  const skillDirectory = join(workspace, "skills", "cooldown-skill")
+  const skillDirectory = join(MCP_CONFIG.skills.root, "cooldown-skill")
   await mkdir(skillDirectory, { recursive: true })
   await writeFile(
     join(skillDirectory, "SKILL.md"),

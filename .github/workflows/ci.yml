@@ -35,8 +35,6 @@ jobs:
         run: brew install ripgrep
       - run: npm ci
       - run: npm run setup -- --config-only
-      - name: Create default test workspace
-        run: node -e "require('node:fs').mkdirSync(require('node:path').join(require('node:os').homedir(),'Desktop','agent-workspace'),{recursive:true})"
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -54,10 +52,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run setup -- --config-only
-      - name: Create default test workspace
-        run: node -e "require('node:fs').mkdirSync(require('node:path').join(require('node:os').homedir(),'Desktop','agent-workspace'),{recursive:true})"
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
       - name: Windows platform tests
-        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/setup-workspace.test.ts test/schema-compatibility.test.ts
+        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts

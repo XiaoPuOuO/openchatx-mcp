@@ -5,7 +5,7 @@
 - [Project Overview](./pages/project-overview.md) — Mandatory startup context for Shellby MCP
 - [Architecture Map](./pages/architecture-map.md) — Process-level architecture and request flow across Shellby's HTTP boundary, shared runtime services, and capability handlers.
 - [Computer Use](./pages/computer-use.md) — Focused Computer Use execution through Peekaboo, including snapshots, coordinates, background delivery, and cursor-host ownership.
-- [HTTP Transport](./pages/http-transport.md) — Local HTTP/MCP routing, ngrok trust boundary, remote owner binding, request lifetime, and shared process state.
+- [HTTP Transport](./pages/http-transport.md) — Local HTTP/MCP routing, OpenAI Secure MCP Tunnel trust boundary, remote owner binding, request lifetime, and shared process state.
 - [MCP Tool Registration Boundary](./pages/mcp-tool-registration-boundary.md) — How the registerTool monkeypatch connects tool registration to Shellby's dispatch pipeline, including installation order, validation, notices, and audit.
 - [MCP Tool Surface](./pages/mcp-tool-surface.md) — MCP registration, startup prompt loading, result projection, and routing to capability contracts.
 - [Operations](./pages/operations/index.md) — Operational setup, validation, logging, and secret-handling knowledge for running and maintaining Shellby MCP.
@@ -14,4 +14,4 @@
 - [Subagents](./pages/subagents/index.md) — Browser-backed ChatGPT subagent architecture, completion, recovery, and private ChatGPT transport behavior.
 - [Tool Naming and Schema Design](./pages/tool-naming-and-schema-design.md) — Model-facing conventions for tool names, routing descriptions, schemas, parameter descriptions, and compact outputs.
 - [Tools](./pages/tools/index.md) — Caller-facing contracts for shell execution, patching, browser delegation, clones, and resource fetching.
-- [Workspace Tooling](./pages/workspace-tooling.md) — Default coding workspace behavior and the dynamic reusable-skill catalog exposed through skill_list and skill_use.
+- [State and Skills](./pages/state-and-skills.md) — Persistent OpenChatX state, default tool cwd, AGENTS.md, and reusable skills.

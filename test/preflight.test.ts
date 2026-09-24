@@ -31,15 +31,15 @@ test("requires RTK only when shell.rtk is enabled", () => {
   assert.match(missingRtk, /brew install rtk/u)
 })
 
-test("preflight and full setup honor local config without ngrok on PATH", async (t) => {
-  const root = await realpath(await tempDir(t, "shellby-local-setup-"))
+test("preflight and full setup require a configured OpenAI tunnel-client profile", async (t) => {
+  const root = await realpath(await tempDir(t, "openchatx-tunnel-setup-"))
   for (const dir of ["scripts", "src", ".openchatx", "bin", "skills/create-skill"])
     await mkdir(join(root, dir), { recursive: true })
   for (const path of [
     "scripts/setup.ts",
     "scripts/setup-console.ts",
     "scripts/preflight.ts",
-    "scripts/workspace-setup.ts",
+    "scripts/state-setup.ts",
     "src/config.ts",
     "src/host-platform.ts",
     "src/public-config.cts",
@@ -57,35 +57,37 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
     `#!${process.execPath}\nconsole.log("fixture build complete")\n`,
     { mode: 0o755 }
   )
+  await writeFile(
+    join(root, "bin/tunnel-client"),
+    `#!${process.execPath}
+const args = process.argv.slice(2)
+if (args[0] === "profiles" && args[1] === "list") {
+  console.log(JSON.stringify([{ name: "openchatx" }]))
+}
+`,
+    { mode: 0o755 }
+  )
+
   const configPath = join(root, ".openchatx/config.toml")
   const source = [
     `state_dir = ${JSON.stringify(join(root, "state"))}`,
-    `workspace = ${JSON.stringify(join(root, "workspace"))}`,
-    "[ngrok]",
-    "enabled = false",
-    "[tools]",
-    ...[
-      "review",
-      "shell",
-      "apply_patch",
-      "file_read",
-      "file_write",
-      "clones",
-      "subagents",
-      "web",
-      "skills",
-      "image",
-      "computer",
-    ].map((name) => `${name} = false`),
+    "[tunnel]",
+    'profile = "openchatx"',
+    "health_port = 8080",
   ].join("\n")
   await writeFile(configPath, source)
+
   for (const script of ["preflight", "setup"]) {
     const result = spawnSync(
       process.execPath,
       ["--import", "tsx", join(root, `scripts/${script}.ts`)],
       {
         encoding: "utf8",
-        env: { ...process.env, PATH: join(root, "bin") },
+        env: {
+          ...process.env,
+          PATH: join(root, "bin"),
+          CONTROL_PLANE_API_KEY: "test-key",
+        },
         timeout: 15_000,
       }
     )
@@ -93,18 +95,22 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
     assert.equal(result.status, 0, result.stdout + result.stderr)
     if (script === "preflight") assert.match(result.stdout, /Preflight passed/u)
   }
+
   assert.equal(await readFile(configPath, "utf8"), source)
-  assert.match(await readFile(join(root, "workspace/AGENTS.md"), "utf8"), /Workspace Instructions/u)
-  await writeFile(configPath, source.replace("enabled = false", "enabled = true"))
-  const remote = spawnSync(
+  assert.match(
+    await readFile(join(root, "state/AGENTS.md"), "utf8"),
+    /OpenChatX Agent Instructions/u
+  )
+
+  const missingClient = spawnSync(
     process.execPath,
     ["--import", "tsx", join(root, "scripts/preflight.ts")],
     {
       encoding: "utf8",
-      env: { ...process.env, PATH: join(root, "bin") },
+      env: { ...process.env, PATH: "", CONTROL_PLANE_API_KEY: "test-key" },
       timeout: 10_000,
     }
   )
-  assert.equal(remote.status, 1)
-  assert.match(remote.stderr, /ngrok is not installed/u)
+  assert.equal(missingClient.status, 1)
+  assert.match(missingClient.stderr, /tunnel-client is not installed/u)
 })

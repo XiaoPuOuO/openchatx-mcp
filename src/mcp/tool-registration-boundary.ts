@@ -55,7 +55,8 @@ export function installToolRegistrationBoundary(
       const result = await (tool.acceptsInput
         ? tool.callback(inputValue, context)
         : tool.callback(context))
-      options.agentObserver?.finishTool(agent, observedCallId, result)
+      if (isErrorResult(result)) options.agentObserver?.failTool(agent, observedCallId, result)
+      else options.agentObserver?.finishTool(agent, observedCallId, result)
 
       const projected =
         !tool.nativeContent && !structuredOutput ? compactToolResult(name, result) : result
@@ -65,7 +66,7 @@ export function installToolRegistrationBoundary(
       return finalResult
     } catch (error) {
       const agent = getAgentIdentity()
-      options.agentObserver?.failTool(agent, observedCallId)
+      options.agentObserver?.failTool(agent, observedCallId, error)
       const result = formatToolError(error, structuredOutput)
       auditCall?.finish({ error, modelResult: result })
       return result
@@ -114,6 +115,11 @@ function formatToolError(error: unknown, structuredOutput: boolean): CallToolRes
     ...(structuredOutput ? { structuredContent: { error_code: failure.code } } : {}),
     content: [{ type: "text" as const, text: `${failure.code}: ${failure.message}` }],
   }
+}
+
+function isErrorResult(value: unknown): boolean {
+  const record = isRecord(value) ? value : undefined
+  return record?.isError === true
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

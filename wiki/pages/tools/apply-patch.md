@@ -142,7 +142,7 @@ Validation ownership and current coverage are documented in [Build and Test](../
 ## Related
 
 - [MCP Tool Surface](../mcp-tool-surface.md)
-- [Workspace Tooling](../workspace-tooling.md)
+- [State and Skills](../state-and-skills.md)
 - [Build and Test](../operations/build-and-test.md)
 - [Open Questions and Risks](../project/open-questions-and-risks.md)
 - [Audit Logging](../operations/audit-logging.md)

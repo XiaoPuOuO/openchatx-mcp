@@ -7,16 +7,9 @@ import { z } from "zod"
 
 // CommonJS lets the built loader serve PM2's ecosystem file as well as the ESM runtime.
 const defaultConfigPath = resolve(__dirname, "../.openchatx/config.toml")
-const httpUrl = z
-  .url()
-  .refine(
-    (value) => value.startsWith("http://") || value.startsWith("https://"),
-    "URL must use http or https"
-  )
 const publicConfigSchema = z.object({
   state_dir: z.string().trim().min(1).default("~/.openchatx-mcp"),
   port: z.number().int().min(1).max(65535).default(3333),
-  workspace: z.string().trim().min(1).default("~/Desktop/agent-workspace"),
   shell: z.object({
     path: z
       .string()
@@ -25,11 +18,9 @@ const publicConfigSchema = z.object({
       .default(process.platform === "win32" ? "pwsh.exe" : "/bin/zsh"),
     rtk: z.boolean().default(false),
   }),
-  ngrok: z.object({
-    enabled: z.boolean().default(true),
-    api_port: z.number().int().min(1).max(65535).default(4040),
-    url: httpUrl.optional(),
-    pooling_enabled: z.boolean().default(false),
+  tunnel: z.object({
+    profile: z.string().trim().min(1).default("openchatx"),
+    health_port: z.number().int().min(1).max(65535).default(8080),
   }),
   mcp: z.object({ tool_output: z.enum(["compact", "structured"]).default("compact") }),
   tools: z.object({
@@ -66,12 +57,7 @@ export function loadPublicConfig(path = defaultConfigPath): OpenChatXPublicConfi
 
   const warn = (message: string) =>
     console.warn(`openchatx-mcp config warning (${path}): ${message}`)
-  const config = publicConfigSchema.parse(resolveConfigObject(publicConfigSchema, value, "", warn))
-  if (config.ngrok.pooling_enabled && !config.ngrok.url) {
-    warn("ngrok.pooling_enabled requires a valid ngrok.url; using default false.")
-    config.ngrok.pooling_enabled = false
-  }
-  return config
+  return publicConfigSchema.parse(resolveConfigObject(publicConfigSchema, value, "", warn))
 }
 
 function resolveConfigObject(

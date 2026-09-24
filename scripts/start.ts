@@ -1,5 +1,5 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process"
-import { access, rm } from "node:fs/promises"
+import { rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -19,20 +19,12 @@ if (hardRestart && process.env.name === "openchatx-mcp" && process.env.pm_exec_p
   process.exit(1)
 }
 
-const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled, MCP_CONFIG.shell.path)
+const { errors } = await checkPublicRuntime(MCP_CONFIG.tunnel.profile, MCP_CONFIG.shell.path)
 const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
 if (rtkError) errors.push(rtkError)
 
 if (errors.length > 0) {
   printPreflightErrors(errors)
-  process.exit(1)
-}
-
-const workspace = MCP_CONFIG.workspace
-try {
-  await access(workspace)
-} catch {
-  console.error(`Agent workspace does not exist at ${workspace}. Run \`npm run setup\` first.`)
   process.exit(1)
 }
 
@@ -43,34 +35,22 @@ if (hardRestart) {
   run(process.execPath, ["--import", "tsx", pm2Script, "kill"])
 }
 if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
-// Reload MCP last: its shutdown can kill this CLI, but the PM2 daemon completes the app restart.
-if (MCP_CONFIG.ngrok.enabled) {
-  run(
-    process.execPath,
-    [
-      "--import",
-      "tsx",
-      pm2Script,
-      "startOrReload",
-      "ecosystem.config.cjs",
-      "--only",
-      "openchatx-ngrok",
-      "--update-env",
-    ],
-    { quiet: true }
-  )
-} else if (!hardRestart) {
-  // Removing it from the ecosystem alone leaves an already-running tunnel alive.
-  const processes: unknown = JSON.parse(
-    run(process.execPath, ["--import", "tsx", pm2Script, "jlist", "--silent"], { quiet: true })
-      .stdout
-  )
-  if (hasNamedPm2Process(processes, "openchatx-ngrok")) {
-    run(process.execPath, ["--import", "tsx", pm2Script, "delete", "openchatx-ngrok"], {
-      quiet: true,
-    })
-  }
-}
+// Reload the tunnel before MCP. When restart is invoked through OpenChatX itself,
+// reloading MCP can terminate the requesting process before later PM2 commands run.
+run(
+  process.execPath,
+  [
+    "--import",
+    "tsx",
+    pm2Script,
+    "startOrReload",
+    "ecosystem.config.cjs",
+    "--only",
+    "openchatx-tunnel",
+    "--update-env",
+  ],
+  { quiet: true }
+)
 run(
   process.execPath,
   [
@@ -94,7 +74,7 @@ if (!(await waitForMcp())) {
 }
 
 console.log("MCP server: running")
-console.log(MCP_CONFIG.ngrok.enabled ? "ngrok: running" : "ngrok: disabled (local only)")
+console.log(`OpenAI tunnel-client: running (profile ${MCP_CONFIG.tunnel.profile})`)
 run(process.execPath, ["--import", "tsx", join(repoRoot, "scripts", "print-url.ts")])
 
 interface RunOptions {
@@ -129,15 +109,4 @@ async function waitForMcp(attemptsRemaining = 20): Promise<boolean> {
   await new Promise((resolve) => setTimeout(resolve, 250))
   if (attemptsRemaining <= 1) return false
   return waitForMcp(attemptsRemaining - 1)
-}
-
-function hasNamedPm2Process(processes: unknown, name: string): boolean {
-  return (
-    Array.isArray(processes) &&
-    processes.some((entry: unknown) => isRecord(entry) && entry.name === name)
-  )
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

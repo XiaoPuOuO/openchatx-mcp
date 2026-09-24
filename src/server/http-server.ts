@@ -111,7 +111,7 @@ export async function startMcpHttpServer(
     if (
       req.method === "POST" &&
       authStore &&
-      isTrustedRemoteRequest(req) &&
+      (req.get("x-openai-subject") || req.get("x-openchatx-remote") === "1") &&
       containsToolCall(req.body)
     ) {
       try {
@@ -161,10 +161,6 @@ function containsToolCall(payload: unknown): boolean {
     const params = asRecord(request.params)
     return typeof params?.name === "string" && params.name.length > 0
   })
-}
-
-function isTrustedRemoteRequest(req: Request): boolean {
-  return req.get("x-openchatx-remote") === "1"
 }
 
 function requestSessionId(req: Request): string | undefined {

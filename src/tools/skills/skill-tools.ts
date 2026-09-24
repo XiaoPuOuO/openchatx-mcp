@@ -1,4 +1,3 @@
-import { join } from "node:path"
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
@@ -16,7 +15,7 @@ const SKILL_LOAD_COOLDOWN_MS = 5_000
 const loadSkillOnce = createAgentLoadDeduper<LoadedSkill>(SKILL_LOAD_COOLDOWN_MS)
 
 export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistry): void {
-  const skills = new SkillCatalog(join(MCP_CONFIG.workspace, "skills"))
+  const skills = new SkillCatalog(MCP_CONFIG.skills.root)
 
   server.registerTool(
     "skill_list",

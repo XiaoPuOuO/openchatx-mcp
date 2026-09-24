@@ -17,7 +17,7 @@ export function registerImageTools(server: McpServer): void {
         path: z
           .string()
           .min(1)
-          .describe("Local image path. Relative paths resolve from the workspace."),
+          .describe("Local image path. Relative paths resolve from the user's home directory."),
       }),
       annotations: {
         readOnlyHint: true,
@@ -27,7 +27,7 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async ({ path }, ctx) => {
-      const imagePath = isAbsolute(path) ? path : resolve(MCP_CONFIG.workspace, path)
+      const imagePath = isAbsolute(path) ? path : resolve(MCP_CONFIG.defaultCwd, path)
       try {
         const encoded = await encodeImageForMcp(
           await readFile(imagePath, { signal: ctx.mcpReq.signal })

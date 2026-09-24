@@ -26,7 +26,7 @@ export function registerBashTool(server: McpServer, processManager?: BashProcess
           .string()
           .min(1)
           .optional()
-          .describe("Working directory. Relative paths resolve from the configured workspace."),
+          .describe("Working directory. Relative paths resolve from the user's home directory."),
         timeout_ms: z
           .int()
           .min(1)
@@ -90,8 +90,8 @@ export function registerBashTool(server: McpServer, processManager?: BashProcess
 }
 
 function resolveWorkdir(workdir?: string): string {
-  if (!workdir) return MCP_CONFIG.workspace
-  return isAbsolute(workdir) ? workdir : resolve(MCP_CONFIG.workspace, workdir)
+  if (!workdir) return MCP_CONFIG.defaultCwd
+  return isAbsolute(workdir) ? workdir : resolve(MCP_CONFIG.defaultCwd, workdir)
 }
 
 async function runCommand(

@@ -47,7 +47,7 @@ External MCP tools and custom toolbox tools stay lazy. `start_here` exposes a li
 - Node.js 22.18.0 or newer
 - npm
 - ripgrep (`rg`)
-- [ngrok](https://ngrok.com/) account and CLI
+- [OpenAI tunnel-client](https://github.com/openai/tunnel-client) on PATH
 - ChatGPT with Developer Mode / custom MCP support available for your account or workspace
 
 Windows runs natively; WSL is not required. OpenChatX prefers PowerShell 7 (`pwsh.exe`) and falls back to Windows PowerShell (`powershell.exe`) when `pwsh` is unavailable. The vendored `apply_patch` binary is currently macOS-only; on Windows the normal `file_read` / `file_edit` / `file_write` workflow remains available.
@@ -64,82 +64,195 @@ Use the bundled install skill:
 
 ### Manual install
 
+Start with the repository. Do not run the full setup yet because it validates the Secure MCP Tunnel prerequisites.
+
 macOS:
 
 ```bash
-brew install --cask ngrok
 brew install ripgrep
 git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
 cd openchatx-mcp
 npm ci
-
-ngrok config add-authtoken <your-token>
-
 npm run setup -- --config-only
-npm run setup
-npm start
 ```
 
 Windows PowerShell:
 
 ```powershell
-winget install Ngrok.Ngrok
 winget install BurntSushi.ripgrep.MSVC
 git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
 Set-Location openchatx-mcp
 npm ci
-
-ngrok config add-authtoken <your-token>
-
 npm run setup -- --config-only
-npm run setup
-npm start
 ```
 
 Run the first setup from a normal external terminal (Terminal.app on macOS or PowerShell/Windows Terminal on Windows) so the managed runtime inherits the expected host permissions and environment.
 
-### Add OpenChatX to ChatGPT
+### Set up OpenAI Secure MCP Tunnel
 
-1. Open **Settings** and enable **Developer Mode**.
+OpenChatX uses OpenAI Secure MCP Tunnel instead of a public reverse proxy. The private MCP server stays on `127.0.0.1:3333`; `tunnel-client` makes the outbound connection to OpenAI.
 
-   ![Open ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
+#### 1. Install `tunnel-client`
 
-   ![Enable Developer Mode](docs/assets/enable-developer-mode-step-2.png)
+Open [OpenAI's Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) and use the Platform **Download tunnel-client** button or the [latest `openai/tunnel-client` release](https://github.com/openai/tunnel-client/releases/latest). Always use the latest compatible release instead of a hard-coded version.
 
-2. Open **Plugins**, click **+**, and choose **Create app**.
+On macOS, check your architecture:
 
-   ![Create app](docs/assets/create-chatgpt-plugin-step-1.png)
+```bash
+uname -m
+```
 
-3. Choose **Create MCP app**.
+- `arm64` → download the `darwin-arm64` client.
+- `x86_64` → download the `darwin-amd64` client.
 
-   ![Create MCP app](docs/assets/create-chatgpt-plugin-step-2.png)
+After extracting it:
 
-4. Configure:
-   - Name: `OpenChatX`
-   - Server URL: the `https://.../mcp` URL printed by `npm run print-url`
-   - Authentication: **No Auth**
+```bash
+chmod +x tunnel-client
+sudo mv tunnel-client /usr/local/bin/
+tunnel-client --help
+```
 
-   ![Configure OpenChatX](docs/assets/create-chatgpt-plugin-step-3.png)
+If macOS Gatekeeper says Apple cannot verify `tunnel-client`, first verify that the download came from the official OpenAI release, then remove the quarantine attribute:
 
-5. If desired, set the OpenChatX plugin permission to **Allow all tools**.
+```bash
+sudo xattr -d com.apple.quarantine /usr/local/bin/tunnel-client
+```
 
-   ![Allow all OpenChatX tools](docs/assets/openchatx-allow-all-tools.png)
+On Windows, download the release asset matching your Windows architecture, place `tunnel-client.exe` on `PATH`, then verify:
+
+```powershell
+tunnel-client --help
+```
+
+#### 2. Start creating the ChatGPT MCP app
+
+Enable **Developer Mode**, open **Plugins**, click **+**, choose **Create app**, then **Create MCP app**.
+
+![Open ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
+
+![Enable Developer Mode](docs/assets/enable-developer-mode-step-2.png)
+
+![Create app](docs/assets/create-chatgpt-plugin-step-1.png)
+
+![Create MCP app](docs/assets/create-chatgpt-plugin-step-2.png)
+
+Enter the app name and description, switch the connection type to **Tunnel**, and click **Create tunnel**.
+
+![Choose Tunnel and create a tunnel](docs/assets/secure-tunnel-chatgpt-create.png)
+
+#### 3. Create the tunnel in OpenAI Platform
+
+In the Platform [**Tunnels** settings](https://platform.openai.com/settings/organization/tunnels):
+
+1. Name the tunnel `openchatx`.
+2. Add a short description such as `openchatx tunnel`.
+3. Select the Platform organization that owns the tunnel.
+4. Select the ChatGPT workspace that will use OpenChatX.
+5. Click **Create**.
+
+![Create the OpenChatX tunnel](docs/assets/secure-tunnel-platform-create.png)
+
+Copy the resulting `tunnel_...` ID. It is not the API key.
+
+#### 4. Create a runtime API key
+
+Open the Platform [**API keys** page](https://platform.openai.com/settings/organization/api-keys) and create a new secret key for the runtime. A name such as `OpenChatX Runtime Key` makes it easy to identify later. Choose an expiration that matches your security policy; the screenshot uses **Never** for a persistent local runtime. The default **All** permissions are the simplest setup, or use a restricted key if your organization has a defined policy for tunnel access.
+
+![Create the OpenChatX runtime API key](docs/assets/secure-tunnel-runtime-key.png)
+
+Store the secret key securely when it is shown. Do not paste it into chat, commit it to Git, or put it in this repository.
+
+Set it in the same terminal that will run setup/start:
+
+macOS:
+
+```bash
+export CONTROL_PLANE_API_KEY="<your-runtime-api-key>"
+```
+
+Windows PowerShell:
+
+```powershell
+$env:CONTROL_PLANE_API_KEY="<your-runtime-api-key>"
+```
+
+OpenChatX intentionally does not load a repository `.env` file. After a reboot or a new shell, export the key again or provide it through your own secure environment/secret manager before starting OpenChatX.
+
+#### 5. Initialize the OpenChatX tunnel profile
+
+Replace `<tunnel_id>` with the ID created above:
+
+```bash
+tunnel-client init \
+  --profile openchatx \
+  --tunnel-id <tunnel_id> \
+  --mcp-server-url http://127.0.0.1:3333/mcp
+```
+
+If `tunnel-client` says the `openchatx` profile already exists, keep the existing profile when it points at the correct tunnel. Use `--force` only when you intentionally want to replace that profile.
+
+The OpenChatX config defaults to the same profile:
+
+```toml
+[tunnel]
+profile = "openchatx"
+health_port = 8080
+```
+
+Now finish OpenChatX setup and start the managed services:
+
+```bash
+npm run setup
+npm start
+```
+
+`npm start` manages both `openchatx-mcp` and `openchatx-tunnel` through the project-local PM2 daemon. You do not need to keep a separate manual `tunnel-client run` terminal open.
+
+#### 6. Verify the tunnel
+
+```bash
+tunnel-client doctor --profile openchatx --explain
+curl -fsS http://127.0.0.1:3333/healthz
+curl -fsS http://127.0.0.1:8080/readyz
+npm run status
+npm run print-url
+```
+
+`doctor` should end with `RESULT ok`. The tunnel operator UI is available at:
+
+```text
+http://127.0.0.1:8080/ui
+```
+
+#### 7. Finish the ChatGPT MCP app
+
+Return to the ChatGPT MCP app dialog:
+
+1. Select the newly created `openchatx (tunnel_...)` tunnel.
+2. Set authentication to **No authentication**.
+3. Read and accept the custom MCP risk acknowledgement.
+4. Click **Create**.
+
+![Select the tunnel and create the OpenChatX app](docs/assets/secure-tunnel-chatgpt-finish.png)
+
+If desired, set the OpenChatX plugin permission to **Allow all tools**.
+
+![Allow all OpenChatX tools](docs/assets/openchatx-allow-all-tools.png)
 
 > [!IMPORTANT]
-> The first trusted remote tool call binds this installation to that ChatGPT subject. Run `npm run auth:reset` only when you intentionally want to clear that binding.
+> Keep `openchatx-tunnel` running whenever ChatGPT needs to discover or call OpenChatX tools. The first trusted remote tool call binds this installation to that ChatGPT subject. Run `npm run auth:reset` only when you intentionally want to clear that binding.
 
 ### Verify
 
 ```bash
 npm run status
 curl -fsS http://127.0.0.1:3333/healthz
+curl -fsS http://127.0.0.1:8080/readyz
 npm run print-url
 ```
 
-```text
-MCP: http://127.0.0.1:3333/mcp
-UI:  http://127.0.0.1:3333/ui
-```
+`npm run print-url` should report the local MCP target, the configured tunnel profile, the tunnel-client UI, and the OpenChatX UI.
 
 ## Capability discovery
 
@@ -225,32 +338,29 @@ read → edit/write → patch only when appropriate
 ## Configuration
 
 ```text
-.openchatx/config.toml   # runtime, workspace, shell, ngrok, MCP output
+.openchatx/config.toml   # runtime, state directory, shell, tunnel-client, MCP output
 mcp-servers.json        # external MCP servers
 subagents.json          # providers and curated model profiles
 toolboxes/              # built-in and custom toolboxes
 ```
 
-To keep the ChatGPT connector URL stable across restarts:
+OpenChatX uses the `tunnel-client` profile configured under `[tunnel]`. The default profile is `openchatx`, and the default tunnel admin UI is `http://127.0.0.1:8080/ui`.
 
-```toml
-[ngrok]
-url = "https://your-static-domain.ngrok-free.dev"
-```
+Persistent OpenChatX state lives under `state_dir` (default `~/.openchatx-mcp`). Setup creates `~/.openchatx-mcp/AGENTS.md` and `~/.openchatx-mcp/skills/` there without overwriting existing user content. OpenChatX no longer creates a separate agent workspace; relative shell/file/search/image paths start from the current user's home directory unless an absolute path is supplied.
 
-The Dashboard is always available at `/ui`.
+The OpenChatX Dashboard is always available at `/ui`.
 
 ## Operations
 
 | Command | Purpose |
 | --- | --- |
-| `npm start` | Build and start/reload OpenChatX and ngrok |
+| `npm start` | Build and start/reload OpenChatX and tunnel-client |
 | `npm run restart` | Rebuild and reload services |
 | `npm run restart -- --hard` | Rebuild and recreate the dedicated PM2 daemon from an external terminal |
 | `npm run status` | Show service status |
 | `npm run logs` | Show service logs |
-| `npm run print-url` | Print the public MCP URL and local UI URL |
-| `npm run stop` | Stop OpenChatX and ngrok |
+| `npm run print-url` | Print the local MCP target, tunnel profile/UI, and OpenChatX UI |
+| `npm run stop` | Stop OpenChatX and tunnel-client |
 | `npm run auth:reset` | Clear the bound ChatGPT subject after confirmation |
 
 See [Configuration and Startup](wiki/pages/operations/configuration-and-startup.md) for recovery details.

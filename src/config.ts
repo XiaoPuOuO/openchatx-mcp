@@ -16,6 +16,7 @@ if (!packageVersion) throw new Error("package.json is missing a valid version.")
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
 const publicConfig = loadPublicConfig()
+const stateDir = resolveConfiguredPath(publicConfig.state_dir)
 const rtkExecutable = resolvePathExecutable("rtk")
 const brandIcon = readOptionalFile(new URL("../ui/public/openchatx-mcp-icon.png", import.meta.url))
 
@@ -43,13 +44,17 @@ export const MCP_CONFIG = {
   /** TCP port used by the MCP HTTP server. */
   port: publicConfig.port,
   /** Stable identity for this repository and state-directory combination. */
-  instanceId: createHash("sha256")
-    .update(`${repositoryRoot}\0${resolveConfiguredPath(publicConfig.state_dir)}`)
-    .digest("hex"),
+  instanceId: createHash("sha256").update(`${repositoryRoot}\0${stateDir}`).digest("hex"),
   /** Directory for persistent runtime state. */
-  stateDir: resolveConfiguredPath(publicConfig.state_dir),
-  /** Default filesystem workspace exposed to local tools. */
-  workspace: resolveConfiguredPath(publicConfig.workspace),
+  stateDir,
+  /** Default cwd/root for relative shell and filesystem tool paths. */
+  defaultCwd: homedir(),
+  /** Persistent user-authored agent instructions. */
+  agentInstructionsFile: join(stateDir, "AGENTS.md"),
+  /** Persistent reusable skills owned by this OpenChatX installation. */
+  skills: {
+    root: join(stateDir, "skills"),
+  },
   /** External local/remote MCP servers aggregated into the tool surface. */
   externalMcp: {
     configFile: fileURLToPath(new URL("../mcp-servers.json", import.meta.url)),
@@ -61,16 +66,12 @@ export const MCP_CONFIG = {
   toolboxes: {
     root: fileURLToPath(new URL("../toolboxes/", import.meta.url)),
   },
-  /** Public ngrok tunnel settings. */
-  ngrok: {
-    /** Whether openchatx-mcp should expose MCP through ngrok. */
-    enabled: publicConfig.ngrok.enabled,
-    /** Local ngrok API port used to inspect active tunnels. */
-    apiPort: publicConfig.ngrok.api_port,
-    /** Optional configured public ngrok URL. */
-    url: publicConfig.ngrok?.url,
-    /** Whether ngrok endpoint pooling is enabled. */
-    poolingEnabled: publicConfig.ngrok?.pooling_enabled ?? false,
+  /** OpenAI Secure MCP Tunnel client settings. */
+  tunnel: {
+    /** tunnel-client profile initialized for this OpenChatX installation. */
+    profile: publicConfig.tunnel.profile,
+    /** Local tunnel-client health/admin UI port. */
+    healthPort: publicConfig.tunnel.health_port,
   },
   /** MCP protocol presentation settings. */
   mcp: {

@@ -26,7 +26,7 @@ test("published OpenChatX schemas stay OpenAI-compatible", { timeout: 20_000 }, 
   for (const toolOutput of ["compact", "structured"] as const) {
     const toolboxes = new ToolboxRegistry(join(REPOSITORY_ROOT, "toolboxes"))
     await toolboxes.reload()
-    const terminal = new InteractiveShellManager(MCP_CONFIG.workspace, MCP_CONFIG.shell.path)
+    const terminal = new InteractiveShellManager(MCP_CONFIG.defaultCwd, MCP_CONFIG.shell.path)
     const bashProcesses = new BashProcessManager(
       join(REPOSITORY_ROOT, ".tmp-schema-bash-processes")
     )

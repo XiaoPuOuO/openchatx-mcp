@@ -50,13 +50,23 @@ export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: ()
               </Button>
             </Dialog.Close>
           </div>
-          <div className="min-h-0 overflow-auto p-5">
+          <div className="min-h-0 space-y-4 overflow-auto p-5">
             <pre className="overflow-x-auto rounded-lg border bg-muted/30 p-4 text-xs leading-5">
               <code
                 className="hljs bg-transparent p-0"
                 dangerouslySetInnerHTML={{ __html: highlighted }}
               />
             </pre>
+            {call?.status === "failed" && call.error ? (
+              <div>
+                <div className="mb-2 text-xs font-semibold text-red-700">
+                  {t("toolCall.errorReason")}
+                </div>
+                <pre className="whitespace-pre-wrap break-words rounded-lg border border-red-200 bg-red-50 p-4 text-xs leading-5 text-red-800">
+                  {call.error}
+                </pre>
+              </div>
+            ) : null}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

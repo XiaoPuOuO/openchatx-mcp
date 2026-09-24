@@ -2,7 +2,7 @@
 summary: "Current trust, resource, external-integration, persistence, and intentionally unenforced maintenance risks."
 paths:
   - src/
-  - ngrok-traffic-policy.yml
+  - ecosystem.config.cjs
 ---
 
 # Open Questions and Risks
@@ -13,7 +13,7 @@ This page is the maintenance lint target for current trust, resource, external-i
 
 ## Active Risks
 
-- **Remote trust depends on the deployment boundary:** replacing or weakening the checked-in ngrok origin policy can accidentally turn traffic that should be remote-authenticated into effectively local traffic. Preserve an equivalent trusted-origin marker contract; see [HTTP Transport](../http-transport.md).
+- **Remote trust depends on the deployment boundary:** OpenAI Secure MCP Tunnel is the supported remote path. Exposing the loopback MCP listener through another proxy changes the trust model and must preserve equivalent remote owner binding; see [HTTP Transport](../http-transport.md).
 - **Local MCP remains intentionally unauthenticated:** exposing the localhost listener through a different proxy changes the threat model. Exact routing and ownership behavior are canonical in [HTTP Transport](../http-transport.md).
 - **Authenticated browser delegation:** `subagent_run` can act through the ChatGPT account already authenticated in the configured debuggable Chrome instance. The MCP trust boundary therefore includes that browser session. The delegation runtime service remains attach-only, while the public setup/start helpers may launch the dedicated `<state_dir>/chatgpt-chrome` profile (`src/tools/delegation/subagent-tools.ts`, `src/tools/delegation/chatgpt-service.ts`, `scripts/chatgpt/browser.mjs`).
 - **Caller-selected shell boundaries are not per-user ACLs:** remote ChatGPT is single-owner by default, but local MCP clients share the same named-shell namespace. Any authorized/local caller that knows or guesses another `shell_id` can access or reset that shell, and all shells retain the same operating-system permissions (`src/auth/store.ts`, `src/tools/shell/shell-tools.ts`, `src/tools/shell/session-manager.ts`).
@@ -29,7 +29,7 @@ This page is the maintenance lint target for current trust, resource, external-i
 - **Coordinate interpretation:** screen captures require display-origin translation, while app/window clicks use screenshot-relative coordinates with an explicit capture target. Multi-display layout or upstream bounds changes are important real-CLI regression cases (`src/tools/computer/peekaboo.ts`, `src/tools/computer/computer-tools.ts`, `test/peekaboo.test.ts`).
 
 - **Delegated-ID capacity is per caller:** the configured cap counts saved and live IDs, not total sessions or a process-wide running-turn semaphore. Existing IDs remain reusable after lowering the cap. See [Subagent contract](../tools/subagent.md).
-- **Dashboard is local operational authority:** with `ui.enabled`, observer history can expose call inputs and steering can affect agent work. The ngrok policy does not expose `/ui`; preserve that boundary. Snapshot/SSE and queued instructions are process-local. See [HTTP Transport](../http-transport.md).
+- **Dashboard is local operational authority:** with `ui.enabled`, observer history can expose call inputs and steering can affect agent work. The Secure MCP Tunnel profile targets only the local MCP endpoint, not `/ui`; preserve that boundary. Snapshot/SSE and queued instructions are process-local. See [HTTP Transport](../http-transport.md).
 
 ## Intentional Unenforced Conventions
 

@@ -6,8 +6,8 @@ import { failure, intro, note, outro, spinner } from "./setup-console.js"
 import {
   type ConfigInitializationResult,
   initializeOpenChatXConfig,
-  initializeWorkspace,
-} from "./workspace-setup.js"
+  initializeOpenChatXState,
+} from "./state-setup.js"
 
 const configOnly = process.argv.includes("--config-only")
 
@@ -42,7 +42,7 @@ note("Configuration", formatConfigPath(config))
 const { MCP_CONFIG } = await import("../src/config.js")
 
 const prerequisiteStep = spinner("Checking prerequisites")
-const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled, MCP_CONFIG.shell.path)
+const { errors } = await checkPublicRuntime(MCP_CONFIG.tunnel.profile, MCP_CONFIG.shell.path)
 if (errors.length > 0) {
   prerequisiteStep.fail("Prerequisites need attention")
   failure("Setup cannot continue", errors)
@@ -57,10 +57,10 @@ if (rtkError) {
   process.exit(1)
 }
 
-const workspaceStep = spinner("Preparing agent workspace")
-const workspace = await initializeWorkspace(MCP_CONFIG.workspace)
-workspaceStep.succeed(workspace.created ? "Agent workspace created" : "Agent workspace ready")
-note("Workspace", workspace.agentsPath)
+const stateStep = spinner("Preparing OpenChatX state")
+const state = await initializeOpenChatXState(MCP_CONFIG.stateDir)
+stateStep.succeed(state.agentsCreated ? "OpenChatX state initialized" : "OpenChatX state ready")
+note("Agent instructions", state.agentsPath)
 
 await commandStep(
   "Building openchatx-mcp",

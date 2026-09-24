@@ -26,7 +26,7 @@ Tool schemas live beside handlers. Use `npm run schemas` to inspect the configur
 
 `start_here` discovers modes from lowercase kebab-case Markdown filenames in bundled `src/tools/start-here/prompts/` and local `.shellby/prompts/`. `shared.md` is reserved. Local files override matching bundled names; additional local names add modes. Discovery happens each time the short-lived MCP server is registered, so subsequent `tools/list` requests can see added modes without a process restart. Clients caching schemas may still need an app refresh.
 
-Prompt loading returns `shared.md` first, then the selected mode. Contents are read at call time. Repeated same-mode loads by the same agent within five seconds reuse the pending load and return a short reuse notice; errors remain retryable. The caller's nonempty `task_id` becomes audit/review task context; current validation does not require a kebab-case task ID. Startup does not interpolate the configured workspace or automatically read its `AGENTS.md` (`src/tools/start-here/start-here.ts`, `test/integrations/session-initialization.ts`).
+Prompt loading returns `shared.md` first, then the selected mode. Contents are read at call time. Repeated same-mode loads by the same agent within five seconds reuse the pending load and return a short reuse notice; errors remain retryable. The caller's nonempty `task_id` becomes audit/review task context; current validation does not require a kebab-case task ID. Persistent installation instructions live at `<state_dir>/AGENTS.md`; prompt loading remains owned by `start_here` and does not depend on a separate workspace directory (`src/tools/start-here/start-here.ts`, `scripts/state-setup.ts`, `test/integrations/session-initialization.ts`).
 
 ## Result Boundary
 
@@ -48,7 +48,7 @@ Error results carrying an explicit `structuredContent.error_code` preserve that 
 | Patching | [apply_patch](./tools/apply-patch.md) | `src/tools/apply-patch/apply-patch.ts` |
 | Browser delegation | [Subagents](./tools/subagent.md), [clones](./tools/clones.md) | `src/tools/delegation/` |
 | Website and resource fetching | [fetch_url](./tools/fetch-url.md) | `src/tools/web/` |
-| Workspace skills | [Workspace Tooling](./workspace-tooling.md) | `src/tools/skills/skill-tools.ts` |
+| Persistent skills | [State and Skills](./state-and-skills.md) | `src/tools/skills/skill-tools.ts` |
 | Computer interaction | [Computer Use](./computer-use.md) | `src/tools/computer/` |
 | Local images | Shared Sharp encoder preserves dimensions, lowers JPEG quality to fit its byte budget, and fails rather than resizing. | `src/tools/image/` |
 | File transfer | `file_read` returns local bytes as embedded MCP resource content; `file_write` consumes an OpenAI file input and writes its downloaded bytes to a local path. | `src/tools/file/file-tools.ts` |

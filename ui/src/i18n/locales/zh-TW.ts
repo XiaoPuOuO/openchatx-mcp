@@ -41,6 +41,7 @@ export const zhTW: Messages = {
   "steer.delivered": "已送達：{message}",
   "steer.dismissDelivered": "關閉已送達指示",
   "toolCall.noInput": "這次工具呼叫沒有擷取到輸入內容。",
+  "toolCall.errorReason": "錯誤原因",
   "toolCall.close": "關閉工具呼叫詳情",
   "toolboxes.title": "工具箱",
   "toolboxes.subtitle": "管理內建工具、自訂 TypeScript 工具與 Skill",

@@ -28,7 +28,7 @@ subagentRuntime.startWatching(MCP_CONFIG.subagents.configFile)
 const toolboxRegistry = new ToolboxRegistry(MCP_CONFIG.toolboxes.root)
 await toolboxRegistry.start()
 const interactiveShellManager = new InteractiveShellManager(
-  MCP_CONFIG.workspace,
+  MCP_CONFIG.defaultCwd,
   MCP_CONFIG.shell.path
 )
 const bashProcessManager = new BashProcessManager()
@@ -58,7 +58,8 @@ try {
 console.log(`Local shell MCP server: ${running.url}`)
 console.log(`Agent dashboard: http://${running.host}:${running.port}/ui`)
 console.log("Remote MCP authentication: trusted ChatGPT origin + bound OpenAI subject")
-console.log(`Default workspace: ${MCP_CONFIG.workspace}`)
+console.log(`Default cwd: ${MCP_CONFIG.defaultCwd}`)
+console.log(`Agent instructions: ${MCP_CONFIG.agentInstructionsFile}`)
 console.log(`Shell tools: bash + terminal (${MCP_CONFIG.shell.path})`)
 console.log(`Agent MCP audit log: ${auditLogPath}`)
 console.log(

@@ -1,11 +1,11 @@
 ---
-summary: "Local HTTP/MCP routing, ngrok trust boundary, remote owner binding, request lifetime, and shared process state."
+summary: "Local HTTP/MCP routing, OpenAI Secure MCP Tunnel trust boundary, remote owner binding, request lifetime, and shared process state."
 paths:
   - src/server/http-server.ts
   - src/agent/dashboard-routes.ts
   - src/mcp/server-factory.ts
   - src/auth/
-  - ngrok-traffic-policy.yml
+  - ecosystem.config.cjs
 ---
 
 # HTTP Transport
@@ -18,14 +18,14 @@ This page documents the local HTTP/MCP boundary, trusted remote path, subject bi
 
 - `createMcpExpressApp({ host, jsonLimit: "1mb" })` creates the Express app and applies the MCP v2 adapter's JSON parsing plus localhost Host/Origin guards. No custom `allowedOrigins` list is configured (`src/server/http-server.ts`).
 - `GET /healthz` returns `{ "ok": true }` and an `X-Shellby-Instance` header derived from the repository and resolved state directory. Startup checks that identity so a different copy listening on the selected port cannot satisfy its health check. This header is a local startup check, not authentication (`src/server/http-server.ts`, `src/config.ts`, `scripts/start.ts`).
-- Exact `/mcp` is the only MCP endpoint; a regex route keeps `/mcp/` distinct because the MCP Express factory initializes Express routing before application code can enable strict routing. `app.all` forwards the MCP methods to the SDK handler, which owns the protocol-specific method semantics. Direct localhost clients remain unauthenticated. Trusted tunnel traffic is marked by ngrok; on marked `tools/call` requests Shellby MCP requires `X-OpenAI-Subject`, binds the first subject before dispatch, and requires that subject thereafter. The tool does not need to exist or succeed for the first call to bind (`src/server/http-server.ts`, `src/auth/store.ts`).
+- Exact `/mcp` is the only MCP endpoint; a regex route keeps `/mcp/` distinct because the MCP Express factory initializes Express routing before application code can enable strict routing. `app.all` forwards the MCP methods to the SDK handler, which owns the protocol-specific method semantics. Direct localhost clients remain unauthenticated. Secure MCP Tunnel traffic reaches the same loopback endpoint and carries OpenAI identity metadata; on remote `tools/call` requests OpenChatX requires `X-OpenAI-Subject`, binds the first subject before dispatch, and requires that subject thereafter. The tool does not need to exist or succeed for the first call to bind (`src/server/http-server.ts`, `src/auth/store.ts`).
 - Shellby uses no MCP OAuth or per-tool security schemes; redundant `noauth` metadata is omitted. Remote authorization remains at the HTTP/deployment boundary (`src/server/http-server.ts`, `src/mcp/server-factory.ts`).
 
-The MCP Express Host/Origin guards protect the localhost HTTP listener from DNS-rebinding/browser-origin attacks; they are not caller authentication. The ngrok policy remains the remote trust boundary: it rejects traffic outside ngrok's `com.openai.chatgpt` IP category, exposes only exact `/mcp`, rewrites Host to `localhost` independently of the configured upstream port, and adds `X-Shellby-Remote: 1`. Shellby MCP uses that marker only to distinguish already-origin-verified tunnel traffic from direct localhost clients (`ngrok-traffic-policy.yml`, `src/server/http-server.ts`).
+The MCP Express Host/Origin guards protect the localhost HTTP listener from DNS-rebinding/browser-origin attacks; they are not caller authentication. The remote trust boundary is OpenAI Secure MCP Tunnel: `tunnel-client` makes the outbound connection to the OpenAI control plane and forwards only to the configured loopback MCP target. OpenChatX uses OpenAI subject metadata for remote owner binding while direct localhost clients remain local-only and unauthenticated (`ecosystem.config.cjs`, `src/server/http-server.ts`).
 
 ## Local Dashboard Boundary
 
-When `ui.enabled` creates an `AgentObserver`, `src/agent/dashboard-routes.ts` registers static `ui/dist` under `/ui`, a snapshot at `/ui/api/agents`, SSE at `/ui/api/events`, and steering endpoints on the same Express app. These routes share the localhost Host/Origin guards but do not use ChatGPT subject binding. The checked-in ngrok policy exposes only `/mcp`, so the dashboard stays local.
+When `ui.enabled` creates an `AgentObserver`, `src/agent/dashboard-routes.ts` registers static `ui/dist` under `/ui`, a snapshot at `/ui/api/agents`, SSE at `/ui/api/events`, and steering endpoints on the same Express app. These routes share the localhost Host/Origin guards but do not use ChatGPT subject binding. The tunnel profile targets the exact local `/mcp` endpoint, so the OpenChatX dashboard stays local.
 
 Observation starts at the tool-registration boundary after the startup gate. Steering is queued by agent identity and appended to a returning tool result; it cannot interrupt upstream model generation or a tool that has not returned. Observer history and queued instructions disappear on restart. Frontend contracts and presentation state live in the [UI wiki](../../ui/wiki/index.md).
 
@@ -45,7 +45,7 @@ The endpoint is dual-era by construction. Modern clients negotiate MCP `2026-07-
 
 Production also injects the repository-local MCP audit logger at this boundary. Its storage, truncation, token-accounting, and sensitivity rules are canonical in [Audit Logging](./operations/audit-logging.md).
 
-Because neither the modern 2026 serving model nor Shellby's legacy stateless fallback retains an MCP HTTP session ID, an existing client can send its next request after the server is rebuilt and restarted on the same URL without reconnecting. The bound owner survives in `<state_dir>/auth.json` (default `~/.shellby/auth.json`); process-local shell, webpage-cache, and `start_here` state reset, so a ChatGPT conversation must initialize again after process restart. ChatGPT needs an app refresh when advertised tool metadata or server instructions change (`src/auth/store.ts`, `src/server/http-server.ts`).
+Because neither the modern 2026 serving model nor Shellby's legacy stateless fallback retains an MCP HTTP session ID, an existing client can send its next request after the server is rebuilt and restarted on the same URL without reconnecting. The bound owner survives in `<state_dir>/auth.json` (default `~/.openchatx-mcp/auth.json`); process-local shell, webpage-cache, and `start_here` state reset, so a ChatGPT conversation must initialize again after process restart. ChatGPT needs an app refresh when advertised tool metadata or server instructions change (`src/auth/store.ts`, `src/server/http-server.ts`).
 
 The shared `McpHttpHandler` tracks modern in-flight exchanges and closes with the Node HTTP server. Process-level shell, Peekaboo, subagent, and cursor-host services are owned and disposed separately by the production composition root (`src/server/http-server.ts`, `src/index.ts`).
 

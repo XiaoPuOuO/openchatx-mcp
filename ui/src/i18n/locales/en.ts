@@ -42,6 +42,7 @@ export const en: Messages = {
   "steer.delivered": "Delivered: {message}",
   "steer.dismissDelivered": "Dismiss delivered instruction",
   "toolCall.noInput": "No captured input for this tool call.",
+  "toolCall.errorReason": "Error reason",
   "toolCall.close": "Close tool call details",
   "toolboxes.title": "Toolboxes",
   "toolboxes.subtitle": "Manage built-in tools, custom TS tools, and skills",

@@ -17,7 +17,7 @@ const externalMcp = await createExternalMcpRegistry(MCP_CONFIG.externalMcp.confi
 const toolboxRegistry = new ToolboxRegistry(MCP_CONFIG.toolboxes.root)
 await toolboxRegistry.start()
 const interactiveShellManager = new InteractiveShellManager(
-  MCP_CONFIG.workspace,
+  MCP_CONFIG.defaultCwd,
   MCP_CONFIG.shell.path
 )
 const bashProcessManager = new BashProcessManager()

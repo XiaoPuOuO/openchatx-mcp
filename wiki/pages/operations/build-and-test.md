@@ -25,7 +25,7 @@ Run the cheapest focused check that addresses the changed behavior. Broaden when
 
 | Area | Useful checks |
 | --- | --- |
-| Config and setup | `test/config.test.ts`, `test/setup-workspace.test.ts`, `test/start.test.ts`, `test/instance-isolation.test.ts`, `test/preflight.test.ts` |
+| Config and setup | `test/config.test.ts`, `test/state-setup.test.ts`, `test/start.test.ts`, `test/instance-isolation.test.ts`, `test/preflight.test.ts` |
 | Shell lifecycle, batches, rewriting | `test/shell-session.test.ts`, `test/shell-session-manager.test.ts`, `test/shell-parallel.test.ts`, `test/rtk.test.ts` |
 | MCP contract and transport | `test/mcp-integration.test.ts` loads cases from `test/integrations/`; registration/projection also have focused tests. |
 | Audit and dashboard observation | `test/server/audit-log.test.ts`, `test/agent/observer.test.ts`, `test/agent/context.test.ts` |
@@ -38,9 +38,9 @@ Integration tests cover modern MCP negotiation and legacy fallback, shared state
 
 Tests use temporary directories and real local child shells. `test/helpers/temp.ts` owns disposable-directory cleanup. Process-group and vendored binary checks require the supported macOS environment. Some adapter tests inject fake executables; real vendored `apply_patch` coverage also exercises partial application and move/edit semantics.
 
-Instance isolation tests run two disposable MCP listeners with separate auth stores, validate ngrok v2/v3 API overlays without copying credentials, exercise URL discovery against a fake ngrok API, and reject an occupied CDP endpoint belonging to another profile. Startup fixtures also reject a healthy response from a different repository/state identity. These tests do not start a public tunnel or restart the production daemon.
+Instance isolation tests run two disposable MCP listeners with separate auth stores, verify tunnel-client profile/operator URL presentation, and keep repository/state health identities separate. Startup fixtures also reject a healthy response from a different repository/state identity. These tests do not start a live Secure MCP Tunnel or restart the production daemon.
 
-Local-only lifecycle coverage checks fresh startup, removal of an existing managed tunnel, cleanup failures, and hard restart. A disposable setup fixture uses the real config loader and preflight with no ngrok on `PATH`, proving disabled mode skips that prerequisite while enabled mode still requires it. URL tests ensure disabled mode never queries ngrok.
+Tunnel lifecycle coverage checks fresh startup, restart ordering, tunnel reload failure, and hard restart. A disposable setup fixture uses the real config loader and preflight with a fake `tunnel-client`, proving the configured profile and runtime API-key requirements are enforced without contacting the live control plane.
 
 ## Live Browser Validation
 
@@ -52,7 +52,7 @@ For private transport investigation, [ChatGPT CDP Transport](../subagents/chatgp
 
 `.github/workflows/ci.yml` validates arm64 and x64 macOS runners: clean install, config-only setup, lint, typecheck, tests, backend build. CI does not install/build the UI or run the live browser canary.
 
-Deterministic tests cover startup command ordering with fixtures, not a real PM2/ngrok lifecycle. Production composition, health failure recovery, signal shutdown, real browser authentication, TCC permission behavior, and cursor-host relaunch still need targeted operational validation. Unit store persistence plus the two-turn canary do not establish full browser-service restoration across a production restart. Do not claim broad runtime coverage from a successful compile or docs pass.
+Deterministic tests cover startup command ordering with fixtures, not a real PM2/Secure MCP Tunnel lifecycle. Production composition, health failure recovery, signal shutdown, real browser authentication, TCC permission behavior, and cursor-host relaunch still need targeted operational validation. Unit store persistence plus the two-turn canary do not establish full browser-service restoration across a production restart. Do not claim broad runtime coverage from a successful compile or docs pass.
 
 ## Related
 

@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { constants, existsSync } from "node:fs"
-import { access, readFile } from "node:fs/promises"
-import { homedir } from "node:os"
+import { access } from "node:fs/promises"
 import { join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -20,7 +19,7 @@ export interface PublicRuntimeCheck {
 }
 
 export async function checkPublicRuntime(
-  ngrokEnabled = true,
+  tunnelProfile = "openchatx",
   shellPath?: string,
   platform: NodeJS.Platform = process.platform
 ): Promise<PublicRuntimeCheck> {
@@ -63,25 +62,41 @@ export async function checkPublicRuntime(
     }
   }
 
-  if (!ngrokEnabled) return { errors, pm2Path }
+  errors.push(...checkTunnelClient(tunnelProfile, platform))
+  return { errors, pm2Path }
+}
 
-  const ngrokExecutable = resolvePathExecutable("ngrok", platform) ?? "ngrok"
-  const ngrokVersion = spawnSync(ngrokExecutable, ["version"], { encoding: "utf8" })
-  if (hasErrorCode(ngrokVersion.error, "ENOENT")) {
-    errors.push(
+function checkTunnelClient(tunnelProfile: string, platform: NodeJS.Platform): string[] {
+  const errors: string[] = []
+  const executable = resolvePathExecutable("tunnel-client", platform) ?? "tunnel-client"
+  const check = spawnSync(executable, ["--help"], { encoding: "utf8", windowsHide: true })
+
+  if (hasErrorCode(check.error, "ENOENT")) {
+    return [
       platform === "win32"
-        ? "ngrok is not installed. Install it with `winget install Ngrok.Ngrok`."
-        : "ngrok is not installed. Install it with `brew install --cask ngrok`."
-    )
-  } else if (ngrokVersion.status !== 0) {
-    errors.push(
-      `ngrok could not run${ngrokVersion.stderr?.trim() ? `: ${ngrokVersion.stderr.trim()}` : "."}`
-    )
-  } else if (!(await hasNgrokAuth(ngrokExecutable))) {
-    errors.push("ngrok is not authenticated. Run `ngrok config add-authtoken <your-token>`.")
+        ? "OpenAI tunnel-client is not installed. Download the Windows build from openai/tunnel-client releases and put tunnel-client.exe on PATH."
+        : "OpenAI tunnel-client is not installed. Download the matching macOS build from openai/tunnel-client releases and put it on PATH.",
+    ]
+  }
+  if (check.status !== 0) {
+    return [`tunnel-client could not run${check.stderr?.trim() ? `: ${check.stderr.trim()}` : "."}`]
   }
 
-  return { errors, pm2Path }
+  const profiles = spawnSync(executable, ["profiles", "list", "--json"], {
+    encoding: "utf8",
+    windowsHide: true,
+  })
+  if (profiles.status !== 0 || !profiles.stdout.includes(`"${tunnelProfile}"`)) {
+    errors.push(
+      `tunnel-client profile "${tunnelProfile}" is missing. Initialize it with tunnel-client init --profile ${tunnelProfile} --tunnel-id <tunnel_id> --mcp-server-url http://127.0.0.1:3333/mcp.`
+    )
+  }
+  if (!process.env.CONTROL_PLANE_API_KEY && !process.env.OPENAI_API_KEY) {
+    errors.push(
+      "tunnel-client authentication is missing. Set CONTROL_PLANE_API_KEY (preferred) or OPENAI_API_KEY in the environment that starts OpenChatX."
+    )
+  }
+  return errors
 }
 
 export function isSupportedNodeVersion(version: string): boolean {
@@ -115,39 +130,17 @@ export function printPreflightErrors(errors: readonly string[]): void {
   for (const error of errors) console.error(`- ${error}`)
 }
 
-async function hasNgrokAuth(ngrokExecutable: string): Promise<boolean> {
-  const check = spawnSync(ngrokExecutable, ["config", "check"], { encoding: "utf8" })
-  if (check.status !== 0) return false
-
-  const output = `${check.stdout ?? ""}\n${check.stderr ?? ""}`
-  const match = output.match(/Valid configuration file at (.+)$/mu)
-  if (!match?.[1]) return false
-
-  try {
-    const config = await readFile(expandHome(match[1].trim()), "utf8")
-    return /^\s*authtoken\s*:\s*\S+/mu.test(config)
-  } catch {
-    return false
-  }
-}
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { loadPublicConfig, DEFAULT_PUBLIC_CONFIG } = await import("../src/public-config.cjs")
   const configPath = join(repoRoot, ".openchatx", "config.toml")
   const config = existsSync(configPath) ? loadPublicConfig(configPath) : DEFAULT_PUBLIC_CONFIG
-  const { errors } = await checkPublicRuntime(config.ngrok.enabled, config.shell.path)
+  const { errors } = await checkPublicRuntime(config.tunnel.profile, config.shell.path)
   if (errors.length > 0) {
     printPreflightErrors(errors)
     process.exitCode = 1
   } else {
     console.log("Preflight passed.")
   }
-}
-
-function expandHome(value: string): string {
-  if (value === "~") return homedir()
-  if (value.startsWith("~/") || value.startsWith("~\\")) return join(homedir(), value.slice(2))
-  return value
 }
 
 function hasErrorCode(error: unknown, code: string): boolean {

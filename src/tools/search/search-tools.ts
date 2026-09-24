@@ -24,7 +24,7 @@ export function registerSearchTools(server: McpServer): void {
           .string()
           .min(1)
           .optional()
-          .describe("Directory to search. Defaults to the configured workspace."),
+          .describe("Directory to search. Defaults to the user's home directory."),
       }),
       outputSchema: z.object({
         files: z.array(z.string()),
@@ -99,7 +99,7 @@ export function registerSearchTools(server: McpServer): void {
           .string()
           .min(1)
           .optional()
-          .describe("File or directory to search. Defaults to the configured workspace."),
+          .describe("File or directory to search. Defaults to the user's home directory."),
         include: z
           .string()
           .min(1)
@@ -161,8 +161,8 @@ interface RgMatch {
 }
 
 function resolveSearchPath(path?: string): string {
-  if (!path) return MCP_CONFIG.workspace
-  return isAbsolute(path) ? path : join(MCP_CONFIG.workspace, path)
+  if (!path) return MCP_CONFIG.defaultCwd
+  return isAbsolute(path) ? path : join(MCP_CONFIG.defaultCwd, path)
 }
 
 function parseRgMatches(stdout: string, cwd: string): RgMatch[] {

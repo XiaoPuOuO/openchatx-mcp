@@ -1,12 +1,11 @@
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
-import { createServer } from "node:http"
-import { createRequire } from "node:module"
+import { copyFile, mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { promisify } from "node:util"
+
 import { OpenChatXAuthStore } from "../src/auth/store.js"
 import { MCP_CONFIG } from "../src/config.js"
 import { createMcpServerFactory } from "../src/mcp/server-factory.js"
@@ -14,86 +13,10 @@ import { startMcpHttpServer } from "../src/server/http-server.js"
 import { tempDir } from "./helpers/temp.js"
 
 const run = promisify(execFile)
-const { ngrokConfigFiles } = createRequire(import.meta.url)("../scripts/ngrok-config.cjs") as {
-  ngrokConfigFiles(
-    config: { state_dir: string; ngrok: { api_port: number } },
-    root: string,
-    executable: string
-  ): string[]
-}
 
-for (const version of ["2", "3"]) {
-  test(`ngrok v${version} keeps credentials in native config and isolates API addresses`, async (t) => {
-    const root = await tempDir(t, "shellby-ngrok-")
-    const nativePath = join(root, "native config.yml")
-    const nativeSource = `version: "${version}"\n${version === "3" ? "agent:\n  " : ""}authtoken: test-secret\n`
-    await writeFile(nativePath, nativeSource)
-    const executable = join(root, "ngrok")
-    await writeFile(
-      executable,
-      `#!/usr/bin/env node\nconsole.log(${JSON.stringify(`Valid configuration file at ${nativePath}`)})\n`,
-      { mode: 0o755 }
-    )
-    for (const [name, port] of [
-      ["first", 4040],
-      ["second", 4041],
-    ] as const) {
-      const files = ngrokConfigFiles(
-        { state_dir: name, ngrok: { api_port: port } },
-        root,
-        executable
-      )
-      assert.deepEqual(files, [nativePath, join(root, name, "ngrok-agent.json")])
-      const overlay = await readFile(files[1]!, "utf8")
-      const address = { web_addr: `127.0.0.1:${port}` }
-      assert.deepEqual(
-        JSON.parse(overlay),
-        version === "3" ? { version, agent: address } : { version, ...address }
-      )
-      assert.ok(!overlay.includes("test-secret"))
-    }
-    assert.equal(await readFile(nativePath, "utf8"), nativeSource)
-  })
-}
-
-test("print-url uses this copy's ngrok API and filters other upstreams and domains", async (t) => {
-  const root = await tempDir(t, "shellby-print-url-")
-  let requests = 0
-  const api = createServer((_req, res) => {
-    requests++
-    res.setHeader("content-type", "application/json")
-    res.end(
-      JSON.stringify({
-        tunnels: [
-          {
-            proto: "https",
-            public_url: "https://second.ngrok.app",
-            config: { addr: "http://127.0.0.1:3333" },
-          },
-          {
-            proto: "https",
-            public_url: "https://wrong.ngrok.app",
-            config: { addr: "http://127.0.0.1:3334" },
-          },
-          {
-            proto: "https",
-            public_url: "https://second.ngrok.app",
-            config: { addr: "http://127.0.0.1:3334" },
-          },
-        ],
-      })
-    )
-  })
-  await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve))
-  t.after(
-    () =>
-      new Promise<void>((resolve, reject) =>
-        api.close((error) => (error ? reject(error) : resolve()))
-      )
-  )
-  const address = api.address()
-  assert.ok(address && typeof address !== "string")
-  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
+test("print-url reports the configured tunnel-client profile and local operator URLs", async (t) => {
+  const root = await tempDir(t, "openchatx-print-url-")
+  await mkdir(join(root, "scripts"), { recursive: true })
   await mkdir(join(root, "src"))
   await writeFile(join(root, "package.json"), '{"type":"module"}\n')
   await copyFile(
@@ -102,80 +25,37 @@ test("print-url uses this copy's ngrok API and filters other upstreams and domai
   )
   await writeFile(
     join(root, "src/config.ts"),
-    `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, ngrok: { enabled: true, apiPort: address.port, url: "https://second.ngrok.app" }, ui: { enabled: true } })}`
+    `export const MCP_CONFIG = ${JSON.stringify({
+      host: "127.0.0.1",
+      port: 3334,
+      tunnel: { profile: "secondary", healthPort: 8181 },
+    })}`
   )
-  const result = await run(
-    process.execPath,
-    ["--import", "tsx", join(root, "scripts/print-url.ts"), "--optional"],
-    { timeout: 10_000 }
-  )
-  assert.equal(
-    result.stdout.trim(),
-    "MCP URL: https://second.ngrok.app/mcp\nUI URL: http://127.0.0.1:3334/ui"
-  )
-  assert.equal(requests, 1)
-})
 
-test("print-url reports the configured local address without contacting ngrok when disabled", async (t) => {
-  const root = await tempDir(t, "shellby-local-url-")
-  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
-  await mkdir(join(root, "src"))
-  await writeFile(join(root, "package.json"), JSON.stringify({ type: "module" }))
-  await copyFile(
-    new URL("../scripts/print-url.ts", import.meta.url),
-    join(root, "scripts/print-url.ts")
-  )
-  await writeFile(
-    join(root, "src/config.ts"),
-    'export const MCP_CONFIG = { host: "127.0.0.1", port: 3334, ngrok: { enabled: false }, ui: { enabled: false } }'
-  )
-  const result = await run(
-    process.execPath,
-    [
-      "--import",
-      "tsx",
-      "--import",
-      "data:text/javascript,globalThis.fetch=()=>{process.exit(9)}",
-      join(root, "scripts/print-url.ts"),
-    ],
-    { timeout: 10_000 }
-  )
-  assert.equal(
-    result.stdout.trim(),
-    "MCP URL: http://127.0.0.1:3334/mcp (local only)\nUI URL: http://127.0.0.1:3334/ui"
-  )
-})
-
-test("print-url also prints the local UI URL when enabled", async (t) => {
-  const root = await tempDir(t, "shellby-ui-url-")
-  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
-  await mkdir(join(root, "src"))
-  await writeFile(join(root, "package.json"), JSON.stringify({ type: "module" }))
-  await copyFile(
-    new URL("../scripts/print-url.ts", import.meta.url),
-    join(root, "scripts/print-url.ts")
-  )
-  await writeFile(
-    join(root, "src/config.ts"),
-    'export const MCP_CONFIG = { host: "127.0.0.1", port: 3334, ngrok: { enabled: false }, ui: { enabled: true } }'
-  )
   const result = await run(
     process.execPath,
     ["--import", "tsx", join(root, "scripts/print-url.ts")],
     { timeout: 10_000 }
   )
+
   assert.equal(
     result.stdout.trim(),
-    "MCP URL: http://127.0.0.1:3334/mcp (local only)\nUI URL: http://127.0.0.1:3334/ui"
+    [
+      "Local MCP target: http://127.0.0.1:3334/mcp",
+      "Tunnel profile: secondary",
+      "Tunnel UI: http://127.0.0.1:8181/ui",
+      "OpenChatX UI: http://127.0.0.1:3334/ui",
+    ].join("\n")
   )
 })
 
 test("two MCP listeners keep separate health identities and remote owner bindings", async (t) => {
-  const root = await tempDir(t, "shellby-instances-")
+  const root = await tempDir(t, "openchatx-instances-")
   const disabledTools = Object.fromEntries(
     Object.keys(MCP_CONFIG.tools).map((key) => [key, false])
   ) as typeof MCP_CONFIG.tools
   const servers: Array<Awaited<ReturnType<typeof startMcpHttpServer>>> = []
+
   for (const name of ["first", "second"]) {
     const auth = new OpenChatXAuthStore(join(root, name, "auth.json"))
     await auth.ensureState()
@@ -188,16 +68,17 @@ test("two MCP listeners keep separate health identities and remote owner binding
     )
     servers.push(server)
     t.after(() => server.close())
+
     const health = await fetch(`http://127.0.0.1:${server.port}/healthz`)
     assert.equal(health.headers.get("x-openchatx-instance"), name)
     await health.json()
+
     const response = await fetch(server.url, {
       method: "POST",
       headers: {
         host: "localhost",
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
-        "x-openchatx-remote": "1",
         "x-openai-subject": name,
       },
       body: JSON.stringify({
@@ -208,16 +89,19 @@ test("two MCP listeners keep separate health identities and remote owner binding
       }),
     })
     await response.text()
+
     assert.equal(
       (await auth.readState()).subject,
       name,
-      "Host rewrite must pass the guard and bind only this copy"
+      "OpenAI subject metadata must bind only this copy"
     )
   }
+
   const [firstServer, secondServer] = servers
   assert.ok(firstServer)
   assert.ok(secondServer)
   assert.notEqual(firstServer.port, secondServer.port)
+
   await firstServer.close()
   const health = await fetch(`http://127.0.0.1:${secondServer.port}/healthz`)
   assert.equal(health.headers.get("x-openchatx-instance"), "second")

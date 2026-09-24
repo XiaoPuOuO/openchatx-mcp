@@ -10,4 +10,4 @@ Include the affected version or commit, reproduction steps, impact, and any sugg
 
 ## Scope
 
-The supported release targets are macOS (Apple Silicon or Intel) and native Windows 10/11. Direct localhost MCP access is intentionally unauthenticated; the remote ChatGPT path depends on the checked-in ngrok trust policy plus OpenChatX's bound OpenAI subject check. See the README and [`wiki/pages/http-transport.md`](wiki/pages/http-transport.md) for the current trust model.
+The supported release targets are macOS (Apple Silicon or Intel) and native Windows 10/11. Direct localhost MCP access is intentionally unauthenticated; remote ChatGPT access is carried through OpenAI Secure MCP Tunnel, and OpenChatX binds trusted tool calls to the first observed OpenAI subject. See the README and [`wiki/pages/http-transport.md`](wiki/pages/http-transport.md) for the current trust model.

@@ -6,6 +6,7 @@ export interface ToolCallPresentation {
   detailLanguage?: string
   resultDetail?: string
   resultDetailLanguage?: string
+  error?: string
 }
 
 /** Build the local dashboard presentation for one tool call without exposing observer state. */
@@ -30,6 +31,36 @@ export function presentToolResult(
     return { resultDetail: structured.diff, resultDetailLanguage: "diff" }
   }
   return {}
+}
+
+export function presentToolFailure(error: unknown): Pick<ToolCallPresentation, "error"> {
+  if (error instanceof Error) return { error: error.message }
+
+  const record = asRecord(error)
+  if (record) {
+    const structured = asRecord(record.structuredContent)
+    if (structured && typeof structured.output === "string") {
+      return { error: structured.output }
+    }
+    if (structured && typeof structured.message === "string") {
+      return { error: structured.message }
+    }
+
+    if (Array.isArray(record.content)) {
+      const message = record.content
+        .map((item) => asRecord(item))
+        .filter((item): item is Record<string, unknown> => item !== undefined)
+        .flatMap((item) =>
+          item.type === "text" && typeof item.text === "string" ? [item.text] : []
+        )
+        .join("\n")
+      if (message) return { error: message }
+    }
+
+    if (typeof record.message === "string") return { error: record.message }
+  }
+
+  return { error: String(error) }
 }
 
 function summarizeTool(tool: string, input: unknown): string {

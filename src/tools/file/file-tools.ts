@@ -256,7 +256,7 @@ export function registerFileEditTool(server: McpServer): void {
         filePath: z
           .string()
           .min(1)
-          .describe("File to edit. Relative paths resolve from the configured workspace."),
+          .describe("File to edit. Relative paths resolve from the user's home directory."),
         oldString: z
           .string()
           .min(1)
@@ -479,5 +479,5 @@ function isFsError(error: unknown, code: string): error is NodeJS.ErrnoException
 }
 
 function resolveLocalPath(path: string): string {
-  return isAbsolute(path) ? path : resolve(MCP_CONFIG.workspace, path)
+  return isAbsolute(path) ? path : resolve(MCP_CONFIG.defaultCwd, path)
 }

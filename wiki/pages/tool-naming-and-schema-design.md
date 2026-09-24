@@ -84,7 +84,7 @@ This means descriptions and any validation metadata that remains in the advertis
 For example, before Shellby's model-facing schema pruning was added, OpenAI presented `shell_run` to the model as:
 
 ```ts
-// Run arbitrary zsh commands in a persistent shell. New shells start in "/Users/austinserb/Desktop/agent-workspace".
+// Run arbitrary zsh commands in a persistent shell. New shells start in the current user's home directory.
 // - Use the apply_patch tool for file changes.
 type shell_run = (_: {
 // Unique persistent shell label such as api-audit. Reuse for command(s) that should share cwd or environment.

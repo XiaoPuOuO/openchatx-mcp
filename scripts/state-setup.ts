@@ -7,11 +7,11 @@ import { stringify } from "smol-toml"
 
 import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cjs"
 
-export interface WorkspaceInitializationResult {
-  workspace: string
+export interface StateInitializationResult {
+  stateDir: string
   agentsPath: string
   starterSkillPath: string
-  created: boolean
+  agentsCreated: boolean
   starterSkillCreated: boolean
 }
 
@@ -31,23 +31,22 @@ const CONFIG_HEADER = `# openchatx-mcp configuration.
 
 `
 
-const STARTER_AGENTS_MD = `# Workspace Instructions
+const STARTER_AGENTS_MD = `# OpenChatX Agent Instructions
 
-This file contains persistent instructions for coding work in this workspace. Customize it for your preferences.
+This file contains persistent instructions for OpenChatX. Customize it for your preferences.
 
 - Read and follow project-local \`AGENTS.md\` files and relevant project documentation before editing a repository.
 - Keep existing projects in their current locations.
-- Create or clone new projects in this workspace unless the user asks for another location.
 - Prefer more-specific project instructions when they conflict with this file.
 `
 
-export async function initializeWorkspace(
-  workspace: string
-): Promise<WorkspaceInitializationResult> {
-  await mkdir(workspace, { recursive: true })
+export async function initializeOpenChatXState(
+  stateDir: string
+): Promise<StateInitializationResult> {
+  await mkdir(stateDir, { recursive: true })
 
-  const agentsPath = join(workspace, "AGENTS.md")
-  const starterSkillPath = join(workspace, "skills", "create-skill", "SKILL.md")
+  const agentsPath = join(stateDir, "AGENTS.md")
+  const starterSkillPath = join(stateDir, "skills", "create-skill", "SKILL.md")
   await mkdir(dirname(starterSkillPath), { recursive: true })
 
   let agentsCreated = false
@@ -66,7 +65,7 @@ export async function initializeWorkspace(
     if (!hasErrorCode(error, "EEXIST")) throw error
   }
 
-  return { workspace, agentsPath, starterSkillPath, created: agentsCreated, starterSkillCreated }
+  return { stateDir, agentsPath, starterSkillPath, agentsCreated, starterSkillCreated }
 }
 
 export async function initializeOpenChatXConfig(
@@ -89,20 +88,9 @@ export async function initializeOpenChatXConfig(
   return { configPath, created: false, updated: false }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
 function serializeConfig(config: typeof DEFAULT_PUBLIC_CONFIG): string {
   const { tools: _legacyTools, ...visibleConfig } = config
-  let body = stringify(visibleConfig)
-  if (isRecord(config.ngrok) && !("url" in config.ngrok)) {
-    body = body.replace(
-      "[ngrok]\n",
-      '[ngrok]\n# Optional reserved endpoint; leave commented to let ngrok assign the public URL.\n# url = "https://your-reserved-domain.ngrok.app"\n'
-    )
-  }
-  return `${CONFIG_HEADER}${body}\n`
+  return `${CONFIG_HEADER}${stringify(visibleConfig)}\n`
 }
 
 function hasErrorCode(error: unknown, code: string): boolean {

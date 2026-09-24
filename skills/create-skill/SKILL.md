@@ -5,13 +5,13 @@ description: Create or revise reusable openchatx-mcp skills. Use when the user a
 
 # Create Skill
 
-Create small reusable workflows that openchatx-mcp can discover from the configured workspace or a toolbox.
+Create small reusable workflows that openchatx-mcp can discover from its persistent state directory or a toolbox.
 
-## Workspace
+## OpenChatX state
 
-- Treat the configured openchatx-mcp workspace as `<workspace>`. Determine it from the MCP instructions or current shell context. Never assume a username or absolute path.
-- Store MCP skills at `<workspace>/skills/<name>/SKILL.md`.
-- Read `<workspace>/AGENTS.md` and inspect existing skills before changing the catalog.
+- Treat the configured OpenChatX state directory as `<state_dir>` (default `~/.openchatx-mcp`).
+- Store MCP skills at `<state_dir>/skills/<name>/SKILL.md`.
+- Read `<state_dir>/AGENTS.md` and inspect existing skills before changing the catalog.
 - Use lowercase hyphenated skill names. Keep the directory name and frontmatter `name` identical.
 
 ## Skill structure
@@ -57,14 +57,14 @@ description: What the skill does and concrete requests that should trigger it.
 1. Inspect existing skills for overlap and conventions.
 2. Define the requests that should trigger the skill.
 3. Capture only reusable instructions, constraints, domain knowledge, scripts, references, and assets needed for those requests.
-4. Create or update `<workspace>/skills/<name>/SKILL.md`.
+4. Create or update `<state_dir>/skills/<name>/SKILL.md`.
 5. Use `skill_list` to verify discovery.
 6. Use `skill_use` to verify the complete instructions load correctly.
 7. Exercise complex skills on a realistic request when useful.
 
 ## Portability
 
-- Prefer paths relative to `<workspace>` or the skill directory.
+- Prefer paths relative to `<state_dir>` or the skill directory.
 - Do not assume Codex, Claude, a particular username, or another agent runtime is installed.
 - If the user explicitly wants one skill shared with another runtime, inspect that runtime's supported skill location and symlink or share a canonical directory only when both runtimes can consume the same files correctly.
 - Avoid runtime-specific tool names unless the skill is intentionally specific to that runtime.

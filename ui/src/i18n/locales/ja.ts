@@ -41,6 +41,7 @@ export const ja: Messages = {
   "steer.delivered": "配信済み: {message}",
   "steer.dismissDelivered": "配信済み指示を閉じる",
   "toolCall.noInput": "このツール呼び出しでは入力内容を取得できませんでした。",
+  "toolCall.errorReason": "エラー理由",
   "toolCall.close": "ツール呼び出し詳細を閉じる",
   "toolboxes.title": "ツールボックス",
   "toolboxes.subtitle": "組み込みツール、TypeScript ツール、Skill を管理",
