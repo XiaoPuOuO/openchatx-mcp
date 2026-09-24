@@ -1,6 +1,7 @@
 const { execFileSync } = require("node:child_process")
 const { join } = require("node:path")
 const process = require("node:process")
+// biome-ignore lint/correctness/noUnresolvedImports: This generated module exists after `npm run build`, before PM2 loads this config.
 const { loadPublicConfig } = require("./dist/public-config.cjs")
 const { ngrokConfigFiles } = require("./scripts/ngrok-config.cjs")
 
