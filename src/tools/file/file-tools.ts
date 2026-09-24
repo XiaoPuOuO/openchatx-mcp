@@ -48,7 +48,7 @@ export function registerFileReadTool(server: McpServer): void {
     "file_read",
     {
       description:
-        "Read a local file or directory. Text files return line-numbered model-readable content with pagination. Directories return sorted entries. Binary files are rejected except images/PDFs, which return native MCP resource content.",
+        "Read a local file or directory. Use this when the path is already known. If the path is unknown, use glob first; if you need to locate specific content inside files, use grep first. Text files return line-numbered content with pagination; directories return sorted entries. Prefer one useful context window over many tiny reads. Binary files are rejected except images/PDFs, which return native MCP resource content.",
       inputSchema: z.object({
         filePath: z
           .string()
@@ -197,7 +197,7 @@ export function registerFileWriteTool(server: McpServer): void {
     "file_write",
     {
       description:
-        "Create a text file or completely overwrite an existing text file. Use this when you know the full desired file contents or when a change is large enough that exact replacement with file_edit is less clear. For small or localized changes to an existing file, use file_edit instead. Returns the resulting diff.",
+        "Create a new text file or intentionally replace an entire existing text file. Prefer file_edit for localized changes to existing files. If the target already exists, you must read it with file_read before overwriting it so the replacement is based on current contents. Do not create new files unless the task actually requires them. Returns the resulting diff.",
       inputSchema: z.object({
         filePath: z
           .string()
@@ -251,7 +251,7 @@ export function registerFileEditTool(server: McpServer): void {
     "file_edit",
     {
       description:
-        "Modify an existing text file using an exact string replacement. This is the primary tool for small and localized code edits. Read the relevant file content first, preserve exact whitespace and indentation, and include enough surrounding text for oldString to be unique. Use replaceAll only when every occurrence should change. For a new file or a large whole-file rewrite, use file_write. Returns the resulting diff.",
+        "Perform an exact string replacement in an existing text file. This is the default tool for localized edits. You must read the relevant file content with file_read before editing, then copy oldString from the current file while preserving exact whitespace and indentation. If oldString is missing or ambiguous, read more surrounding context and retry with a unique match; use replaceAll only when every occurrence should change. Use file_write for a new file or intentional whole-file replacement. Returns the resulting diff.",
       inputSchema: z.object({
         filePath: z
           .string()

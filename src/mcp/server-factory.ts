@@ -15,6 +15,8 @@ import {
 import { registerImageTools } from "../tools/image/image-tools.js"
 import { registerMcpServerManagementTools } from "../tools/mcp-server-management/mcp-server-management-tools.js"
 import { registerSearchTools } from "../tools/search/search-tools.js"
+import type { BashProcessManager } from "../tools/shell/bash-process-manager.js"
+import { registerBashProcessTool } from "../tools/shell/bash-process-tool.js"
 import { registerBashTool } from "../tools/shell/bash-tool.js"
 import {
   type InteractiveShellManager,
@@ -32,6 +34,7 @@ export interface CreateMcpServerOptions {
   externalMcp?: ExternalMcpRegistry
   toolboxRegistry?: ToolboxRegistry
   interactiveShellManager?: InteractiveShellManager
+  bashProcessManager?: BashProcessManager
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
   auditRequest?: McpAuditRequest
@@ -42,6 +45,7 @@ export interface McpCapabilityServices {
   externalMcp?: ExternalMcpRegistry
   toolboxRegistry?: ToolboxRegistry
   interactiveShellManager?: InteractiveShellManager
+  bashProcessManager?: BashProcessManager
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
 }
@@ -119,7 +123,8 @@ function registerToolboxRuntime(
     registerStartHereTool(server, () => buildCapabilityCatalog(options, registry))
   )
   registerBuiltinToolbox(server, registry, "shell", () => {
-    registerBashTool(server)
+    registerBashTool(server, options.bashProcessManager)
+    if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
     if (options.interactiveShellManager)
       registerTerminalTool(server, options.interactiveShellManager)
   })
@@ -180,7 +185,8 @@ function registerDirectRuntime(
 ): void {
   registerStartHereTool(server)
   if (profile.tools.shell) {
-    registerBashTool(server)
+    registerBashTool(server, options.bashProcessManager)
+    if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
     if (options.interactiveShellManager)
       registerTerminalTool(server, options.interactiveShellManager)
   }

@@ -15,6 +15,7 @@ import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
 import { SubagentRuntime } from "../src/subagents/runtime.js"
 import { ToolboxRegistry } from "../src/toolbox/registry.js"
+import { BashProcessManager } from "../src/tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "../src/tools/shell/interactive-shell.js"
 import { WebPageOpener } from "../src/tools/web/web-open.js"
 
@@ -26,6 +27,9 @@ test("published OpenChatX schemas stay OpenAI-compatible", { timeout: 20_000 }, 
     const toolboxes = new ToolboxRegistry(join(REPOSITORY_ROOT, "toolboxes"))
     await toolboxes.reload()
     const terminal = new InteractiveShellManager(MCP_CONFIG.workspace, MCP_CONFIG.shell.path)
+    const bashProcesses = new BashProcessManager(
+      join(REPOSITORY_ROOT, ".tmp-schema-bash-processes")
+    )
     const externalMcp = emptyExternalMcpRegistry()
     const running = await startMcpHttpServer(
       {
@@ -33,6 +37,7 @@ test("published OpenChatX schemas stay OpenAI-compatible", { timeout: 20_000 }, 
           {
             toolboxRegistry: toolboxes,
             interactiveShellManager: terminal,
+            bashProcessManager: bashProcesses,
             externalMcp,
             webPageOpener: new WebPageOpener(),
             subagentRuntime: new SubagentRuntime({ providers: {}, models: {} }),
@@ -67,6 +72,7 @@ test("published OpenChatX schemas stay OpenAI-compatible", { timeout: 20_000 }, 
       await client.close().catch(() => undefined)
       await running.close()
       await terminal.close()
+      await bashProcesses.close()
       await externalMcp.close()
     }
   }

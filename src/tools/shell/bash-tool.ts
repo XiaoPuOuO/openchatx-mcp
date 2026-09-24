@@ -8,16 +8,17 @@ import { MCP_CONFIG } from "../../config.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import { tokenPrefix } from "../../tokenizer.js"
 import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
+import type { BashProcessManager } from "./bash-process-manager.js"
 import { prepareShellCommand } from "./rtk.js"
 
 const MAX_CAPTURE_BYTES = 1024 * 1024
 
-export function registerBashTool(server: McpServer): void {
+export function registerBashTool(server: McpServer, processManager?: BashProcessManager): void {
   server.registerTool(
     "bash",
     {
       description:
-        "Run a non-interactive shell command in a fresh zsh process. Use workdir explicitly when needed. For prompts, REPLs, menus, or TTY-only programs, use terminal instead.",
+        "Run a genuine non-interactive shell operation in a fresh zsh process. Use this for builds, tests, git, package managers, processes, networking, permissions, system commands, pipelines, or shell features that dedicated tools do not provide. Set keep=true for long-running non-interactive servers, watchers, or daemons that must remain alive after the tool call returns. OpenChatX captures kept-process stdout/stderr; use bash_process to list processes, read logs for debugging, or stop one. Do NOT use bash for ordinary file reading, editing, writing, filename discovery, or content search: use file_read, file_edit, file_write, glob, or grep instead. Shell rg is appropriate only when you need capabilities grep does not expose, such as match counts or specialized ripgrep flags. Use workdir explicitly when needed. For prompts, REPLs, menus, or TTY-only programs, use terminal instead.",
       inputSchema: z.object({
         command: z.string().min(1),
         workdir: z
@@ -29,7 +30,14 @@ export function registerBashTool(server: McpServer): void {
           .int()
           .min(1)
           .max(15 * 60_000)
-          .default(120_000),
+          .default(120_000)
+          .describe("Maximum runtime for normal commands. Ignored when keep=true."),
+        keep: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Keep a long-running command alive after this tool call returns. Use for servers, watchers, or other background processes. OpenChatX captures stdout/stderr so bash_process can read the logs later."
+          ),
         max_output_tokens: z
           .int()
           .min(1)
@@ -43,10 +51,24 @@ export function registerBashTool(server: McpServer): void {
         openWorldHint: true,
       },
     },
-    async ({ command, workdir, timeout_ms, max_output_tokens }, context) => {
+    async ({ command, workdir, timeout_ms, keep, max_output_tokens }, context) => {
       try {
         const cwd = resolveWorkdir(workdir)
         const executableCommand = prepareShellCommand(command, cwd, process.env)
+        if (keep) {
+          if (!processManager) throw new Error("Managed bash processes are not available.")
+          const kept = await processManager.start(executableCommand, cwd)
+          return {
+            structuredContent: {
+              cwd,
+              kept: true,
+              process_id: kept.id,
+              pid: kept.pid,
+              log_path: kept.logPath,
+            },
+            content: [],
+          }
+        }
         const result = await runCommand(executableCommand, cwd, timeout_ms, context.mcpReq.signal)
         const bounded = tokenPrefix(withApplyPatchToolHint(result.output), max_output_tokens)
         return {

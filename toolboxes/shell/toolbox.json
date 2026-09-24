@@ -8,6 +8,10 @@
       "enabled": true,
       "description": "Run a command in a fresh non-interactive zsh process."
     },
+    "bash_process": {
+      "enabled": true,
+      "description": "List, read logs from, or stop bash processes launched with keep=true."
+    },
     "terminal": {
       "enabled": true,
       "description": "Create, write, read, resize, or close an interactive pseudo-terminal."

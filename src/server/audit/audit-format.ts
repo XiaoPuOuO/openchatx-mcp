@@ -180,6 +180,7 @@ function formatBashArguments(
   const fields: string[] = []
   if (workdir) fields.push(workdir)
   pushExplicitNumberArgument(fields, argumentsRecord, "timeout_ms")
+  if (argumentsRecord.keep === true) fields.push("keep: true")
   pushExplicitNumberArgument(fields, argumentsRecord, "max_output_tokens")
   if (message) fields.push(message)
   if (command) fields.push(`command: |-\n${indentBlock(truncate(command, MAX_COMMAND_CHARS))}`)
@@ -209,6 +210,10 @@ function formatResponseSummary(toolName: string, summary: ToolResponseSummary): 
   if (toolName === "bash") {
     const parts = [
       typeof value.exit_code === "number" ? `exit_code=${value.exit_code}` : "",
+      value.kept === true ? "kept=true" : "",
+      typeof value.process_id === "string" ? `process_id=${yamlString(value.process_id)}` : "",
+      typeof value.pid === "number" ? `pid=${value.pid}` : "",
+      typeof value.log_path === "string" ? `log_path=${yamlString(value.log_path)}` : "",
       typeof value.cwd === "string" ? `cwd=${yamlString(value.cwd)}` : "",
       value.timed_out === true ? "timed_out=true" : "",
       value.output_truncated === true ? "output_truncated=true" : "",

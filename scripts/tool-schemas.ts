@@ -8,6 +8,7 @@ import { loadSubagentConfig } from "../src/subagents/config.js"
 import { SubagentRuntime } from "../src/subagents/runtime.js"
 import { countTokens, OUTPUT_TOKEN_ENCODING } from "../src/tokenizer.js"
 import { ToolboxRegistry } from "../src/toolbox/registry.js"
+import { BashProcessManager } from "../src/tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "../src/tools/shell/interactive-shell.js"
 import { WebPageOpener } from "../src/tools/web/web-open.js"
 
@@ -19,6 +20,7 @@ const interactiveShellManager = new InteractiveShellManager(
   MCP_CONFIG.workspace,
   MCP_CONFIG.shell.path
 )
+const bashProcessManager = new BashProcessManager()
 const subagentRuntime = new SubagentRuntime(loadSubagentConfig(MCP_CONFIG.subagents.configFile))
 const webPageOpener = new WebPageOpener()
 const running = await startMcpHttpServer(
@@ -27,6 +29,7 @@ const running = await startMcpHttpServer(
       externalMcp,
       toolboxRegistry,
       interactiveShellManager,
+      bashProcessManager,
       webPageOpener,
       subagentRuntime,
     }),
@@ -62,6 +65,7 @@ try {
   await running.close()
   await Promise.allSettled([
     interactiveShellManager.close(),
+    bashProcessManager.close(),
     toolboxRegistry.close(),
     externalMcp.close(),
   ])

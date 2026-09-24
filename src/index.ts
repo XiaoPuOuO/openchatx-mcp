@@ -11,6 +11,7 @@ import { startMcpHttpServer } from "./server/http-server.js"
 import { loadSubagentConfig } from "./subagents/config.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
+import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
 
@@ -29,6 +30,7 @@ const interactiveShellManager = new InteractiveShellManager(
   MCP_CONFIG.workspace,
   MCP_CONFIG.shell.path
 )
+const bashProcessManager = new BashProcessManager()
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -37,6 +39,7 @@ try {
       externalMcp,
       toolboxRegistry,
       interactiveShellManager,
+      bashProcessManager,
       webPageOpener,
       subagentRuntime,
     }),
@@ -76,6 +79,7 @@ const shutdown = async (signal: string) => {
 async function closeRuntimeServices(): Promise<void> {
   await Promise.allSettled([
     interactiveShellManager.close(),
+    bashProcessManager.close(),
     externalMcp.close(),
     toolboxRegistry.close(),
   ])

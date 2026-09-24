@@ -17,7 +17,7 @@ export function registerSearchTools(server: McpServer): void {
     "glob",
     {
       description:
-        "Find files by glob pattern without invoking a shell. Returns up to 100 absolute paths, newest modified first.",
+        "Fast file/path discovery by glob pattern without invoking a shell. Use this when you need to find files by name or path pattern, or when you are unsure of the exact path before calling file_read. Do not use bash find or ls -R for ordinary file discovery. Returns up to 100 absolute paths, newest modified first.",
       inputSchema: z.object({
         pattern: z.string().min(1).describe('Glob pattern such as "**/*.ts" or "src/**/*.tsx".'),
         path: z
@@ -92,7 +92,7 @@ export function registerSearchTools(server: McpServer): void {
     "grep",
     {
       description:
-        "Search file contents using a regular expression without invoking a shell. Supports an optional glob include filter and returns up to 100 matches.",
+        "Fast content search across files using a regular expression. Use this when you need to find files containing specific text or code patterns; use include to restrict file types. Do not use shell grep or rg for ordinary content search. If you specifically need match counts, aggregation, or ripgrep flags this tool does not expose, use bash with rg. Returns up to 100 matches with file paths and line numbers.",
       inputSchema: z.object({
         pattern: z.string().min(1).describe("Regular expression to search for."),
         path: z
