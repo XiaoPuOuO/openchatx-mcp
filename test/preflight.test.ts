@@ -18,7 +18,7 @@ test("requires Node.js 22.18.0 or newer", () => {
   assert.equal(isSupportedNodeVersion("23.0.0"), true)
 })
 
-test("supports Apple Silicon and Intel Macs", () => {
+test("supports arm64 and x64 hosts", () => {
   assert.equal(isSupportedArchitecture("arm64"), true)
   assert.equal(isSupportedArchitecture("x64"), true)
   assert.equal(isSupportedArchitecture("ia32"), false)
@@ -41,6 +41,7 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
     "scripts/preflight.ts",
     "scripts/workspace-setup.ts",
     "src/config.ts",
+    "src/host-platform.ts",
     "src/public-config.cts",
     "skills/create-skill/SKILL.md",
   ]) {

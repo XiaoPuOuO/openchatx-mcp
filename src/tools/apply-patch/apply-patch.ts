@@ -20,6 +20,10 @@ const DEFAULT_APPLY_PATCH_BINARY = fileURLToPath(
   new URL("../../../vendor/apply-patch/apply_patch", import.meta.url)
 )
 
+export function isApplyPatchSupported(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "darwin"
+}
+
 export function registerApplyPatchTool(server: McpServer): void {
   server.registerTool(
     "apply_patch",

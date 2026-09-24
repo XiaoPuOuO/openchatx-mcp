@@ -1,6 +1,6 @@
 ---
 name: install-openchatx-mcp
-description: Install and verify openchatx-mcp on macOS, including ngrok, PM2, ChatGPT Developer Mode, MCP servers, and the local dashboard.
+description: Install and verify openchatx-mcp on macOS or native Windows, including ngrok, PM2, ChatGPT Developer Mode, MCP servers, and the local dashboard.
 ---
 
 # Install openchatx-mcp
@@ -16,9 +16,10 @@ Install openchatx-mcp collaboratively with the human. Inspect the current machin
 
 ## Requirements
 
-- macOS on Apple Silicon or Intel.
+- macOS on Apple Silicon or Intel, or native Windows 10/11 (no WSL required).
 - Node.js 22.18.0 or newer.
 - npm and git.
+- ripgrep (`rg`).
 - ngrok when remote ChatGPT access is desired.
 - ChatGPT Developer Mode for the custom MCP connection.
 
@@ -66,7 +67,7 @@ enabled = false
 
 ## Start managed services
 
-The first managed start should come from the human's intended Terminal.app session:
+The first managed start should come from the human's intended external terminal session (Terminal.app on macOS, PowerShell/Windows Terminal on Windows):
 
 ```bash
 npm start

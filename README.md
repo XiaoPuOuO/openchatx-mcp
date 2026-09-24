@@ -10,19 +10,19 @@
 
 <p align="center">
   <strong>Turn ChatGPT into a local agent runtime.</strong><br>
-  Operate your Mac, use local tools, discover MCP servers, and delegate work to your own models through one MCP connection.
+  Operate your computer, use local tools, discover MCP servers, and delegate work to your own models through one MCP connection.
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="macOS">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="macOS and Windows">
 </p>
 
 > [!NOTE]
 > OpenChatX runs inside a normal ChatGPT conversation and does not use Codex as its execution backend. OpenChatX itself therefore does not consume Codex task usage; your ChatGPT plan, message limits, and other usage policies still apply and may change over time.
 
 > [!CAUTION]
-> openchatx-mcp runs with the permissions of your local macOS user. An authorized ChatGPT caller can run commands, edit files, fetch webpages, and control connected tools and applications.
+> openchatx-mcp runs with the permissions of your local operating-system user. An authorized ChatGPT caller can run commands, edit files, fetch webpages, and control connected tools and applications.
 
 ![openchatx-mcp architecture](docs/assets/openchatx-mcp-architecture.png)
 
@@ -30,7 +30,9 @@
 
 ChatGPT is the planner. OpenChatX gives it hands.
 
-- **Local execution** — run shell commands, edit files, inspect images, and use an interactive terminal on your Mac.
+I use AI agents heavily for real development work, and I once burned through 100% of my Pro 20x Codex Weekly Usage in about half a day. I did not want my entire workflow tied to the usage limits of a single agent runtime, so I built OpenChatX: ChatGPT can work directly with my local machine, tools, MCP servers, and models from a normal conversation instead of requiring Codex as the execution backend.
+
+- **Local execution** — run shell commands, edit files, inspect images, and use an interactive terminal on macOS or native Windows.
 - **MCP aggregation** — connect local stdio and remote HTTP MCP servers behind one ChatGPT connection.
 - **Capability discovery** — ChatGPT knows Blender, Unreal, browser automation, and other capabilities exist without loading every tool schema into context.
 - **Toolboxes** — add your own TypeScript tools and reusable skills as folder-backed plugins.
@@ -41,11 +43,14 @@ External MCP tools and custom toolbox tools stay lazy. `start_here` exposes a li
 
 ## Requirements
 
-- macOS on Apple Silicon or Intel
+- macOS on Apple Silicon or Intel, or native Windows 10/11
 - Node.js 22.18.0 or newer
 - npm
+- ripgrep (`rg`)
 - [ngrok](https://ngrok.com/) account and CLI
 - ChatGPT with Developer Mode / custom MCP support available for your account or workspace
+
+Windows runs natively; WSL is not required. OpenChatX prefers PowerShell 7 (`pwsh.exe`) and falls back to Windows PowerShell (`powershell.exe`) when `pwsh` is unavailable. The vendored `apply_patch` binary is currently macOS-only; on Windows the normal `file_read` / `file_edit` / `file_write` workflow remains available.
 
 Computer Use is intentionally kept outside the core runtime and can be connected as an external MCP.
 
@@ -59,8 +64,11 @@ Use the bundled install skill:
 
 ### Manual install
 
+macOS:
+
 ```bash
 brew install --cask ngrok
+brew install ripgrep
 git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
 cd openchatx-mcp
 npm ci
@@ -72,7 +80,23 @@ npm run setup
 npm start
 ```
 
-Run the first setup from Terminal.app so macOS permissions are granted in a normal interactive session.
+Windows PowerShell:
+
+```powershell
+winget install Ngrok.Ngrok
+winget install BurntSushi.ripgrep.MSVC
+git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+Set-Location openchatx-mcp
+npm ci
+
+ngrok config add-authtoken <your-token>
+
+npm run setup -- --config-only
+npm run setup
+npm start
+```
+
+Run the first setup from a normal external terminal (Terminal.app on macOS or PowerShell/Windows Terminal on Windows) so the managed runtime inherits the expected host permissions and environment.
 
 ### Add OpenChatX to ChatGPT
 
@@ -143,18 +167,13 @@ ChatGPT then calls only the discovered tool through `tool_call`. This keeps the 
 
 ## External MCP servers
 
-Fresh installs start with no external MCP servers configured. Add them from the Dashboard or create the gitignored `mcp-servers.json`.
+Want to connect Blender, browser automation, another local app, or a remote MCP server? Just ask ChatGPT to connect it for you.
 
-```json
-{
-  "open-computer-use": {
-    "type": "local",
-    "command": ["/opt/homebrew/bin/open-computer-use", "mcp"],
-    "enabled": true,
-    "description": "macOS GUI control"
-  }
-}
-```
+For example:
+
+> Add this MCP server to OpenChatX and verify that it works.
+
+ChatGPT can inspect the server's setup instructions, configure it through OpenChatX, and verify the connection. You can also manage MCP servers manually from the Dashboard if you prefer.
 
 Unavailable servers do not prevent OpenChatX from starting; they stay visible in the capability catalog as configured but unavailable.
 
@@ -176,22 +195,21 @@ Configure profiles from the Dashboard or in the gitignored `subagents.json`.
 - `subagent_list` — list curated profiles and their intended use.
 - `subagent_run` — delegate one task to one selected profile.
 
-## Toolboxes
+## Custom tools
 
-Toolboxes are folder-backed plugins under `toolboxes/`:
+Need a tool that OpenChatX does not have yet? Ask ChatGPT to build it for you.
 
-```text
-toolboxes/
-└── my-tools/
-    ├── toolbox.json
-    ├── tools/
-    │   └── hello.ts
-    └── skills/
-        └── debug-app/
-            └── SKILL.md
-```
+For example:
 
-The Dashboard can enable or disable toolboxes, tools, and skills, and create starter templates. Custom tools are discovered lazily through `tool_search` and called through `tool_call`.
+> Create an OpenChatX tool that starts my game server and returns its status.
+
+or:
+
+> Make a tool that talks to my local API and lets you query projects.
+
+ChatGPT can create the toolbox, write the TypeScript tool, test it, and make it available to future conversations. You do not need to hand-write plugin files or schemas yourself.
+
+Custom tools stay lazily discoverable through OpenChatX, so adding your own tools does not bloat the normal ChatGPT tool context. The Dashboard is still available when you want to enable, disable, or inspect them manually.
 
 ## File workflow
 
@@ -228,7 +246,7 @@ The Dashboard is always available at `/ui`.
 | --- | --- |
 | `npm start` | Build and start/reload OpenChatX and ngrok |
 | `npm run restart` | Rebuild and reload services |
-| `npm run restart -- --hard` | Rebuild and recreate the dedicated PM2 daemon from Terminal.app |
+| `npm run restart -- --hard` | Rebuild and recreate the dedicated PM2 daemon from an external terminal |
 | `npm run status` | Show service status |
 | `npm run logs` | Show service logs |
 | `npm run print-url` | Print the public MCP URL and local UI URL |

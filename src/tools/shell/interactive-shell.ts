@@ -8,6 +8,7 @@ import * as pty from "node-pty"
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
+import { interactiveReadyCommand, interactiveShellArgs } from "../../host-platform.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import { createTranscriptBuffer, type TranscriptBuffer } from "./transcript.js"
 
@@ -15,7 +16,7 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/u
 const MAX_INTERACTIVE_SESSIONS = 4
 const DEFAULT_WAIT_MS = 500
 const MAX_WAIT_MS = 30_000
-const READY_PROMPT = "__OPENCHATX_READY__ "
+const READY_PROMPT = "__OPENCHATX_READY__"
 const ESC = String.fromCharCode(27)
 const ANSI_ESCAPE_RE = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, "gu")
 const OUTPUT_QUIET_MS = 60
@@ -72,13 +73,9 @@ export class InteractiveShellManager {
     const cwdInfo = await stat(cwd)
     if (!cwdInfo.isDirectory()) throw new Error(`Interactive shell cwd is not a directory: ${cwd}`)
 
-    const terminal = pty.spawn(this.shellPath, ["-f"], {
+    const terminal = pty.spawn(this.shellPath, interactiveShellArgs(), {
       cwd,
-      env: {
-        ...stringEnvironment(process.env),
-        PS1: READY_PROMPT,
-        PROMPT: READY_PROMPT,
-      },
+      env: stringEnvironment(process.env),
       name: process.env.TERM || "xterm-256color",
       cols: 120,
       rows: 30,
@@ -95,6 +92,7 @@ export class InteractiveShellManager {
     this.sessions.set(input.sessionId, session)
     wireSession(session)
 
+    terminal.write(`${interactiveReadyCommand()}\r`)
     await waitForPrompt(session, input.signal)
     const cursor = input.command ? session.transcript.end : 0
     if (input.command) {

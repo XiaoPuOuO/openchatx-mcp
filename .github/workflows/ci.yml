@@ -37,3 +37,21 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  windows:
+    name: validate (windows-x64)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - run: npm run setup -- --config-only
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Windows platform tests
+        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/setup-workspace.test.ts test/schema-compatibility.test.ts

@@ -21,7 +21,7 @@ async function runStartup(
   } = {}
 ) {
   const root = await realpath(await tempDir(t, "shellby-start-"))
-  for (const directory of ["scripts", "src", "bin", "node_modules/.bin"])
+  for (const directory of ["scripts", "src", "bin", "node_modules/pm2/bin"])
     await mkdir(join(root, directory), { recursive: true })
   await writeFile(join(root, "package.json"), '{"type":"module"}\n')
   await copyFile(new URL("../scripts/start.ts", import.meta.url), join(root, "scripts", "start.ts"))
@@ -47,7 +47,7 @@ export function printPreflightErrors() {}`
 
   for (const [command, path] of [
     ["npm", "bin/npm"],
-    ["pm2", "node_modules/.bin/pm2"],
+    ["pm2", "node_modules/pm2/bin/pm2"],
   ]) {
     await writeFile(
       join(root, path!),
@@ -223,7 +223,7 @@ test("hard restart inside OpenChatX fails before build or shutdown", async (t) =
     fromOpenChatX: true,
   })
   assert.equal(result.status, 1)
-  assert.match(result.stderr, /healthy Terminal.app session/u)
+  assert.match(result.stderr, /healthy external terminal session/u)
   assert.deepEqual(calls, [])
   assert.equal(await readFile(join(root, "agent-commands.yaml"), "utf8"), "previous audit\n")
 })

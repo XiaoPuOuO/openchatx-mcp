@@ -17,7 +17,8 @@ function ngrokConfigFiles(config, repositoryRoot, executable) {
   const configured = config.state_dir
   let stateDir
   if (configured === "~") stateDir = homedir()
-  else if (configured.startsWith("~/")) stateDir = join(homedir(), configured.slice(2))
+  else if (configured.startsWith("~/") || configured.startsWith("~\\"))
+    stateDir = join(homedir(), configured.slice(2))
   else stateDir = resolve(repositoryRoot, configured)
   const overridePath = join(stateDir, "ngrok-agent.json")
   const address = { web_addr: `127.0.0.1:${config.ngrok.api_port}` }

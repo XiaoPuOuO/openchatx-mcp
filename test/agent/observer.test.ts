@@ -28,6 +28,58 @@ test("tracks current and recent tool activity for one agent", () => {
   assert.equal(snapshot?.recent[0]?.finishedAt, 1_500)
 })
 
+test("completed file edits expose the resulting diff for the dashboard", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "edit" }
+
+  const callId = observer.startTool(agent, "file_edit", {
+    filePath: "/tmp/example.ts",
+    oldString: "const before = true",
+    newString: "const after = true",
+  })
+  observer.finishTool(agent, callId, {
+    structuredContent: {
+      path: "/tmp/example.ts",
+      replacements: 1,
+      diff: "--- before\n+++ after\n@@\n-const before = true\n+const after = true",
+    },
+  })
+
+  assert.deepEqual(
+    {
+      resultDetail: observer.listAgents()[0]?.recent[0]?.resultDetail,
+      resultDetailLanguage: observer.listAgents()[0]?.recent[0]?.resultDetailLanguage,
+    },
+    {
+      resultDetail: "--- before\n+++ after\n@@\n-const before = true\n+const after = true",
+      resultDetailLanguage: "diff",
+    }
+  )
+})
+
+test("completed file writes expose the resulting diff for the dashboard", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "write" }
+
+  const callId = observer.startTool(agent, "file_write", {
+    filePath: "/tmp/new.ts",
+    content: "export const value = 1\n",
+  })
+  observer.finishTool(agent, callId, {
+    structuredContent: {
+      path: "/tmp/new.ts",
+      created: true,
+      diff: "--- before\n+++ after\n@@\n+export const value = 1",
+    },
+  })
+
+  assert.equal(
+    observer.listAgents()[0]?.recent[0]?.resultDetail,
+    "--- before\n+++ after\n@@\n+export const value = 1"
+  )
+  assert.equal(observer.listAgents()[0]?.recent[0]?.resultDetailLanguage, "diff")
+})
+
 test("queues and delivers steering instructions once", () => {
   let timestamp = 2_000
   const observer = createAgentObserver(() => timestamp)

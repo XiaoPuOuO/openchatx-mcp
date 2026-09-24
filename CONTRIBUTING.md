@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for improving Shellby MCP.
+Thanks for improving OpenChatX.
 
 ## Development
 
-Shellby MCP currently targets macOS on Apple Silicon or Intel and Node.js 22.13.0 or newer.
+OpenChatX targets macOS and native Windows on arm64/x64 with Node.js 22.18.0 or newer.
 
 ```bash
 npm ci

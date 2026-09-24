@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import process from "node:process"
 
 import { parse } from "smol-toml"
 import { z } from "zod"
@@ -17,7 +18,11 @@ const publicConfigSchema = z.object({
   port: z.number().int().min(1).max(65535).default(3333),
   workspace: z.string().trim().min(1).default("~/Desktop/agent-workspace"),
   shell: z.object({
-    path: z.string().trim().min(1).default("/bin/zsh"),
+    path: z
+      .string()
+      .trim()
+      .min(1)
+      .default(process.platform === "win32" ? "pwsh.exe" : "/bin/zsh"),
     rtk: z.boolean().default(false),
   }),
   ngrok: z.object({

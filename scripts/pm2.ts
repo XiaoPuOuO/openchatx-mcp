@@ -10,7 +10,7 @@ const pm2Args: string[] = process.argv.slice(2)
 // openchatx-mcp uses an installation-specific PM2 home so separate configured state roots stay isolated.
 const result = spawnSync(
   process.execPath,
-  [join(repoRoot, "node_modules", ".bin", "pm2"), ...pm2Args],
+  [join(repoRoot, "node_modules", "pm2", "bin", "pm2"), ...pm2Args],
   {
     cwd: repoRoot,
     env: { ...process.env, PM2_HOME: join(MCP_CONFIG.stateDir, "pm2") },

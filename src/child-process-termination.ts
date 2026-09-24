@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process"
-import process from "node:process"
+import { signalProcessTree } from "./host-platform.js"
 
 export type ProcessGroupTerminationResult = "child_exited" | "grace_elapsed" | "cancelled"
 
@@ -23,8 +23,7 @@ export interface ProcessGroupTerminationOptions {
 export function signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   if (!child.pid) return
   try {
-    if (process.platform === "win32") child.kill(signal)
-    else process.kill(-child.pid, signal)
+    signalProcessTree(child.pid, signal)
   } catch {
     // Best effort: callers decide how failed cleanup affects their own lifecycle.
   }

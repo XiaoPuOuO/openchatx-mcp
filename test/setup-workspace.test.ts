@@ -4,6 +4,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import { initializeOpenChatXConfig, initializeWorkspace } from "../scripts/workspace-setup.js"
+import { defaultShellPath } from "../src/host-platform.js"
 import { loadPublicConfig } from "../src/public-config.cjs"
 import { SkillCatalog } from "../src/tools/skills/skill-catalog.js"
 import { tempDir } from "./helpers/temp.js"
@@ -48,7 +49,7 @@ test("setup creates all defaults and preserves existing partial configs", async 
   const scaffold = loadPublicConfig(initial.configPath)
   assert.equal(scaffold.state_dir, "~/.openchatx-mcp")
   assert.equal(scaffold.workspace, "~/Desktop/agent-workspace")
-  assert.deepEqual(scaffold.shell, { path: "/bin/zsh", rtk: false })
+  assert.deepEqual(scaffold.shell, { path: defaultShellPath(), rtk: false })
   assert.deepEqual(scaffold.mcp, { tool_output: "compact" })
   assert.equal(scaffold.tools.file_read, true)
   assert.equal(scaffold.tools.file_write, true)

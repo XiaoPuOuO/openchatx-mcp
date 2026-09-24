@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { dirname } from "node:path"
+import process from "node:process"
 
 import { MCP_CONFIG } from "../../config.js"
 
@@ -8,6 +9,7 @@ const REWRITE_MAX_BUFFER_BYTES = 256 * 1024
 const TRAILING_NEWLINE_RE = /\r?\n$/u
 
 export function prepareShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv): string {
+  if (process.platform === "win32") return command
   const executable = MCP_CONFIG.shell.rtkExecutable
   if (!MCP_CONFIG.shell.rtk || !executable) return command
 

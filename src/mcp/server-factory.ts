@@ -5,7 +5,7 @@ import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
-import { registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
+import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
 import { registerCatalogTools } from "../tools/catalog/catalog-tools.js"
 import {
   registerFileEditTool,
@@ -129,7 +129,7 @@ function registerToolboxRuntime(
       registerTerminalTool(server, options.interactiveShellManager)
   })
   registerBuiltinToolbox(server, registry, "files", () => {
-    registerApplyPatchTool(server)
+    if (isApplyPatchSupported()) registerApplyPatchTool(server)
     registerFileReadTool(server)
     registerFileWriteTool(server)
     registerFileEditTool(server)
@@ -190,7 +190,7 @@ function registerDirectRuntime(
     if (options.interactiveShellManager)
       registerTerminalTool(server, options.interactiveShellManager)
   }
-  if (profile.tools.applyPatch) registerApplyPatchTool(server)
+  if (profile.tools.applyPatch && isApplyPatchSupported()) registerApplyPatchTool(server)
   if (profile.tools.fileRead) registerFileReadTool(server)
   if (profile.tools.fileWrite) registerFileWriteTool(server)
   if (profile.tools.fileWrite) registerFileEditTool(server)

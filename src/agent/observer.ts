@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events"
 
 import type { AgentIdentity } from "./context.js"
-import { presentToolCall } from "./tool-call-presentation.js"
+import { presentToolCall, presentToolResult } from "./tool-call-presentation.js"
 
 type AgentCallStatus = "running" | "completed" | "failed"
 
@@ -11,6 +11,8 @@ interface AgentCallSnapshot {
   summary: string
   detail?: string
   detailLanguage?: string
+  resultDetail?: string
+  resultDetailLanguage?: string
   startedAt: number
   finishedAt?: number
   status: AgentCallStatus
@@ -46,7 +48,7 @@ interface AgentObserverEvent {
 export interface AgentObserver {
   listAgents(): AgentSnapshot[]
   startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
-  finishTool(agent: AgentIdentity | undefined, callId: string | undefined): void
+  finishTool(agent: AgentIdentity | undefined, callId: string | undefined, result?: unknown): void
   failTool(agent: AgentIdentity | undefined, callId: string | undefined): void
   queueInstruction(agentId: string, message: string): AgentInstructionSnapshot | undefined
   cancelInstruction(agentId: string, instructionId: string): boolean
@@ -128,7 +130,8 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   function settleTool(
     identity: AgentIdentity | undefined,
     callId: string | undefined,
-    status: "completed" | "failed"
+    status: "completed" | "failed",
+    result?: unknown
   ): void {
     if (!identity || !callId) return
     const agent = agentsBySession.get(identity.sessionId)
@@ -136,7 +139,12 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     if (!agent || !activeCall) return
     const timestamp = now()
     agent.taskSlug = identity.taskSlug
-    const call: AgentCallSnapshot = { ...activeCall, status, finishedAt: timestamp }
+    const call: AgentCallSnapshot = {
+      ...activeCall,
+      ...(status === "completed" ? presentToolResult(activeCall.tool, result) : {}),
+      status,
+      finishedAt: timestamp,
+    }
     agent.activeCalls.delete(callId)
     agent.current = latestActiveCall(agent.activeCalls)
     agent.recent = [call, ...agent.recent].slice(0, MAX_RECENT_CALLS)
@@ -199,7 +207,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   return {
     listAgents,
     startTool,
-    finishTool: (agent, callId) => settleTool(agent, callId, "completed"),
+    finishTool: (agent, callId, result) => settleTool(agent, callId, "completed", result),
     failTool: (agent, callId) => settleTool(agent, callId, "failed"),
     queueInstruction,
     cancelInstruction,

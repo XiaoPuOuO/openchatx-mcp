@@ -4,7 +4,10 @@
   "enabled": true,
   "builtin": "files",
   "tools": {
-    "apply_patch": { "enabled": true, "description": "Apply structured patches to local files." },
+    "apply_patch": {
+      "enabled": true,
+      "description": "Apply structured patches to local files when supported by the host."
+    },
     "file_read": {
       "enabled": true,
       "description": "Read files or directories with OpenCode-style text pagination and native media transport."

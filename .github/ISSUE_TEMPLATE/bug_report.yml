@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem with Shellby MCP
+description: Report a reproducible problem with OpenChatX
 title: "[Bug]: "
 labels:
   - bug
@@ -30,10 +30,10 @@ body:
       required: true
 
   - type: input
-    id: macos
+    id: os
     attributes:
-      label: macOS version
-      placeholder: "15.x"
+      label: Operating system
+      placeholder: "macOS 15.x or Windows 11 24H2"
     validations:
       required: true
 

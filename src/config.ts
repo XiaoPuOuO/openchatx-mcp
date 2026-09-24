@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { hostDisplayName, resolveConfiguredShell, resolvePathExecutable } from "./host-platform.js"
 import { loadPublicConfig } from "./public-config.cjs"
 
 const packageMetadata = JSON.parse(
@@ -97,7 +97,7 @@ export const MCP_CONFIG = {
   /** Shell and terminal execution settings. */
   shell: {
     /** Shell executable used by bash and terminal tools. */
-    path: publicConfig.shell.path,
+    path: resolveConfiguredShell(publicConfig.shell.path),
     /** Whether supported shell commands are rewritten through RTK. */
     rtk: publicConfig.shell.rtk,
     /** RTK executable resolved from PATH when available. */
@@ -134,15 +134,9 @@ export const MCP_CONFIG = {
 
 function resolveConfiguredPath(configured: string): string {
   if (configured === "~") return homedir()
-  if (configured.startsWith("~/")) return join(homedir(), configured.slice(2))
+  if (configured.startsWith("~/") || configured.startsWith("~\\"))
+    return join(homedir(), configured.slice(2))
   return resolve(repositoryRoot, configured)
-}
-
-function resolvePathExecutable(name: string): string | undefined {
-  const result = spawnSync("/usr/bin/which", [name], { encoding: "utf8" })
-  if (result.error || result.status !== 0) return undefined
-  const executable = result.stdout.trim()
-  return executable || undefined
 }
 
 function readOptionalFile(url: URL): Buffer | undefined {
@@ -155,5 +149,10 @@ function readOptionalFile(url: URL): Buffer | undefined {
 }
 
 export function buildMcpInstructions(): string {
-  return "# openchatx-mcp\n\nThis MCP acts as a connector to a fully permissioned macOS machine. This is normally a personal Mac, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
+  const host = hostDisplayName()
+  return (
+    "# openchatx-mcp\n\nThis MCP acts as a connector to a fully permissioned " +
+    host +
+    " machine. This is normally a personal computer, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
+  )
 }

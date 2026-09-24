@@ -5,6 +5,12 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
+import {
+  isSupportedHostPlatform,
+  resolveConfiguredShell,
+  resolvePathExecutable,
+  shellCommandArgs,
+} from "../src/host-platform.js"
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url))
 
@@ -13,33 +19,60 @@ export interface PublicRuntimeCheck {
   pm2Path: string
 }
 
-export async function checkPublicRuntime(ngrokEnabled = true): Promise<PublicRuntimeCheck> {
+export async function checkPublicRuntime(
+  ngrokEnabled = true,
+  shellPath?: string,
+  platform: NodeJS.Platform = process.platform
+): Promise<PublicRuntimeCheck> {
   const errors: string[] = []
 
-  if (process.platform !== "darwin") {
-    errors.push("This release supports macOS only.")
+  if (!isSupportedHostPlatform(platform)) {
+    errors.push("This release supports macOS and native Windows only.")
   }
   if (!isSupportedArchitecture(process.arch)) {
-    errors.push("This release supports Apple Silicon and Intel Macs only.")
+    errors.push("This release supports arm64 and x64 hosts only.")
   }
 
   if (!isSupportedNodeVersion(process.versions.node)) {
     errors.push(`Node.js 22.18.0+ is required. Current version: ${process.versions.node}.`)
   }
 
-  const pm2Path = join(repoRoot, "node_modules", ".bin", "pm2")
+  const pm2Path = join(repoRoot, "node_modules", "pm2", "bin", "pm2")
   try {
-    await access(pm2Path, constants.X_OK)
+    await access(pm2Path, platform === "win32" ? constants.F_OK : constants.X_OK)
   } catch {
     errors.push("Local dependencies are missing. Run `npm ci` first.")
   }
 
+  if (shellPath) {
+    const executable = resolveConfiguredShell(shellPath, platform)
+    const shellCheck = spawnSync(
+      executable,
+      shellCommandArgs(
+        platform === "win32"
+          ? 'Write-Output "__OPENCHATX_SHELL_OK__"'
+          : "printf '__OPENCHATX_SHELL_OK__\\n'",
+        platform
+      ),
+      { encoding: "utf8", windowsHide: true }
+    )
+    if (shellCheck.error || shellCheck.status !== 0) {
+      errors.push(
+        `Configured shell could not run: ${executable}. On Windows install PowerShell 7 (pwsh) or use powershell.exe.`
+      )
+    }
+  }
+
   if (!ngrokEnabled) return { errors, pm2Path }
 
-  const ngrokExecutable = "ngrok"
+  const ngrokExecutable = resolvePathExecutable("ngrok", platform) ?? "ngrok"
   const ngrokVersion = spawnSync(ngrokExecutable, ["version"], { encoding: "utf8" })
   if (hasErrorCode(ngrokVersion.error, "ENOENT")) {
-    errors.push("ngrok is not installed. Install it with `brew install --cask ngrok`.")
+    errors.push(
+      platform === "win32"
+        ? "ngrok is not installed. Install it with `winget install Ngrok.Ngrok`."
+        : "ngrok is not installed. Install it with `brew install --cask ngrok`."
+    )
   } else if (ngrokVersion.status !== 0) {
     errors.push(
       `ngrok could not run${ngrokVersion.stderr?.trim() ? `: ${ngrokVersion.stderr.trim()}` : "."}`
@@ -62,6 +95,8 @@ export function isSupportedArchitecture(arch: string): boolean {
 
 export function checkRtkRuntime(enabled: boolean, executable?: string): string | undefined {
   if (!enabled) return
+  if (process.platform === "win32")
+    return "RTK shell rewriting is not supported on Windows yet. Set `shell.rtk = false`."
   if (!executable)
     return "RTK is enabled but not installed. Install it with `brew install rtk`, then restart openchatx-mcp."
 
@@ -100,7 +135,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { loadPublicConfig, DEFAULT_PUBLIC_CONFIG } = await import("../src/public-config.cjs")
   const configPath = join(repoRoot, ".openchatx", "config.toml")
   const config = existsSync(configPath) ? loadPublicConfig(configPath) : DEFAULT_PUBLIC_CONFIG
-  const { errors } = await checkPublicRuntime(config.ngrok.enabled)
+  const { errors } = await checkPublicRuntime(config.ngrok.enabled, config.shell.path)
   if (errors.length > 0) {
     printPreflightErrors(errors)
     process.exitCode = 1
@@ -111,7 +146,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
 function expandHome(value: string): string {
   if (value === "~") return homedir()
-  if (value.startsWith("~/")) return join(homedir(), value.slice(2))
+  if (value.startsWith("~/") || value.startsWith("~\\")) return join(homedir(), value.slice(2))
   return value
 }
 

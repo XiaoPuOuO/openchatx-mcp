@@ -6,7 +6,7 @@
   "tools": {
     "bash": {
       "enabled": true,
-      "description": "Run a command in a fresh non-interactive zsh process."
+      "description": "Run a command in a fresh non-interactive host shell (zsh on macOS, PowerShell on Windows)."
     },
     "bash_process": {
       "enabled": true,

@@ -14,12 +14,12 @@ const restarting = process.argv.includes("--restart") || hardRestart
 
 if (hardRestart && process.env.name === "openchatx-mcp" && process.env.pm_exec_path) {
   console.error(
-    "A hard restart must run from a healthy Terminal.app session because it replaces PM2 itself. Use `npm run restart` inside openchatx-mcp."
+    "A hard restart must run from a healthy external terminal session because it replaces PM2 itself. Use `npm run restart` inside openchatx-mcp."
   )
   process.exit(1)
 }
 
-const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled)
+const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled, MCP_CONFIG.shell.path)
 const rtkError = checkRtkRuntime(MCP_CONFIG.shell.rtk, MCP_CONFIG.shell.rtkExecutable)
 if (rtkError) errors.push(rtkError)
 
@@ -36,9 +36,10 @@ try {
   process.exit(1)
 }
 
-run("npm", ["run", "build"])
+if (process.platform === "win32") run("cmd.exe", ["/d", "/s", "/c", "npm", "run", "build"])
+else run("npm", ["run", "build"])
 if (hardRestart) {
-  // Only a hard restart replaces the daemon's inherited macOS service context.
+  // Only a hard restart replaces the daemon's inherited host service context.
   run(process.execPath, ["--import", "tsx", pm2Script, "kill"])
 }
 if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })

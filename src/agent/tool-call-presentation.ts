@@ -4,6 +4,8 @@ export interface ToolCallPresentation {
   summary: string
   detail?: string
   detailLanguage?: string
+  resultDetail?: string
+  resultDetailLanguage?: string
 }
 
 /** Build the local dashboard presentation for one tool call without exposing observer state. */
@@ -12,6 +14,22 @@ export function presentToolCall(tool: string, input: unknown): ToolCallPresentat
     summary: summarizeTool(tool, input),
     ...formatToolDetail(tool, input),
   }
+}
+
+export function presentToolResult(
+  tool: string,
+  result: unknown
+): Pick<ToolCallPresentation, "resultDetail" | "resultDetailLanguage"> {
+  const record = asRecord(result)
+  const structured = record ? asRecord(record.structuredContent) : undefined
+  if (
+    (tool === "file_edit" || tool === "file_write") &&
+    structured &&
+    typeof structured.diff === "string"
+  ) {
+    return { resultDetail: structured.diff, resultDetailLanguage: "diff" }
+  }
+  return {}
 }
 
 function summarizeTool(tool: string, input: unknown): string {

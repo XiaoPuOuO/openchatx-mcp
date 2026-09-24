@@ -42,7 +42,7 @@ note("Configuration", formatConfigPath(config))
 const { MCP_CONFIG } = await import("../src/config.js")
 
 const prerequisiteStep = spinner("Checking prerequisites")
-const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled)
+const { errors } = await checkPublicRuntime(MCP_CONFIG.ngrok.enabled, MCP_CONFIG.shell.path)
 if (errors.length > 0) {
   prerequisiteStep.fail("Prerequisites need attention")
   failure("Setup cannot continue", errors)
@@ -62,7 +62,12 @@ const workspace = await initializeWorkspace(MCP_CONFIG.workspace)
 workspaceStep.succeed(workspace.created ? "Agent workspace created" : "Agent workspace ready")
 note("Workspace", workspace.agentsPath)
 
-await commandStep("Building openchatx-mcp", "Build ready", "npm", ["run", "build"])
+await commandStep(
+  "Building openchatx-mcp",
+  "Build ready",
+  process.platform === "win32" ? "cmd.exe" : "npm",
+  process.platform === "win32" ? ["/d", "/s", "/c", "npm", "run", "build"] : ["run", "build"]
+)
 
 outro(["Run `npm start` to launch openchatx-mcp."])
 

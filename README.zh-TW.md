@@ -10,19 +10,19 @@
 
 <p align="center">
   <strong>把 ChatGPT 變成真正的本機 Agent Runtime。</strong><br>
-  讓 ChatGPT 直接操作你的 Mac、使用本機工具、發現外部 MCP，並調度你自己的模型，只需要一個 MCP 連線。
+  讓 ChatGPT 直接操作你的電腦、使用本機工具、發現外部 MCP，並調度你自己的模型，只需要一個 MCP 連線。
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="macOS">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="macOS 與 Windows">
 </p>
 
 > [!NOTE]
 > OpenChatX 跑在一般 ChatGPT 對話裡，不會把 Codex 當成執行後端。換句話說，OpenChatX 本身不會消耗 Codex task 用量；你的 ChatGPT 方案、訊息限制與其他使用政策仍然適用，而且未來可能調整。
 
 > [!CAUTION]
-> openchatx-mcp 會以目前 macOS 使用者的權限執行。經授權的 ChatGPT 呼叫可以執行指令、修改檔案、抓取網頁，以及控制已連接的工具與應用程式。
+> openchatx-mcp 會以目前作業系統使用者的權限執行。經授權的 ChatGPT 呼叫可以執行指令、修改檔案、抓取網頁，以及控制已連接的工具與應用程式。
 
 ![openchatx-mcp architecture](docs/assets/openchatx-mcp-architecture.png)
 
@@ -30,7 +30,9 @@
 
 ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 
-- **本機執行** — 在 Mac 上跑 shell、改檔案、看圖片、使用互動式 Terminal。
+我自己做專案時 AI Agent 用量非常大，甚至曾經半天就把 Pro 20x 的 Codex Weekly Usage 燒到 100%。我不想讓整個工作流綁死在單一 Agent Runtime 的額度上，所以做了 OpenChatX：讓 ChatGPT 可以直接從一般對話操作本機、使用工具、接 MCP、調度自己的模型，而不是一定要把 Codex 當成執行後端。
+
+- **本機執行** — 在 macOS 或原生 Windows 上跑 shell、改檔案、看圖片、使用互動式 Terminal。
 - **MCP 聚合** — 把本機 stdio 與遠端 HTTP MCP Server 集中到同一個 ChatGPT MCP 連線。
 - **Capability Discovery** — ChatGPT 知道 Blender、Unreal、Browser Automation 等能力存在，但不必一次載入所有 Tool Schema。
 - **Toolboxes** — 用資料夾式 Plugin 加入自己的 TypeScript tools 與 reusable skills。
@@ -41,11 +43,14 @@ ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 
 ## 系統需求
 
-- macOS，支援 Apple Silicon 與 Intel
+- macOS（Apple Silicon / Intel）或原生 Windows 10/11
 - Node.js 22.18.0 或更新版本
 - npm
+- ripgrep（`rg`）
 - [ngrok](https://ngrok.com/) 帳號與 CLI
 - ChatGPT 帳號或 Workspace 已開放 Developer Mode / Custom MCP
+
+Windows 直接原生執行，不需要 WSL。OpenChatX 會優先使用 PowerShell 7（`pwsh.exe`），若沒有則回退到 Windows PowerShell（`powershell.exe`）。目前內建的 `apply_patch` binary 仍是 macOS-only；Windows 上一般工作流使用 `file_read` / `file_edit` / `file_write`。
 
 Computer Use 刻意放在外部 MCP，不綁死在 OpenChatX Core 裡。
 
@@ -59,8 +64,11 @@ Computer Use 刻意放在外部 MCP，不綁死在 OpenChatX Core 裡。
 
 ### 手動安裝
 
+macOS：
+
 ```bash
 brew install --cask ngrok
+brew install ripgrep
 git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
 cd openchatx-mcp
 npm ci
@@ -72,7 +80,23 @@ npm run setup
 npm start
 ```
 
-第一次安裝建議從 Terminal.app 執行，讓 macOS 權限處於正常互動式環境。
+Windows PowerShell：
+
+```powershell
+winget install Ngrok.Ngrok
+winget install BurntSushi.ripgrep.MSVC
+git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+Set-Location openchatx-mcp
+npm ci
+
+ngrok config add-authtoken <your-token>
+
+npm run setup -- --config-only
+npm run setup
+npm start
+```
+
+第一次安裝請從正常的外部 Terminal 啟動（macOS 使用 Terminal.app；Windows 使用 PowerShell / Windows Terminal），讓 PM2 runtime 繼承正確的系統權限與環境。
 
 ### 加到 ChatGPT
 
@@ -143,18 +167,13 @@ ChatGPT 再透過 `tool_call` 呼叫找到的 Tool。這樣一開始就知道「
 
 ## External MCP Servers
 
-新安裝預設沒有任何外部 MCP Server。可以從 Dashboard 新增，或建立 gitignored 的 `mcp-servers.json`。
+想接 Blender、Browser Automation、其他本機 App，或遠端 MCP Server？直接叫 ChatGPT 幫你接就好。
 
-```json
-{
-  "open-computer-use": {
-    "type": "local",
-    "command": ["/opt/homebrew/bin/open-computer-use", "mcp"],
-    "enabled": true,
-    "description": "macOS GUI control"
-  }
-}
-```
+例如：
+
+> 幫我把這個 MCP Server 接進 OpenChatX，然後確認可以正常使用。
+
+ChatGPT 可以自己查看該 MCP 的安裝方式、透過 OpenChatX 完成設定，再幫你驗證連線。你如果想手動管理，也可以直接從 Dashboard 操作。
 
 MCP 暫時連不上不會阻止 OpenChatX 啟動；Capability Catalog 會把它標成 configured but unavailable。
 
@@ -176,22 +195,21 @@ OpenChatX 可以把工作委派給你明確設定的其他模型。Provider 不�
 - `subagent_list` — 列出 curated profiles 與用途。
 - `subagent_run` — 把一個任務委派給指定 Profile。
 
-## Toolboxes
+## 自訂 Tools
 
-Toolbox 是放在 `toolboxes/` 下的資料夾式 Plugin：
+缺一個 OpenChatX 還沒有的能力？直接叫 ChatGPT 幫你寫。
 
-```text
-toolboxes/
-└── my-tools/
-    ├── toolbox.json
-    ├── tools/
-    │   └── hello.ts
-    └── skills/
-        └── debug-app/
-            └── SKILL.md
-```
+例如：
 
-Dashboard 可以 Enable / Disable Toolbox、單一 Tool、Skill，也能建立 starter template。自訂 Tools 同樣透過 `tool_search` lazy discovery，再用 `tool_call` 執行。
+> 幫我做一個 OpenChatX Tool，可以啟動我的遊戲 Server 並回傳目前狀態。
+
+或：
+
+> 幫我做一個 Tool 連我的本機 API，讓你可以查詢 Projects。
+
+ChatGPT 可以自己建立 Toolbox、撰寫 TypeScript Tool、測試，並讓之後的對話都能使用。你不需要自己手刻 Plugin 結構或 Tool Schema。
+
+自訂 Tools 一樣採 Lazy Discovery，不會因為你加很多工具就把一般 ChatGPT 對話的 Tool Context 撐大。想手動 Enable / Disable 或查看細節時，再到 Dashboard 管理即可。
 
 ## File Workflow
 
@@ -228,7 +246,7 @@ Dashboard 永遠可以從 `/ui` 使用。
 | --- | --- |
 | `npm start` | Build 並啟動 / reload OpenChatX 與 ngrok |
 | `npm run restart` | Rebuild 並 reload services |
-| `npm run restart -- --hard` | 從 Terminal.app 重建專用 PM2 daemon |
+| `npm run restart -- --hard` | 從外部 Terminal 重建專用 PM2 daemon |
 | `npm run status` | 查看 service 狀態 |
 | `npm run logs` | 查看 logs |
 | `npm run print-url` | 顯示公開 MCP URL 與本機 UI URL |

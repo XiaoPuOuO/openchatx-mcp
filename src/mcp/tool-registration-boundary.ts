@@ -55,7 +55,7 @@ export function installToolRegistrationBoundary(
       const result = await (tool.acceptsInput
         ? tool.callback(inputValue, context)
         : tool.callback(context))
-      options.agentObserver?.finishTool(agent, observedCallId)
+      options.agentObserver?.finishTool(agent, observedCallId, result)
 
       const projected =
         !tool.nativeContent && !structuredOutput ? compactToolResult(name, result) : result

@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { signalProcessGroup } from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
+import { shellCommandArgs } from "../../host-platform.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import { tokenPrefix } from "../../tokenizer.js"
 import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
@@ -18,7 +19,7 @@ export function registerBashTool(server: McpServer, processManager?: BashProcess
     "bash",
     {
       description:
-        "Run a genuine non-interactive shell operation in a fresh zsh process. Use this for builds, tests, git, package managers, processes, networking, permissions, system commands, pipelines, or shell features that dedicated tools do not provide. Set keep=true for long-running non-interactive servers, watchers, or daemons that must remain alive after the tool call returns. OpenChatX captures kept-process stdout/stderr; use bash_process to list processes, read logs for debugging, or stop one. Do NOT use bash for ordinary file reading, editing, writing, filename discovery, or content search: use file_read, file_edit, file_write, glob, or grep instead. Shell rg is appropriate only when you need capabilities grep does not expose, such as match counts or specialized ripgrep flags. Use workdir explicitly when needed. For prompts, REPLs, menus, or TTY-only programs, use terminal instead.",
+        "Run a genuine non-interactive shell operation in a fresh host shell process (zsh on macOS, PowerShell on Windows). Use this for builds, tests, git, package managers, processes, networking, permissions, system commands, pipelines, or shell features that dedicated tools do not provide. Set keep=true for long-running non-interactive servers, watchers, or daemons that must remain alive after the tool call returns. OpenChatX captures kept-process stdout/stderr; use bash_process to list processes, read logs for debugging, or stop one. Do NOT use bash for ordinary file reading, editing, writing, filename discovery, or content search: use file_read, file_edit, file_write, glob, or grep instead. Shell rg is appropriate only when you need capabilities grep does not expose, such as match counts or specialized ripgrep flags. Use workdir explicitly when needed. For prompts, REPLs, menus, or TTY-only programs, use terminal instead.",
       inputSchema: z.object({
         command: z.string().min(1),
         workdir: z
@@ -100,10 +101,11 @@ async function runCommand(
   signal: AbortSignal
 ): Promise<{ exitCode: number; output: string; timedOut: boolean }> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(MCP_CONFIG.shell.path, ["-f", "-c", command], {
+    const child = spawn(MCP_CONFIG.shell.path, shellCommandArgs(command), {
       cwd,
       env: process.env,
-      detached: true,
+      detached: process.platform !== "win32",
+      windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     })
     let output = ""

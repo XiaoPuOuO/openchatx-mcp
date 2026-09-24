@@ -17,10 +17,11 @@ hljs.registerLanguage("json", json)
 
 export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: () => void }) {
   const { t } = useI18n()
-  const detail = call?.detail || call?.summary || t("toolCall.noInput")
+  const detail = call?.resultDetail || call?.detail || call?.summary || t("toolCall.noInput")
+  const detailLanguage = call?.resultDetail ? call.resultDetailLanguage : call?.detailLanguage
   const highlighted =
-    call?.detailLanguage && hljs.getLanguage(call.detailLanguage)
-      ? hljs.highlight(detail, { language: call.detailLanguage }).value
+    detailLanguage && hljs.getLanguage(detailLanguage)
+      ? hljs.highlight(detail, { language: detailLanguage }).value
       : hljs.highlightAuto(detail).value
 
   return (

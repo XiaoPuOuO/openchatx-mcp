@@ -2,7 +2,7 @@
   "name": "openchatx-mcp",
   "version": "0.2.0",
   "private": false,
-  "description": "Local MCP platform for ChatGPT with toolboxes, persistent local tools, skills, and MCP aggregation.",
+  "description": "Turn ChatGPT into a local agent runtime with computer control, MCP aggregation, toolboxes, and subagents.",
   "homepage": "https://github.com/XiaoPuOuO/openchatx-mcp#readme",
   "repository": {
     "type": "git",
@@ -16,7 +16,7 @@
   },
   "scripts": {
     "auth:reset": "node --import tsx src/auth/reset.ts",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "dev": "node --import tsx --watch src/index.ts",
     "format": "biome format --write .",
     "inspect": "npx @modelcontextprotocol/inspector",
@@ -78,7 +78,8 @@
     "node": ">=22.18.0"
   },
   "os": [
-    "darwin"
+    "darwin",
+    "win32"
   ],
   "cpu": [
     "arm64",

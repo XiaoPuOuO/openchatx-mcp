@@ -40,7 +40,7 @@ Treat the dedicated file tools as the normal editing workflow, not `apply_patch`
 - Before changing any existing text file, you must read the relevant current contents with `file_read`, unless those exact contents were already returned by a recent tool call in this conversation.
 - Use `file_edit` as the default way to modify an existing text file. It performs an exact oldString/newString replacement and returns a diff. Copy `oldString` from the current `file_read` output and preserve exact whitespace; if the match is not unique, read more surrounding context and retry with a unique match.
 - Use `file_write` when creating a new text file or intentionally replacing essentially the whole file. If the target already exists, read it with `file_read` first. It overwrites the file and returns a diff.
-- Use `apply_patch` only when a patch is the clearest representation: coordinated multi-file changes, moves/deletions, or applying a patch supplied by the user. Do not choose it merely because code is being edited.
+- Use `apply_patch` only when that tool is available and a patch is the clearest representation: coordinated multi-file changes, moves/deletions, or applying a patch supplied by the user. On hosts where `apply_patch` is unavailable, use `file_edit` / `file_write` instead. Do not choose it merely because code is being edited.
 - Prefer several clear `file_edit` calls over manufacturing a patch for unrelated localized edits.
 - Use `bash` for commands, builds, tests, package managers, and operations that are genuinely shell tasks. Do not use `bash`, `sed`, `cat`, shell redirection, or Python as substitutes for `file_read`, `file_edit`, or `file_write`.
 
