@@ -17,6 +17,8 @@
   "scripts": {
     "auth:reset": "node --import tsx src/auth/reset.ts",
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "desktop:install": "node --import tsx scripts/desktop.ts install",
+    "desktop:uninstall": "node --import tsx scripts/desktop.ts uninstall",
     "dev": "node --import tsx --watch src/index.ts",
     "format": "biome format --write .",
     "inspect": "npx @modelcontextprotocol/inspector",
@@ -40,6 +42,7 @@
     "ui:build": "npm --prefix ui run build",
     "ui:dev": "npm --prefix ui run dev",
     "ui:install": "npm --prefix ui ci",
+    "update": "node --import tsx scripts/update.ts",
     "vendor:apply-patch": "scripts/vendor/build-apply-patch.sh"
   },
   "overrides": {
