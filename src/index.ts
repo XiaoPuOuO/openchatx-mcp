@@ -5,6 +5,7 @@ import { createAgentObserver } from "./agent/observer.js"
 import { OpenChatXAuthStore } from "./auth/store.js"
 import { MCP_CONFIG } from "./config.js"
 import { createExternalMcpRegistry } from "./external-mcp/registry.js"
+import { JobManager } from "./jobs/job-manager.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
@@ -32,6 +33,7 @@ const interactiveShellManager = new InteractiveShellManager(
   MCP_CONFIG.shell.path
 )
 const bashProcessManager = new BashProcessManager()
+const jobManager = new JobManager()
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -43,6 +45,7 @@ try {
       bashProcessManager,
       webPageOpener,
       subagentRuntime,
+      jobManager,
     }),
     auditLogger,
     authStore,
@@ -86,6 +89,7 @@ async function closeRuntimeServices(): Promise<void> {
     externalMcp.close(),
     toolboxRegistry.close(),
     subagentRuntime.close(),
+    jobManager.close(),
   ])
 }
 

@@ -1,0 +1,13 @@
+{
+  "name": "Durable Jobs",
+  "description": "Run and inspect background work that survives individual ChatGPT requests.",
+  "enabled": true,
+  "builtin": "jobs",
+  "tools": {
+    "job_start": { "enabled": true, "description": "Start durable background work." },
+    "job_list": { "enabled": true, "description": "List durable jobs." },
+    "job_read": { "enabled": true, "description": "Read job status and logs." },
+    "job_cancel": { "enabled": true, "description": "Cancel a running job." }
+  },
+  "skills": {}
+}

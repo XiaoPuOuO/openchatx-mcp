@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server"
 import type { AgentObserver } from "../agent/observer.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { JobManager } from "../jobs/job-manager.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
@@ -13,6 +14,7 @@ import {
   registerFileWriteTool,
 } from "../tools/file/file-tools.js"
 import { registerImageTools } from "../tools/image/image-tools.js"
+import { registerJobTools } from "../tools/jobs/job-tools.js"
 import { registerMcpServerManagementTools } from "../tools/mcp-server-management/mcp-server-management-tools.js"
 import { registerSearchTools } from "../tools/search/search-tools.js"
 import type { BashProcessManager } from "../tools/shell/bash-process-manager.js"
@@ -37,6 +39,7 @@ export interface CreateMcpServerOptions {
   bashProcessManager?: BashProcessManager
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
+  jobManager?: JobManager
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -48,6 +51,7 @@ export interface McpCapabilityServices {
   bashProcessManager?: BashProcessManager
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
+  jobManager?: JobManager
 }
 
 export interface McpRuntimeProfile {
@@ -140,6 +144,9 @@ function registerToolboxRuntime(
   registerBuiltinToolbox(server, registry, "skills", () => registerSkillTools(server, registry))
   registerBuiltinToolbox(server, registry, "media", () => registerImageTools(server))
   registerBuiltinToolbox(server, registry, "search", () => registerSearchTools(server))
+  const jobManager = options.jobManager
+  if (jobManager)
+    registerBuiltinToolbox(server, registry, "jobs", () => registerJobTools(server, jobManager))
   registerBuiltinToolbox(server, registry, "toolbox-manager", () =>
     registerToolboxManagementTools(server, registry)
   )
@@ -198,6 +205,7 @@ function registerDirectRuntime(
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (profile.tools.skills) registerSkillTools(server)
   if (profile.tools.image) registerImageTools(server)
+  if (options.jobManager) registerJobTools(server, options.jobManager)
 }
 
 function registerBuiltinToolbox(
