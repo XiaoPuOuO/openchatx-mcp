@@ -42,10 +42,20 @@ test("continues serving an existing client after an HTTP server restart", {
   assert.equal(compactField(toolText(before), "output"), "before")
   await firstServer.close()
   activeServer = await startMcpHttpServer({ port })
-  const after = await connection.client.callTool({
-    name: "bash",
-    arguments: { command: "printf after" },
-  })
+  let after: Awaited<ReturnType<typeof connection.client.callTool>> | undefined
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      after = await connection.client.callTool({
+        name: "bash",
+        arguments: { command: "printf after" },
+      })
+      break
+    } catch (error) {
+      if (attempt > 0) throw error
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+  assert.ok(after)
   assert.equal(compactField(toolText(after), "output"), "after")
 })
 

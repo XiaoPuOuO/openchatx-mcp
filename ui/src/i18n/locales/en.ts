@@ -97,6 +97,7 @@ export const en: Messages = {
   "mcp.environmentHint": "One KEY=value per line",
   "mcp.timeout": "Timeout (ms)",
   "mcp.description": "Description",
+  "mcp.saved": "Saved. MCP connection changes are available immediately.",
   "mcp.savedRestart": "Saved. Restart openchatx-mcp to apply connection changes.",
   "mcp.savedMock": "Saved in mock mode.",
   "mcp.mockFinder": "Mock mode: this would reveal mcp-servers.json in Finder.",

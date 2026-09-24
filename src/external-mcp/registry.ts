@@ -1,3 +1,6 @@
+import { type FSWatcher, watch } from "node:fs"
+import { basename, dirname } from "node:path"
+
 import {
   Client,
   fromJsonSchema,
@@ -43,12 +46,13 @@ export interface ExternalMcpRegistry {
   registerTools(server: McpServer): void
   catalog(): ExternalMcpCatalogTool[]
   call(id: string, args: Record<string, unknown>): Promise<unknown>
+  reload(): Promise<void>
   close(): Promise<void>
 }
 
 export async function createExternalMcpRegistry(configPath: string): Promise<ExternalMcpRegistry> {
-  const config = loadExternalMcpConfig(configPath)
-  const connections = (
+  let config = loadExternalMcpConfig(configPath)
+  let connections = (
     await Promise.all(
       Object.entries(config)
         .filter(([, server]) => server.enabled)
@@ -56,21 +60,59 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
     )
   ).filter((connection): connection is ExternalConnection => connection !== undefined)
 
-  const publicNames = new Set<string>()
-  const registrations = connections.flatMap((connection) =>
-    connection.tools.map((tool) => {
-      const publicName = `${sanitizeToolName(connection.id)}__${sanitizeToolName(tool.name)}`
-      if (publicNames.has(publicName)) {
-        throw new Error(`External MCP tool name collision: ${publicName}`)
+  let registrations = buildRegistrations(connections)
+  let watcher: FSWatcher | undefined
+  let reloadTimer: NodeJS.Timeout | undefined
+  let reloadQueue: Promise<void> = Promise.resolve()
+
+  const reloadRegistry = (): Promise<void> => {
+    const reload = reloadQueue.then(async () => {
+      const nextConfig = loadExternalMcpConfig(configPath)
+      if (JSON.stringify(nextConfig) === JSON.stringify(config)) return
+      const nextConnections = (
+        await Promise.all(
+          Object.entries(nextConfig)
+            .filter(([, server]) => server.enabled)
+            .map(async ([id, server]) => connectServer(id, server))
+        )
+      ).filter((connection): connection is ExternalConnection => connection !== undefined)
+      let nextRegistrations: ReturnType<typeof buildRegistrations>
+      try {
+        nextRegistrations = buildRegistrations(nextConnections)
+      } catch (error) {
+        await closeConnections(nextConnections)
+        throw error
       }
-      publicNames.add(publicName)
-      return { connection, tool, publicName }
+      const previousConnections = connections
+      config = nextConfig
+      connections = nextConnections
+      registrations = nextRegistrations
+      await closeConnections(previousConnections)
     })
-  )
+    reloadQueue = reload.catch(() => undefined)
+    return reload
+  }
+
+  watcher = watch(dirname(configPath), (_event, filename) => {
+    if (filename && filename.toString() !== basename(configPath)) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => {
+      void reloadRegistry().catch((error) => {
+        console.warn(
+          `External MCP config reload failed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      })
+    }, 150)
+    reloadTimer.unref()
+  })
 
   return {
-    connectedServers: connections.map(({ id }) => id),
-    toolCount: registrations.length,
+    get connectedServers() {
+      return connections.map(({ id }) => id)
+    },
+    get toolCount() {
+      return registrations.length
+    },
     capabilities() {
       return Object.entries(config)
         .filter(([, server]) => server.enabled)
@@ -154,10 +196,32 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
         { timeout: registration.connection.config.timeout ?? DEFAULT_CALL_TIMEOUT_MS }
       )
     },
+    reload: reloadRegistry,
     async close() {
-      await Promise.allSettled(connections.map(({ client }) => client.close()))
+      watcher?.close()
+      if (reloadTimer) clearTimeout(reloadTimer)
+      await reloadQueue
+      await closeConnections(connections)
     },
   }
+}
+
+function buildRegistrations(connections: readonly ExternalConnection[]) {
+  const publicNames = new Set<string>()
+  return connections.flatMap((connection) =>
+    connection.tools.map((tool) => {
+      const publicName = `${sanitizeToolName(connection.id)}__${sanitizeToolName(tool.name)}`
+      if (publicNames.has(publicName)) {
+        throw new Error(`External MCP tool name collision: ${publicName}`)
+      }
+      publicNames.add(publicName)
+      return { connection, tool, publicName }
+    })
+  )
+}
+
+async function closeConnections(connections: readonly ExternalConnection[]): Promise<void> {
+  await Promise.allSettled(connections.map(({ client }) => client.close()))
 }
 
 function parseExternalToolId(id: string): { server: string; tool: string } {

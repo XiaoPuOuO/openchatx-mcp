@@ -76,7 +76,7 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
     try {
       const result = await saveMcpServers(servers)
       setServers(result.servers)
-      setMessage(result.restartRequired ? t("mcp.savedRestart") : t("mcp.savedMock"))
+      setMessage(result.restartRequired ? t("mcp.savedRestart") : t("mcp.saved"))
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError))
     } finally {

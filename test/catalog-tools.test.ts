@@ -72,6 +72,7 @@ export default {
       },
     ],
     call: async (id) => ({ content: [{ type: "text", text: `called:${id}` }] }),
+    reload: async () => {},
     close: async () => {},
   }
 

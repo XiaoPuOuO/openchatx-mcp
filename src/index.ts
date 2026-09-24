@@ -24,6 +24,7 @@ await authStore.ensureState()
 const webPageOpener = new WebPageOpener()
 const externalMcp = await createExternalMcpRegistry(MCP_CONFIG.externalMcp.configFile)
 const subagentRuntime = new SubagentRuntime(loadSubagentConfig(MCP_CONFIG.subagents.configFile))
+subagentRuntime.startWatching(MCP_CONFIG.subagents.configFile)
 const toolboxRegistry = new ToolboxRegistry(MCP_CONFIG.toolboxes.root)
 await toolboxRegistry.start()
 const interactiveShellManager = new InteractiveShellManager(
@@ -48,6 +49,7 @@ try {
     agentObserver,
     toolboxRegistry,
     subagentRuntime,
+    externalMcp,
   })
 } catch (error) {
   await closeRuntimeServices()
@@ -82,6 +84,7 @@ async function closeRuntimeServices(): Promise<void> {
     bashProcessManager.close(),
     externalMcp.close(),
     toolboxRegistry.close(),
+    subagentRuntime.close(),
   ])
 }
 

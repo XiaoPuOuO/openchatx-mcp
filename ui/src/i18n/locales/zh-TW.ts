@@ -96,6 +96,7 @@ export const zhTW: Messages = {
   "mcp.environmentHint": "每行一個 KEY=value",
   "mcp.timeout": "逾時時間 (ms)",
   "mcp.description": "描述",
+  "mcp.saved": "已儲存，MCP 連線變更立即可用。",
   "mcp.savedRestart": "已儲存。重新啟動 openchatx-mcp 後套用連線變更。",
   "mcp.savedMock": "已儲存至 Mock 模式。",
   "mcp.mockFinder": "Mock 模式：正式環境會在 Finder 中顯示 mcp-servers.json。",

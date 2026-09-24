@@ -8,6 +8,7 @@ import {
   loadExternalMcpConfig,
   saveExternalMcpConfig,
 } from "../../external-mcp/config.js"
+import type { ExternalMcpRegistry } from "../../external-mcp/registry.js"
 import { toToolError } from "../../mcp/tool-error.js"
 
 const actionSchema = z.enum(["create", "update", "delete", "enable", "disable"])
@@ -28,7 +29,8 @@ const manageInputSchema = z.object({
 
 export function registerMcpServerManagementTools(
   server: McpServer,
-  configPath = MCP_CONFIG.externalMcp.configFile
+  configPath = MCP_CONFIG.externalMcp.configFile,
+  registry?: ExternalMcpRegistry
 ): void {
   server.registerTool(
     "mcp_server_list",
@@ -60,7 +62,7 @@ export function registerMcpServerManagementTools(
     "mcp_server_manage",
     {
       description:
-        "Create, update, delete, enable, or disable an external MCP server in mcp-servers.json. Changes are validated before writing and require restarting openchatx-mcp to reconnect servers.",
+        "Create, update, delete, enable, or disable an external MCP server in mcp-servers.json. Changes are validated, hot-reloaded, and available without restarting openchatx-mcp.",
       inputSchema: manageInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -74,16 +76,17 @@ export function registerMcpServerManagementTools(
         const current = loadExternalMcpConfig(configPath)
         const next = applyAction(current, input)
         const saved = saveExternalMcpConfig(configPath, next)
+        await registry?.reload()
         return {
           structuredContent: {
             ok: true,
-            restart_required: true,
+            restart_required: false,
             servers: redactConfig(saved),
           },
           content: [
             {
               type: "text" as const,
-              text: "Saved MCP server configuration. Restart openchatx-mcp to apply connection changes.",
+              text: "Saved and hot-reloaded MCP server configuration.",
             },
           ],
         }

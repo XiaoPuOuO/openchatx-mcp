@@ -31,7 +31,7 @@ test("agent can create, update, disable, list, and delete MCP servers", async (t
     },
   })
   assert.equal(created.isError, undefined)
-  assert.equal((created.structuredContent as { restart_required: boolean }).restart_required, true)
+  assert.equal((created.structuredContent as { restart_required: boolean }).restart_required, false)
 
   const listed = await client.callTool({ name: "mcp_server_list", arguments: {} })
   const listedServer = (

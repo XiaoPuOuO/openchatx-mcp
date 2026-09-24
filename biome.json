@@ -260,6 +260,16 @@
       }
     },
     {
+      "includes": ["ecosystem.config.cjs"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnresolvedImports": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/*.{ts,tsx,cts,mts}", "scripts/**"],
       "linter": {
         "rules": {

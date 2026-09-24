@@ -1,9 +1,52 @@
 import assert from "node:assert/strict"
+import { writeFile } from "node:fs/promises"
 import { createServer } from "node:http"
+import { join } from "node:path"
 import test from "node:test"
 
 import type { SubagentConfig } from "../src/subagents/config.js"
 import { SubagentRuntime } from "../src/subagents/runtime.js"
+import { tempDir } from "./helpers/temp.js"
+
+test("subagent runtime hot-reloads direct config file edits", async (t) => {
+  const root = await tempDir(t, "openchatx-subagent-watch-")
+  const configPath = join(root, "subagents.json")
+  await writeFile(configPath, JSON.stringify({ providers: {}, models: {} }))
+  const runtime = new SubagentRuntime({ providers: {}, models: {} })
+  runtime.startWatching(configPath)
+  t.after(() => runtime.close())
+
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      providers: {
+        local: {
+          type: "openai-compatible",
+          base_url: "http://127.0.0.1:1/v1",
+          enabled: true,
+          timeout: 5000,
+        },
+      },
+      models: {
+        watched: {
+          provider: "local",
+          model: "watched-model",
+          name: "Watched",
+          description: "Reloaded profile",
+          enabled: true,
+          context_window: 8192,
+          thinking: { mode: "none" },
+        },
+      },
+    })
+  )
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (runtime.profiles().some((profile) => profile.id === "watched")) return
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  assert.fail("subagent config watcher did not reload the edited file")
+})
 
 test("subagent runtime sends only curated profile settings to an OpenAI-compatible provider", async (t) => {
   let received: Record<string, unknown> | undefined

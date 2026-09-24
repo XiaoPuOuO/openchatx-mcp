@@ -144,7 +144,7 @@ function registerToolboxRuntime(
     registerToolboxManagementTools(server, registry)
   )
   registerBuiltinToolbox(server, registry, "mcp-manager", () =>
-    registerMcpServerManagementTools(server)
+    registerMcpServerManagementTools(server, MCP_CONFIG.externalMcp.configFile, options.externalMcp)
   )
   const subagentRuntime = options.subagentRuntime
   if (subagentRuntime)

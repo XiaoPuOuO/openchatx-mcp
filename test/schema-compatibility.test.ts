@@ -97,6 +97,7 @@ function emptyExternalMcpRegistry(): ExternalMcpRegistry {
     call: async () => {
       throw new Error("No external MCP tools are configured in this test.")
     },
+    reload: async () => {},
     close: async () => {},
   }
 }

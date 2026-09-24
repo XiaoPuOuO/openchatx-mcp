@@ -1,4 +1,12 @@
-import type { SubagentConfig, SubagentModelProfile, SubagentProviderConfig } from "./config.js"
+import { type FSWatcher, watch } from "node:fs"
+import { basename, dirname } from "node:path"
+
+import {
+  loadSubagentConfig,
+  type SubagentConfig,
+  type SubagentModelProfile,
+  type SubagentProviderConfig,
+} from "./config.js"
 
 const TRAILING_SLASH_RE = /\/$/u
 
@@ -20,10 +28,35 @@ export interface SubagentRunResult {
 }
 
 export class SubagentRuntime {
+  private watcher?: FSWatcher
+  private reloadTimer?: NodeJS.Timeout
+
   constructor(private config: SubagentConfig) {}
 
   updateConfig(config: SubagentConfig): void {
     this.config = config
+  }
+
+  startWatching(configPath: string): void {
+    this.watcher?.close()
+    this.watcher = watch(dirname(configPath), (_event, filename) => {
+      if (filename && filename.toString() !== basename(configPath)) return
+      if (this.reloadTimer) clearTimeout(this.reloadTimer)
+      this.reloadTimer = setTimeout(() => {
+        try {
+          this.updateConfig(loadSubagentConfig(configPath))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error"
+          console.warn(`Subagent config reload failed: ${message}`)
+        }
+      }, 150)
+      this.reloadTimer.unref()
+    })
+  }
+
+  close(): void {
+    this.watcher?.close()
+    if (this.reloadTimer) clearTimeout(this.reloadTimer)
   }
 
   profiles() {

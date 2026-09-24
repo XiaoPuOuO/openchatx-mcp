@@ -72,6 +72,40 @@ test("aggregates a local stdio MCP and forwards tool calls", { timeout: 10_000 }
   assert.deepEqual(result.structuredContent, { value: "hello", transport: "stdio" })
 })
 
+test("external MCP registry hot-reloads direct config file edits", {
+  timeout: 10_000,
+}, async (t) => {
+  const root = await tempDir(t, "openchatx-external-watch-")
+  const configPath = join(root, "mcp-servers.json")
+  const fixturePath = new URL("../fixtures/external-mcp-stdio.mjs", import.meta.url).pathname
+  await writeFile(configPath, "{}")
+
+  const registry = await createExternalMcpRegistry(configPath)
+  t.after(() => registry.close())
+  assert.equal(registry.toolCount, 0)
+
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      watched: {
+        type: "local",
+        command: [process.execPath, fixturePath],
+        enabled: true,
+        description: "Watched fixture",
+      },
+    })
+  )
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (registry.connectedServers.includes("watched") && registry.catalog().length === 1) {
+      assert.equal(registry.catalog()[0]?.id, "mcp:watched:echo")
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  assert.fail("external MCP config watcher did not reconnect the edited server")
+})
+
 test("aggregates a remote HTTP MCP and tolerates unavailable peers", {
   timeout: 10_000,
 }, async (t) => {

@@ -96,6 +96,7 @@ export const ja: Messages = {
   "mcp.environmentHint": "1 行につき 1 つの KEY=value",
   "mcp.timeout": "タイムアウト (ms)",
   "mcp.description": "説明",
+  "mcp.saved": "保存しました。MCP 接続の変更はすぐに利用できます。",
   "mcp.savedRestart": "保存しました。接続変更を適用するには openchatx-mcp を再起動してください。",
   "mcp.savedMock": "Mock モードに保存しました。",
   "mcp.mockFinder": "Mock モード: 本番環境では mcp-servers.json を Finder に表示します。",

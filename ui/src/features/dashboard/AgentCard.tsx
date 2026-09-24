@@ -10,9 +10,10 @@ import { ToolCallModal } from "./ToolCallModal"
 
 export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
   const { t, locale } = useI18n()
-  const [selectedCall, setSelectedCall] = useState<AgentCall>()
+  const [selectedCallId, setSelectedCallId] = useState<string>()
   const active = now - agent.lastSeenAt < 30_000
   const recent = [agent.current, ...agent.recent].filter((call): call is AgentCall => Boolean(call))
+  const selectedCall = recent.find((call) => call.id === selectedCallId)
 
   return (
     <Card className="overflow-hidden">
@@ -45,7 +46,7 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
               <ActivityRow
                 key={call.id}
                 call={call}
-                onClick={() => setSelectedCall(call)}
+                onClick={() => setSelectedCallId(call.id)}
                 locale={locale}
               />
             ))}
@@ -54,7 +55,7 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
 
         <SteerComposer agent={agent} />
       </CardContent>
-      <ToolCallModal call={selectedCall} onClose={() => setSelectedCall(undefined)} />
+      <ToolCallModal call={selectedCall} onClose={() => setSelectedCallId(undefined)} />
     </Card>
   )
 }

@@ -4,6 +4,7 @@ import { static as expressStatic, Router } from "express"
 
 import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
+import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import {
   loadSubagentConfig,
   redactSubagentConfig,
@@ -18,7 +19,8 @@ import type { AgentObserver } from "./observer.js"
 export function createDashboardRouter(
   agentObserver: AgentObserver,
   toolboxRegistry?: ToolboxRegistry,
-  subagentRuntime?: SubagentRuntime
+  subagentRuntime?: SubagentRuntime,
+  externalMcp?: ExternalMcpRegistry
 ): Router {
   const router = Router()
 
@@ -71,10 +73,11 @@ export function createDashboardRouter(
     res.json({ servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile) })
   })
 
-  router.put("/api/mcp-servers", (req, res) => {
+  router.put("/api/mcp-servers", async (req, res) => {
     try {
       const servers = saveExternalMcpConfig(MCP_CONFIG.externalMcp.configFile, req.body?.servers)
-      res.json({ servers, restartRequired: true })
+      await externalMcp?.reload()
+      res.json({ servers, restartRequired: false })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       res.status(400).json({ error: message })
