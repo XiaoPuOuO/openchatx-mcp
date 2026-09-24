@@ -3,16 +3,16 @@ import { readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import process from "node:process"
 import test from "node:test"
-import { ShellbyAuthError, ShellbyAuthStore } from "../../src/auth/store.js"
+import { OpenChatXAuthError, OpenChatXAuthStore } from "../../src/auth/store.js"
 import { tempDir } from "../helpers/temp.js"
 
 test("creates durable auth state with owner-only permissions", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-")
   const filePath = join(root, ".shellby", "auth.json")
-  const auth = new ShellbyAuthStore(filePath)
+  const auth = new OpenChatXAuthStore(filePath)
 
   const first = await auth.ensureState()
-  const second = await new ShellbyAuthStore(filePath).ensureState()
+  const second = await new OpenChatXAuthStore(filePath).ensureState()
 
   assert.deepEqual(first, { version: 1, subject: null })
   assert.deepEqual(second, first)
@@ -26,20 +26,20 @@ test("creates durable auth state with owner-only permissions", async (t) => {
 
 test("first tool call binds one subject and later calls require it", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-bind-")
-  const auth = new ShellbyAuthStore(join(root, "auth.json"))
+  const auth = new OpenChatXAuthStore(join(root, "auth.json"))
   await auth.ensureState()
 
   assert.equal((await auth.authorizeToolCall("subject-a")).subject, "subject-a")
   assert.equal((await auth.authorizeToolCall("subject-a")).subject, "subject-a")
   await assert.rejects(
     () => auth.authorizeToolCall("subject-b"),
-    (error: unknown) => error instanceof ShellbyAuthError && error.code === "subject_mismatch"
+    (error: unknown) => error instanceof OpenChatXAuthError && error.code === "subject_mismatch"
   )
 })
 
 test("concurrent first tool calls bind exactly one subject", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-race-")
-  const auth = new ShellbyAuthStore(join(root, "auth.json"))
+  const auth = new OpenChatXAuthStore(join(root, "auth.json"))
   await auth.ensureState()
 
   const results = await Promise.allSettled([
@@ -52,7 +52,7 @@ test("concurrent first tool calls bind exactly one subject", async (t) => {
 
 test("reset clears the bound subject", async (t) => {
   const root = await tempDir(t, "shellby-mcp-auth-reset-")
-  const auth = new ShellbyAuthStore(join(root, "auth.json"))
+  const auth = new OpenChatXAuthStore(join(root, "auth.json"))
   await auth.ensureState()
   await auth.authorizeToolCall("subject-a")
 
@@ -63,11 +63,11 @@ test("malformed auth state fails closed instead of being replaced", async (t) =>
   const root = await tempDir(t, "shellby-mcp-auth-invalid-")
   const filePath = join(root, "auth.json")
   await writeFile(filePath, "not-json\n", { mode: 0o600 })
-  const auth = new ShellbyAuthStore(filePath)
+  const auth = new OpenChatXAuthStore(filePath)
 
   await assert.rejects(
     () => auth.ensureState(),
-    (error: unknown) => error instanceof ShellbyAuthError && error.code === "state_invalid"
+    (error: unknown) => error instanceof OpenChatXAuthError && error.code === "state_invalid"
   )
   assert.equal(await readFile(filePath, "utf8"), "not-json\n")
 })

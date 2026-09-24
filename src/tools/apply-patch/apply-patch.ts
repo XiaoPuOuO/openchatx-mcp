@@ -25,7 +25,7 @@ export function registerApplyPatchTool(server: McpServer): void {
     "apply_patch",
     {
       description:
-        "Shellby's first-class tool for local file modifications. Use `apply_patch` to create, update, delete, move, or rename files. A patch may contain multiple file operations and multiple update hunks. Use `@@ <context>` to scope an update to a class, function, section, or other unique line when needed.",
+        "Use `apply_patch` for structural or multi-file changes, or to create, delete, move, or rename files. For one existing text file with an exact oldString/newString replacement, prefer `file_edit`. A patch may contain multiple file operations and update hunks; use `@@ <context>` to scope a hunk when needed.",
       inputSchema: z.object({
         patch: z
           .string()

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
 import test from "node:test"
 import {
   appendToolEvents,
@@ -8,7 +7,6 @@ import {
   renderStructuredContent,
 } from "../../src/mcp/tool-output.js"
 import { countTokens } from "../../src/tokenizer.js"
-import { extractConversationMessages } from "../../src/tools/delegation/turn-protocol.js"
 
 test("renders compact scalar metadata and multiline strings without losing values", () => {
   const structured = {
@@ -144,36 +142,8 @@ test("compact fetch_url image results preserve native image content while render
   )
 })
 
-test("subagent formatter preserves fenced Markdown from the frozen real ChatGPT fixture", async () => {
-  const payload = JSON.parse(
-    await readFile(
-      new URL("../fixtures/chatgpt-live-fixture/conversation.json", import.meta.url),
-      "utf8"
-    )
-  ) as unknown
-  const assistant = extractConversationMessages(payload)
-    .filter((message) => message.role === "assistant")
-    .at(-1)
-  assert.ok(assistant)
-
-  const rendered = compactText("subagent_result", {
-    turns: [{ turn_id: "fixture_turn_1", status: "completed", response: assistant.text }],
-  })
-
-  assert.ok(rendered.startsWith("---- turn_id=fixture_turn_1 status=completed ----"))
-  assert.doesNotMatch(rendered, /response:/u)
-  assert.ok(rendered.includes("## Live Fixture"))
-  assert.ok(rendered.includes("```md"))
-  assert.ok(rendered.includes("```ts"))
-  assert.ok(rendered.includes("const answer: number = 42;"))
-  assert.ok(rendered.includes("| fixture | ok |"))
-  assert.ok(rendered.includes("CONTEXT_KEY:"))
-})
-
 const longSkillDescription =
   "Create or revise reusable skills for this ChatGPT local-shell MCP workspace, including reusable agent workflows and adaptations of existing skills without bloating the tool schema."
-const longStartError =
-  "subagent_failed: Browser observation failed after submission, so the detached turn could not complete."
 
 const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expected: string }> = [
   {
@@ -252,36 +222,6 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
     tool: "shell_close",
     structuredContent: { shell_id: "review", closed: true },
     expected: "shell_id=review closed=true",
-  },
-  {
-    tool: "subagent_run",
-    structuredContent: {
-      turns: [
-        { agent_id: "reviewer", turn_id: "reviewer_turn_1", status: "running" },
-        { agent_id: "tester", status: "failed", error: longStartError },
-      ],
-    },
-    expected: `turns:\n\n- agent_id=reviewer turn_id=reviewer_turn_1 status=running\n- agent_id=tester status=failed error="${longStartError}"`,
-  },
-  {
-    tool: "subagent_result",
-    structuredContent: {
-      turns: [
-        {
-          turn_id: "reviewer_turn_1",
-          status: "completed",
-          response: "## Review\n\nArchitecture looks good.",
-        },
-        {
-          turn_id: "tester_turn_1",
-          status: "running",
-          activity: "Using tools",
-          activity_age_ms: 2_750,
-        },
-      ],
-    },
-    expected:
-      '---- turn_id=reviewer_turn_1 status=completed ----\n\n## Review\n\nArchitecture looks good.\n\n---- turn_id=tester_turn_1 status=running activity="Using tools" activity_age_ms=2750 ----',
   },
   {
     tool: "fetch_url",

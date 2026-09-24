@@ -13,7 +13,7 @@ function ngrokConfigFiles(config, repositoryRoot, executable) {
   const nativeConfig = load(readFileSync(nativePath, "utf8"))
   const version = String(nativeConfig?.version)
   if (!["2", "3"].includes(version))
-    throw new Error("Shellby requires ngrok config version 2 or 3.")
+    throw new Error("openchatx-mcp requires ngrok config version 2 or 3.")
   const configured = config.state_dir
   let stateDir
   if (configured === "~") stateDir = homedir()

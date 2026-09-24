@@ -24,7 +24,7 @@ export interface PatchExecutionSummary {
  * Interpret the submitted patch together with the native binary's outcome.
  *
  * The vendored binary applies file sections in order and reports only the first failure. This
- * module owns Shellby's dependency on that ordering and diagnostic format so process execution
+ * module owns openchatx-mcp's dependency on that ordering and diagnostic format so process execution
  * does not need to understand patch grammar.
  */
 export function summarizePatchExecution(

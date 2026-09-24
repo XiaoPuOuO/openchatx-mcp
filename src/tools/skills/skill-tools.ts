@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import { MCP_CONFIG } from "../../config.js"
+import type { ToolboxRegistry } from "../../toolbox/registry.js"
 import {
   isValidSkillName,
   type LoadedSkill,
@@ -13,7 +14,7 @@ import {
 const SKILL_LOAD_COOLDOWN_MS = 5_000
 const loadSkillOnce = createAgentLoadDeduper<LoadedSkill>(SKILL_LOAD_COOLDOWN_MS)
 
-export function registerSkillTools(server: McpServer): void {
+export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistry): void {
   const skills = new SkillCatalog(join(MCP_CONFIG.workspace, "skills"))
 
   server.registerTool(
@@ -38,7 +39,10 @@ export function registerSkillTools(server: McpServer): void {
     },
     async (_input, ctx) => {
       try {
-        const available = await skills.list(ctx.mcpReq.signal)
+        const available = [
+          ...(await skills.list(ctx.mcpReq.signal)),
+          ...(toolboxes?.listSkills() ?? []),
+        ].sort((left, right) => left.name.localeCompare(right.name))
         return {
           structuredContent: { skills: available },
           content: [],
@@ -73,9 +77,13 @@ export function registerSkillTools(server: McpServer): void {
     },
     async ({ name }, ctx) => {
       try {
-        const { value: loaded, reused } = await loadSkillOnce(name, () =>
-          skills.read(name, ctx.mcpReq.signal)
-        )
+        const { value: loaded, reused } = await loadSkillOnce(name, async () => {
+          if (name.includes(".") && toolboxes) {
+            const toolboxSkill = await toolboxes.readSkill(name, ctx.mcpReq.signal)
+            return { name, path: toolboxSkill.path, content: toolboxSkill.content }
+          }
+          return skills.read(name, ctx.mcpReq.signal)
+        })
         return {
           structuredContent: {
             path: loaded.path,

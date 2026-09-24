@@ -1,0 +1,43 @@
+{
+  "providers": {
+    "local-vllm": {
+      "type": "openai-compatible",
+      "base_url": "http://127.0.0.1:8000/v1",
+      "enabled": true,
+      "timeout": 120000,
+      "description": "Local GPU inference server"
+    }
+  },
+  "models": {
+    "qwen-fast": {
+      "provider": "local-vllm",
+      "model": "Qwen3.8-Flash-Next",
+      "name": "Qwen3.8-Flash-Next",
+      "description": "專門負責簡單、快速、大量的雜事與機械性工作。",
+      "enabled": true,
+      "context_window": 131072,
+      "thinking": {
+        "mode": "boolean",
+        "request_field": "enable_thinking",
+        "default_enabled": false
+      }
+    },
+    "qwen-heavy": {
+      "provider": "local-vllm",
+      "model": "Qwen3.8-2.4T-A95B",
+      "name": "Qwen3.8-2.4T-A95B",
+      "description": "負責較複雜、需要長上下文與較深推理的大型任務。",
+      "enabled": true,
+      "context_window": 262144,
+      "max_output_tokens": 16384,
+      "thinking": {
+        "mode": "effort",
+        "request_field": "reasoning_effort",
+        "levels": ["low", "medium", "high"],
+        "default": "medium",
+        "enabled_field": "enable_thinking",
+        "default_enabled": true
+      }
+    }
+  }
+}

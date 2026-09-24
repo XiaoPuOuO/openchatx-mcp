@@ -3,11 +3,11 @@ const { join } = require("node:path")
 const { loadPublicConfig } = require("./dist/public-config.cjs")
 const { ngrokConfigFiles } = require("./scripts/ngrok-config.cjs")
 
-const shellbyConfig = loadPublicConfig(join(__dirname, ".shellby", "config.toml"))
+const openchatxConfig = loadPublicConfig(join(__dirname, ".openchatx", "config.toml"))
 
 const apps = [
   {
-    name: "shellby-mcp",
+    name: "openchatx-mcp",
     script: "dist/index.js",
     cwd: __dirname,
     instances: 1,
@@ -17,16 +17,16 @@ const apps = [
   },
 ]
 
-if (shellbyConfig.ngrok.enabled) {
+if (openchatxConfig.ngrok.enabled) {
   const ngrokExecutable = execFileSync("/usr/bin/which", ["ngrok"], { encoding: "utf8" }).trim()
-  const ngrokArgs = ["http", `http://127.0.0.1:${shellbyConfig.port}`]
-  for (const path of ngrokConfigFiles(shellbyConfig, __dirname, ngrokExecutable))
+  const ngrokArgs = ["http", `http://127.0.0.1:${openchatxConfig.port}`]
+  for (const path of ngrokConfigFiles(openchatxConfig, __dirname, ngrokExecutable))
     ngrokArgs.push("--config", path)
-  if (shellbyConfig.ngrok.url) ngrokArgs.push("--url", shellbyConfig.ngrok.url)
-  if (shellbyConfig.ngrok.pooling_enabled) ngrokArgs.push("--pooling-enabled")
+  if (openchatxConfig.ngrok.url) ngrokArgs.push("--url", openchatxConfig.ngrok.url)
+  if (openchatxConfig.ngrok.pooling_enabled) ngrokArgs.push("--pooling-enabled")
   ngrokArgs.push("--traffic-policy-file=./ngrok-traffic-policy.yml", "--inspect=false")
   apps.push({
-    name: "shellby-ngrok",
+    name: "openchatx-ngrok",
     script: ngrokExecutable,
     args: ngrokArgs,
     cwd: __dirname,

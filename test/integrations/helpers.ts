@@ -3,7 +3,7 @@ import { request as httpRequest } from "node:http"
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import type { AgentObserver } from "../../src/agent/observer.js"
-import type { ShellbyAuthStore } from "../../src/auth/store.js"
+import type { OpenChatXAuthStore } from "../../src/auth/store.js"
 import {
   createMcpServerFactory,
   type McpCapabilityServices,
@@ -14,7 +14,6 @@ import {
   type McpHttpProfileOverrides,
   startMcpHttpServer as startMcpHttpServerRaw,
 } from "../../src/server/http-server.js"
-import { PeekabooClient } from "../../src/tools/computer/peekaboo.js"
 import { createShellSessionManager } from "../../src/tools/shell/session-manager.js"
 import { WebPageOpener } from "../../src/tools/web/web-open.js"
 
@@ -23,22 +22,18 @@ type TestMcpServerOptions = Partial<McpCapabilityServices> & {
   http?: McpHttpProfileOverrides
   profile?: McpRuntimeProfileOverrides
   auditLogger?: McpAuditLogger
-  authStore?: ShellbyAuthStore
+  authStore?: OpenChatXAuthStore
   agentObserver?: AgentObserver
 }
 
 const TEST_TOOLS = {
-  review: true,
   shell: true,
   applyPatch: true,
   fileRead: true,
   fileWrite: true,
-  clones: true,
-  subagents: true,
   web: true,
   skills: true,
   image: true,
-  computer: true,
 } satisfies McpRuntimeProfileOverrides["tools"]
 
 export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
@@ -47,24 +42,15 @@ export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
   const shellManager = tools.shell
     ? (services.shellManager ?? createShellSessionManager())
     : undefined
-  const peekaboo = tools.computer
-    ? (services.peekaboo ?? new PeekabooClient({ localOnly: true }))
-    : undefined
-  const chatGptDelegation =
-    tools.clones || tools.subagents
-      ? (services.chatGptDelegation ?? createUnavailableDelegationService())
-      : undefined
   const capabilityServices = {
     shellManager,
-    peekaboo,
-    chatGptDelegation,
+    externalMcp: services.externalMcp,
     webPageOpener: tools.web ? (services.webPageOpener ?? new WebPageOpener()) : undefined,
   }
   const closeRuntime = () =>
     Promise.allSettled([
       shellManager?.close() ?? Promise.resolve(),
-      peekaboo?.close() ?? Promise.resolve(),
-      chatGptDelegation?.dispose() ?? Promise.resolve(),
+      services.externalMcp?.close() ?? Promise.resolve(),
     ])
 
   try {
@@ -91,22 +77,6 @@ export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
   } catch (error) {
     await closeRuntime()
     throw error
-  }
-}
-
-function createUnavailableDelegationService(): NonNullable<
-  McpCapabilityServices["chatGptDelegation"]
-> {
-  const unavailable = async (): Promise<never> => {
-    throw new Error("This deterministic integration test did not supply a ChatGPT agent service.")
-  }
-  return {
-    ask: unavailable,
-    cloneSelf: unavailable,
-    cloneRun: unavailable,
-    poll: unavailable,
-    drainEvents: () => [],
-    dispose: async () => {},
   }
 }
 
@@ -139,7 +109,7 @@ async function connectClientWithMode(
         ? {
             headers: {
               ...(openAiSubject ? { "x-openai-subject": openAiSubject } : {}),
-              ...(trustedRemote ? { "x-shellby-remote": "1" } : {}),
+              ...(trustedRemote ? { "x-openchatx-remote": "1" } : {}),
               ...(openAiSession ? { "x-openai-session": openAiSession } : {}),
             },
           }

@@ -25,7 +25,7 @@ The MCP Express Host/Origin guards protect the localhost HTTP listener from DNS-
 
 ## Local Dashboard Boundary
 
-When `ui.enabled` creates an `AgentObserver`, `src/agent/dashboard-routes.ts` registers static `ui/dist` under `/ui`, the room editor at `/ui/editor`, a snapshot at `/ui/api/agents`, SSE at `/ui/api/events`, and steering endpoints on the same Express app. These routes share the localhost Host/Origin guards but do not use ChatGPT subject binding. The checked-in ngrok policy exposes only `/mcp`, so the dashboard stays local.
+When `ui.enabled` creates an `AgentObserver`, `src/agent/dashboard-routes.ts` registers static `ui/dist` under `/ui`, a snapshot at `/ui/api/agents`, SSE at `/ui/api/events`, and steering endpoints on the same Express app. These routes share the localhost Host/Origin guards but do not use ChatGPT subject binding. The checked-in ngrok policy exposes only `/mcp`, so the dashboard stays local.
 
 Observation starts at the tool-registration boundary after the startup gate. Steering is queued by agent identity and appended to a returning tool result; it cannot interrupt upstream model generation or a tool that has not returned. Observer history and queued instructions disappear on restart. Frontend contracts and presentation state live in the [UI wiki](../../ui/wiki/index.md).
 

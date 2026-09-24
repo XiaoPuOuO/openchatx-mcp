@@ -5,7 +5,6 @@ import { createAgentObserver } from "../../src/agent/observer.js"
 import { MCP_CONFIG } from "../../src/config.js"
 import { createMcpServerFactory } from "../../src/mcp/server-factory.js"
 import { startMcpHttpServer as startMcpHttpServerRaw } from "../../src/server/http-server.js"
-import { REVIEW_PROMPT_TOOL_CALLS } from "../../src/tools/review/review-tool.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) => {
@@ -32,30 +31,14 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "apply_patch",
       "file_read",
       "file_write",
+      "file_edit",
       "shell_reset",
       "shell_list",
       "shell_close",
-      "subagent_run",
-      "subagent_result",
       "fetch_url",
       "skill_list",
       "skill_use",
       "image_view",
-      "computer_list",
-      "computer_observe",
-      "computer_inspect",
-      "computer_click",
-      "computer_type",
-      "computer_press",
-      "computer_hotkey",
-      "computer_scroll",
-      "computer_drag",
-      "computer_app",
-      "computer_window",
-      "clone_self",
-      "clone_run",
-      "clone_result",
-      "submit_review",
     ]
   )
 
@@ -76,9 +59,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const shellPoll = tools.tools.find((tool) => tool.name === "shell_poll")
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
   const fileWrite = tools.tools.find((tool) => tool.name === "file_write")
-  const subagentResult = tools.tools.find((tool) => tool.name === "subagent_result")
-  const computerDrag = tools.tools.find((tool) => tool.name === "computer_drag")
-  assert.ok(shellRun && shellPoll && fetchUrl && fileWrite && subagentResult && computerDrag)
+  assert.ok(shellRun && shellPoll && fetchUrl && fileWrite)
 
   const runYield = (shellRun.inputSchema.properties as Record<string, Record<string, unknown>>)
     .yield_time_ms
@@ -88,9 +69,6 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   const webTokens = webProperties.max_output_tokens
   const webCompact = webProperties.compact
   const webFormat = webProperties.format
-  const subagentWait = (
-    subagentResult.inputSchema.properties as Record<string, Record<string, unknown>>
-  ).wait_ms
   assert.equal(runYield?.default, MCP_CONFIG.shell.defaultWaitMs)
   assert.equal(runYield?.maximum, MCP_CONFIG.shell.maxWaitMs)
   assert.equal(pollYield?.default, MCP_CONFIG.shell.defaultPollWaitMs)
@@ -111,15 +89,6 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     "mime_type",
     "file_name",
   ])
-  assert.equal(subagentWait?.default, MCP_CONFIG.chatGpt.defaultPollWaitMs)
-  assert.equal(subagentWait?.maximum, MCP_CONFIG.chatGpt.maxPollWaitMs)
-  const dragProperties = computerDrag.inputSchema.properties as Record<
-    string,
-    Record<string, unknown>
-  >
-  assert.equal("modifiers" in dragProperties, false)
-  assert.equal(dragProperties.from?.anyOf, undefined)
-  assert.equal(dragProperties.to?.anyOf, undefined)
 })
 
 test("bound MCP factories snapshot identity, tool groups, and output mode", {
@@ -139,17 +108,13 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
     {
       server: { name: "profile-snapshot", version: "9.9.9" },
       tools: {
-        review: false,
         shell: false,
         applyPatch: false,
         fileRead: false,
         fileWrite: false,
-        clones: false,
-        subagents: false,
         web: false,
         skills: true,
         image: false,
-        computer: false,
       },
       toolOutput: "compact",
     }
@@ -158,17 +123,13 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
   MCP_CONFIG.server.name = "mutated-after-bind"
   MCP_CONFIG.server.version = "0.0.0"
   Object.assign(MCP_CONFIG.tools, {
-    review: true,
     shell: true,
     applyPatch: true,
     fileRead: true,
     fileWrite: true,
-    clones: true,
-    subagents: true,
     web: true,
     skills: false,
     image: true,
-    computer: true,
   })
   MCP_CONFIG.mcp.toolOutput = "structured"
 
@@ -225,17 +186,13 @@ test("publishes only start_here when every optional tool group is disabled", {
   const running = await startMcpHttpServer({
     profile: {
       tools: {
-        review: false,
         shell: false,
         applyPatch: false,
         fileRead: false,
         fileWrite: false,
-        clones: false,
-        subagents: false,
         web: false,
         skills: false,
         image: false,
-        computer: false,
       },
     },
   })
@@ -267,42 +224,6 @@ test("file_read and file_write can be enabled independently", { timeout: 10_000 
     assert.equal(names.includes("file_read"), fileRead)
     assert.equal(names.includes("file_write"), fileWrite)
   }
-})
-
-test("asks once for a Shellby review after sustained tool use", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer()
-  t.after(() => running.close())
-  const connected = await connectClient(
-    running.url,
-    "review-client",
-    undefined,
-    false,
-    "review-session"
-  )
-  t.after(() => connected.client.close())
-
-  await connected.client.callTool({
-    name: "start_here",
-    arguments: { mode: "general", task_id: "review-feedback" },
-  })
-
-  let beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  for (let call = 1; call < REVIEW_PROMPT_TOOL_CALLS - 2; call += 1) {
-    beforeThreshold = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  }
-  assert.doesNotMatch(
-    beforeThreshold.content.find((item) => item.type === "text")?.text ?? "",
-    /submit_review/u
-  )
-
-  const prompted = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  assert.match(prompted.content.find((item) => item.type === "text")?.text ?? "", /submit_review/u)
-
-  const noRepeat = await connected.client.callTool({ name: "shell_list", arguments: {} })
-  assert.doesNotMatch(
-    noRepeat.content.find((item) => item.type === "text")?.text ?? "",
-    /submit_review/u
-  )
 })
 
 test("publishes ordinary tool results only through the compact MCP surface", {

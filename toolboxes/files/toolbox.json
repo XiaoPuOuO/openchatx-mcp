@@ -1,0 +1,22 @@
+{
+  "name": "Files",
+  "description": "Local file reading, writing, and patch editing.",
+  "enabled": true,
+  "builtin": "files",
+  "tools": {
+    "apply_patch": { "enabled": true, "description": "Apply structured patches to local files." },
+    "file_read": {
+      "enabled": true,
+      "description": "Read files or directories with OpenCode-style text pagination and native media transport."
+    },
+    "file_write": {
+      "enabled": true,
+      "description": "Write a ChatGPT file to the local filesystem."
+    },
+    "file_edit": {
+      "enabled": true,
+      "description": "Precisely replace text in one existing file."
+    }
+  },
+  "skills": {}
+}

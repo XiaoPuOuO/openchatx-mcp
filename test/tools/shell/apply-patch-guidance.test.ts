@@ -4,7 +4,8 @@ import test from "node:test"
 import { shellRunFileEditNotices } from "../../../src/tools/shell/apply-patch-guidance.js"
 
 test("emits apply_patch notice for obvious shell file edits", () => {
-  const notice = "Use the `apply_patch` MCP tool over `shell_run` for file changes."
+  const notice =
+    "Use `file_edit` for precise single-file replacements or `apply_patch` for structural/multi-file changes instead of `bash`."
   const commands = [
     "cat > notes.txt <<'EOF'\nhello\nEOF",
     "echo hello >> notes.txt",

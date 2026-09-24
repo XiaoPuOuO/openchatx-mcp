@@ -15,9 +15,9 @@ on_http_request:
       - type: remove-headers
         config:
           headers:
-            - x-shellby-remote
+            - x-openchatx-remote
       - type: add-headers
         config:
           headers:
             host: localhost
-            x-shellby-remote: "1"
+            x-openchatx-remote: "1"

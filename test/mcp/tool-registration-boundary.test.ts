@@ -13,13 +13,8 @@ for (const structuredOutput of [false, true]) {
     t.after(() => Promise.all([client.close(), server.close()]))
     let inputCalls = 0
     let contextCalls = 0
-    let notices = 0
     installToolRegistrationBoundary(server, {
       structuredOutput,
-      drainPendingEvents: () => {
-        notices += 1
-        return ["fixture notice"]
-      },
     })
 
     server.registerTool(
@@ -64,7 +59,6 @@ for (const structuredOutput of [false, true]) {
     assert.equal(inputCalls, 1)
     if (structuredOutput) assert.deepEqual(loaded.structuredContent, { name: "value" })
     else assert.equal(loaded.structuredContent, undefined)
-    assert.match(JSON.stringify(loaded.content), /fixture notice/u)
 
     const contextResult = await client.callTool({ name: "without_input", arguments: {} })
     assert.notEqual(contextResult.isError, true)
@@ -74,11 +68,9 @@ for (const structuredOutput of [false, true]) {
     const invalid = await client.callTool({ name: "with_input", arguments: { name: 42 } })
     assert.equal(invalid.isError, true)
     assert.equal(inputCalls, 1)
-    assert.equal(notices, 2)
 
     const thrown = await client.callTool({ name: "throwing", arguments: {} })
     assert.equal(thrown.isError, true)
     assert.match(JSON.stringify(thrown.content), /fixture failure/u)
-    assert.equal(notices, 2)
   })
 }

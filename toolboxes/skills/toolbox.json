@@ -1,0 +1,11 @@
+{
+  "name": "Skills",
+  "description": "Reusable instruction bundles from the workspace and toolboxes.",
+  "enabled": true,
+  "builtin": "skills",
+  "tools": {
+    "skill_list": { "enabled": true, "description": "List available reusable skills." },
+    "skill_use": { "enabled": true, "description": "Load a reusable skill." }
+  },
+  "skills": {}
+}

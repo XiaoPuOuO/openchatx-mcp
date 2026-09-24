@@ -1,0 +1,22 @@
+{
+  "name": "Toolbox Manager",
+  "description": "Agent-facing management for plugins, TypeScript tools, and skills.",
+  "enabled": true,
+  "builtin": "toolbox-manager",
+  "tools": {
+    "toolbox_list": {
+      "enabled": true,
+      "description": "List installed toolboxes, tools, and skills."
+    },
+    "toolbox_manage": {
+      "enabled": true,
+      "description": "Create, delete, enable, disable, or reload toolboxes, tools, and skills."
+    }
+  },
+  "skills": {
+    "plugin-authoring": {
+      "enabled": true,
+      "description": "Create or revise openchatx-mcp plugins from natural-language user requests."
+    }
+  }
+}

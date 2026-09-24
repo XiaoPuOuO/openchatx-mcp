@@ -3,7 +3,6 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
 import { getAgentIdentity } from "../agent/context.js"
 import type { AgentObserver } from "../agent/observer.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
-import type { ReviewPromptTracker } from "../tools/review/review-tool.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import { appendToolEvents, compactToolResult } from "./tool-output.js"
@@ -15,9 +14,7 @@ import {
 
 export interface ToolRegistrationBoundaryOptions {
   structuredOutput: boolean
-  drainPendingEvents?: () => string[]
   agentObserver?: AgentObserver
-  reviewPromptTracker?: ReviewPromptTracker
   auditRequest?: McpAuditRequest
 }
 
@@ -104,9 +101,7 @@ function collectToolEvents(
 ): string[] {
   return [
     ...(name === "shell_run" ? shellRunFileEditNotices(input) : []),
-    ...(options.drainPendingEvents?.() ?? []),
     ...(options.agentObserver?.drainInstructions(agent) ?? []),
-    ...(options.reviewPromptTracker?.() ?? []),
   ]
 }
 
@@ -123,7 +118,7 @@ function startupRequiredResult() {
     content: [
       {
         type: "text" as const,
-        text: "Shellby has not been initialized for this conversation. Call `start_here` first, and follow the instructions.",
+        text: "openchatx-mcp has not been initialized for this conversation. Call `start_here` first, and follow the instructions.",
       },
     ],
   }

@@ -1,6 +1,6 @@
 ---
 name: audit-logs
-description: Understand and analyze Shellby's agent-commands.yaml audit log format without loading the full log into context.
+description: Understand and analyze openchatx-mcp's agent-commands.yaml audit log format without loading the full log into context.
 ---
 
 # Agent Command Log
@@ -30,14 +30,14 @@ Source of truth for format:
 - `out` = model-facing text/structured output tokens; native image payloads are excluded
 - final time = local call start time
 
-Tool calls may include `session: "agent-N"` or, after a successful `start_here`, `session: "agent-N/task-slug"`. Shellby's shared agent context assigns each distinct `X-OpenAI-Session` a stable process-local identity such as `agent-1`, `agent-2`, and so on. A successful `start_here` adds that caller's `task_id`; later audit entries append it to the agent label, for example `agent-1/audit-session-labels`. The `start_here` entry itself keeps the plain `agent-N` label. Raw session IDs are not written to the log.
+Tool calls may include `session: "agent-N"` or, after a successful `start_here`, `session: "agent-N/task-slug"`. openchatx-mcp's shared agent context assigns each distinct `X-OpenAI-Session` a stable process-local identity such as `agent-1`, `agent-2`, and so on. A successful `start_here` adds that caller's `task_id`; later audit entries append it to the agent label, for example `agent-1/audit-session-labels`. The `start_here` entry itself keeps the plain `agent-N` label. Raw session IDs are not written to the log.
 
-For ChatGPT sessions, `start_here` is normally the first successful Shellby tool call for that session.
+For ChatGPT sessions, `start_here` is normally the first successful openchatx-mcp tool call for that session.
 
 ## Tool Bodies
 
-- `shell_run`: shell/request ID, explicitly supplied `yield_time_ms` / `max_output_tokens`, optional cwd, and either one command or a parallel commands array
-- `shell_poll`: shell/request ID, cursor, and explicitly supplied `yield_time_ms` / `max_output_tokens`
+- `bash`: command, optional workdir/timeout, and bounded output metadata
+- `terminal`: pseudo-terminal action (`create`, `write`, `read`, `resize`, or `close`) and session ID
 - `apply_patch`: cwd + patch size; patch body retained only on failure
 - other tools: serialized `args`
 

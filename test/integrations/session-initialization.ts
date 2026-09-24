@@ -203,14 +203,14 @@ test("suppresses rapid duplicate skill loads for the same agent", {
   assert.match(toolText(retryMissing), /unknown_skill/u)
 })
 
-test("prefers repo-local .shellby prompt overrides and falls back to bundled prompts", async (t) => {
+test("prefers repo-local .openchatx prompt overrides and falls back to bundled prompts", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-start-prompt-"))
   t.after(() => rm(root, { recursive: true, force: true }))
 
   const bundledPath = join(root, "src", "tools", "start-here", "prompts", "coding.md")
-  const overridePath = join(root, ".shellby", "prompts", "coding.md")
+  const overridePath = join(root, ".openchatx", "prompts", "coding.md")
   await mkdir(join(root, "src", "tools", "start-here", "prompts"), { recursive: true })
-  await mkdir(join(root, ".shellby", "prompts"), { recursive: true })
+  await mkdir(join(root, ".openchatx", "prompts"), { recursive: true })
   await writeFile(bundledPath, "bundled")
   await writeFile(overridePath, "override")
 
@@ -228,7 +228,7 @@ test("derives start_here modes from bundled and local prompt filename slugs", as
   t.after(() => rm(root, { recursive: true, force: true }))
 
   const bundledDirectory = join(root, "src", "tools", "start-here", "prompts")
-  const localDirectory = join(root, ".shellby", "prompts")
+  const localDirectory = join(root, ".openchatx", "prompts")
   await mkdir(bundledDirectory, { recursive: true })
   await mkdir(localDirectory, { recursive: true })
   await Promise.all([

@@ -1,11 +1,18 @@
-<h1 align="center">Shellby MCP</h1>
+<p align="center">
+  <img src="ui/public/openchatx-mcp-icon.png" width="96" alt="openchatx-mcp icon">
+</p>
+
+<h1 align="center">openchatx-mcp</h1>
 
 <p align="center">
-  A local MCP server that gives ChatGPT Web persistent shells, direct file editing, Computer Use, browser-backed subagents, webpage tools, and reusable skills on macOS.
+  <strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Serbyte-Development/shellby-mcp/actions/workflows/ci.yml"><img src="https://github.com/Serbyte-Development/shellby-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  A local MCP platform for ChatGPT with persistent tools, toolboxes, skills, and local/remote MCP aggregation.
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="macOS">
 </p>
@@ -18,9 +25,9 @@
 </p>
 
 > [!CAUTION]
-> Shellby MCP runs with the full permissions of your local macOS user. An authorized ChatGPT caller can run commands, edit files, fetch webpages, and control supported applications.
+> openchatx-mcp runs with the full permissions of your local macOS user. An authorized ChatGPT caller can run commands, edit files, fetch webpages, and control supported applications.
 
-![Shellby MCP architecture showing ChatGPT Web connecting to the local harness and its persistent tools, Computer Use, and subagent runtime](docs/assets/shellby-mcp-architecture.svg)
+![openchatx-mcp architecture](docs/assets/openchatx-mcp-architecture.png)
 
 ## Capabilities
 
@@ -28,8 +35,8 @@
 | -------------------- | -------------------------------------------------------------------------------------------- |
 | Persistent shells    | Named login shells retain cwd, environment, processes, and command history across MCP calls. |
 | Native `apply_patch` | Native ChatGPT `apply_patch` binary used to edit files independently of shell state.         |
-| Computer Use         | Focused macOS observation and interaction backed by [Peekaboo](https://peekaboo.sh/).        |
-| Browser subagents    | Detached ChatGPT Web conversations with follow-up context and concurrent result retrieval.   |
+| MCP aggregation      | Local stdio and remote HTTP MCP servers are namespaced and republished through openchatx-mcp. |
+| Toolboxes             | Folder-backed plugins containing built-in or user-authored TypeScript tools and skills.       |
 | Web and images       | Rendered webpage extraction, bounded document pagination, and native image transport.        |
 | Dynamic skills       | Reusable workflows loaded from `<workspace>/skills/*/SKILL.md`.                              |
 
@@ -41,13 +48,13 @@
 - An [ngrok](https://ngrok.com/) account and CLI
 - A ChatGPT Plus or Higher account with Developer Mode turned on
 
-Google Chrome is optional and is used for browser-backed subagents. Computer Use is optional and uses the Peekaboo package installed with this repository.
+Computer Use is intentionally provided through an external MCP rather than being built in.
 
 ## Quick start
 
 ### Install with your coding agent
 
-[`skills/install-shellby-mcp/SKILL.md`](skills/install-shellby-mcp/SKILL.md)
+[`skills/install-openchatx-mcp/SKILL.md`](skills/install-openchatx-mcp/SKILL.md)
 
 ### Manual install
 
@@ -58,8 +65,8 @@ Google Chrome is optional and is used for browser-backed subagents. Computer Use
 
    ```bash
    brew install --cask ngrok
-   git clone https://github.com/Serbyte-Development/shellby-mcp.git
-   cd shellby-mcp
+   git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+   cd openchatx-mcp
    npm ci
    ```
 
@@ -71,13 +78,13 @@ Google Chrome is optional and is used for browser-backed subagents. Computer Use
 
    Get an authtoken from the [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) if needed.
 
-3. Create the active Shellby config:
+3. Create the active openchatx-mcp config:
 
    ```bash
    npm run setup -- --config-only
    ```
 
-   Review `.shellby/config.toml` and edit any values you want to customize. The generated file shows every supported setting: defaults are active, and settings without defaults are commented examples.
+   Review `.openchatx/config.toml` and edit any values you want to customize. The generated file shows every supported setting: defaults are active, and settings without defaults are commented examples.
 
 4. Run guided setup:
 
@@ -85,7 +92,7 @@ Google Chrome is optional and is used for browser-backed subagents. Computer Use
    npm run setup
    ```
 
-   Setup checks the machine, prepares the workspace, and builds Shellby MCP. It also checks Computer Use and prepares the dedicated ChatGPT Chrome profile when those tool groups are enabled.
+   Setup checks the machine, prepares the workspace, and builds openchatx-mcp.
 
 5. Run the first managed start from Terminal.app:
 
@@ -93,9 +100,42 @@ Google Chrome is optional and is used for browser-backed subagents. Computer Use
    npm start
    ```
 
-   This creates or reuses the repository-local PM2 runtime, starts Shellby MCP and ngrok, launches the configured ChatGPT browser when agent tools are enabled, waits for local health, and prints the public `/mcp` URL. Starting from Terminal.app gives the managed process tree the intended macOS permission context for Computer Use.
+   This creates or reuses the repository-local PM2 runtime, starts openchatx-mcp and ngrok, waits for local health, and prints the public `/mcp` URL.
 
-6. In ChatGPT Developer Mode, create a custom MCP app with the printed `https://.../mcp` URL and select **No Auth**.
+6. Enable ChatGPT Developer Mode, then create a custom MCP app with the printed `https://.../mcp` URL and select **No Auth**.
+
+   To enable Developer Mode:
+
+   1. Open your profile menu in the lower-left corner and choose **Settings**.
+
+      ![Open ChatGPT Settings from the profile menu](docs/assets/enable-developer-mode-step-1.png)
+
+   2. In **Security & sign-in**, turn on **Developer Mode**.
+
+      ![Enable Developer Mode in Security & sign-in settings](docs/assets/enable-developer-mode-step-2.png)
+
+   Then create the MCP app:
+
+   1. Open **Plugins** from the left sidebar, click the **+** button, and choose **Create app**.
+
+      ![Open Plugins and choose Create app](docs/assets/create-chatgpt-plugin-step-1.png)
+
+   2. In the plugin upload dialog, choose **Create MCP app**.
+
+      ![Choose Create MCP app](docs/assets/create-chatgpt-plugin-step-2.png)
+
+   3. Fill in the app details:
+      - Name: `OpenChatX`
+      - Description: for example `OpenChatX for Computer Agent`
+      - Server URL: the `https://.../mcp` URL printed by `npm run print-url`
+      - Authentication: **No Auth**
+      - Confirm that you understand the risks of a custom MCP server, then click **Create**.
+
+      ![Fill in the OpenChatX MCP app settings and create the app](docs/assets/create-chatgpt-plugin-step-3.png)
+
+   4. Open the OpenChatX plugin permissions and select **Allow all tools** so ChatGPT can use openchatx-mcp without prompting before every tool call.
+
+      ![Set OpenChatX plugin permissions to Allow all tools](docs/assets/openchatx-allow-all-tools.png)
 
 > [!IMPORTANT]
 > The first trusted remote tool call binds the installation to that ChatGPT subject. Use `npm run auth:reset` only when you intend to clear that binding.
@@ -108,74 +148,139 @@ curl -fsS http://127.0.0.1:3333/healthz
 npm run print-url
 ```
 
-The default local MCP endpoint is `http://127.0.0.1:3333/mcp`; root `port` in `.shellby/config.toml` changes the listener and health-check port.
+The default local MCP endpoint is `http://127.0.0.1:3333/mcp`; root `port` in `.openchatx/config.toml` changes the listener and health-check port.
+
+## External MCP servers
+
+Copy `mcp-servers.example.json` to the gitignored `mcp-servers.json`. Each enabled entry is connected at openchatx-mcp startup and its tools are exposed through the same ChatGPT MCP connection. Local entries use stdio; remote entries use Streamable HTTP. Tool names are namespaced as `<server>__<tool>` so different MCP servers cannot collide.
+
+```json
+{
+  "open-computer-use": {
+    "type": "local",
+    "command": ["/opt/homebrew/bin/open-computer-use", "mcp"],
+    "enabled": true
+  },
+  "unreal-engine": {
+    "type": "remote",
+    "url": "http://127.0.0.1:8000/mcp",
+    "enabled": true,
+    "timeout": 300000
+  }
+}
+```
+
+Unavailable MCP servers do not prevent openchatx-mcp from starting. External MCP tools stay lazy: their full schemas are not added to ChatGPT's main tool list. Instead, `start_here` returns a lightweight capability catalog containing each configured server's id/name, description, availability, and tool count. This lets ChatGPT know that capabilities such as Blender or Unreal Engine exist without paying the schema cost of every underlying tool. When a capability fits the task, ChatGPT can call `tool_search` with `source="mcp"` and an optional `server="<id>"`, then invoke the selected result through `tool_call`. Restart openchatx-mcp after an unavailable server becomes available so its tools can be discovered.
+
+## Provider-backed subagents
+
+Subagents run through providers configured by openchatx-mcp itself. They do not automate additional ChatGPT conversations. This makes local GPU inference, self-hosted models, and external APIs available as delegated workers while ChatGPT remains the primary planner.
+
+Providers do **not** automatically expose every model they offer. The user explicitly creates curated model profiles with a name, description, real provider model ID, context window, optional max output, and thinking configuration. ChatGPT sees only those profiles and uses their descriptions to choose the right worker.
+
+Configure them from the dashboard's **Subagents** page or copy [`subagents.example.json`](subagents.example.json) to the gitignored `subagents.json`.
+
+```json
+{
+  "providers": {
+    "local-vllm": {
+      "type": "openai-compatible",
+      "base_url": "http://127.0.0.1:8000/v1",
+      "enabled": true,
+      "timeout": 120000
+    }
+  },
+  "models": {
+    "qwen-fast": {
+      "provider": "local-vllm",
+      "model": "Qwen3.8-Flash-Next",
+      "name": "Qwen3.8-Flash-Next",
+      "description": "Fast model for simple, high-volume mechanical work.",
+      "enabled": true,
+      "context_window": 131072,
+      "thinking": {
+        "mode": "boolean",
+        "request_field": "enable_thinking",
+        "default_enabled": false
+      }
+    }
+  }
+}
+```
+
+`max_output_tokens` is optional. If neither the model profile nor `subagent_run` supplies a maximum, openchatx-mcp leaves the provider's output limit unspecified.
+
+The initial provider adapter supports OpenAI-compatible `/chat/completions` endpoints, including common local inference servers. Additional provider adapters can be added without changing the curated profile model.
+
+Agent-facing tools remain intentionally small:
+
+- `subagent_list` — lists configured model profiles and their intended uses.
+- `subagent_run` — delegates one task to one selected profile.
+
+## Toolboxes and custom TypeScript tools
+
+Every built-in tool is assigned to a toolbox, and user toolboxes use the same runtime. A toolbox is a folder under `toolboxes/`:
+
+```text
+toolboxes/
+└── my-tools/
+    ├── toolbox.json
+    ├── tools/
+    │   └── hello.ts
+    └── skills/
+        └── debug-app/
+            └── SKILL.md
+```
+
+The dashboard's **Toolboxes** page can enable or disable whole toolboxes, individual tools, and skills. It can also create toolbox folders, TypeScript tool templates, and skill templates. Built-in Shell/File/Web/Media tools are managed from the same page rather than from `[tools]` in the TOML config.
+
+Custom tools use the public toolbox SDK:
+
+```ts
+import { defineTool, z } from "openchatx-mcp/toolbox"
+
+export default defineTool({
+  name: "hello",
+  description: "Say hello",
+  inputSchema: z.object({ name: z.string() }),
+  async execute({ name }) {
+    return { content: [{ type: "text", text: `Hello ${name}` }] }
+  },
+})
+```
+
+The tool name must match its `.ts` filename. User tools are exposed as `<toolbox>__<tool>` to prevent collisions. `Tool` subclasses may additionally provide `title`, `outputSchema`, MCP annotations/icons/metadata, `required`, and `onLoad` / `onUnload` lifecycle hooks. Changes under `toolboxes/` are watched and reloaded without restarting the openchatx-mcp process; a connected MCP client may need to refresh its advertised tool list after schemas change.
 
 ## Optional capabilities
-
-<details>
-<summary><strong>Computer Use</strong></summary>
-
-Shellby ships a package-local Peekaboo CLI build that matches its Computer Use adapter. Check or grant permissions with:
-
-```bash
-npm run setup:computer
-```
-
-Screen Recording enables observation. Accessibility and Event Synthesizing enable actions. Shellby always uses its bundled Peekaboo executable so the adapter and CLI stay on the tested version together.
-
-See [Computer Use](wiki/pages/computer-use.md) for runtime details.
-
-</details>
-
-> [!WARNING]
-> Browser-backed ChatGPT agent features (`clones` and `subagents`) automate ChatGPT Web and may conflict with [OpenAI's Terms of Use](https://openai.com/policies/terms-of-use/). Disable them with `tools.clones = false` and `tools.subagents = false` in `.shellby/config.toml`. Use these features at your own risk.
-
-<details>
-<summary><strong>Browser-backed ChatGPT subagents</strong></summary>
-
-Run the dedicated browser setup when Chrome was unavailable during initial setup or when you want to configure it later:
-
-```bash
-npm run setup:chatgpt
-```
-
-This creates a dedicated Chrome profile under `<state_dir>/chatgpt-chrome` and attaches over CDP at `127.0.0.1:9222`. `state_dir` defaults to `~/.shellby`. Sign into ChatGPT once in that profile. Future `npm start` runs launch it automatically while clone or subagent tools are enabled.
-
-Conversation URL and turn count are persisted for reused `agent_id` values. Use `npm run reset-agents` to forget those local mappings.
-
-See [Browser ChatGPT Subagents](wiki/pages/subagents/browser-chatgpt-subagents.md) for lifecycle details.
-
-</details>
 
 ## Operations
 
 | Command                | Purpose                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------ |
-| `npm start`            | Build and start or reload Shellby MCP, ngrok, and enabled supporting services. |
+| `npm start`            | Build and start or reload openchatx-mcp, ngrok, and enabled supporting services. |
 | `npm run restart`      | Rebuild, clear the audit log, and reload services using the existing PM2 daemon. |
-| `npm run restart -- --hard` | Rebuild and recreate Shellby's PM2 daemon from a healthy Terminal.app session. |
+| `npm run restart -- --hard` | Rebuild and recreate openchatx-mcp's PM2 daemon from a healthy Terminal.app session. |
 | `npm run status`       | Show PM2 process state.                                                        |
 | `npm run logs`         | Follow PM2 logs.                                                               |
-| `npm run pm2 -- <args>` | Run a PM2 command against Shellby's dedicated daemon.                          |
+| `npm run pm2 -- <args>` | Run a PM2 command against openchatx-mcp's dedicated daemon.                    |
 | `npm run print-url`    | Print the active public `/mcp` URL.                                            |
-| `npm run stop`         | Stop the managed Shellby MCP and ngrok processes.                              |
+| `npm run stop`         | Stop the managed openchatx-mcp and ngrok processes.                            |
 | `npm run auth:reset`   | Clear the bound remote ChatGPT subject after confirmation.                     |
-| `npm run reset-agents` | Forget persisted subagent conversation mappings.                               |
 
-PM2 is installed as a repository dependency. All Shellby PM2 commands use `<state_dir>/pm2` for their daemon, sockets, logs, and process state. `state_dir` defaults to `~/.shellby`. This is separate from the default `~/.pm2` daemon used by other projects; use `npm run pm2 -- <args>` for direct access to Shellby's daemon.
+PM2 is installed as a repository dependency. openchatx-mcp uses `<state_dir>/pm2` for its daemon, sockets, logs, and process state. This is separate from the default `~/.pm2` daemon used by other projects.
 
-Use `npm run restart` for routine code or config changes, including from `shell_run`. It keeps the PM2 daemon, reloads ngrok, then reloads MCP. The initiating shell and MCP connection may close; after services return, make a fresh tool call. Build failures leave running services and the audit log intact. The authenticated ChatGPT Chrome profile is reused.
+Use `npm run restart` for routine code or config changes, including from `bash`. It keeps the PM2 daemon, reloads ngrok, then reloads MCP. The initiating MCP connection may close; after services return, make a fresh tool call. Build failures leave running services and the audit log intact.
 
-For macOS permission or service-context problems, run `npm run restart -- --hard` from a healthy Terminal.app session. This also recreates Shellby's dedicated PM2 daemon. Hard restart refuses to run inside Shellby because stopping that daemon would kill the command responsible for starting its replacement.
+For macOS permission or service-context problems, run `npm run restart -- --hard` from a healthy Terminal.app session. This recreates openchatx-mcp's dedicated PM2 daemon. Hard restart refuses to run from inside openchatx-mcp because stopping that daemon would kill the command responsible for starting its replacement.
 
-If Shellby was previously running under the default shared daemon, move it once from Terminal.app before using the new commands:
+If an older installation was previously running under the default shared daemon, move it once from Terminal.app before using the new commands:
 
 ```sh
 PM2_HOME="$HOME/.pm2" ./node_modules/.bin/pm2 delete shellby-mcp shellby-ngrok
 npm run restart
 ```
 
-The first command removes only Shellby's old app entries, leaving the shared daemon and other projects running. If an older installation still has a `shellby-cursor-host` entry in that daemon, delete that entry there too. The migration briefly interrupts Shellby; it does not erase authentication or browser profiles. Future restarts need only `npm run restart`.
+The first command removes only the legacy app entries, leaving the shared daemon and other projects running. If an older installation still has a `shellby-cursor-host` entry in that daemon, delete that entry there too. The migration briefly interrupts the MCP service; it does not erase authentication state. Future restarts need only `npm run restart`.
 
 ### Update an existing installation
 
@@ -188,52 +293,35 @@ npm start
 
 ## Configuration
 
-Shellby's public configuration is the gitignored `.shellby/config.toml`. `npm run setup` creates a config showing every supported setting for new installations, with defaults active and the optional `ngrok.url` shown as a commented example. Uncomment and customize that URL to use a reserved ngrok endpoint; leaving it commented lets ngrok assign the public URL. Existing files are left untouched, preserving their values, comments, and formatting. Missing settings use defaults automatically. Invalid values produce a warning and fall back individually; unknown keys warn and are ignored. Valid TOML formatting—including reordered sections, dotted keys, and inline tables—is accepted. Malformed TOML syntax still needs correction; errors show the location and never rewrite your file.
+openchatx-mcp's public configuration is the gitignored `.openchatx/config.toml`. `npm run setup` creates a config showing every supported setting for new installations, with defaults active and the optional `ngrok.url` shown as a commented example. Set `ngrok.url` to your assigned or reserved static ngrok domain so the ChatGPT connector URL stays unchanged across PM2/ngrok restarts; leaving it commented lets ngrok choose the public endpoint. Existing files are left untouched, preserving their values, comments, and formatting. Missing settings use defaults automatically. Invalid values produce a warning and fall back individually; unknown keys warn and are ignored. Valid TOML formatting—including reordered sections, dotted keys, and inline tables—is accepted. Malformed TOML syntax still needs correction; errors show the location and never rewrite your file.
 
-The TOML surface currently owns the runtime state directory, workspace, shell path, ChatGPT CDP/project routing, MCP tool-output format, and startup-static tool groups. `state_dir` controls machine-local Shellby state such as authentication, subagent persistence, the dedicated Chrome profile, and the PM2 daemon; it defaults to `~/.shellby`. The generated config enables every tool group and defaults tool output to `compact`. Setting a group to `false` removes those tools from `tools/list` after Shellby restarts and skips its supporting runtime service where one exists. `start_here` is always published. For example, this customization disables browser-backed agents and Computer Use:
+The TOML surface owns runtime state, workspace, shell, ngrok, and MCP-output settings. The local dashboard is always enabled at `/ui`. External MCP servers are configured separately in `mcp-servers.json`, while built-in and user-authored tools are managed through `toolboxes/` and the Toolboxes UI. `state_dir` controls machine-local authentication and PM2 state and defaults to `~/.openchatx-mcp`. Authentication state is OpenChatX-native and is never imported from legacy Shellby state. `start_here` is always published as a required system tool.
 
 ```toml
-state_dir = "~/.shellby"
+state_dir = "~/.openchatx-mcp"
 workspace = "~/Desktop/agent-workspace"
 
 [shell]
 path = "/bin/zsh"
 rtk = false
 
-[chatgpt]
-cdp_endpoint = "http://127.0.0.1:9222"
-project_url = "https://chatgpt.com/"
-max_delegated_agents = 3
-
 [mcp]
 tool_output = "compact"
 
-[tools]
-review = true
-shell = true
-apply_patch = true
-clones = false
-subagents = false
-web = true
-skills = true
-image = true
-computer = false
 ```
 
-`chatgpt.max_delegated_agents` sets the maximum number of delegated agent IDs per main-agent session, shared by subagents and clones. It defaults to `3`; invalid values warn and fall back to `3`. Set a positive integer to override it. Saved agents and in-flight creations count toward the limit; existing IDs remain reusable even if the limit is lowered. The per-call batch limit remains three. Older configs can omit this field. To override it, add it under `[chatgpt]`, then restart Shellby after changing its value.
+`mcp.tool_output` controls the representation used for ordinary built-in tool results. `compact` is optimized for model context and omits public output schemas; `structured` preserves each tool's structured result and output schema for MCP clients that use them. External MCP results are proxied without compacting so image/audio/resource content is preserved. Changing this setting requires an openchatx-mcp restart.
 
-`mcp.tool_output` controls the representation used for ordinary tool results. `compact` is optimized for model context and omits public output schemas; `structured` preserves each tool's structured result and output schema for MCP clients that use them. Computer Use and `image_view` keep their native MCP content in either mode. Changing this setting requires a Shellby restart.
+`shell.rtk` defaults to `false`, so RTK is not required. To enable transparent RTK command rewriting, install RTK Token Killer with `brew install rtk`, set `shell.rtk = true`, and restart openchatx-mcp. The runtime resolves that executable from startup `PATH`, then uses the resolved absolute path for supported rewrites regardless of the shell command's cwd. Unsupported rewrites and RTK failures fall back to the original command. Caller-visible command identity remains based on the original command.
 
-`shell.rtk` defaults to `false`, so RTK is not required to install or run Shellby. To enable transparent RTK command rewriting, install RTK Token Killer with `brew install rtk`, set `shell.rtk = true`, and restart Shellby. Shellby resolves that executable from startup `PATH`, then uses the resolved absolute path for supported rewrites regardless of the shell command's cwd. Unsupported rewrites and RTK failures fall back to the original command. Shellby keeps the caller's original command for request identity, auditing, and command previews, and disables RTK's separate failure tee, telemetry, and persistent history for Shellby-launched commands while still loading normal RTK filtering/exclusion configuration.
-
-Shellby does not use a repository `.env` file. User-configurable Shellby settings come only from `.shellby/config.toml`; external tools use their normal machine-level configuration. In particular, ngrok is resolved from `PATH` and authentication is configured with `ngrok config add-authtoken`. Chrome is discovered in the normal macOS application locations, and Shellby uses its bundled Peekaboo build. The loopback host and internal runtime limits remain code-owned in [`src/config.ts`](src/config.ts).
+openchatx-mcp does not use a repository `.env` file. Runtime settings live in `.openchatx/config.toml`; external MCP servers live in `mcp-servers.json`; toolboxes live in `toolboxes/`. ngrok is resolved from `PATH` and authentication is configured with `ngrok config add-authtoken`. The loopback host and internal runtime limits remain code-owned in [`src/config.ts`](src/config.ts).
 
 ### Running two copies
 
-Give each repository copy its own state directory, MCP port, and ChatGPT CDP port when agent tools are enabled. Copies using ngrok also need separate ngrok API ports and public URLs. Changing only `state_dir` separates saved state and PM2, but does not prevent port collisions. In the second copy's `.shellby/config.toml`, merge these values into the existing root and sections:
+Give each repository copy its own state directory and MCP port. Copies using ngrok also need separate ngrok API ports and public URLs. Changing only `state_dir` separates saved state and PM2, but does not prevent port collisions. In the second copy's `.openchatx/config.toml`, merge these values into the existing root and sections:
 
 ```toml
-state_dir = "~/.shellby-second"
+state_dir = "~/.openchatx-mcp-second"
 port = 3334
 
 [ngrok]
@@ -241,30 +329,28 @@ api_port = 4041
 url = "https://your-second-reserved-domain.ngrok.app"
 pooling_enabled = false
 
-[chatgpt]
-cdp_endpoint = "http://127.0.0.1:9223"
 ```
 
-Use a real, distinct ngrok URL available to your account. Keep pooling disabled for independent copies. If your config is missing, run `npm run setup -- --config-only` first, then edit it before full setup or startup. Run `npm run setup` in the new copy, sign into its dedicated Chrome profile if agent tools are enabled, then run `npm start` from Terminal.app. Run `npm run print-url` in each repository to get that copy's connector URL.
+Use a real, distinct ngrok URL available to your account. Keep pooling disabled for independent copies. If your config is missing, run `npm run setup -- --config-only` first, then edit it before full setup or startup. Run `npm run setup` in the new copy, then run `npm start` from Terminal.app. Run `npm run print-url` in each repository to get that copy's connector URL.
 
-Each copy's PM2 commands, including hard restart, target its configured state directory. Authentication, subagent mappings, and Chrome profiles stay separate. ngrok credentials remain in its native user config; Shellby writes only an API-address overlay at `<state_dir>/ngrok-agent.json`. The dashboard uses the copy's MCP port (`http://127.0.0.1:3334/ui/` for this example); the Vite development proxy also reads that port. Workspace files and the macOS desktop are still shared unless you select a separate `workspace`; Computer Use still controls the same desktop.
+Each copy's PM2 commands, including hard restart, target its configured state directory. Authentication state stays separate. ngrok credentials remain in its native user config; openchatx-mcp writes only an API-address overlay at `<state_dir>/ngrok-agent.json`. The dashboard uses the copy's MCP port (`http://127.0.0.1:3334/ui/` for this example); the Vite development proxy also reads that port. Workspace files and the macOS desktop are still shared unless you select a separate `workspace`.
 
 ### Local-only MCP
 
-To run without ngrok, add or update this setting in `.shellby/config.toml`:
+To run without ngrok, add or update this setting in `.openchatx/config.toml`:
 
 ```toml
 [ngrok]
 enabled = false
 ```
 
-Then use the usual `npm start` or `npm run restart`. PM2, enabled tool services, Chrome startup, and the optional dashboard still work. Setup and preflight skip ngrok installation/authentication checks. Startup removes any existing `shellby-ngrok` process from this instance's PM2 daemon before reloading MCP; a cleanup failure stops startup. Separately managed tunnels are outside this setting's scope.
+Then use the usual `npm start` or `npm run restart`. PM2 and the dashboard still work. Setup and preflight skip ngrok installation/authentication checks. Startup removes any existing `openchatx-ngrok` process from this instance's PM2 daemon before reloading MCP; a cleanup failure stops startup. Separately managed tunnels are outside this setting's scope.
 
 `npm run print-url` prints `http://127.0.0.1:<port>/mcp` for your local MCP client. A new installation can run `npm run setup -- --config-only`, set `ngrok.enabled = false`, then run full setup without installing ngrok. The setting defaults to `true`, so existing configurations retain their behavior. Reserved URL and pooling values remain saved for later re-enabling. Local-only copies do not need a separate ngrok API port or public URL.
 
 ## Troubleshooting
 
-If the endpoint stays offline after restarting, check `npm run status` and `npm run logs` from Terminal.app. Run `npm start` if services are stopped. `npm run print-url` reports the active ngrok endpoint; an offline reserved URL does not by itself mean your config changed. Routine restart through `shell_run` may disconnect its own call while PM2 brings MCP back.
+If the endpoint stays offline after restarting, check `npm run status` and `npm run logs` from Terminal.app. Run `npm start` if services are stopped. `npm run print-url` reports the active ngrok endpoint; an offline reserved URL does not by itself mean your config changed. Routine restart through `bash` may disconnect its own call while PM2 brings MCP back.
 
 <details>
 <summary><strong>Setup or startup fails</strong></summary>
@@ -282,16 +368,9 @@ npm run logs
 </details>
 
 <details>
-<summary><strong>Computer Use permissions are missing</strong></summary>
-
-Run `npm run setup:computer` from Terminal.app and follow Peekaboo's permission guidance. Keep the managed Shellby process associated with the same intended Terminal permission context.
-
-</details>
-
-<details>
 <summary><strong>The PM2 daemon needs to be recreated</strong></summary>
 
-Run `npm run restart -- --hard` from a newly opened Terminal.app session. This recreates Shellby's dedicated PM2 daemon as well as Shellby MCP and ngrok. A stale macOS session inherited by PM2 can cause Chromium to abort before navigation and DNS lookups to fail even while MCP remains reachable. Ordinary restart retains the daemon's session and cannot repair that context. Daemon isolation does not make PM2 independent of Terminal's macOS session; keep Terminal.app running until PM2 is managed through a macOS LaunchAgent.
+Run `npm run restart -- --hard` from a newly opened Terminal.app session. This recreates openchatx-mcp's dedicated PM2 daemon as well as the MCP process and ngrok. Ordinary restart retains the daemon's inherited macOS session and cannot repair a stale service context.
 
 </details>
 
@@ -328,7 +407,6 @@ The [maintainer wiki](wiki/) contains implementation and operational details:
 - [Project Overview](wiki/pages/project-overview.md)
 - [Architecture Map](wiki/pages/architecture-map.md)
 - [Configuration and Startup](wiki/pages/operations/configuration-and-startup.md)
-- [Computer Use](wiki/pages/computer-use.md)
 - [MCP Tool Surface](wiki/pages/mcp-tool-surface.md)
 - [Build and Test](wiki/pages/operations/build-and-test.md)
 - [Open Questions and Risks](wiki/pages/project/open-questions-and-risks.md)
@@ -341,4 +419,6 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Run the d
 
 [MIT](LICENSE). The vendored `apply_patch` binary retains its upstream OpenAI Codex license and notices under [`vendor/apply-patch/`](vendor/apply-patch/).
 
-Shellby MCP is created and maintained by [Serbyte Development](https://www.serbyte.net/).
+## Attribution
+
+Parts of this project are derived from [Shellby MCP](https://github.com/Serbyte-Development/shellby-mcp), originally created by Serbyte Development under the MIT License. The original license notice is preserved in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

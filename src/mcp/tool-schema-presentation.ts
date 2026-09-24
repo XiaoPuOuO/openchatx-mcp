@@ -104,7 +104,7 @@ interface StandardSchemaJsonSource {
 }
 
 /**
- * Apply Shellby's model-facing registration rules to one tool config.
+ * Apply openchatx-mcp's model-facing registration rules to one tool config.
  *
  * This owns the public schema projection contract: compact-output schema visibility,
  * native-content exceptions, annotation pruning, and JSON Schema
@@ -118,7 +118,9 @@ export function prepareToolRegistration(
   const acceptsInput = config.inputSchema !== undefined
 
   const nativeContent =
-    name.startsWith("computer_") || name === "image_view" || name === "file_read"
+    name === "image_view" ||
+    name === "file_read" ||
+    (isRecord(config._meta) && config._meta["shellby/externalMcp"] === true)
   if (!nativeContent && !structuredOutput) config.outputSchema = undefined
 
   canonicalizeStandardSchema(config.inputSchema)

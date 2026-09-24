@@ -12,9 +12,9 @@ const healthUrl = `http://${MCP_CONFIG.host}:${MCP_CONFIG.port}/healthz`
 const hardRestart = process.argv.includes("--hard")
 const restarting = process.argv.includes("--restart") || hardRestart
 
-if (hardRestart && process.env.name === "shellby-mcp" && process.env.pm_exec_path) {
+if (hardRestart && process.env.name === "openchatx-mcp" && process.env.pm_exec_path) {
   console.error(
-    "A hard restart must run from a healthy Terminal.app session because it replaces PM2 itself. Use `npm run restart` inside Shellby."
+    "A hard restart must run from a healthy Terminal.app session because it replaces PM2 itself. Use `npm run restart` inside openchatx-mcp."
   )
   process.exit(1)
 }
@@ -40,18 +40,8 @@ run("npm", ["run", "build"])
 if (hardRestart) {
   // Only a hard restart replaces the daemon's inherited macOS service context.
   run(process.execPath, ["--import", "tsx", pm2Script, "kill"])
-} else {
-  runAllowFailure(process.execPath, ["--import", "tsx", pm2Script, "delete", "shellby-cursor-host"])
 }
 if (restarting) await rm(join(repoRoot, "agent-commands.yaml"), { force: true })
-if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
-  run(process.execPath, [
-    "--import",
-    "tsx",
-    join(repoRoot, "scripts", "chatgpt", "browser.mjs"),
-    "--auto",
-  ])
-}
 // Reload MCP last: its shutdown can kill this CLI, but the PM2 daemon completes the app restart.
 if (MCP_CONFIG.ngrok.enabled) {
   run(
@@ -63,7 +53,7 @@ if (MCP_CONFIG.ngrok.enabled) {
       "startOrReload",
       "ecosystem.config.cjs",
       "--only",
-      "shellby-ngrok",
+      "openchatx-ngrok",
       "--update-env",
     ],
     { quiet: true }
@@ -74,8 +64,8 @@ if (MCP_CONFIG.ngrok.enabled) {
     run(process.execPath, ["--import", "tsx", pm2Script, "jlist", "--silent"], { quiet: true })
       .stdout
   )
-  if (hasNamedPm2Process(processes, "shellby-ngrok")) {
-    run(process.execPath, ["--import", "tsx", pm2Script, "delete", "shellby-ngrok"], {
+  if (hasNamedPm2Process(processes, "openchatx-ngrok")) {
+    run(process.execPath, ["--import", "tsx", pm2Script, "delete", "openchatx-ngrok"], {
       quiet: true,
     })
   }
@@ -89,7 +79,7 @@ run(
     "startOrReload",
     "ecosystem.config.cjs",
     "--only",
-    "shellby-mcp",
+    "openchatx-mcp",
     "--update-env",
   ],
   { quiet: true }
@@ -97,7 +87,7 @@ run(
 
 if (!(await waitForMcp())) {
   console.error(
-    `This Shellby instance did not become healthy at ${healthUrl}. Check for another instance using port ${MCP_CONFIG.port}.`
+    `This openchatx-mcp instance did not become healthy at ${healthUrl}. Check for another instance using port ${MCP_CONFIG.port}.`
   )
   process.exit(1)
 }
@@ -125,16 +115,12 @@ function run(command: string, args: string[], options: RunOptions = {}): SpawnSy
   return result
 }
 
-function runAllowFailure(command: string, args: string[]): void {
-  spawnSync(command, args, { encoding: "utf8" })
-}
-
 async function waitForMcp(attemptsRemaining = 20): Promise<boolean> {
   try {
     const response = await fetch(healthUrl, {
       signal: AbortSignal.timeout(500),
     })
-    if (response.ok && response.headers.get("x-shellby-instance") === MCP_CONFIG.instanceId)
+    if (response.ok && response.headers.get("x-openchatx-instance") === MCP_CONFIG.instanceId)
       return true
   } catch {
     // PM2 may still be starting the process.

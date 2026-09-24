@@ -63,7 +63,7 @@ export function isSupportedArchitecture(arch: string): boolean {
 export function checkRtkRuntime(enabled: boolean, executable?: string): string | undefined {
   if (!enabled) return
   if (!executable)
-    return "RTK is enabled but not installed. Install it with `brew install rtk`, then restart Shellby."
+    return "RTK is enabled but not installed. Install it with `brew install rtk`, then restart openchatx-mcp."
 
   const result = spawnSync(executable, ["rewrite", "--help"], { encoding: "utf8" })
   if (
@@ -98,7 +98,7 @@ async function hasNgrokAuth(ngrokExecutable: string): Promise<boolean> {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { loadPublicConfig, DEFAULT_PUBLIC_CONFIG } = await import("../src/public-config.cjs")
-  const configPath = join(repoRoot, ".shellby", "config.toml")
+  const configPath = join(repoRoot, ".openchatx", "config.toml")
   const config = existsSync(configPath) ? loadPublicConfig(configPath) : DEFAULT_PUBLIC_CONFIG
   const { errors } = await checkPublicRuntime(config.ngrok.enabled)
   if (errors.length > 0) {

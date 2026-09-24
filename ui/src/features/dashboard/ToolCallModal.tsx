@@ -8,6 +8,7 @@ import "highlight.js/styles/github.css"
 import { X } from "lucide-react"
 
 import { Button } from "../../components/ui/button"
+import { useI18n } from "../../i18n"
 import type { AgentCall } from "../../types"
 
 hljs.registerLanguage("bash", bash)
@@ -15,7 +16,8 @@ hljs.registerLanguage("diff", diff)
 hljs.registerLanguage("json", json)
 
 export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: () => void }) {
-  const detail = call?.detail || call?.summary || "No captured input for this tool call."
+  const { t } = useI18n()
+  const detail = call?.detail || call?.summary || t("toolCall.noInput")
   const highlighted =
     call?.detailLanguage && hljs.getLanguage(call.detailLanguage)
       ? hljs.highlight(detail, { language: call.detailLanguage }).value
@@ -41,7 +43,7 @@ export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: ()
                 variant="ghost"
                 size="icon"
                 className="size-8 shrink-0"
-                aria-label="Close tool call details"
+                aria-label={t("toolCall.close")}
               >
                 <X className="size-4" />
               </Button>

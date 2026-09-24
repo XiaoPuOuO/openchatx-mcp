@@ -7,7 +7,7 @@ import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { promisify } from "node:util"
-import { ShellbyAuthStore } from "../src/auth/store.js"
+import { OpenChatXAuthStore } from "../src/auth/store.js"
 import { MCP_CONFIG } from "../src/config.js"
 import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
@@ -140,7 +140,10 @@ test("print-url reports the configured local address without contacting ngrok wh
     ],
     { timeout: 10_000 }
   )
-  assert.equal(result.stdout.trim(), "MCP URL: http://127.0.0.1:3334/mcp (local only)")
+  assert.equal(
+    result.stdout.trim(),
+    "MCP URL: http://127.0.0.1:3334/mcp (local only)\nUI URL: http://127.0.0.1:3334/ui"
+  )
 })
 
 test("print-url also prints the local UI URL when enabled", async (t) => {
@@ -174,7 +177,7 @@ test("two MCP listeners keep separate health identities and remote owner binding
   ) as typeof MCP_CONFIG.tools
   const servers: Array<Awaited<ReturnType<typeof startMcpHttpServer>>> = []
   for (const name of ["first", "second"]) {
-    const auth = new ShellbyAuthStore(join(root, name, "auth.json"))
+    const auth = new OpenChatXAuthStore(join(root, name, "auth.json"))
     await auth.ensureState()
     const server = await startMcpHttpServer(
       {
@@ -186,7 +189,7 @@ test("two MCP listeners keep separate health identities and remote owner binding
     servers.push(server)
     t.after(() => server.close())
     const health = await fetch(`http://127.0.0.1:${server.port}/healthz`)
-    assert.equal(health.headers.get("x-shellby-instance"), name)
+    assert.equal(health.headers.get("x-openchatx-instance"), name)
     await health.json()
     const response = await fetch(server.url, {
       method: "POST",
@@ -194,7 +197,7 @@ test("two MCP listeners keep separate health identities and remote owner binding
         host: "localhost",
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
-        "x-shellby-remote": "1",
+        "x-openchatx-remote": "1",
         "x-openai-subject": name,
       },
       body: JSON.stringify({
@@ -217,48 +220,6 @@ test("two MCP listeners keep separate health identities and remote owner binding
   assert.notEqual(firstServer.port, secondServer.port)
   await firstServer.close()
   const health = await fetch(`http://127.0.0.1:${secondServer.port}/healthz`)
-  assert.equal(health.headers.get("x-shellby-instance"), "second")
+  assert.equal(health.headers.get("x-openchatx-instance"), "second")
   assert.deepEqual(await health.json(), { ok: true })
-})
-
-test("browser setup refuses a CDP endpoint belonging to another profile", async (t) => {
-  const root = await tempDir(t, "shellby-browser-isolation-")
-  const api = createServer((_req, res) => {
-    res.setHeader("content-type", "application/json")
-    res.end(JSON.stringify({ webSocketDebuggerUrl: "ws://127.0.0.1/devtools/browser/test" }))
-  })
-  await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve))
-  t.after(
-    () =>
-      new Promise<void>((resolve, reject) =>
-        api.close((error) => (error ? reject(error) : resolve()))
-      )
-  )
-  const address = api.address()
-  assert.ok(address && typeof address !== "string")
-  await mkdir(join(root, "scripts", "chatgpt"), { recursive: true })
-  await mkdir(join(root, "src"))
-  await copyFile(
-    new URL("../scripts/chatgpt/browser.mjs", import.meta.url),
-    join(root, "scripts/chatgpt/browser.mjs")
-  )
-  await writeFile(
-    join(root, "src/config.ts"),
-    `export const MCP_CONFIG = ${JSON.stringify({ stateDir: root, chatGpt: { cdpEndpoint: `http://127.0.0.1:${address.port}` } })}`
-  )
-  await assert.rejects(
-    run(
-      process.execPath,
-      ["--import", "tsx", join(root, "scripts/chatgpt/browser.mjs"), "--setup"],
-      { timeout: 10_000 }
-    ),
-    (error: unknown) => {
-      assert.equal((error as { code: number }).code, 1)
-      assert.match(
-        (error as { stderr: string }).stderr,
-        /already in use by another Chrome profile/u
-      )
-      return true
-    }
-  )
 })

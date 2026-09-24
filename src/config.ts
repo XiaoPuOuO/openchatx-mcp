@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { dirname, join, resolve } from "node:path"
+import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { loadPublicConfig } from "./public-config.cjs"
@@ -15,26 +15,28 @@ const packageVersion =
 if (!packageVersion) throw new Error("package.json is missing a valid version.")
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
-const bundledPeekabooExecutable = fileURLToPath(
-  new URL("../vendor/peekaboo/peekaboo", import.meta.url)
-)
 const publicConfig = loadPublicConfig()
 const rtkExecutable = resolvePathExecutable("rtk")
+const brandIcon = readOptionalFile(new URL("../ui/public/openchatx-mcp-icon.png", import.meta.url))
 
 export const MCP_CONFIG = {
   /** MCP server identity advertised to connected clients. */
   server: {
     /** MCP server name advertised during initialization. */
-    name: "shellby-mcp",
+    name: "openchatx-mcp",
     /** MCP server version sourced from package.json. */
     version: packageVersion,
-    // icons: [
-    //   {
-    //     src: `data:image/png;base64,${readFileSync(new URL("../docs/assets/icon-80_square-compressed.png", import.meta.url)).toString("base64")}`,
-    //     mimeType: "image/png",
-    //     sizes: ["80x80"],
-    //   },
-    // ],
+    ...(brandIcon
+      ? {
+          icons: [
+            {
+              src: `data:image/png;base64,${brandIcon.toString("base64")}`,
+              mimeType: "image/png",
+              sizes: ["1536x1536"],
+            },
+          ],
+        }
+      : {}),
   },
   /** Network interface used by the local MCP HTTP server. */
   host: "127.0.0.1",
@@ -44,33 +46,24 @@ export const MCP_CONFIG = {
   instanceId: createHash("sha256")
     .update(`${repositoryRoot}\0${resolveConfiguredPath(publicConfig.state_dir)}`)
     .digest("hex"),
-  /** Directory for Shellby's persistent runtime state. */
+  /** Directory for persistent runtime state. */
   stateDir: resolveConfiguredPath(publicConfig.state_dir),
-  /** Default filesystem workspace exposed to Shellby tools. */
+  /** Default filesystem workspace exposed to local tools. */
   workspace: resolveConfiguredPath(publicConfig.workspace),
-  /** Executables used by local computer-control tools. */
-  peekaboo: {
-    /** Bundled Peekaboo CLI executable. */
-    executable: bundledPeekabooExecutable,
-    /** Companion process used to control the physical cursor. */
-    cursorHostExecutable: join(dirname(bundledPeekabooExecutable), "peekaboo-cursor-host"),
+  /** External local/remote MCP servers aggregated into the tool surface. */
+  externalMcp: {
+    configFile: fileURLToPath(new URL("../mcp-servers.json", import.meta.url)),
   },
-  /** Browser-backed ChatGPT delegation settings. */
-  chatGpt: {
-    /** Chrome DevTools endpoint used to control the ChatGPT browser session. */
-    cdpEndpoint: publicConfig.chatgpt.cdp_endpoint,
-    /** ChatGPT project URL opened for delegated agents. */
-    projectUrl: publicConfig.chatgpt.project_url,
-    /** Maximum delegated ChatGPT agents allowed at once. */
-    maxDelegatedAgents: publicConfig.chatgpt.max_delegated_agents,
-    /** Default wait before a delegated-agent poll returns while still running. */
-    defaultPollWaitMs: 30_000,
-    /** Maximum delegated-agent poll wait accepted from callers. */
-    maxPollWaitMs: 270_000,
+  subagents: {
+    configFile: fileURLToPath(new URL("../subagents.json", import.meta.url)),
+  },
+  /** Toolbox/plugin folders and user-authored TypeScript tools. */
+  toolboxes: {
+    root: fileURLToPath(new URL("../toolboxes/", import.meta.url)),
   },
   /** Public ngrok tunnel settings. */
   ngrok: {
-    /** Whether Shellby should expose MCP through ngrok. */
+    /** Whether openchatx-mcp should expose MCP through ngrok. */
     enabled: publicConfig.ngrok.enabled,
     /** Local ngrok API port used to inspect active tunnels. */
     apiPort: publicConfig.ngrok.api_port,
@@ -83,11 +76,6 @@ export const MCP_CONFIG = {
   mcp: {
     /** Representation used for ordinary MCP tool results. */
     toolOutput: publicConfig.mcp.tool_output,
-  },
-  /** Shellby dashboard settings. */
-  ui: {
-    /** Whether the local Shellby UI is served. */
-    enabled: publicConfig.ui.enabled,
   },
   /** HTTP and document-fetching limits. */
   web: {
@@ -145,8 +133,6 @@ export const MCP_CONFIG = {
   },
   /** Feature flags controlling which MCP tool groups are registered. */
   tools: {
-    /** Enables the Shellby feedback submission tool. */
-    review: publicConfig.tools.review,
     /** Enables persistent shell execution and management tools. */
     shell: publicConfig.tools.shell,
     /** Enables the first-class apply_patch file-editing tool. */
@@ -155,18 +141,12 @@ export const MCP_CONFIG = {
     fileRead: publicConfig.tools.file_read,
     /** Enables writing ChatGPT file inputs to the local filesystem. */
     fileWrite: publicConfig.tools.file_write,
-    /** Enables self-cloning agent tools. */
-    clones: publicConfig.tools.clones,
-    /** Enables delegated ChatGPT subagent tools. */
-    subagents: publicConfig.tools.subagents,
     /** Enables HTTP and document fetching tools. */
     web: publicConfig.tools.web,
     /** Enables reusable workspace skill tools. */
     skills: publicConfig.tools.skills,
     /** Enables local image viewing tools. */
     image: publicConfig.tools.image,
-    /** Enables macOS computer-control tools. */
-    computer: publicConfig.tools.computer,
   },
 }
 
@@ -183,6 +163,15 @@ function resolvePathExecutable(name: string): string | undefined {
   return executable || undefined
 }
 
+function readOptionalFile(url: URL): Buffer | undefined {
+  try {
+    return readFileSync(url)
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined
+    throw error
+  }
+}
+
 export function buildMcpInstructions(): string {
-  return "# Shellby MCP\n\nThis MCP acts as a connector to a fully permissioned macOS machine. This is normally a personal Mac, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other Shellby tools."
+  return "# openchatx-mcp\n\nThis MCP acts as a connector to a fully permissioned macOS machine. This is normally a personal Mac, do not run destructive commands without explicit approval.\n\n- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
 }

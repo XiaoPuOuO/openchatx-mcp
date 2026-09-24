@@ -1,0 +1,14 @@
+{
+  "name": "System",
+  "description": "Required platform initialization tools.",
+  "enabled": true,
+  "builtin": "system",
+  "tools": {
+    "start_here": {
+      "enabled": true,
+      "required": true,
+      "description": "Initialize the agent session and load the selected work mode."
+    }
+  },
+  "skills": {}
+}

@@ -1,21 +1,48 @@
-import { Activity, PencilRuler, RefreshCw, Wifi, WifiOff } from "lucide-react"
+import { Blocks, BrainCircuit, RefreshCw, Settings, Wifi, WifiOff } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { Button } from "./components/ui/button"
-import { RoomEditor } from "./features/agent-room/editor/RoomEditor"
 import { AgentCard } from "./features/dashboard/AgentCard"
+import { McpServerManager } from "./features/mcp-servers/McpServerManager"
+import { SubagentManager } from "./features/subagents/SubagentManager"
+import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
+import { useI18n } from "./i18n"
 
 export function App() {
-  const editorRoute =
-    window.location.pathname.replace(/\/+$/u, "") === "/ui/editor" ||
-    new URLSearchParams(window.location.search).has("editor")
-  if (editorRoute) return <RoomEditor />
-  return <Dashboard />
+  const [view, setView] = useState<"dashboard" | "mcp-servers" | "toolboxes" | "subagents">(
+    "dashboard"
+  )
+  if (view === "mcp-servers") {
+    return <McpServerManager onBack={() => setView("dashboard")} />
+  }
+  if (view === "toolboxes") {
+    return <ToolboxManager onBack={() => setView("dashboard")} />
+  }
+  if (view === "subagents") {
+    return <SubagentManager onBack={() => setView("dashboard")} />
+  }
+  return (
+    <Dashboard
+      onOpenMcpServers={() => setView("mcp-servers")}
+      onOpenToolboxes={() => setView("toolboxes")}
+      onOpenSubagents={() => setView("subagents")}
+    />
+  )
 }
 
-function Dashboard() {
+function Dashboard({
+  onOpenMcpServers,
+  onOpenToolboxes,
+  onOpenSubagents,
+}: {
+  onOpenMcpServers: () => void
+  onOpenToolboxes: () => void
+  onOpenSubagents: () => void
+}) {
   const { agents, connected, loading, error } = useAgents()
+  const { t } = useI18n()
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
@@ -30,13 +57,15 @@ function Dashboard() {
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-5 py-4 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-foreground text-background">
-              <Activity className="size-5" />
-            </div>
+            <img
+              src="/ui/openchatx-mcp-icon.png"
+              alt="openchatx-mcp"
+              className="size-9 rounded-lg"
+            />
             <div>
-              <h1 className="text-base font-semibold tracking-tight">Shellby Control</h1>
+              <h1 className="text-base font-semibold tracking-tight">openchatx-mcp</h1>
               <p className="text-xs text-muted-foreground">
-                {activeCount} active · {agents.length} observed
+                {t("dashboard.activeObserved", { active: activeCount, observed: agents.length })}
               </p>
             </div>
           </div>
@@ -45,19 +74,24 @@ function Dashboard() {
               className={`hidden items-center gap-1.5 text-xs sm:flex ${connected ? "text-emerald-600" : "text-muted-foreground"}`}
             >
               {connected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
-              {connected ? "Live" : "Reconnecting"}
+              {connected ? t("dashboard.live") : t("dashboard.reconnecting")}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => (window.location.href = "/ui/?editor=1")}
-            >
-              <PencilRuler className="size-3.5" />
-              Edit room
+            <LanguageSwitcher />
+            <Button variant="outline" size="sm" onClick={onOpenSubagents}>
+              <BrainCircuit className="size-3.5" />
+              {t("dashboard.subagents")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onOpenToolboxes}>
+              <Blocks className="size-3.5" />
+              {t("dashboard.toolboxes")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onOpenMcpServers}>
+              <Settings className="size-3.5" />
+              {t("dashboard.mcpServer")}
             </Button>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
               <RefreshCw className="size-3.5" />
-              Refresh
+              {t("common.refresh")}
             </Button>
           </div>
         </div>
@@ -72,14 +106,13 @@ function Dashboard() {
 
         {loading ? (
           <div className="py-24 text-center text-sm text-muted-foreground">
-            Loading Shellby agents...
+            {t("dashboard.loading")}
           </div>
         ) : agents.length === 0 ? (
           <div className="mx-auto max-w-lg py-24 text-center">
-            <Activity className="mx-auto size-8 text-muted-foreground" />
-            <h2 className="mt-4 text-lg font-semibold">No agents observed yet</h2>
+            <h2 className="mt-4 text-lg font-semibold">{t("dashboard.noAgents")}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Agents will appear here automatically when they make a Shellby MCP tool call.
+              {t("dashboard.noAgentsHint")}
             </p>
           </div>
         ) : (

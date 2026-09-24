@@ -1,15 +1,15 @@
 ---
 name: create-skill
-description: Create or revise reusable Shellby MCP skills. Use when the user asks to create a skill, add a reusable agent workflow, improve an existing skill, or package repeatable instructions for skill_list and skill_use.
+description: Create or revise reusable openchatx-mcp skills. Use when the user asks to create a skill, add a reusable agent workflow, improve an existing skill, or package repeatable instructions for skill_list and skill_use.
 ---
 
 # Create Skill
 
-Create small reusable workflows that Shellby MCP can discover from the configured workspace.
+Create small reusable workflows that openchatx-mcp can discover from the configured workspace or a toolbox.
 
 ## Workspace
 
-- Treat the configured Shellby workspace as `<workspace>`. Determine it from the MCP instructions or current shell context. Never assume a username or absolute path.
+- Treat the configured openchatx-mcp workspace as `<workspace>`. Determine it from the MCP instructions or current shell context. Never assume a username or absolute path.
 - Store MCP skills at `<workspace>/skills/<name>/SKILL.md`.
 - Read `<workspace>/AGENTS.md` and inspect existing skills before changing the catalog.
 - Use lowercase hyphenated skill names. Keep the directory name and frontmatter `name` identical.

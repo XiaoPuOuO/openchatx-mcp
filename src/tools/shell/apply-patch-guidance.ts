@@ -1,7 +1,8 @@
 const APPLY_PATCH_TOOL_GUIDANCE =
-  "`apply_patch` is a separate MCP tool and cannot be used through `shell_run`. For local file changes, including creating, updating, deleting, moving, or renaming files, use the `apply_patch` MCP tool directly."
+  "File editing is provided by dedicated MCP tools and should not be done through `bash`. Use `file_edit` for a precise oldString/newString replacement in one existing file; use `apply_patch` for structural edits, multiple files, creation, deletion, moves, or renames."
 
-const SHELL_FILE_EDIT_NOTICE = "Use the `apply_patch` MCP tool over `shell_run` for file changes."
+const SHELL_FILE_EDIT_NOTICE =
+  "Use `file_edit` for precise single-file replacements or `apply_patch` for structural/multi-file changes instead of `bash`."
 const APPLY_PATCH_COMMAND_NOT_FOUND_LINE =
   /(^|\n)[^\n]*command not found:\s*apply_patch[^\n]*(?=\n|$)/giu
 const SHELL_FILE_WRITE_PATTERN =

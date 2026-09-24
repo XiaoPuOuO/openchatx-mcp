@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test from "node:test"
 
-import { initializeShellbyConfig, initializeWorkspace } from "../scripts/workspace-setup.js"
+import { initializeOpenChatXConfig, initializeWorkspace } from "../scripts/workspace-setup.js"
 import { loadPublicConfig } from "../src/public-config.cjs"
 import { SkillCatalog } from "../src/tools/skills/skill-catalog.js"
 import { tempDir } from "./helpers/temp.js"
@@ -41,29 +41,22 @@ test("workspace setup creates starter instructions and create-skill without over
 test("setup creates all defaults and preserves existing partial configs", async (t) => {
   const root = await tempDir(t, "shellby-config-scaffold-")
 
-  const initial = await initializeShellbyConfig(root)
+  const initial = await initializeOpenChatXConfig(root)
   assert.equal(initial.created, true)
   assert.equal(initial.updated, false)
-  assert.equal(initial.configPath, join(root, ".shellby", "config.toml"))
+  assert.equal(initial.configPath, join(root, ".openchatx", "config.toml"))
   const scaffold = loadPublicConfig(initial.configPath)
-  assert.equal(scaffold.state_dir, "~/.shellby")
+  assert.equal(scaffold.state_dir, "~/.openchatx-mcp")
   assert.equal(scaffold.workspace, "~/Desktop/agent-workspace")
   assert.deepEqual(scaffold.shell, { path: "/bin/zsh", rtk: false })
-  assert.deepEqual(scaffold.chatgpt, {
-    cdp_endpoint: "http://127.0.0.1:9222",
-    project_url: "https://chatgpt.com/",
-    max_delegated_agents: 3,
-  })
   assert.deepEqual(scaffold.mcp, { tool_output: "compact" })
-  assert.deepEqual(scaffold.ui, { enabled: false })
   assert.equal(scaffold.tools.file_read, true)
   assert.equal(scaffold.tools.file_write, true)
-  assert.equal(scaffold.tools.computer, true)
   assert.deepEqual(scaffold.ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
 
   const scaffoldText = await readFile(initial.configPath, "utf8")
   assert.match(scaffoldText, /^# url = "https:\/\/your-reserved-domain.ngrok.app"$/mu)
-  const unchanged = await initializeShellbyConfig(root)
+  const unchanged = await initializeOpenChatXConfig(root)
   assert.equal(unchanged.updated, false)
   assert.equal(await readFile(initial.configPath, "utf8"), scaffoldText)
 
@@ -80,40 +73,33 @@ test("setup creates all defaults and preserves existing partial configs", async 
     pooling_enabled: true,
   })
 
-  await writeFile(initial.configPath, 'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n')
-  const repeated = await initializeShellbyConfig(root)
+  await writeFile(initial.configPath, 'workspace = "~/Custom"\n')
+  const repeated = await initializeOpenChatXConfig(root)
   assert.equal(repeated.created, false)
   assert.equal(repeated.updated, false)
   const migrated = loadPublicConfig(initial.configPath)
-  assert.equal(migrated.state_dir, "~/.shellby")
+  assert.equal(migrated.state_dir, "~/.openchatx-mcp")
   assert.equal(migrated.workspace, "~/Custom")
-  assert.equal(migrated.tools.computer, false)
   assert.equal(migrated.tools.shell, true)
   assert.equal(migrated.shell.rtk, false)
-  assert.equal(migrated.chatgpt.project_url, "https://chatgpt.com/")
-  assert.equal(migrated.chatgpt.max_delegated_agents, 3)
   assert.equal(migrated.mcp.tool_output, "compact")
-  assert.equal(migrated.ui.enabled, false)
   assert.deepEqual(migrated.ngrok, { enabled: true, api_port: 4040, pooling_enabled: false })
-  assert.equal(
-    await readFile(initial.configPath, "utf8"),
-    'workspace = "~/Custom"\n\n[tools]\ncomputer = false\n'
-  )
+  assert.equal(await readFile(initial.configPath, "utf8"), 'workspace = "~/Custom"\n')
 
-  const complete = await initializeShellbyConfig(root)
+  const complete = await initializeOpenChatXConfig(root)
   assert.equal(complete.created, false)
   assert.equal(complete.updated, false)
 })
 
 test("setup preserves an active ngrok URL without adding a duplicate example", async (t) => {
   const root = await tempDir(t, "shellby-config-ngrok-")
-  const { configPath } = await initializeShellbyConfig(root)
+  const { configPath } = await initializeOpenChatXConfig(root)
   await writeFile(
     configPath,
     'workspace = "~/Custom"\n\n[ngrok]\nurl = "https://custom.ngrok.app"\npooling_enabled = true\n'
   )
 
-  const migrated = await initializeShellbyConfig(root)
+  const migrated = await initializeOpenChatXConfig(root)
   assert.equal(migrated.updated, false)
   assert.deepEqual(loadPublicConfig(configPath).ngrok, {
     enabled: true,

@@ -20,9 +20,30 @@ type PromptSource = {
   prompt: string
 }
 
+export interface CapabilityCatalog {
+  mcpServers: Array<{
+    id: string
+    name: string
+    description?: string
+    available: boolean
+    toolCount: number
+  }>
+  subagents: Array<{ id: string; name: string; description: string }>
+  toolboxes: Array<{
+    id: string
+    name: string
+    description?: string
+    toolCount: number
+    skillCount: number
+  }>
+}
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
-export function registerStartHereTool(server: McpServer): void {
+export function registerStartHereTool(
+  server: McpServer,
+  capabilityCatalog?: () => CapabilityCatalog
+): void {
   const modes = discoverPromptModes()
   const [firstMode, ...remainingModes] = modes
   if (firstMode === undefined) throw new Error("start_here requires at least one prompt mode")
@@ -31,7 +52,7 @@ export function registerStartHereTool(server: McpServer): void {
     START_HERE_TOOL_NAME,
     {
       description:
-        "Initialize Shellby once per conversation. Loads the selected Deep Work mode and unlocks the other tools",
+        "Initialize openchatx-mcp once per conversation. Loads the selected Deep Work mode, returns a lightweight capability catalog for MCP servers/subagents/custom toolboxes, and unlocks the other tools.",
       inputSchema: z.object({
         mode: z.enum([firstMode, ...remainingModes]),
         task_id: z.string().min(1).max(128),
@@ -48,18 +69,77 @@ export function registerStartHereTool(server: McpServer): void {
         buildStartHereInstructions(mode)
       )
       setAgentTaskSlug(task_id)
+      const capabilities = capabilityCatalog ? renderCapabilityCatalog(capabilityCatalog()) : ""
       return {
         content: [
           {
             type: "text",
             text: reused
-              ? `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`
-              : instructions,
+              ? [
+                  `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
+                  capabilities,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n")
+              : [instructions, capabilities].filter(Boolean).join("\n\n"),
           },
         ],
       }
     }
   )
+}
+
+export function renderCapabilityCatalog(catalog: CapabilityCatalog): string {
+  const sections: string[] = []
+
+  if (catalog.mcpServers.length > 0) {
+    const lines = catalog.mcpServers.map((server) => {
+      const status = server.available
+        ? `available, ${server.toolCount} tools`
+        : "configured but unavailable"
+      const description = server.description ? ` — ${server.description}` : ""
+      return `- ${server.id} (${server.name}): ${status}${description}`
+    })
+    sections.push(
+      [
+        "External MCP capabilities:",
+        ...lines,
+        'Use tool_search with source="mcp" and server="<id>" to discover only the tools needed for the task, then call them with tool_call.',
+      ].join("\n")
+    )
+  }
+
+  if (catalog.subagents.length > 0) {
+    sections.push(
+      [
+        "Subagent model profiles:",
+        ...catalog.subagents.map(
+          (profile) => `- ${profile.id} (${profile.name}) — ${profile.description}`
+        ),
+        "Use subagent_run only when delegation is useful; choose profiles by their stated purpose.",
+      ].join("\n")
+    )
+  }
+
+  if (catalog.toolboxes.length > 0) {
+    sections.push(
+      [
+        "Custom toolbox capabilities:",
+        ...catalog.toolboxes.map((toolbox) => {
+          const description = toolbox.description ? ` — ${toolbox.description}` : ""
+          return `- ${toolbox.id} (${toolbox.name}): ${toolbox.toolCount} tools, ${toolbox.skillCount} skills${description}`
+        }),
+        'Use tool_search with source="toolbox" to discover custom tools when one of these capabilities fits the task.',
+      ].join("\n")
+    )
+  }
+
+  if (sections.length === 0) return ""
+  return [
+    "# Available OpenChatX capabilities",
+    "These are lightweight capability summaries, not the full lazy tool schemas. Use them to know what is available before searching for a tool.",
+    ...sections,
+  ].join("\n\n")
 }
 
 export async function buildStartHereInstructions(
@@ -75,14 +155,14 @@ export async function buildStartHereInstructions(
 
 export function discoverPromptModes(root = repositoryRoot): string[] {
   const bundledDirectory = join(root, "src", "tools", "start-here", "prompts")
-  const localDirectory = join(root, ".shellby", "prompts")
+  const localDirectory = join(root, ".openchatx", "prompts")
   const names = new Set([...readPromptSlugs(bundledDirectory), ...readPromptSlugs(localDirectory)])
   names.delete(SHARED_PROMPT_NAME)
   return [...names].sort()
 }
 
 export async function readStartPrompt(name: string, root = repositoryRoot): Promise<PromptSource> {
-  const localPath = join(root, ".shellby", "prompts", `${name}.md`)
+  const localPath = join(root, ".openchatx", "prompts", `${name}.md`)
   try {
     return { path: localPath, prompt: await readFile(localPath, "utf8") }
   } catch (error) {

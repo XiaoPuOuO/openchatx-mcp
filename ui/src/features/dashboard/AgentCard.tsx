@@ -3,12 +3,13 @@ import { useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { useI18n } from "../../i18n"
 import type { Agent, AgentCall } from "../../types"
-import { AgentRoom } from "../agent-room/AgentRoom"
 import { SteerComposer } from "./SteerComposer"
 import { ToolCallModal } from "./ToolCallModal"
 
 export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
+  const { t, locale } = useI18n()
   const [selectedCall, setSelectedCall] = useState<AgentCall>()
   const active = now - agent.lastSeenAt < 30_000
   const recent = [agent.current, ...agent.recent].filter((call): call is AgentCall => Boolean(call))
@@ -23,27 +24,30 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
               <h2 className="truncate text-base font-semibold tracking-tight">{agent.id}</h2>
             </div>
             <p className="mt-1 truncate text-sm text-muted-foreground">
-              {agent.taskSlug ?? "No task name yet"}
+              {agent.taskSlug ?? t("agent.noTask")}
             </p>
           </div>
           <Badge
             className={active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : undefined}
           >
-            {active ? "ACTIVE" : "INACTIVE"}
+            {active ? t("agent.active") : t("agent.inactive")}
           </Badge>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4 pt-4">
-        <AgentRoom agent={agent} />
-
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Recent
+            {t("agent.recent")}
           </h3>
           <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
             {recent.map((call) => (
-              <ActivityRow key={call.id} call={call} onClick={() => setSelectedCall(call)} />
+              <ActivityRow
+                key={call.id}
+                call={call}
+                onClick={() => setSelectedCall(call)}
+                locale={locale}
+              />
             ))}
           </div>
         </div>
@@ -55,7 +59,16 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
   )
 }
 
-function ActivityRow({ call, onClick }: { call: AgentCall; onClick: () => void }) {
+function ActivityRow({
+  call,
+  onClick,
+  locale,
+}: {
+  call: AgentCall
+  onClick: () => void
+  locale: string
+}) {
+  const { t } = useI18n()
   const running = call.status === "running"
   const failed = call.status === "failed"
   return (
@@ -75,7 +88,7 @@ function ActivityRow({ call, onClick }: { call: AgentCall; onClick: () => void }
       <span
         className={`min-w-0 flex-1 truncate font-mono ${failed ? "text-red-700" : "text-muted-foreground"}`}
       >
-        {call.summary || (running ? "Working..." : "Completed")}
+        {call.summary || (running ? t("agent.working") : t("agent.completed"))}
       </span>
       <span
         className={
@@ -86,7 +99,7 @@ function ActivityRow({ call, onClick }: { call: AgentCall; onClick: () => void }
               : "shrink-0 text-muted-foreground"
         }
       >
-        {running ? "now" : formatClock(call.finishedAt ?? call.startedAt)}
+        {running ? t("agent.now") : formatClock(call.finishedAt ?? call.startedAt, locale)}
       </span>
     </button>
   )
@@ -100,6 +113,6 @@ function StatusDot({ active }: { active: boolean }) {
   )
 }
 
-function formatClock(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+function formatClock(timestamp: number, locale: string): string {
+  return new Date(timestamp).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })
 }

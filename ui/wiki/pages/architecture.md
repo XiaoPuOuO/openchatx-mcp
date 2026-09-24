@@ -7,7 +7,6 @@ paths:
   - src/lib/api.ts
   - src/types.ts
   - src/features/dashboard/
-  - src/features/agent-room/
 ---
 
 # Runtime and Interaction Map
@@ -25,13 +24,11 @@ Browser types in `src/types.ts` mirror observer snapshots: agent identity/task s
 | Area | Owner | Durable behavior |
 | --- | --- | --- |
 | Page shell / connection indicator | `src/App.tsx` | Active means `lastSeenAt` within 30 seconds. |
-| Per-agent composition | `src/features/dashboard/AgentCard.tsx` | Room, recent activity, steering, call modal. |
+| Per-agent composition | `src/features/dashboard/AgentCard.tsx` | Recent activity, steering, call modal. |
 | Live data | `src/hooks/useAgents.ts` | Snapshot + SSE replacement model. |
 | API calls | `src/lib/api.ts` | Relative `/ui/api/...` URLs only. |
 | Steering | `src/features/dashboard/SteerComposer.tsx` | Queue on server; cancel queued instruction; delivered dismissal local only. |
 | Tool details | `src/features/dashboard/ToolCallModal.tsx` | Show captured call detail with limited highlight.js languages. |
-| Agent room | `src/features/agent-room/` | Canvas runtime, layout/rendering, Pixel Agents catalog/storage, and editor. |
-| Room editor | `src/features/agent-room/editor/RoomEditor.tsx` | Orchestrate editor state, pointer behavior, persistence, and layout mutation. |
 
 ## Steering Contract
 
@@ -48,10 +45,8 @@ UI status meanings:
 
 Recent list includes current call followed by retained recent calls. Row click opens modal. `detail` is display-only captured input; `detailLanguage` selects bash, diff, or JSON highlighting when available.
 
-Do not derive operational truth from pixel-room queue. Room intentionally lags fast calls for readability. See [Agent Room](./agent-room.md).
-
 ## Server Boundary
 
 Backend transport lives in root repo `src/server/http-server.ts`; dashboard routes and observer state live in `src/agent/`. Server configuration and local-only exposure are documented in [HTTP Transport](../../../wiki/pages/http-transport.md). Tool execution/steering delivery lives in `src/mcp/tool-registration-boundary.ts`.
 
-Production assets use the same configured port as MCP. The Vite development proxy reads root `port` from the repository's `.shellby/config.toml` through the shared public config loader, so a second repository copy points at its own backend. Run config-only setup if the file is missing before invoking Vite (`vite.config.ts`, `../src/public-config.cts`).
+Production assets use the same configured port as MCP. The Vite development proxy reads root `port` from the repository's `.openchatx/config.toml` through the shared public config loader, so a second repository copy points at its own backend. Run config-only setup if the file is missing before invoking Vite (`vite.config.ts`, `../src/public-config.cts`).

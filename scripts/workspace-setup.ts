@@ -26,7 +26,7 @@ const STARTER_SKILL_SOURCE = fileURLToPath(
 )
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
 
-const CONFIG_HEADER = `# Shellby configuration.
+const CONFIG_HEADER = `# openchatx-mcp configuration.
 # All supported settings are shown below. Edit active values to customize this installation.
 
 `
@@ -69,10 +69,10 @@ export async function initializeWorkspace(
   return { workspace, agentsPath, starterSkillPath, created: agentsCreated, starterSkillCreated }
 }
 
-export async function initializeShellbyConfig(
+export async function initializeOpenChatXConfig(
   repositoryRoot = REPOSITORY_ROOT
 ): Promise<ConfigInitializationResult> {
-  const configPath = join(repositoryRoot, ".shellby", "config.toml")
+  const configPath = join(repositoryRoot, ".openchatx", "config.toml")
   await mkdir(dirname(configPath), { recursive: true })
 
   try {
@@ -94,7 +94,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function serializeConfig(config: typeof DEFAULT_PUBLIC_CONFIG): string {
-  let body = stringify(config)
+  const { tools: _legacyTools, ...visibleConfig } = config
+  let body = stringify(visibleConfig)
   if (isRecord(config.ngrok) && !("url" in config.ngrok)) {
     body = body.replace(
       "[ngrok]\n",

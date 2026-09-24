@@ -25,7 +25,7 @@ Verify changes proportionally to their scope. Do not run broad test suites, buil
 
 ## File editing constraints
 
-Use the `apply_patch` tool for local file edits. Do not create or edit files with `shell_run` or `cat` or other shell write tricks. Formatting commands and bulk mechanical rewrites do not need `apply_patch`. Do not use Python to read or write files when a simple shell command or `apply_patch` tool call is enough.
+Use `file_read` to inspect known text files. Use `file_edit` by default for precise edits to one existing text file, especially exact oldString/newString replacements. Use `apply_patch` when an edit is structural, spans multiple files, creates/deletes/moves files, or cannot be expressed safely as an exact replacement. Do not read text files with `bash`, `sed`, `cat`, or similar shell commands when `file_read` can do it. Do not create or edit files with `bash` or shell redirection. Do not use Python for ordinary file reading or editing when the dedicated file tools fit.
 
 You may find yourself working in a dirty worktree. Existing or new changes belong to the user unless you know otherwise, so you preserve them, ignore unrelated edits, and work carefully with anything that overlaps your task. If you cannot work around them you escalate to the user.
 

@@ -17,7 +17,7 @@ import {
 } from "./helpers.js"
 
 const APPLY_PATCH_TOOL_GUIDANCE =
-  "`apply_patch` is a separate MCP tool and cannot be used through `shell_run`. For local file changes, including creating, updating, deleting, moving, or renaming files, use the `apply_patch` MCP tool directly."
+  "File editing is provided by dedicated MCP tools and should not be done through `bash`. Use `file_edit` for a precise oldString/newString replacement in one existing file; use `apply_patch` for structural edits, multiple files, creation, deletion, moves, or renames."
 
 test("returns incremental shell output through MCP before the command finishes", {
   timeout: 10_000,

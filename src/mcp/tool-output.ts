@@ -43,7 +43,6 @@ export function renderStructuredContent(value: unknown): string {
 function renderToolStructuredContent(toolName: string, value: unknown): string {
   if (toolName === "shell_run" || toolName === "shell_poll") return renderShellResult(value)
   if (toolName === "apply_patch") return renderApplyPatchResult(value)
-  if (toolName === "subagent_result") return renderSubagentResult(value)
   return renderStructuredContent(value)
 }
 
@@ -82,36 +81,6 @@ function renderApplyPatchResult(value: unknown): string {
   return (
     [inline.join(" "), ...sections].filter(Boolean).join("\n\n") || renderStructuredContent(value)
   )
-}
-
-function renderSubagentResult(value: unknown): string {
-  if (
-    !isRecord(value) ||
-    Object.keys(value).some((key) => key !== "turns") ||
-    !Array.isArray(value.turns) ||
-    !value.turns.every(isRecord)
-  ) {
-    return renderStructuredContent(value)
-  }
-  if (value.turns.length === 0) return renderStructuredContent(value)
-
-  return value.turns
-    .map((turn) => {
-      const metadata: string[] = []
-      for (const key of ["turn_id", "status", "activity", "activity_age_ms"] as const) {
-        const item = turn[key]
-        if (item !== undefined && isInlineScalar(item))
-          metadata.push(`${key}=${formatScalar(item)}`)
-      }
-      if (metadata.length === 0) return renderRecordListItem(turn, 0)
-
-      const bodies = [
-        typeof turn.response === "string" && turn.response ? turn.response : "",
-        typeof turn.error === "string" && turn.error ? turn.error : "",
-      ].filter(Boolean)
-      return formatOutputBlock(metadata, bodies.join("\n\n"))
-    })
-    .join("\n\n")
 }
 
 /**

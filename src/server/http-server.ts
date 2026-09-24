@@ -7,9 +7,11 @@ import type { Request, Response } from "express"
 import { runWithAgent } from "../agent/context.js"
 import { createDashboardRouter } from "../agent/dashboard-routes.js"
 import type { AgentObserver } from "../agent/observer.js"
-import { ShellbyAuthError, type ShellbyAuthStore } from "../auth/store.js"
+import { OpenChatXAuthError, type OpenChatXAuthStore } from "../auth/store.js"
 import { MCP_CONFIG } from "../config.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
+import type { SubagentRuntime } from "../subagents/runtime.js"
+import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { asRecord } from "../utils.js"
 import type { McpAuditLogger, McpAuditRequest } from "./audit/audit-log.js"
 
@@ -29,8 +31,10 @@ export interface RunningMcpServer {
 export interface McpHttpServices {
   createMcpServer: McpServerFactory
   auditLogger?: McpAuditLogger
-  authStore?: ShellbyAuthStore
+  authStore?: OpenChatXAuthStore
   agentObserver?: AgentObserver
+  toolboxRegistry?: ToolboxRegistry
+  subagentRuntime?: SubagentRuntime
 }
 
 export interface McpHttpProfileOverrides {
@@ -46,7 +50,14 @@ export async function startMcpHttpServer(
   const host = profileOverrides.host ?? MCP_CONFIG.host
   const port = profileOverrides.port ?? MCP_CONFIG.port
   const instanceId = profileOverrides.instanceId ?? MCP_CONFIG.instanceId
-  const { createMcpServer, auditLogger, authStore, agentObserver } = services
+  const {
+    createMcpServer,
+    auditLogger,
+    authStore,
+    agentObserver,
+    toolboxRegistry,
+    subagentRuntime,
+  } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
   const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
@@ -66,11 +77,12 @@ export async function startMcpHttpServer(
   const nodeMcpHandler = toNodeHandler(mcpHandler, { onerror: reportMcpError })
 
   app.get("/healthz", (_req, res) => {
-    res.setHeader("x-shellby-instance", instanceId)
+    res.setHeader("x-openchatx-instance", instanceId)
     res.json({ ok: true })
   })
 
-  if (agentObserver) app.use("/ui", createDashboardRouter(agentObserver))
+  if (agentObserver)
+    app.use("/ui", createDashboardRouter(agentObserver, toolboxRegistry, subagentRuntime))
 
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
@@ -146,7 +158,7 @@ function containsToolCall(payload: unknown): boolean {
 }
 
 function isTrustedRemoteRequest(req: Request): boolean {
-  return req.get("x-shellby-remote") === "1"
+  return req.get("x-openchatx-remote") === "1"
 }
 
 function requestSessionId(req: Request): string | undefined {
@@ -159,7 +171,7 @@ function reportMcpError(error: Error): void {
 }
 
 function remoteAuthError(res: Response, error: unknown): void {
-  if (error instanceof ShellbyAuthError) {
+  if (error instanceof OpenChatXAuthError) {
     if (error.code === "subject_missing" || error.code === "subject_mismatch") {
       jsonRpcError(res, 403, -32002, "Remote MCP access denied.")
       return

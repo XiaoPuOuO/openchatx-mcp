@@ -33,7 +33,7 @@ test("requires RTK only when shell.rtk is enabled", () => {
 
 test("preflight and full setup honor local config without ngrok on PATH", async (t) => {
   const root = await realpath(await tempDir(t, "shellby-local-setup-"))
-  for (const dir of ["scripts", "src", ".shellby", "bin", "skills/create-skill"])
+  for (const dir of ["scripts", "src", ".openchatx", "bin", "skills/create-skill"])
     await mkdir(join(root, dir), { recursive: true })
   for (const path of [
     "scripts/setup.ts",
@@ -56,7 +56,7 @@ test("preflight and full setup honor local config without ngrok on PATH", async 
     `#!${process.execPath}\nconsole.log("fixture build complete")\n`,
     { mode: 0o755 }
   )
-  const configPath = join(root, ".shellby/config.toml")
+  const configPath = join(root, ".openchatx/config.toml")
   const source = [
     `state_dir = ${JSON.stringify(join(root, "state"))}`,
     `workspace = ${JSON.stringify(join(root, "workspace"))}`,

@@ -1,0 +1,17 @@
+{
+  "name": "Search",
+  "description": "Fast project file and content search without shell command construction.",
+  "enabled": true,
+  "builtin": "search",
+  "tools": {
+    "glob": {
+      "enabled": true,
+      "description": "Find files using glob patterns."
+    },
+    "grep": {
+      "enabled": true,
+      "description": "Search file contents using regular expressions."
+    }
+  },
+  "skills": {}
+}

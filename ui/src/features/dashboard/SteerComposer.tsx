@@ -3,10 +3,12 @@ import { useState } from "react"
 
 import { Button } from "../../components/ui/button"
 import { Textarea } from "../../components/ui/textarea"
+import { useI18n } from "../../i18n"
 import { cancelSteer, steerAgent } from "../../lib/api"
 import type { Agent, AgentInstruction } from "../../types"
 
 export function SteerComposer({ agent }: { agent: Agent }) {
+  const { t } = useI18n()
   const [message, setMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -48,7 +50,7 @@ export function SteerComposer({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-1.5 border-t pt-3">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Steer
+        {t("steer.title")}
       </h3>
       <div className="relative">
         <Textarea
@@ -59,14 +61,14 @@ export function SteerComposer({ agent }: { agent: Agent }) {
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit()
           }}
           className="max-h-32 min-h-9 pr-10 field-sizing-content"
-          placeholder="Steer this agent..."
+          placeholder={t("steer.placeholder")}
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className={`absolute right-1 top-1 size-7 ${message.trim() && !sending ? "bg-blue-600 hover:bg-blue-50 hover:text-blue-700 text-white" : "text-muted-foreground"}`}
-          aria-label="Send instruction"
+          aria-label={t("steer.send")}
           disabled={!message.trim() || sending}
           onClick={() => void submit()}
         >
@@ -107,11 +109,12 @@ function SteerStatus({
   onCancelQueued: (instruction: AgentInstruction) => void
   onDismissDelivered: () => void
 }) {
+  const { t } = useI18n()
   if (sending) {
     return (
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <LoaderCircle className="size-3.5 animate-spin" />
-        Sending…
+        {t("steer.sending")}
       </p>
     )
   }
@@ -129,19 +132,19 @@ function SteerStatus({
         <Clock3 className="size-3.5 shrink-0 text-amber-600" />
         <span className="truncate">
           {queued.length === 1
-            ? `Queued: ${queued[0].message}`
-            : `${queued.length} queued · ${queued[0].message}`}
+            ? t("steer.queuedOne", { message: queued[0].message })
+            : t("steer.queuedMany", { count: queued.length, message: queued[0].message })}
         </span>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="pointer-events-none absolute right-0 top-1/2 h-6 -translate-y-1/2 px-2 text-[11px] opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-          aria-label="Cancel queued instruction"
+          aria-label={t("steer.cancelQueued")}
           disabled={cancelling}
           onClick={() => onCancelQueued(queued[0])}
         >
-          {cancelling ? <LoaderCircle className="size-3.5 animate-spin" /> : "Cancel"}
+          {cancelling ? <LoaderCircle className="size-3.5 animate-spin" /> : t("common.cancel")}
         </Button>
       </p>
     )
@@ -150,16 +153,16 @@ function SteerStatus({
     return (
       <p className="group relative flex min-w-0 items-center gap-1.5 pr-16 text-xs text-muted-foreground">
         <Check className="size-3.5 shrink-0 text-emerald-600" />
-        <span className="truncate">Delivered: {delivered.message}</span>
+        <span className="truncate">{t("steer.delivered", { message: delivered.message })}</span>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="pointer-events-none absolute right-0 top-1/2 h-6 -translate-y-1/2 px-2 text-[11px] opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-          aria-label="Dismiss delivered instruction"
+          aria-label={t("steer.dismissDelivered")}
           onClick={onDismissDelivered}
         >
-          Dismiss
+          {t("common.dismiss")}
         </Button>
       </p>
     )

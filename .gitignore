@@ -1,5 +1,9 @@
 node_modules/
 dist/
+mcp-servers.json
+subagents.json
+toolboxes/**/*.openchatx.mjs
+.openchatx/*
 .shellby/*
 .env*
 /agent-commands.md

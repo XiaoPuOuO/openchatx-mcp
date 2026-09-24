@@ -7,7 +7,7 @@ import { MCP_CONFIG } from "../src/config.js"
 const repoRoot = fileURLToPath(new URL("../", import.meta.url))
 const pm2Args: string[] = process.argv.slice(2)
 
-// Shellby uses an installation-specific PM2 home so separate configured state roots stay isolated.
+// openchatx-mcp uses an installation-specific PM2 home so separate configured state roots stay isolated.
 const result = spawnSync(
   process.execPath,
   [join(repoRoot, "node_modules", ".bin", "pm2"), ...pm2Args],

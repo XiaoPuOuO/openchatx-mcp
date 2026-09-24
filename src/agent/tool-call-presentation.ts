@@ -45,8 +45,6 @@ function summarizeKnownTool(tool: string, record: Record<string, unknown>): stri
       return typeof record.url === "string" ? singleLine(record.url, 140) : undefined
     case "image_view":
       return typeof record.path === "string" ? singleLine(record.path, 140) : undefined
-    case "subagent_run":
-      return Array.isArray(record.agents) ? `${record.agents.length} agents` : undefined
     default:
       return undefined
   }

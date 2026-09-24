@@ -1,0 +1,10 @@
+{
+  "name": "Media",
+  "description": "Local media inspection tools.",
+  "enabled": true,
+  "builtin": "media",
+  "tools": {
+    "image_view": { "enabled": true, "description": "View a local image file." }
+  },
+  "skills": {}
+}

@@ -6,42 +6,42 @@ import { isRecord } from "../utils.js"
 
 const AUTH_STATE_VERSION = 1
 
-export interface ShellbyAuthState {
+export interface OpenChatXAuthState {
   version: typeof AUTH_STATE_VERSION
   subject: string | null
 }
 
-export type ShellbyAuthErrorCode =
+export type OpenChatXAuthErrorCode =
   | "state_missing"
   | "state_invalid"
   | "subject_missing"
   | "subject_mismatch"
 
-export class ShellbyAuthError extends Error {
+export class OpenChatXAuthError extends Error {
   constructor(
-    readonly code: ShellbyAuthErrorCode,
+    readonly code: OpenChatXAuthErrorCode,
     message: string,
     options?: ErrorOptions
   ) {
     super(message, options)
-    this.name = "ShellbyAuthError"
+    this.name = "OpenChatXAuthError"
   }
 }
 
-export class ShellbyAuthStore {
+export class OpenChatXAuthStore {
   private mutationTail: Promise<void> = Promise.resolve()
 
   constructor(readonly filePath: string) {}
 
-  async ensureState(): Promise<ShellbyAuthState> {
+  async ensureState(): Promise<OpenChatXAuthState> {
     return this.withMutation(async () => {
       try {
         return await this.readState()
       } catch (error) {
-        if (!(error instanceof ShellbyAuthError) || error.code !== "state_missing") throw error
+        if (!(error instanceof OpenChatXAuthError) || error.code !== "state_missing") throw error
       }
 
-      const state: ShellbyAuthState = { version: AUTH_STATE_VERSION, subject: null }
+      const state: OpenChatXAuthState = { version: AUTH_STATE_VERSION, subject: null }
       await ensurePrivateDirectory(dirname(this.filePath))
       try {
         await writeFile(this.filePath, serializeState(state), {
@@ -58,16 +58,16 @@ export class ShellbyAuthStore {
     })
   }
 
-  async readState(): Promise<ShellbyAuthState> {
+  async readState(): Promise<OpenChatXAuthState> {
     let raw: string
     try {
       raw = await readFile(this.filePath, "utf8")
     } catch (error) {
       if (isNodeError(error, "ENOENT")) {
-        // biome-ignore lint/style/useErrorCause: ShellbyAuthError accepts ErrorOptions as its third argument and forwards the cause to Error.
-        throw new ShellbyAuthError(
+        // biome-ignore lint/style/useErrorCause: OpenChatXAuthError accepts ErrorOptions as its third argument and forwards the cause to Error.
+        throw new OpenChatXAuthError(
           "state_missing",
-          "Shellby MCP authentication state is missing.",
+          "openchatx-mcp authentication state is missing.",
           {
             cause: error,
           }
@@ -82,9 +82,9 @@ export class ShellbyAuthStore {
     return state
   }
 
-  async authorizeToolCall(subject: string | undefined): Promise<ShellbyAuthState> {
+  async authorizeToolCall(subject: string | undefined): Promise<OpenChatXAuthState> {
     if (!isValidSubject(subject)) {
-      throw new ShellbyAuthError(
+      throw new OpenChatXAuthError(
         "subject_missing",
         "OpenAI subject is required for remote tool calls."
       )
@@ -93,23 +93,23 @@ export class ShellbyAuthStore {
     return this.withMutation(async () => {
       const state = await this.readState()
       if (state.subject === null) {
-        const boundState: ShellbyAuthState = { ...state, subject }
+        const boundState: OpenChatXAuthState = { ...state, subject }
         await writeStateAtomically(this.filePath, boundState)
         return boundState
       }
       if (state.subject !== subject) {
-        throw new ShellbyAuthError(
+        throw new OpenChatXAuthError(
           "subject_mismatch",
-          "This Shellby MCP installation is bound to a different ChatGPT user."
+          "This openchatx-mcp installation is bound to a different ChatGPT user."
         )
       }
       return state
     })
   }
 
-  async reset(): Promise<ShellbyAuthState> {
+  async reset(): Promise<OpenChatXAuthState> {
     return this.withMutation(async () => {
-      const state: ShellbyAuthState = { version: AUTH_STATE_VERSION, subject: null }
+      const state: OpenChatXAuthState = { version: AUTH_STATE_VERSION, subject: null }
       await writeStateAtomically(this.filePath, state)
       return state
     })
@@ -130,29 +130,29 @@ export class ShellbyAuthStore {
   }
 }
 
-function parseState(raw: string): ShellbyAuthState {
+function parseState(raw: string): OpenChatXAuthState {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch (error) {
-    throw invalidState("Shellby MCP authentication state is malformed.", error)
+    throw invalidState("openchatx-mcp authentication state is malformed.", error)
   }
 
   if (!isRecord(parsed)) {
-    throw invalidState("Shellby MCP authentication state must be an object.")
+    throw invalidState("openchatx-mcp authentication state must be an object.")
   }
   const state = parsed
   if (state.version !== AUTH_STATE_VERSION) {
-    throw invalidState("Shellby MCP authentication state version is unsupported.")
+    throw invalidState("openchatx-mcp authentication state version is unsupported.")
   }
   const subject = state.subject
   if (subject !== null && !isValidSubject(subject)) {
-    throw invalidState("Shellby MCP authentication subject is invalid.")
+    throw invalidState("openchatx-mcp authentication subject is invalid.")
   }
   return { version: AUTH_STATE_VERSION, subject }
 }
 
-async function writeStateAtomically(filePath: string, state: ShellbyAuthState): Promise<void> {
+async function writeStateAtomically(filePath: string, state: OpenChatXAuthState): Promise<void> {
   const directory = dirname(filePath)
   await ensurePrivateDirectory(directory)
   const temporaryPath = join(directory, `.auth-${process.pid}-${Date.now()}.tmp`)
@@ -174,7 +174,7 @@ async function ensurePrivateDirectory(directory: string): Promise<void> {
   await chmod(directory, 0o700)
 }
 
-function serializeState(state: ShellbyAuthState): string {
+function serializeState(state: OpenChatXAuthState): string {
   return `${JSON.stringify(state, null, 2)}\n`
 }
 
@@ -182,8 +182,12 @@ function isValidSubject(subject: unknown): subject is string {
   return typeof subject === "string" && subject.length > 0 && subject.length <= 512
 }
 
-function invalidState(message: string, cause?: unknown): ShellbyAuthError {
-  return new ShellbyAuthError("state_invalid", message, cause === undefined ? undefined : { cause })
+function invalidState(message: string, cause?: unknown): OpenChatXAuthError {
+  return new OpenChatXAuthError(
+    "state_invalid",
+    message,
+    cause === undefined ? undefined : { cause }
+  )
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {

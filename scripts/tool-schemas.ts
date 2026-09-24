@@ -1,11 +1,10 @@
 import process from "node:process"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { MCP_CONFIG } from "../src/config.js"
+import { createExternalMcpRegistry } from "../src/external-mcp/registry.js"
 import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
 import { countTokens, OUTPUT_TOKEN_ENCODING } from "../src/tokenizer.js"
-import { PeekabooClient } from "../src/tools/computer/peekaboo.js"
-import { createChatGptDelegationService } from "../src/tools/delegation/chatgpt-service.js"
 import { createShellSession } from "../src/tools/shell/session.js"
 import { createShellSessionManager } from "../src/tools/shell/session-manager.js"
 import { WebPageOpener } from "../src/tools/web/web-open.js"
@@ -16,25 +15,20 @@ const shells = MCP_CONFIG.tools.shell
       createShell: () => createShellSession({ cwd: MCP_CONFIG.workspace }),
     })
   : undefined
-const peekaboo = MCP_CONFIG.tools.computer ? new PeekabooClient({ localOnly: true }) : undefined
-const chatGptDelegation =
-  MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents
-    ? createChatGptDelegationService()
-    : undefined
+const externalMcp = await createExternalMcpRegistry(MCP_CONFIG.externalMcp.configFile)
 const webPageOpener = MCP_CONFIG.tools.web ? new WebPageOpener() : undefined
 const running = await startMcpHttpServer(
   {
     createMcpServer: createMcpServerFactory({
       shellManager: shells,
-      peekaboo,
-      chatGptDelegation,
+      externalMcp,
       webPageOpener,
     }),
   },
   { port: 0 }
 )
 const client = new Client(
-  { name: "shellby-mcp-schema-viewer", version: MCP_CONFIG.server.version },
+  { name: "openchatx-mcp-schema-viewer", version: MCP_CONFIG.server.version },
   { versionNegotiation: { mode: "auto" } }
 )
 const transport = new StreamableHTTPClientTransport(new URL(running.url))
@@ -60,9 +54,5 @@ try {
 } finally {
   await client.close().catch(() => undefined)
   await running.close()
-  await Promise.allSettled([
-    shells?.close() ?? Promise.resolve(),
-    peekaboo?.close() ?? Promise.resolve(),
-    chatGptDelegation?.dispose() ?? Promise.resolve(),
-  ])
+  await Promise.allSettled([shells?.close() ?? Promise.resolve(), externalMcp.close()])
 }

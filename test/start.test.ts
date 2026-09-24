@@ -15,21 +15,20 @@ async function runStartup(
     failCommand?: string
     pm2Args?: string[]
     fromShellby?: boolean
-    agentsEnabled?: boolean
     healthInstance?: string
     ngrokEnabled?: boolean
     existingTunnel?: boolean
   } = {}
 ) {
   const root = await realpath(await tempDir(t, "shellby-start-"))
-  for (const directory of ["scripts", "scripts/chatgpt", "src", "bin", "node_modules/.bin"])
+  for (const directory of ["scripts", "src", "bin", "node_modules/.bin"])
     await mkdir(join(root, directory), { recursive: true })
   await writeFile(join(root, "package.json"), '{"type":"module"}\n')
   await copyFile(new URL("../scripts/start.ts", import.meta.url), join(root, "scripts", "start.ts"))
   await copyFile(new URL("../scripts/pm2.ts", import.meta.url), join(root, "scripts", "pm2.ts"))
   await writeFile(
     join(root, "src", "config.ts"),
-    `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, instanceId: "fixture", stateDir: join(root, "state"), workspace: root, ngrok: { enabled: options.ngrokEnabled ?? true }, shell: { rtk: false }, tools: { clones: false, subagents: options.agentsEnabled ?? false } })}`
+    `export const MCP_CONFIG = ${JSON.stringify({ host: "127.0.0.1", port: 3334, instanceId: "fixture", stateDir: join(root, "state"), workspace: root, ngrok: { enabled: options.ngrokEnabled ?? true }, shell: { rtk: false }, tools: {} })}`
   )
   await writeFile(
     join(root, "scripts", "preflight.ts"),
@@ -49,7 +48,6 @@ export function printPreflightErrors() {}`
   for (const [command, path] of [
     ["npm", "bin/npm"],
     ["pm2", "node_modules/.bin/pm2"],
-    ["browser", "scripts/chatgpt/browser.mjs"],
   ]) {
     await writeFile(
       join(root, path!),
@@ -61,7 +59,7 @@ appendFileSync(${JSON.stringify(join(root, "calls.jsonl"))}, JSON.stringify({
   pm2Home: process.env.PM2_HOME, cwd: process.cwd()
 }) + "\\n");
 if ([${JSON.stringify(command)} + " " + args[0], ${JSON.stringify(command)} + " " + args.join(" ")].includes(process.env.START_TEST_FAIL)) process.exit(7);
-if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${JSON.stringify(JSON.stringify(options.existingTunnel ? [{ name: "shellby-ngrok" }, { name: "unrelated-app" }] : []))});
+if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${JSON.stringify(JSON.stringify(options.existingTunnel ? [{ name: "openchatx-ngrok" }, { name: "unrelated-app" }] : []))});
 `,
       { mode: 0o755 }
     )
@@ -73,7 +71,7 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
       "--import",
       "tsx",
       "--import",
-      `data:text/javascript,globalThis.fetch=async(url)=>{if(url!=="http://127.0.0.1:3334/healthz")throw new Error("wrong health port");return {ok:true,headers:new Headers({"x-shellby-instance":${JSON.stringify(options.healthInstance ?? "fixture")}})}}`,
+      `data:text/javascript,globalThis.fetch=async(url)=>{if(url!=="http://127.0.0.1:3334/healthz")throw new Error("wrong health port");return {ok:true,headers:new Headers({"x-openchatx-instance":${JSON.stringify(options.healthInstance ?? "fixture")}})}}`,
       join(root, "scripts", options.pm2Args ? "pm2.ts" : "start.ts"),
       ...(options.pm2Args ?? [
         ...(options.restart ? ["--restart"] : []),
@@ -87,7 +85,7 @@ if (${JSON.stringify(command)} === "pm2" && args[0] === "jlist") console.log(${J
         PATH: `${join(root, "bin")}${delimiter}${process.env.PATH}`,
         START_TEST_FAIL: options.failCommand ?? "",
         PM2_HOME: join(root, "unrelated-pm2"),
-        name: options.fromShellby ? "shellby-mcp" : undefined,
+        name: options.fromShellby ? "openchatx-mcp" : undefined,
         pm_exec_path: options.fromShellby ? join(root, "dist", "index.js") : undefined,
       },
       encoding: "utf8",
@@ -126,15 +124,20 @@ for (const fromShellby of [false, true]) {
     assert.equal(result.status, 0, result.stderr)
     assert.deepEqual(calls, [
       { command: "npm", args: ["run", "build"], auditExists: true },
-      { command: "pm2", args: ["delete", "shellby-cursor-host"], auditExists: true },
       {
         command: "pm2",
-        args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
+        args: [
+          "startOrReload",
+          "ecosystem.config.cjs",
+          "--only",
+          "openchatx-ngrok",
+          "--update-env",
+        ],
         auditExists: false,
       },
       {
         command: "pm2",
-        args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+        args: ["startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
         auditExists: false,
       },
     ])
@@ -148,18 +151,15 @@ for (const existingTunnel of [false, true]) {
       restart: true,
       ngrokEnabled: false,
       existingTunnel,
-      agentsEnabled: true,
     })
     assert.equal(result.status, 0, result.stderr)
     assert.deepEqual(
       calls.map(({ command, args }) => [command, ...args]),
       [
         ["npm", "run", "build"],
-        ["pm2", "delete", "shellby-cursor-host"],
-        ["browser", "--auto"],
         ["pm2", "jlist", "--silent"],
-        ...(existingTunnel ? [["pm2", "delete", "shellby-ngrok"]] : []),
-        ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+        ...(existingTunnel ? [["pm2", "delete", "openchatx-ngrok"]] : []),
+        ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
       ]
     )
     assert.match(result.stdout, /ngrok: disabled \(local only\)/u)
@@ -167,7 +167,7 @@ for (const existingTunnel of [false, true]) {
   })
 }
 
-for (const failCommand of ["pm2 jlist", "pm2 delete shellby-ngrok"]) {
+for (const failCommand of ["pm2 jlist", "pm2 delete openchatx-ngrok"]) {
   test(`local startup stops when tunnel cleanup fails at ${failCommand}`, async (t) => {
     const { result, calls } = await runStartup(t, {
       ngrokEnabled: false,
@@ -192,7 +192,7 @@ test("hard restart with ngrok disabled recreates only MCP", async (t) => {
     [
       ["npm", "run", "build"],
       ["pm2", "kill"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
     ]
   )
 })
@@ -205,12 +205,12 @@ test("hard restart rebuilds before replacing PM2 and clears the audit only after
     { command: "pm2", args: ["kill"], auditExists: true },
     {
       command: "pm2",
-      args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
+      args: ["startOrReload", "ecosystem.config.cjs", "--only", "openchatx-ngrok", "--update-env"],
       auditExists: false,
     },
     {
       command: "pm2",
-      args: ["startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+      args: ["startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
       auditExists: false,
     },
   ])
@@ -236,9 +236,8 @@ test("ordinary startup keeps the PM2 daemon and audit log", async (t) => {
     calls.map(({ command, args }) => [command, ...args]),
     [
       ["npm", "run", "build"],
-      ["pm2", "delete", "shellby-cursor-host"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-ngrok", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
     ]
   )
 })
@@ -250,21 +249,18 @@ test("startup does not report success for another copy on the configured port", 
   assert.ok(!result.stdout.includes("https://test.invalid/mcp"))
 })
 
-test("browser startup finishes before reloading services can disconnect the caller", async (t) => {
+test("restart reloads services in tunnel then MCP order", async (t) => {
   const { result, calls } = await runStartup(t, {
     restart: true,
     fromShellby: true,
-    agentsEnabled: true,
   })
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(
     calls.map(({ command, args }) => [command, ...args]),
     [
       ["npm", "run", "build"],
-      ["pm2", "delete", "shellby-cursor-host"],
-      ["browser", "--auto"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-ngrok", "--update-env"],
-      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "shellby-mcp", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-ngrok", "--update-env"],
+      ["pm2", "startOrReload", "ecosystem.config.cjs", "--only", "openchatx-mcp", "--update-env"],
     ]
   )
 })
@@ -283,8 +279,8 @@ test("an in-shell build failure leaves services and the audit intact", async (t)
 test("a failed tunnel reload leaves MCP running", async (t) => {
   const { result, calls } = await runStartup(t, { restart: true, failCommand: "pm2 startOrReload" })
   assert.equal(result.status, 7)
-  assert.equal(calls.at(-1)?.args[3], "shellby-ngrok")
-  assert.ok(calls.every(({ args }) => !args.includes("shellby-mcp")))
+  assert.equal(calls.at(-1)?.args[3], "openchatx-ngrok")
+  assert.ok(calls.every(({ args }) => !args.includes("openchatx-mcp")))
 })
 
 for (const failure of ["npm run", "pm2 kill"]) {

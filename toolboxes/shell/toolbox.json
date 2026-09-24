@@ -1,0 +1,17 @@
+{
+  "name": "Shell",
+  "description": "Non-interactive command execution and interactive pseudo-terminal access.",
+  "enabled": true,
+  "builtin": "shell",
+  "tools": {
+    "bash": {
+      "enabled": true,
+      "description": "Run a command in a fresh non-interactive zsh process."
+    },
+    "terminal": {
+      "enabled": true,
+      "description": "Create, write, read, resize, or close an interactive pseudo-terminal."
+    }
+  },
+  "skills": {}
+}

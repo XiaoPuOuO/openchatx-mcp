@@ -1,17 +1,14 @@
 import { spawn } from "node:child_process"
 import { mkdir } from "node:fs/promises"
-import { dirname, join } from "node:path"
 import process from "node:process"
-import { fileURLToPath } from "node:url"
 import { checkPublicRuntime, checkRtkRuntime } from "./preflight.js"
 import { failure, intro, note, outro, spinner } from "./setup-console.js"
 import {
   type ConfigInitializationResult,
-  initializeShellbyConfig,
+  initializeOpenChatXConfig,
   initializeWorkspace,
 } from "./workspace-setup.js"
 
-const scriptsDir = dirname(fileURLToPath(import.meta.url))
 const configOnly = process.argv.includes("--config-only")
 
 interface CommandResult {
@@ -32,7 +29,7 @@ function formatConfigPath(configResult: ConfigInitializationResult): string {
 }
 
 if (configOnly) {
-  const config = await initializeShellbyConfig()
+  const config = await initializeOpenChatXConfig()
   await import("../src/config.js")
   console.log(formatConfigPath(config))
   process.exit(0)
@@ -40,7 +37,7 @@ if (configOnly) {
 
 intro()
 
-const config = await initializeShellbyConfig()
+const config = await initializeOpenChatXConfig()
 note("Configuration", formatConfigPath(config))
 const { MCP_CONFIG } = await import("../src/config.js")
 
@@ -65,34 +62,9 @@ const workspace = await initializeWorkspace(MCP_CONFIG.workspace)
 workspaceStep.succeed(workspace.created ? "Agent workspace created" : "Agent workspace ready")
 note("Workspace", workspace.agentsPath)
 
-await commandStep("Building Shellby MCP", "Build ready", "npm", ["run", "build"])
+await commandStep("Building openchatx-mcp", "Build ready", "npm", ["run", "build"])
 
-if (MCP_CONFIG.tools.computer) {
-  const computer = await commandStep(
-    "Checking Computer Use",
-    "Computer Use checked",
-    process.execPath,
-    [join(scriptsDir, "peekaboo-permissions.mjs"), "--status", "--optional"],
-    { allowFailure: true }
-  )
-  note("Computer Use", combinedOutput(computer))
-}
-
-if (MCP_CONFIG.tools.clones || MCP_CONFIG.tools.subagents) {
-  const browser = await commandStep(
-    "Preparing multi-agent Chrome",
-    "Multi-agent Chrome checked",
-    process.execPath,
-    ["--import", "tsx", join(scriptsDir, "chatgpt", "browser.mjs"), "--setup", "--optional"],
-    { allowFailure: true }
-  )
-  note("Multi-agent", combinedOutput(browser))
-}
-
-outro([
-  "Sign into ChatGPT if the dedicated Chrome window opened.",
-  "Run `npm start` to launch Shellby MCP.",
-])
+outro(["Run `npm start` to launch openchatx-mcp."])
 
 async function commandStep(
   label: string,

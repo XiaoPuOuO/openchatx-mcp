@@ -6,14 +6,14 @@ import test from "node:test"
 
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 
-import { ShellbyAuthStore } from "../../src/auth/store.js"
+import { OpenChatXAuthStore } from "../../src/auth/store.js"
 import { connectClient, postWithHost, startMcpHttpServer } from "./helpers.js"
 
 test("remote MCP binds one OpenAI subject while local MCP remains available", {
   timeout: 20_000,
 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-mcp-remote-auth-"))
-  const authStore = new ShellbyAuthStore(join(root, "auth.json"))
+  const authStore = new OpenChatXAuthStore(join(root, "auth.json"))
   await authStore.ensureState()
   const running = await startMcpHttpServer({ authStore })
   t.after(async () => {
@@ -74,7 +74,7 @@ test("remote MCP binds one OpenAI subject while local MCP remains available", {
 test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "shellby-mcp-remote-restart-"))
   const filePath = join(root, "auth.json")
-  const firstAuthStore = new ShellbyAuthStore(filePath)
+  const firstAuthStore = new OpenChatXAuthStore(filePath)
   await firstAuthStore.ensureState()
   let running = await startMcpHttpServer({ authStore: firstAuthStore })
   const port = running.port
@@ -85,7 +85,7 @@ test("remote MCP owner survives an HTTP server restart", { timeout: 20_000 }, as
   await owner.client.close()
   await running.close()
 
-  const secondAuthStore = new ShellbyAuthStore(filePath)
+  const secondAuthStore = new OpenChatXAuthStore(filePath)
   assert.deepEqual(await secondAuthStore.ensureState(), { version: 1, subject: "subject-a" })
   running = await startMcpHttpServer({ port, authStore: secondAuthStore })
   t.after(async () => {

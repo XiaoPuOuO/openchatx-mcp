@@ -1,0 +1,55 @@
+{
+  "blender": {
+    "type": "local",
+    "command": ["/opt/homebrew/bin/uvx", "blender-mcp"],
+    "enabled": true,
+    "description": "Blender 控制（ahujasid/blender-mcp，需 Blender 啟用其 addon，port 9876）"
+  },
+  "unreal-engine": {
+    "type": "remote",
+    "url": "http://127.0.0.1:8000/mcp",
+    "enabled": true,
+    "timeout": 300000,
+    "description": "UE 5.8 官方 Unreal MCP（EditorToolset；需開著 Unreal 編輯器，編輯器關閉時連線會失敗屬正常）"
+  },
+  "unityMCP": {
+    "type": "remote",
+    "url": "http://127.0.0.1:8080/mcp",
+    "enabled": true
+  },
+  "mcp-api": {
+    "type": "remote",
+    "url": "https://mcp-api.vdineapp.com/mcp",
+    "enabled": true,
+    "headers": {
+      "Authorization": "Bearer ***"
+    },
+    "timeout": 900000,
+    "description": "mcp-api.vdineapp.com（image / video / music 三個工具固定提供）"
+  },
+  "open-computer-use": {
+    "type": "local",
+    "command": ["/opt/homebrew/bin/open-computer-use", "mcp"],
+    "enabled": true
+  },
+  "open-browser-use": {
+    "type": "local",
+    "command": ["/opt/homebrew/bin/obu", "mcp"],
+    "enabled": true,
+    "description": "Open Browser Use — real Chrome automation for agents"
+  },
+  "capcut-api": {
+    "type": "local",
+    "command": [
+      "/Users/xiaopu/Projects/VectCutAPI/venv-capcut/bin/python",
+      "/Users/xiaopu/Projects/VectCutAPI/mcp_server.py"
+    ],
+    "enabled": true,
+    "cwd": "/Users/xiaopu/Projects/VectCutAPI",
+    "environment": {
+      "PYTHONPATH": "/Users/xiaopu/Projects/VectCutAPI",
+      "DEBUG": "0"
+    },
+    "description": "CapCut/Jianying draft generation via VectCutAPI"
+  }
+}

@@ -23,6 +23,3 @@ Background jobs were moved out of the web process because serverless instances c
 
 -->
 
-## 2026-09-04 — Pixel room is delayed visualization, not live-state mirror
-
-Fast Shellby calls were too brief to perceive when animation followed `agent.current` directly. Room now queues observed call IDs and gives each station action at least three visible working seconds after arrival, while server Recent/state remains authoritative. Pixel Agents assets and office composition conventions provide visual language; Shellby keeps smaller custom engine instead of importing Pixel Agents editor/pathfinding stack.

@@ -20,7 +20,7 @@ export interface SetupSpinner {
 
 export function intro(): void {
   process.stdout.write(
-    `\n${bold("SHELLBY MCP")} ${dim("SETUP")}\n${dim("First-time local agent harness setup")}\n\n`
+    `\n${bold("OPENCHATX-MCP")} ${dim("SETUP")}\n${dim("First-time local agent platform setup")}\n\n`
   )
 }
 

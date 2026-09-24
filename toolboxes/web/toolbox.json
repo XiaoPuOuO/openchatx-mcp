@@ -1,0 +1,10 @@
+{
+  "name": "Web",
+  "description": "HTTP and document fetching.",
+  "enabled": true,
+  "builtin": "web",
+  "tools": {
+    "fetch_url": { "enabled": true, "description": "Fetch and extract web resources." }
+  },
+  "skills": {}
+}

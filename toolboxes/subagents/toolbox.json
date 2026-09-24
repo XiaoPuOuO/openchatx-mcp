@@ -1,0 +1,17 @@
+{
+  "name": "Subagents",
+  "description": "Delegate work to curated local or remote provider-backed model profiles.",
+  "enabled": true,
+  "builtin": "subagents",
+  "tools": {
+    "subagent_list": {
+      "enabled": true,
+      "description": "List curated subagent model profiles and their intended uses."
+    },
+    "subagent_run": {
+      "enabled": true,
+      "description": "Delegate a task to one configured model profile."
+    }
+  },
+  "skills": {}
+}

@@ -4,7 +4,7 @@
 
 ## Native ChatGPT tooling
 
-You have access to ChatGPT's built-in tools such as `web.run`. Combine them with Shellby when useful.
+You have access to ChatGPT's built-in tools such as `web.run`. Combine them with openchatx-mcp when useful.
 
 # Rules for getting work done
 

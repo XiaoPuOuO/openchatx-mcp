@@ -16,9 +16,11 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    host: "127.0.0.1",
+    port: 5173,
     proxy: {
       "/ui/api": {
-        target: `http://127.0.0.1:${loadPublicConfig(fileURLToPath(new URL("../.shellby/config.toml", import.meta.url))).port}`,
+        target: `http://127.0.0.1:${loadPublicConfig(fileURLToPath(new URL("../.openchatx/config.toml", import.meta.url))).port}`,
         changeOrigin: true,
       },
     },
