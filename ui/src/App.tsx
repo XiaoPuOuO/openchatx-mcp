@@ -1,12 +1,21 @@
-import { Blocks, BrainCircuit, PackageOpen, RefreshCw, Settings, Wifi, WifiOff } from "lucide-react"
+import {
+  Activity,
+  Blocks,
+  BrainCircuit,
+  PackageOpen,
+  RefreshCw,
+  Settings,
+  Wifi,
+  WifiOff,
+} from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
-import { CapabilityHealthPanel } from "./features/dashboard/CapabilityHealthPanel"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
+import { StatusPage } from "./features/status/StatusPage"
 import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
@@ -15,7 +24,7 @@ import { useI18n } from "./i18n"
 
 export function App() {
   const [view, setView] = useState<
-    "dashboard" | "mcp-servers" | "toolboxes" | "subagents" | "store"
+    "dashboard" | "mcp-servers" | "toolboxes" | "subagents" | "store" | "status"
   >("dashboard")
   if (view === "mcp-servers") {
     return <McpServerManager onBack={() => setView("dashboard")} />
@@ -29,12 +38,16 @@ export function App() {
   if (view === "store") {
     return <CapabilityStoreManager onBack={() => setView("dashboard")} />
   }
+  if (view === "status") {
+    return <StatusPage onBack={() => setView("dashboard")} />
+  }
   return (
     <Dashboard
       onOpenMcpServers={() => setView("mcp-servers")}
       onOpenToolboxes={() => setView("toolboxes")}
       onOpenSubagents={() => setView("subagents")}
       onOpenStore={() => setView("store")}
+      onOpenStatus={() => setView("status")}
     />
   )
 }
@@ -44,11 +57,13 @@ function Dashboard({
   onOpenToolboxes,
   onOpenSubagents,
   onOpenStore,
+  onOpenStatus,
 }: {
   onOpenMcpServers: () => void
   onOpenToolboxes: () => void
   onOpenSubagents: () => void
   onOpenStore: () => void
+  onOpenStatus: () => void
 }) {
   const { agents, connected, loading, error } = useAgents()
   const { t } = useI18n()
@@ -86,6 +101,10 @@ function Dashboard({
               {connected ? t("dashboard.live") : t("dashboard.reconnecting")}
             </div>
             <LanguageSwitcher />
+            <Button variant="outline" size="sm" onClick={onOpenStatus}>
+              <Activity className="size-3.5" />
+              Status
+            </Button>
             <Button variant="outline" size="sm" onClick={onOpenStore}>
               <PackageOpen className="size-3.5" />
               Store
@@ -112,7 +131,6 @@ function Dashboard({
 
       <div className="mx-auto max-w-[1500px] px-5 py-6 lg:px-8">
         <PlatformHomePanel />
-        <CapabilityHealthPanel />
         {error ? (
           <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
