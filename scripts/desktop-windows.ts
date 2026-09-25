@@ -23,6 +23,7 @@ const shellPublish = join(bundleRoot, "shell-publish")
 const zipPath = join(outputRoot, `OpenChatX-windows-${targetArch}.zip`)
 const nodeVersion = process.versions.node
 const packageVersion = await readPackageVersion()
+const tunnelClientVersion = process.env.OPENCHATX_TUNNEL_CLIENT_VERSION?.trim() || "v0.0.15"
 
 if (command === "build") {
   await buildWindowsDesktop()
@@ -140,8 +141,7 @@ async function installWindowsRuntimeDependencies(): Promise<void> {
     npm_config_os: "win32",
     npm_config_cpu: targetArch,
   }
-  run(
-    "npm",
+  runNpm(
     [
       "install",
       "--omit=dev",
@@ -175,27 +175,18 @@ async function ensureWindowsNode(): Promise<string> {
 }
 
 async function ensureWindowsTunnelClient(): Promise<string> {
-  const release = await fetchLatestTunnelRelease()
-
-  const expectedSuffix = `-windows-${tunnelArch}.zip`
-  const asset = release.assets.find(
-    (candidate) =>
-      candidate.name.startsWith("tunnel-client-v") &&
-      candidate.name.endsWith(expectedSuffix) &&
-      !candidate.name.includes("-runtime")
-  )
-  if (!asset) {
-    throw new Error(
-      `Latest tunnel-client release ${release.tag_name} has no full Windows ${tunnelArch} archive.`
-    )
-  }
-
-  const releaseCache = join(cacheRoot, "tunnel-client", release.tag_name, targetArch)
-  const archive = join(releaseCache, asset.name)
+  const assetName = `tunnel-client-${tunnelClientVersion}-windows-${tunnelArch}.zip`
+  const releaseCache = join(cacheRoot, "tunnel-client", tunnelClientVersion, targetArch)
+  const archive = join(releaseCache, assetName)
   const extracted = join(releaseCache, "extracted")
   await mkdir(releaseCache, { recursive: true })
 
-  if (!(await exists(archive))) await download(asset.browser_download_url, archive)
+  if (!(await exists(archive))) {
+    await download(
+      `https://github.com/openai/tunnel-client/releases/download/${tunnelClientVersion}/${assetName}`,
+      archive
+    )
+  }
   if (!(await exists(extracted))) {
     await mkdir(extracted, { recursive: true })
     await extractZip(archive, extracted)
@@ -203,7 +194,7 @@ async function ensureWindowsTunnelClient(): Promise<string> {
 
   const executable = await findFile(extracted, "tunnel-client.exe")
   if (!executable) {
-    throw new Error(`Downloaded ${asset.name} did not contain tunnel-client.exe`)
+    throw new Error(`Downloaded ${assetName} did not contain tunnel-client.exe`)
   }
   return executable
 }
@@ -412,35 +403,6 @@ async function download(url: string, destination: string): Promise<void> {
   await writeFile(destination, bytes)
 }
 
-async function fetchLatestTunnelRelease(): Promise<{
-  tag_name: string
-  assets: Array<{ name: string; browser_download_url: string }>
-}> {
-  const url = "https://api.github.com/repos/openai/tunnel-client/releases/latest"
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "OpenChatX-Desktop-Packager",
-    },
-  })
-  if (!response.ok) throw new Error(`Request failed ${response.status}: ${url}`)
-  const value: unknown = await response.json()
-  if (!isRecord(value) || typeof value.tag_name !== "string" || !Array.isArray(value.assets)) {
-    throw new Error("Unexpected tunnel-client release response.")
-  }
-  const assets = value.assets.flatMap((item) => {
-    if (
-      isRecord(item) &&
-      typeof item.name === "string" &&
-      typeof item.browser_download_url === "string"
-    ) {
-      return [{ name: item.name, browser_download_url: item.browser_download_url }]
-    }
-    return []
-  })
-  return { tag_name: value.tag_name, assets }
-}
-
 async function findFile(directory: string, filename: string): Promise<string | undefined> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const child = join(directory, entry.name)
@@ -512,12 +474,19 @@ function isFsError(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code
 }
 
-function runNpm(args: string[]): void {
+function runNpm(
+  args: string[],
+  options: {
+    env?: NodeJS.ProcessEnv
+    cwd?: string
+    quiet?: boolean
+  } = {}
+): void {
   if (process.platform === "win32") {
-    run("cmd.exe", ["/d", "/s", "/c", "npm", ...args])
+    run("cmd.exe", ["/d", "/s", "/c", "npm", ...args], options)
     return
   }
-  run("npm", args)
+  run("npm", args, options)
 }
 
 function run(

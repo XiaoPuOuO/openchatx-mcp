@@ -17,6 +17,7 @@ const cachePath = join(outputRoot, "cache")
 const dmgPath = join(outputRoot, "OpenChatX.dmg")
 const notarizationZipPath = join(outputRoot, "OpenChatX-notarization.zip")
 const nodeVersion = process.versions.node
+const tunnelClientVersion = process.env.OPENCHATX_TUNNEL_CLIENT_VERSION?.trim() || "v0.0.15"
 const notaryProfile = process.env.OPENCHATX_NOTARY_PROFILE?.trim() || "openchatx-notary"
 
 if (process.platform !== "darwin") {
@@ -152,54 +153,21 @@ async function ensureBundledNode(): Promise<string> {
 
 async function ensureBundledTunnelClient(): Promise<string> {
   const architecture = process.arch === "arm64" ? "arm64" : "amd64"
-  const releaseUrl = "https://api.github.com/repos/openai/tunnel-client/releases/latest"
-  const response = await fetch(releaseUrl, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "OpenChatX-Desktop-Packager",
-    },
-  })
-  if (!response.ok) {
-    throw new Error(`Unable to resolve latest tunnel-client release: ${response.status}`)
-  }
-
-  const value: unknown = await response.json()
-  if (!isRecord(value) || typeof value.tag_name !== "string" || !Array.isArray(value.assets)) {
-    throw new Error("Unexpected tunnel-client release response.")
-  }
-
-  const asset = value.assets.find(
-    (item) =>
-      isRecord(item) &&
-      typeof item.name === "string" &&
-      typeof item.browser_download_url === "string" &&
-      item.name.startsWith("tunnel-client-v") &&
-      item.name.endsWith(`-darwin-${architecture}.zip`) &&
-      !item.name.includes("-runtime")
-  )
-  if (
-    !isRecord(asset) ||
-    typeof asset.name !== "string" ||
-    typeof asset.browser_download_url !== "string"
-  ) {
-    throw new Error(
-      `Latest tunnel-client release ${value.tag_name} has no macOS ${architecture} archive.`
-    )
-  }
-
-  const releaseCache = join(cachePath, "tunnel-client", value.tag_name, architecture)
-  const archive = join(releaseCache, asset.name)
+  const assetName = `tunnel-client-${tunnelClientVersion}-darwin-${architecture}.zip`
+  const releaseCache = join(cachePath, "tunnel-client", tunnelClientVersion, architecture)
+  const archive = join(releaseCache, assetName)
   const extracted = join(releaseCache, "extracted")
   const executable = join(extracted, "tunnel-client")
   try {
     await stat(executable)
     return executable
   } catch {
-    // Download and extract the official tunnel-client release for this architecture.
+    // Download and extract the pinned official tunnel-client release for this architecture.
   }
 
   await mkdir(extracted, { recursive: true })
-  run("/usr/bin/curl", ["--fail", "--location", "--output", archive, asset.browser_download_url])
+  const url = `https://github.com/openai/tunnel-client/releases/download/${tunnelClientVersion}/${assetName}`
+  run("/usr/bin/curl", ["--fail", "--location", "--output", archive, url])
   run("/usr/bin/unzip", ["-q", "-o", archive, "-d", extracted])
   await chmod(executable, 0o755)
   return executable

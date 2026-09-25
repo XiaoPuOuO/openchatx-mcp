@@ -46,7 +46,7 @@ test("Windows desktop packaging cross-builds x64 and arm64 with bundled Node and
   assert.match(source, /win-x64/u)
   assert.match(source, /win-arm64/u)
   assert.match(source, /nodejs\.org\/dist/u)
-  assert.match(source, /openai\/tunnel-client\/releases\/latest/u)
+  assert.match(source, /openai\/tunnel-client\/releases\/download/u)
   assert.match(source, /OpenChatX-windows-/u)
   assert.match(source, /dotnet/u)
   assert.match(source, /signtool/u)
