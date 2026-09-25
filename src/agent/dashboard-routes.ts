@@ -19,7 +19,6 @@ import {
 } from "../subagents/config.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
-import { RuleCatalog } from "../tools/rules/rule-catalog.js"
 import { readAgentInstructionsTemplate } from "../tools/start-here/start-here.js"
 import { checkForOpenChatXUpdate } from "../update/version-check.js"
 import type { AgentObserver } from "./observer.js"
@@ -58,7 +57,7 @@ export function createDashboardRouter(
   registerWorkspaceRoutes(router, projectRegistry)
   registerUpdateRoutes(router)
   registerAgentInstructionsRoutes(router)
-  registerRuleRoutes(router)
+  registerRuleRoutes(router, toolboxRegistry)
   registerPlatformRoute(router, platformOverview)
 
   router.get("/api/events", (req, res) => {
@@ -368,27 +367,34 @@ function registerAgentInstructionsRoutes(router: ReturnType<typeof Router>): voi
   })
 }
 
-function registerRuleRoutes(router: ReturnType<typeof Router>): void {
-  const rules = new RuleCatalog(MCP_CONFIG.rules.root)
-
-  router.get("/api/rules", async (_req, res) => {
+function registerRuleRoutes(
+  router: ReturnType<typeof Router>,
+  toolboxRegistry?: ToolboxRegistry
+): void {
+  router.get("/api/toolboxes/:toolboxId/rules", async (req, res) => {
     try {
-      res.json({ rules: await rules.list() })
+      if (!toolboxRegistry) return unavailableToolboxes(res)
+      res.json({ rules: await toolboxRegistry.listRules(req.params.toolboxId) })
     } catch (error) {
       toolboxError(res, error)
     }
   })
 
-  router.get("/api/rules/:ruleName", async (req, res) => {
+  router.get("/api/toolboxes/:toolboxId/rules/:ruleName", async (req, res) => {
     try {
-      res.json({ rule: await rules.load(req.params.ruleName) })
+      if (!toolboxRegistry) return unavailableToolboxes(res)
+      res.json({
+        rule: await toolboxRegistry.ruleCatalog(req.params.toolboxId).load(req.params.ruleName),
+      })
     } catch (error) {
       toolboxError(res, error)
     }
   })
 
-  router.post("/api/rules", async (req, res) => {
+  router.post("/api/toolboxes/:toolboxId/rules", async (req, res) => {
     try {
+      if (!toolboxRegistry) return unavailableToolboxes(res)
+      const rules = toolboxRegistry.ruleCatalog(req.params.toolboxId)
       const rule = await rules.create({
         name: String(req.body?.name ?? "").trim(),
         ...(req.body?.description !== undefined
@@ -408,8 +414,10 @@ function registerRuleRoutes(router: ReturnType<typeof Router>): void {
     }
   })
 
-  router.patch("/api/rules/:ruleName", async (req, res) => {
+  router.patch("/api/toolboxes/:toolboxId/rules/:ruleName", async (req, res) => {
     try {
+      if (!toolboxRegistry) return unavailableToolboxes(res)
+      const rules = toolboxRegistry.ruleCatalog(req.params.toolboxId)
       const rule = await rules.edit(req.params.ruleName, {
         ...(req.body?.description !== undefined
           ? { description: String(req.body.description) }
@@ -428,8 +436,10 @@ function registerRuleRoutes(router: ReturnType<typeof Router>): void {
     }
   })
 
-  router.delete("/api/rules/:ruleName", async (req, res) => {
+  router.delete("/api/toolboxes/:toolboxId/rules/:ruleName", async (req, res) => {
     try {
+      if (!toolboxRegistry) return unavailableToolboxes(res)
+      const rules = toolboxRegistry.ruleCatalog(req.params.toolboxId)
       await rules.delete(req.params.ruleName)
       res.json({ rules: await rules.list() })
     } catch (error) {

@@ -6,7 +6,12 @@ import { pathToFileURL } from "node:url"
 
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
 import { z } from "zod"
-
+import {
+  type LoadedRule,
+  MAX_RULE_RESOLVE_RESULTS,
+  RuleCatalog,
+  type RuleSummary,
+} from "../tools/rules/rule-catalog.js"
 import {
   isValidSkillName,
   type LoadedSkill,
@@ -79,6 +84,10 @@ export interface CustomToolCatalogEntry {
   name: string
   description: string
   inputSchema: unknown
+}
+
+export interface ToolboxRule extends LoadedRule {
+  toolboxId: string
 }
 
 interface LoadedToolbox {
@@ -234,6 +243,40 @@ export class ToolboxRegistry {
     return result.sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  ruleCatalog(toolboxId: string): RuleCatalog {
+    const box = this.requireBox(toolboxId)
+    return new RuleCatalog(join(box.path, "rules"))
+  }
+
+  async listRules(toolboxId: string, signal?: AbortSignal): Promise<RuleSummary[]> {
+    return this.ruleCatalog(toolboxId).list(signal)
+  }
+
+  async alwaysAppliedRules(signal?: AbortSignal): Promise<ToolboxRule[]> {
+    const result: ToolboxRule[] = []
+    for (const box of this.toolboxes.values()) {
+      if (!box.manifest.enabled) continue
+      const rules = await new RuleCatalog(join(box.path, "rules")).alwaysApplied(signal)
+      result.push(...rules.map((rule) => ({ ...rule, toolboxId: box.id })))
+    }
+    return result
+  }
+
+  async resolveRules(
+    input: { query?: string; paths?: string[]; limit?: number },
+    signal?: AbortSignal
+  ): Promise<ToolboxRule[]> {
+    const limit = Math.max(1, Math.min(MAX_RULE_RESOLVE_RESULTS, input.limit ?? 10))
+    const result: ToolboxRule[] = []
+    for (const box of this.toolboxes.values()) {
+      if (!box.manifest.enabled) continue
+      const rules = await new RuleCatalog(join(box.path, "rules")).resolve(input, signal)
+      result.push(...rules.map((rule) => ({ ...rule, toolboxId: box.id })))
+      if (result.length >= limit) break
+    }
+    return result.slice(0, limit)
+  }
+
   async readSkill(name: string, signal?: AbortSignal): Promise<{ path: string; content: string }> {
     const { toolboxId, skillName } = this.parseSkillRef(name)
     const box = this.toolboxes.get(toolboxId)
@@ -362,6 +405,7 @@ export class ToolboxRegistry {
     const path = join(this.root, id)
     await mkdir(join(path, "tools"), { recursive: true })
     await mkdir(join(path, "skills"), { recursive: true })
+    await mkdir(join(path, "rules"), { recursive: true })
     await writeFile(
       join(path, "toolbox.json"),
       `${JSON.stringify({ name, enabled: false, tools: {}, skills: {} }, null, 2)}\n`,

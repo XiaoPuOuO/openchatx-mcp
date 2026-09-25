@@ -67,24 +67,44 @@ test("appends Goal context for older editable templates without the new placehol
 
 test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async (t) => {
   const stateDir = await mkdtemp(join(tmpdir(), "openchatx-rule-startup-"))
-  const previousRulesRoot = MCP_CONFIG.rules.root
-  MCP_CONFIG.rules.root = join(stateDir, "rules")
-  t.after(() => {
-    MCP_CONFIG.rules.root = previousRulesRoot
-    return rm(stateDir, { recursive: true, force: true })
-  })
+  t.after(() => rm(stateDir, { recursive: true, force: true }))
 
-  await mkdir(MCP_CONFIG.rules.root, { recursive: true })
+  const toolboxRoot = join(stateDir, "toolboxes")
+  const rulesToolbox = join(toolboxRoot, "test-rules")
+  const rulesRoot = join(rulesToolbox, "rules")
+  const systemToolbox = join(toolboxRoot, "system")
+  await mkdir(rulesRoot, { recursive: true })
+  await mkdir(systemToolbox, { recursive: true })
   await writeFile(
-    join(MCP_CONFIG.rules.root, "always-rule.mdc"),
+    join(systemToolbox, "toolbox.json"),
+    JSON.stringify({
+      name: "System",
+      enabled: true,
+      builtin: "system",
+      tools: { start_here: { enabled: true, required: true } },
+      skills: {},
+    }),
+    "utf8"
+  )
+  await writeFile(
+    join(rulesToolbox, "toolbox.json"),
+    JSON.stringify({ name: "Test Rules", enabled: true, tools: {}, skills: {} }),
+    "utf8"
+  )
+  await writeFile(
+    join(rulesRoot, "always-rule.mdc"),
     "---\ndescription: Global coding rule\nalwaysApply: true\n---\n\nAlways rule body marker.\n"
   )
   await writeFile(
-    join(MCP_CONFIG.rules.root, "manual-rule.mdc"),
+    join(rulesRoot, "manual-rule.mdc"),
     "---\nalwaysApply: false\n---\n\nManual rule body marker.\n"
   )
 
-  const running = await startMcpHttpServer()
+  const toolboxRegistry = new ToolboxRegistry(toolboxRoot)
+  await toolboxRegistry.start()
+  t.after(() => toolboxRegistry.close())
+
+  const running = await startMcpHttpServer({ toolboxRegistry })
   t.after(() => running.close())
   const connected = await connectClient(
     running.url,

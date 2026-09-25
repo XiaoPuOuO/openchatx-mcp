@@ -52,10 +52,6 @@ export const MCP_CONFIG = {
   defaultCwd: homedir(),
   /** Persistent user-authored agent instructions. */
   agentInstructionsFile: join(stateDir, "AGENTS.md"),
-  /** Persistent Cursor-style .mdc rules owned by this OpenChatX installation. */
-  rules: {
-    root: join(stateDir, "rules"),
-  },
   /** External local/remote MCP servers aggregated into the tool surface. */
   externalMcp: {
     configFile:
@@ -184,7 +180,7 @@ export function buildMcpInstructions(): string {
     "- Skills use portable SKILL.md Markdown with name/description frontmatter. Do not enumerate skill names proactively.\n" +
     "- When the user explicitly mentions a skill/workflow by name or asks to use one, call skill_search with those words; then call skill_load only for the selected exact match.\n" +
     "- Use skill_manage to create, edit, or delete user-owned skills. Store operations such as store_skill_import/store_skill_export are lazy; discover them with tool_search first.\n" +
-    "- Rules are persistent .mdc files with four derived modes: Always (alwaysApply), Auto Attached (globs), Agent Requested (description), and Manual (none). Always rules are injected by start_here. Before file-focused work or when a task may have description-based rules, call rule_resolve with the relevant task query and paths. Use rule_load for an exact manual reference and rule_manage for CRUD.\n" +
+    "- Rules are toolbox-owned .mdc files stored under each toolbox's rules/ directory, with four derived modes: Always (alwaysApply), Auto Attached (globs), Agent Requested (description), and Manual (none). Always rules from enabled toolboxes are injected by start_here. Before file-focused work or when a task may have description-based rules, call rule_resolve with the relevant task query and paths. rule_load/rule_manage require the owning toolbox id.\n" +
     "- MCP server management and other platform administration are lazy. Discover mcp_server_list/mcp_server_manage or the relevant tool with tool_search before calling tool_call.\n" +
     "- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
   )

@@ -14,7 +14,7 @@ import type { RegisteredGoal } from "../../goals/goal-registry.js"
 import type { GoalScope } from "../../goals/goal-scope.js"
 import type { RegisteredProject } from "../../projects/project-registry.js"
 import type { ProjectScope } from "../../projects/project-scope.js"
-import type { LoadedRule } from "../rules/rule-catalog.js"
+import type { ToolboxRule } from "../../toolbox/registry.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const AGENT_TEMPLATE_NAME = "AGENTS.template.md"
@@ -46,7 +46,7 @@ export function registerStartHereTool(
   capabilityCatalog?: () => CapabilityCatalog,
   projectScope?: ProjectScope,
   goalScope?: GoalScope,
-  alwaysAppliedRules?: () => Promise<LoadedRule[]>
+  alwaysAppliedRules?: () => Promise<ToolboxRule[]>
 ): void {
   const modes = discoverPromptModes()
   const [firstMode, ...remainingModes] = modes
@@ -140,12 +140,12 @@ function renderGoalContext(
   ].join("\n")
 }
 
-function renderAlwaysAppliedRules(rules: LoadedRule[]): string {
+function renderAlwaysAppliedRules(rules: ToolboxRule[]): string {
   if (rules.length === 0) return ""
   return [
     "# Always-applied rules",
     "The following persistent .mdc rules apply to every request in this session.",
-    ...rules.map((rule) => `## ${rule.name}\n\n${rule.markdown}`),
+    ...rules.map((rule) => `## ${rule.toolboxId}/${rule.name}\n\n${rule.markdown}`),
   ].join("\n")
 }
 

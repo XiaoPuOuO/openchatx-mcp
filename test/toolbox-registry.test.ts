@@ -120,6 +120,31 @@ test("toolbox skills are discovered, toggled, and loaded", async (t) => {
   assert.deepEqual(await registry.listSkills(), [])
 })
 
+test("toolbox rules are stored inside the owning toolbox", async (t) => {
+  const root = await tempDir(t, "openchatx-toolbox-rule-")
+  const box = join(root, "game")
+  await mkdir(box, { recursive: true })
+  await writeFile(
+    join(box, "toolbox.json"),
+    JSON.stringify({ name: "Game", enabled: true, tools: {}, skills: {} })
+  )
+
+  const registry = new ToolboxRegistry(root)
+  await registry.reload()
+  const created = await registry.ruleCatalog("game").create({
+    name: "user-rule",
+    alwaysApply: true,
+    markdown: "# Game Rule\n",
+  })
+
+  assert.equal(created.path, join(box, "rules", "user-rule.mdc"))
+  assert.match(await readFile(created.path, "utf8"), /Game Rule/u)
+  assert.deepEqual(
+    (await registry.alwaysAppliedRules()).map((rule) => [rule.toolboxId, rule.name]),
+    [["game", "user-rule"]]
+  )
+})
+
 test("createTool writes a TypeScript SDK template", async (t) => {
   const root = await tempDir(t, "openchatx-toolbox-template-")
   const registry = new ToolboxRegistry(root)

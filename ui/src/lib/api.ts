@@ -863,16 +863,18 @@ export async function openToolboxInFinder(
   return true
 }
 
-export async function fetchRules(): Promise<RuleSummary[]> {
+export async function fetchRules(toolboxId: string): Promise<RuleSummary[]> {
   if (MOCK_DASHBOARD) return []
-  const response = await fetch("/ui/api/rules")
+  const response = await fetch(`/ui/api/toolboxes/${encodeURIComponent(toolboxId)}/rules`)
   if (!response.ok) throw new Error(`Failed to load rules (${response.status})`)
   const body = (await response.json()) as { rules?: RuleSummary[] }
   return body.rules ?? []
 }
 
-export async function fetchRule(name: string): Promise<LoadedRule> {
-  const response = await fetch(`/ui/api/rules/${encodeURIComponent(name)}`)
+export async function fetchRule(toolboxId: string, name: string): Promise<LoadedRule> {
+  const response = await fetch(
+    `/ui/api/toolboxes/${encodeURIComponent(toolboxId)}/rules/${encodeURIComponent(name)}`
+  )
   const body = (await response.json().catch(() => undefined)) as
     | { rule?: LoadedRule; error?: string }
     | undefined
@@ -883,6 +885,7 @@ export async function fetchRule(name: string): Promise<LoadedRule> {
 }
 
 export async function saveRule(input: {
+  toolboxId: string
   originalName?: string
   name: string
   mode: RuleMode
@@ -892,8 +895,8 @@ export async function saveRule(input: {
 }): Promise<RuleSummary[]> {
   const response = await fetch(
     input.originalName
-      ? `/ui/api/rules/${encodeURIComponent(input.originalName)}`
-      : "/ui/api/rules",
+      ? `/ui/api/toolboxes/${encodeURIComponent(input.toolboxId)}/rules/${encodeURIComponent(input.originalName)}`
+      : `/ui/api/toolboxes/${encodeURIComponent(input.toolboxId)}/rules`,
     {
       method: input.originalName ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -914,10 +917,11 @@ export async function saveRule(input: {
   return body?.rules ?? []
 }
 
-export async function deleteRule(name: string): Promise<RuleSummary[]> {
-  const response = await fetch(`/ui/api/rules/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  })
+export async function deleteRule(toolboxId: string, name: string): Promise<RuleSummary[]> {
+  const response = await fetch(
+    `/ui/api/toolboxes/${encodeURIComponent(toolboxId)}/rules/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  )
   const body = (await response.json().catch(() => undefined)) as
     | { rules?: RuleSummary[]; error?: string }
     | undefined

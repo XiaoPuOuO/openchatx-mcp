@@ -74,10 +74,9 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState<string>()
 
   useEffect(() => {
-    void Promise.all([fetchToolboxes(), fetchRules(), fetchAgentInstructions()])
-      .then(([items, currentRules, instructions]) => {
+    void Promise.all([fetchToolboxes(), fetchAgentInstructions()])
+      .then(([items, instructions]) => {
         setToolboxes(items)
-        setRules(currentRules)
         setSelectedId(items[0]?.id)
         setAgentInstructionsPath(instructions.path)
         setAgentInstructions(instructions.content)
@@ -90,6 +89,18 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
 
   const selected = toolboxes.find((item) => item.id === selectedId)
   const agentsSelected = selectedId === AGENTS_ITEM_ID
+
+  useEffect(() => {
+    if (!selectedId || selectedId === AGENTS_ITEM_ID) {
+      setRules([])
+      return
+    }
+    void fetchRules(selectedId)
+      .then(setRules)
+      .catch((loadError) =>
+        setError(loadError instanceof Error ? loadError.message : String(loadError))
+      )
+  }, [selectedId])
 
   async function run(action: () => Promise<ToolboxSnapshot[]>, success?: string) {
     setError(undefined)
@@ -127,7 +138,8 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
   async function openRule(rule: RuleSummary) {
     setError(undefined)
     try {
-      const loaded = await fetchRule(rule.name)
+      if (!selected) return
+      const loaded = await fetchRule(selected.id, rule.name)
       setRuleDraft(ruleToDraft(loaded))
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError))
@@ -135,10 +147,11 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
   }
 
   async function persistRule() {
-    if (!ruleDraft?.name.trim()) return
+    if (!selected || !ruleDraft?.name.trim()) return
     setError(undefined)
     try {
       const next = await saveRule({
+        toolboxId: selected.id,
         ...ruleDraft,
         name: ruleDraft.name.trim(),
         description: ruleDraft.description.trim() || undefined,
@@ -155,7 +168,8 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
   async function removeRule(name: string) {
     if (!window.confirm(t("toolboxes.deleteRuleConfirm", { name }))) return
     try {
-      setRules(await deleteRule(name))
+      if (!selected) return
+      setRules(await deleteRule(selected.id, name))
       if (ruleDraft?.originalName === name) setRuleDraft(undefined)
       setMessage(t("toolboxes.deletedRule", { name }))
     } catch (deleteError) {

@@ -1,6 +1,6 @@
 {
   "name": "Rules",
-  "description": "Persistent .mdc rules with Always, Auto Attached, Agent Requested, and Manual activation.",
+  "description": "Toolbox-owned .mdc rules with Always, Auto Attached, Agent Requested, and Manual activation.",
   "enabled": true,
   "builtin": "rules",
   "tools": {
@@ -14,7 +14,7 @@
     },
     "rule_manage": {
       "enabled": true,
-      "description": "Create, edit, or delete .mdc rules."
+      "description": "Create, edit, or delete .mdc rules inside a toolbox."
     },
     "rule_import": {
       "enabled": true,
