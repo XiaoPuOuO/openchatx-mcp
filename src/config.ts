@@ -52,10 +52,6 @@ export const MCP_CONFIG = {
   defaultCwd: homedir(),
   /** Persistent user-authored agent instructions. */
   agentInstructionsFile: join(stateDir, "AGENTS.md"),
-  /** Persistent reusable skills owned by this OpenChatX installation. */
-  skills: {
-    root: join(stateDir, "skills"),
-  },
   /** Persistent Cursor-style .mdc rules owned by this OpenChatX installation. */
   rules: {
     root: join(stateDir, "rules"),

@@ -223,9 +223,9 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:grid-cols-[340px_1fr] lg:px-8">
-        <Card className="overflow-hidden">
-          <CardContent className="space-y-5 p-3">
+      <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:h-[calc(100dvh-178px)] lg:min-h-[560px] lg:grid-cols-[340px_1fr] lg:px-8">
+        <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
+          <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto p-3">
             <ListSection
               title={t("subagents.providers")}
               ids={Object.keys(config.providers)}
@@ -252,39 +252,41 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
           </CardContent>
         </Card>
 
-        <Card>
-          {!selection ? (
-            <CardContent className="py-24 text-center text-sm text-muted-foreground">
-              {t("subagents.select")}
-            </CardContent>
-          ) : selectedProvider ? (
-            <ProviderEditor
-              id={selection.id}
-              provider={selectedProvider}
-              onRename={renameSelection}
-              onChange={updateProvider}
-              onDelete={removeSelection}
-            />
-          ) : selectedModel ? (
-            <ModelEditor
-              id={selection.id}
-              model={selectedModel}
-              providerIds={Object.keys(config.providers)}
-              onRename={renameSelection}
-              onChange={updateModel}
-              onDelete={removeSelection}
-            />
-          ) : null}
-          {error ? (
-            <div className="m-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          ) : null}
-          {message ? (
-            <div className="m-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {message}
-            </div>
-          ) : null}
+        <Card className="min-h-0 overflow-hidden lg:h-full">
+          <div className="h-full overflow-y-auto">
+            {!selection ? (
+              <CardContent className="py-24 text-center text-sm text-muted-foreground">
+                {t("subagents.select")}
+              </CardContent>
+            ) : selectedProvider ? (
+              <ProviderEditor
+                id={selection.id}
+                provider={selectedProvider}
+                onRename={renameSelection}
+                onChange={updateProvider}
+                onDelete={removeSelection}
+              />
+            ) : selectedModel ? (
+              <ModelEditor
+                id={selection.id}
+                model={selectedModel}
+                providerIds={Object.keys(config.providers)}
+                onRename={renameSelection}
+                onChange={updateModel}
+                onDelete={removeSelection}
+              />
+            ) : null}
+            {error ? (
+              <div className="m-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
+            {message ? (
+              <div className="m-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {message}
+              </div>
+            ) : null}
+          </div>
         </Card>
       </div>
     </main>

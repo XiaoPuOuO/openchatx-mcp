@@ -33,7 +33,7 @@ test("requires RTK only when shell.rtk is enabled", () => {
 
 test("preflight and full setup require a configured OpenAI tunnel-client profile", async (t) => {
   const root = await realpath(await tempDir(t, "openchatx-tunnel-setup-"))
-  for (const dir of ["scripts", "src/tools/start-here", ".openchatx", "bin", "skills/create-skill"])
+  for (const dir of ["scripts", "src/tools/start-here", ".openchatx", "bin"])
     await mkdir(join(root, dir), { recursive: true })
   for (const path of [
     "scripts/setup.ts",
@@ -44,7 +44,6 @@ test("preflight and full setup require a configured OpenAI tunnel-client profile
     "src/host-platform.ts",
     "src/public-config.cts",
     "src/tools/start-here/AGENTS.template.md",
-    "skills/create-skill/SKILL.md",
   ]) {
     await copyFile(new URL(`../${path}`, import.meta.url), join(root, path))
   }

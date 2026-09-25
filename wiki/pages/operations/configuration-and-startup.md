@@ -5,7 +5,7 @@ paths:
   - src/public-config.cts
   - src/index.ts
   - scripts/
-  - skills/create-skill/SKILL.md
+  - toolboxes/skills/skills/create-skill/SKILL.md
   - ecosystem.config.cjs
 ---
 
@@ -35,7 +35,7 @@ profile = "openchatx"
 health_port = 8080
 ```
 
-Production HTTP binds to loopback `127.0.0.1` at the configured root `port` (default `3333`). `tunnel-client` exposes its local health/admin surface on `tunnel.health_port` (default `8080`). Both port settings accept integers from 1 through 65535. `state_dir` defaults to `~/.openchatx-mcp`; setup creates `<state_dir>/AGENTS.md` and `<state_dir>/skills/` without overwriting existing user content. Relative shell/file/search/image paths resolve from the operating-system user's home directory through `MCP_CONFIG.defaultCwd`. There is no separate workspace directory.
+Production HTTP binds to loopback `127.0.0.1` at the configured root `port` (default `3333`). `tunnel-client` exposes its local health/admin surface on `tunnel.health_port` (default `8080`). Both port settings accept integers from 1 through 65535. `state_dir` defaults to `~/.openchatx-mcp`; setup creates `<state_dir>/AGENTS.md` and runtime state only. Reusable skills live exclusively inside Toolbox folders. Relative shell/file/search/image paths resolve from the operating-system user's home directory through `MCP_CONFIG.defaultCwd`. There is no separate workspace directory.
 
 ## Secure MCP Tunnel Runtime
 
@@ -45,7 +45,7 @@ Ordinary start/restart reloads `openchatx-tunnel` before `openchatx-mcp`. That o
 
 ## Concurrent Repository Copies
 
-`state_dir` isolates saved runtime state, AGENTS.md, reusable skills, and the PM2 daemon. Running copied repositories simultaneously also requires distinct root `port`, distinct `tunnel.health_port`, and separate tunnel-client profiles/tunnel IDs. Relative local-tool paths still default to the same operating-system home directory unless callers provide absolute paths.
+`state_dir` isolates saved runtime state, AGENTS.md, and the PM2 daemon. Reusable skills are owned by Toolbox folders instead. Running copied repositories simultaneously also requires distinct root `port`, distinct `tunnel.health_port`, and separate tunnel-client profiles/tunnel IDs. Relative local-tool paths still default to the same operating-system home directory unless callers provide absolute paths.
 
 `ecosystem.config.cjs` resolves `tunnel-client` from `PATH` and starts the configured profile with the configured loopback health address. `print-url` reports the local MCP target plus the tunnel profile and operator UI rather than discovering a public URL. Startup's health check verifies an instance header derived from the repository and resolved state root, preventing a different copy from producing a false success. Startup's health check verifies an instance header derived from the repository and resolved state root, preventing a different copy from producing a false success (`ecosystem.config.cjs`, `scripts/print-url.ts`, `test/instance-isolation.test.ts`, `test/start.test.ts`).
 

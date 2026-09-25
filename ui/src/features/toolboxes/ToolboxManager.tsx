@@ -225,15 +225,15 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:grid-cols-[300px_1fr] lg:px-8">
-        <Card className="overflow-hidden">
+      <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:h-[calc(100dvh-178px)] lg:min-h-[560px] lg:grid-cols-[300px_1fr] lg:px-8">
+        <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
           <CardHeader className="border-b">
             <h2 className="text-sm font-semibold">{t("toolboxes.folders")}</h2>
             <p className="text-xs text-muted-foreground">
               {t("toolboxes.count", { count: toolboxes.length })}
             </p>
           </CardHeader>
-          <CardContent className="space-y-1 p-2">
+          <CardContent className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
             <button
               type="button"
               onClick={() => setSelectedId(AGENTS_ITEM_ID)}
@@ -279,7 +279,7 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
           </CardContent>
         </Card>
 
-        <div className="space-y-3">
+        <div className="min-h-0 space-y-3 lg:h-full">
           {agentsSelected ? (
             <AgentsEditor
               path={agentInstructionsPath}
@@ -290,7 +290,7 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
               t={t}
             />
           ) : selected ? (
-            <Card className="overflow-hidden">
+            <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
               <CardHeader className="flex-row items-start justify-between border-b">
                 <div>
                   <h2 className="text-base font-semibold">{selected.name}</h2>
@@ -355,57 +355,59 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
 
-              {tab === "tools" ? (
-                <ToolContent
-                  selected={selected}
-                  onAdd={() => void addTool()}
-                  onOpen={(name: string) => void openFinder("tool", name)}
-                  onDelete={(name: string) => {
-                    if (
-                      !selected.builtin &&
-                      window.confirm(t("toolboxes.deleteToolConfirm", { name }))
-                    ) {
-                      void run(
-                        () => deleteTool(selected.id, name),
-                        t("toolboxes.deletedTool", { name })
-                      )
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {tab === "tools" ? (
+                  <ToolContent
+                    selected={selected}
+                    onAdd={() => void addTool()}
+                    onOpen={(name: string) => void openFinder("tool", name)}
+                    onDelete={(name: string) => {
+                      if (
+                        !selected.builtin &&
+                        window.confirm(t("toolboxes.deleteToolConfirm", { name }))
+                      ) {
+                        void run(
+                          () => deleteTool(selected.id, name),
+                          t("toolboxes.deletedTool", { name })
+                        )
+                      }
+                    }}
+                    onToggle={(name: string, enabled: boolean) =>
+                      void run(() => setToolEnabled(selected.id, name, enabled))
                     }
-                  }}
-                  onToggle={(name: string, enabled: boolean) =>
-                    void run(() => setToolEnabled(selected.id, name, enabled))
-                  }
-                  t={t}
-                />
-              ) : tab === "skills" ? (
-                <SkillContent
-                  selected={selected}
-                  onAdd={() => void addSkill()}
-                  onOpen={(name: string) => void openFinder("skill", name)}
-                  onDelete={(name: string) => {
-                    if (window.confirm(t("toolboxes.deleteSkillConfirm", { name }))) {
-                      void run(
-                        () => deleteToolboxSkill(selected.id, name),
-                        t("toolboxes.deletedSkill", { name })
-                      )
+                    t={t}
+                  />
+                ) : tab === "skills" ? (
+                  <SkillContent
+                    selected={selected}
+                    onAdd={() => void addSkill()}
+                    onOpen={(name: string) => void openFinder("skill", name)}
+                    onDelete={(name: string) => {
+                      if (window.confirm(t("toolboxes.deleteSkillConfirm", { name }))) {
+                        void run(
+                          () => deleteToolboxSkill(selected.id, name),
+                          t("toolboxes.deletedSkill", { name })
+                        )
+                      }
+                    }}
+                    onToggle={(name: string, enabled: boolean) =>
+                      void run(() => setToolboxSkillEnabled(selected.id, name, enabled))
                     }
-                  }}
-                  onToggle={(name: string, enabled: boolean) =>
-                    void run(() => setToolboxSkillEnabled(selected.id, name, enabled))
-                  }
-                  t={t}
-                />
-              ) : (
-                <RulesContent
-                  rules={rules}
-                  draft={ruleDraft}
-                  setDraft={setRuleDraft}
-                  onAdd={() => setRuleDraft({ ...EMPTY_RULE })}
-                  onEdit={(rule: RuleSummary) => void openRule(rule)}
-                  onDelete={(name: string) => void removeRule(name)}
-                  onSave={() => void persistRule()}
-                  t={t}
-                />
-              )}
+                    t={t}
+                  />
+                ) : (
+                  <RulesContent
+                    rules={rules}
+                    draft={ruleDraft}
+                    setDraft={setRuleDraft}
+                    onAdd={() => setRuleDraft({ ...EMPTY_RULE })}
+                    onEdit={(rule: RuleSummary) => void openRule(rule)}
+                    onDelete={(name: string) => void removeRule(name)}
+                    onSave={() => void persistRule()}
+                    t={t}
+                  />
+                )}
+              </div>
             </Card>
           ) : null}
 

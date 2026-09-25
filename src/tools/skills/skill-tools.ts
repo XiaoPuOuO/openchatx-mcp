@@ -1,14 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
-import { MCP_CONFIG } from "../../config.js"
 import { ToolError, toToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
-import {
-  MAX_SKILL_SEARCH_RESULTS,
-  SkillCatalog,
-  SkillCatalogError,
-  type SkillSummary,
-} from "./skill-catalog.js"
+import { MAX_SKILL_SEARCH_RESULTS, SkillCatalogError, type SkillSummary } from "./skill-catalog.js"
 
 const skillSummarySchema = z.object({
   name: z.string(),
@@ -16,8 +10,6 @@ const skillSummarySchema = z.object({
 })
 
 export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistry): void {
-  const skills = new SkillCatalog(MCP_CONFIG.skills.root)
-
   server.registerTool(
     "skill_search",
     {
@@ -39,10 +31,7 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
     },
     async ({ query, limit }, ctx) => {
       try {
-        const available = [
-          ...(await skills.list(ctx.mcpReq.signal)),
-          ...((await toolboxes?.listSkills(ctx.mcpReq.signal)) ?? []),
-        ]
+        const available = (await toolboxes?.listSkills(ctx.mcpReq.signal)) ?? []
         const matches = searchCombinedSkills(available, query, limit)
         return {
           structuredContent: {
@@ -81,19 +70,8 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
     },
     async ({ name }, ctx) => {
       try {
-        if (name.includes(".") && toolboxes) {
-          const loaded = await toolboxes.readSkill(name, ctx.mcpReq.signal)
-          return {
-            structuredContent: {
-              name,
-              path: loaded.path,
-              markdown: loaded.content,
-            },
-            content: [],
-          }
-        }
-
-        const loaded = await skills.read(name, ctx.mcpReq.signal)
+        if (!toolboxes) throw new Error("Toolbox runtime is unavailable.")
+        const loaded = await toolboxes.readSkill(name, ctx.mcpReq.signal)
         return {
           structuredContent: {
             name,
@@ -111,10 +89,10 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
   server.registerTool(
     "skill_manage",
     {
-      description:
-        "Create, edit, or delete user-owned portable SKILL.md skills using standard name/description frontmatter.",
+      description: "Create, edit, or delete portable SKILL.md skills inside a toolbox.",
       inputSchema: z.object({
         action: z.enum(["create", "edit", "delete"]),
+        toolbox: z.string().min(1).describe("Toolbox id that owns the skill."),
         name: z
           .string()
           .min(1)
@@ -145,7 +123,8 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
     },
     async (input) => {
       try {
-        return await manageSkill(skills, input)
+        if (!toolboxes) throw new Error("Toolbox runtime is unavailable.")
+        return await manageSkill(toolboxes, input)
       } catch (error) {
         throw skillToolError(error)
       }
@@ -154,19 +133,20 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
 }
 
 async function manageSkill(
-  skills: SkillCatalog,
+  toolboxes: ToolboxRegistry,
   input: {
     action: "create" | "edit" | "delete"
+    toolbox: string
     name: string
     description?: string
     markdown?: string
   }
 ) {
-  const { action: operation, name, description, markdown } = input
+  const { action: operation, toolbox, name, description, markdown } = input
   if (operation === "delete") {
-    await skills.delete(name)
+    await toolboxes.deleteManagedSkill(toolbox, name)
     return {
-      structuredContent: { action: operation, name },
+      structuredContent: { action: operation, name: `${toolbox}.${name}` },
       content: [],
     }
   }
@@ -177,13 +157,13 @@ async function manageSkill(
   }
   const loaded =
     operation === "create"
-      ? await skills.create({ name, ...options })
-      : await skills.edit(name, options)
+      ? await toolboxes.createManagedSkill(toolbox, { name, ...options })
+      : await toolboxes.editManagedSkill(toolbox, name, options)
 
   return {
     structuredContent: {
       action: operation,
-      name,
+      name: `${toolbox}.${name}`,
       path: loaded.path,
       ...(loaded.description ? { description: loaded.description } : {}),
     },

@@ -6,6 +6,7 @@ import test from "node:test"
 
 import { getAgentIdentity, runWithAgent } from "../../src/agent/context.js"
 import { MCP_CONFIG } from "../../src/config.js"
+import { ToolboxRegistry } from "../../src/toolbox/registry.js"
 import {
   buildStartHereInstructions,
   discoverPromptModes,
@@ -230,21 +231,55 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
 test("searches skill metadata before loading full Markdown", {
   timeout: 10_000,
 }, async (t) => {
-  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-skill-search-"))
-  const previousSkillsRoot = MCP_CONFIG.skills.root
-  MCP_CONFIG.skills.root = join(stateDir, "skills")
+  const toolboxRoot = await mkdtemp(join(tmpdir(), "openchatx-skill-search-"))
+  const previousToolboxRoot = MCP_CONFIG.toolboxes.root
+  MCP_CONFIG.toolboxes.root = toolboxRoot
   t.after(() => {
-    MCP_CONFIG.skills.root = previousSkillsRoot
-    return rm(stateDir, { recursive: true, force: true })
+    MCP_CONFIG.toolboxes.root = previousToolboxRoot
+    return rm(toolboxRoot, { recursive: true, force: true })
   })
 
-  const skillDirectory = join(MCP_CONFIG.skills.root, "cooldown-skill")
+  const toolboxDirectory = join(toolboxRoot, "test-skills")
+  const skillDirectory = join(toolboxDirectory, "skills", "cooldown-skill")
   await mkdir(skillDirectory, { recursive: true })
+  await mkdir(join(toolboxRoot, "system", "skills"), { recursive: true })
+  await mkdir(join(toolboxRoot, "skills", "skills"), { recursive: true })
+  await writeFile(
+    join(toolboxRoot, "system", "toolbox.json"),
+    JSON.stringify({
+      name: "System",
+      enabled: true,
+      builtin: "system",
+      tools: { start_here: { enabled: true, required: true } },
+      skills: {},
+    })
+  )
+  await writeFile(
+    join(toolboxRoot, "skills", "toolbox.json"),
+    JSON.stringify({
+      name: "Skills",
+      enabled: true,
+      builtin: "skills",
+      tools: {
+        skill_search: { enabled: true },
+        skill_load: { enabled: true },
+        skill_manage: { enabled: true },
+      },
+      skills: {},
+    })
+  )
+  await writeFile(
+    join(toolboxDirectory, "toolbox.json"),
+    JSON.stringify({ name: "Test Skills", enabled: true, dynamic: true, tools: {}, skills: {} })
+  )
   await writeFile(
     join(skillDirectory, "SKILL.md"),
     "---\nname: cooldown-skill\ndescription: Cooldown test skill for repeated work.\n---\n\n# Cooldown Skill\n\nFull instructions.\n"
   )
-  const running = await startMcpHttpServer()
+  const toolboxRegistry = new ToolboxRegistry(toolboxRoot)
+  await toolboxRegistry.start()
+  t.after(() => toolboxRegistry.close())
+  const running = await startMcpHttpServer({ toolboxRegistry })
   t.after(() => running.close())
   const connected = await connectClient(
     running.url,
@@ -273,20 +308,20 @@ test("searches skill metadata before loading full Markdown", {
 
   const firstLoad = await connected.client.callTool({
     name: "skill_load",
-    arguments: { name: "cooldown-skill" },
+    arguments: { name: "test-skills.cooldown-skill" },
   })
   const secondLoad = await connected.client.callTool({
     name: "skill_load",
-    arguments: { name: "cooldown-skill" },
+    arguments: { name: "test-skills.cooldown-skill" },
   })
   assert.match(toolText(firstLoad), /Full instructions\./u)
   assert.match(toolText(secondLoad), /Full instructions\./u)
 
   const missing = await connected.client.callTool({
     name: "skill_load",
-    arguments: { name: "missing-skill" },
+    arguments: { name: "test-skills.missing-skill" },
   })
-  assert.match(toolText(missing), /unknown_skill/u)
+  assert.match(toolText(missing), /Unknown toolbox skill/u)
 })
 
 test("prefers repo-local .openchatx prompt overrides and falls back to bundled prompts", async (t) => {

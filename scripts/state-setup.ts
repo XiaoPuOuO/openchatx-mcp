@@ -1,5 +1,4 @@
-import { constants } from "node:fs"
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -10,9 +9,7 @@ import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cjs"
 export interface StateInitializationResult {
   stateDir: string
   agentsPath: string
-  starterSkillPath: string
   agentsCreated: boolean
-  starterSkillCreated: boolean
 }
 
 export interface ConfigInitializationResult {
@@ -21,9 +18,6 @@ export interface ConfigInitializationResult {
   updated: boolean
 }
 
-const STARTER_SKILL_SOURCE = fileURLToPath(
-  new URL("../skills/create-skill/SKILL.md", import.meta.url)
-)
 const AGENTS_TEMPLATE_SOURCE = fileURLToPath(
   new URL("../src/tools/start-here/AGENTS.template.md", import.meta.url)
 )
@@ -49,8 +43,6 @@ export async function initializeOpenChatXState(
   await mkdir(stateDir, { recursive: true })
 
   const agentsPath = join(stateDir, "AGENTS.md")
-  const starterSkillPath = join(stateDir, "skills", "create-skill", "SKILL.md")
-  await mkdir(dirname(starterSkillPath), { recursive: true })
   await mkdir(join(stateDir, "rules"), { recursive: true })
 
   let agentsCreated = false
@@ -66,14 +58,7 @@ export async function initializeOpenChatXState(
     }
   }
 
-  let starterSkillCreated = false
-  try {
-    await copyFile(STARTER_SKILL_SOURCE, starterSkillPath, constants.COPYFILE_EXCL)
-    starterSkillCreated = true
-  } catch (error) {
-    if (!hasErrorCode(error, "EEXIST")) throw error
-  }
-  return { stateDir, agentsPath, starterSkillPath, agentsCreated, starterSkillCreated }
+  return { stateDir, agentsPath, agentsCreated }
 }
 
 export async function initializeOpenChatXConfig(

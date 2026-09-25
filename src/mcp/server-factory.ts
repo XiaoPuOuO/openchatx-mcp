@@ -257,7 +257,7 @@ function registerPlatformTools(
   const capabilityStore = options.capabilityStore
   if (capabilityStore)
     registerConfiguredBuiltin(server, lazyServer, registry, "store", (target) =>
-      registerStoreTools(target, capabilityStore)
+      registerStoreTools(target, capabilityStore, registry)
     )
   const providerHub = options.providerHub
   if (providerHub)
@@ -310,7 +310,7 @@ function registerDirectRuntime(
   if (profile.tools.fileWrite) registerFileEditTool(server, options.projectScope)
   if (profile.tools.web)
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
-  if (profile.tools.skills) registerSkillTools(server)
+  if (profile.tools.skills) registerSkillTools(server, options.toolboxRegistry)
   registerRuleTools(server)
   if (profile.tools.image) registerImageTools(server, options.projectScope)
   registerDirectPlatformTools(server, options)
@@ -321,7 +321,8 @@ function registerDirectPlatformTools(server: McpServer, options: CreateMcpServer
   if (options.projectRegistry)
     registerProjectTools(server, options.projectRegistry, options.projectScope)
   if (options.goalRegistry) registerGoalTools(server, options.goalRegistry, options.goalScope)
-  if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
+  if (options.capabilityStore)
+    registerStoreTools(server, options.capabilityStore, options.toolboxRegistry)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
   if (options.agentTeams) registerAgentTeamTools(server, options.agentTeams)

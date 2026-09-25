@@ -19,7 +19,7 @@ The Toolbox Dashboard exposes this file at the same level as Toolbox folders. Us
 
 ## Persistent Skills
 
-Reusable agent workflows live under `<state_dir>/skills/<name>/SKILL.md`. `SKILL.md` stays portable and uses the standard `name` and `description` frontmatter plus Markdown instructions. `skill_search` returns at most five relevant names/descriptions without loading instructions; `skill_load` returns the complete Markdown for one exact skill; `skill_manage` creates, edits, or deletes user-owned skills.
+Reusable agent workflows live only inside Toolbox folders at `toolboxes/<toolbox>/skills/<name>/SKILL.md`. `SKILL.md` stays portable and uses the standard `name` and `description` frontmatter plus Markdown instructions. `skill_search` returns at most five relevant qualified names/descriptions without loading instructions; `skill_load` accepts an exact `<toolbox>.<skill>` name; `skill_manage` creates, edits, or deletes a skill inside an explicit toolbox.
 
 Skills are always on-demand. No skill name, description, or body is injected by `start_here`, and Skills do not have `alwaysApply` or an OpenChatX startup-loading flag. `store_skill_import` and `store_skill_export` copy portable skill folders, including optional `scripts/`, `references/`, and `assets/`, between OpenChatX and other Agent Skills consumers.
 
@@ -63,7 +63,7 @@ Claude and AGENTS.md cannot losslessly represent OpenChatX Agent Requested or Ma
 
 ## Skill Bootstrap Boundary
 
-`skills/create-skill/SKILL.md` is repository-owned bootstrap source, while `<state_dir>/skills/create-skill/SKILL.md` becomes installation-owned state after the first setup copy. Runtime discovery scans only `<state_dir>/skills`.
+There is no global skill catalog under `state_dir`. Runtime discovery scans enabled Toolboxes only, so every skill is visible in the same Toolbox model used by the UI.
 
 ## Related
 

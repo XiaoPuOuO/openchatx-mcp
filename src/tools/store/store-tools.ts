@@ -1,13 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { MCP_CONFIG } from "../../config.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import type { CapabilityStoreService } from "../../store/store-service.js"
-import { SkillCatalog } from "../skills/skill-catalog.js"
+import type { ToolboxRegistry } from "../../toolbox/registry.js"
 
-export function registerStoreTools(server: McpServer, store: CapabilityStoreService): void {
-  const skills = new SkillCatalog(MCP_CONFIG.skills.root)
+export function registerStoreTools(
+  server: McpServer,
+  store: CapabilityStoreService,
+  toolboxes?: ToolboxRegistry
+): void {
   server.registerTool(
     "store_list",
     {
@@ -208,7 +210,7 @@ export function registerStoreTools(server: McpServer, store: CapabilityStoreServ
     }
   )
 
-  registerPortableSkillStoreTools(server, skills)
+  registerPortableSkillStoreTools(server, toolboxes)
 
   server.registerTool(
     "store_publish_check",
@@ -233,13 +235,14 @@ export function registerStoreTools(server: McpServer, store: CapabilityStoreServ
   )
 }
 
-function registerPortableSkillStoreTools(server: McpServer, skills: SkillCatalog): void {
+function registerPortableSkillStoreTools(server: McpServer, toolboxes?: ToolboxRegistry): void {
   server.registerTool(
     "store_skill_import",
     {
       description:
-        "Import a portable Agent Skills folder containing SKILL.md and optional scripts/references/assets into the OpenChatX user skill catalog.",
+        "Import a portable Agent Skills folder containing SKILL.md and optional scripts/references/assets into a toolbox.",
       inputSchema: z.object({
+        toolbox: z.string().min(1).describe("Toolbox id that will own the imported skill."),
         directory: z.string().min(1).describe("Local skill directory containing SKILL.md."),
         replace: z.boolean().default(false),
       }),
@@ -250,13 +253,14 @@ function registerPortableSkillStoreTools(server: McpServer, skills: SkillCatalog
         openWorldHint: false,
       },
     },
-    async ({ directory, replace }) => {
+    async ({ toolbox, directory, replace }) => {
       try {
-        const skill = await skills.importDirectory(directory, { replace })
+        if (!toolboxes) throw new Error("Toolbox runtime is unavailable.")
+        const skill = await toolboxes.importSkill(toolbox, directory, { replace })
         return {
           structuredContent: {
             skill: {
-              name: skill.name,
+              name: `${toolbox}.${skill.name}`,
               ...(skill.description ? { description: skill.description } : {}),
             },
             path: skill.path,
@@ -273,9 +277,12 @@ function registerPortableSkillStoreTools(server: McpServer, skills: SkillCatalog
     "store_skill_export",
     {
       description:
-        "Export one user skill as a portable Agent Skills folder for Claude, Codex, or another SKILL.md consumer.",
+        "Export one toolbox skill as a portable Agent Skills folder for Claude, Codex, or another SKILL.md consumer.",
       inputSchema: z.object({
-        name: z.string().min(1),
+        name: z
+          .string()
+          .min(1)
+          .describe("Qualified toolbox skill name, for example legal.legal-counsel."),
         directory: z.string().min(1).describe("Destination parent directory."),
         replace: z.boolean().default(false),
       }),
@@ -288,7 +295,8 @@ function registerPortableSkillStoreTools(server: McpServer, skills: SkillCatalog
     },
     async ({ name, directory, replace }) => {
       try {
-        const path = await skills.exportDirectory(name, directory, { replace })
+        if (!toolboxes) throw new Error("Toolbox runtime is unavailable.")
+        const path = await toolboxes.exportSkill(name, directory, { replace })
         return {
           structuredContent: { name, path },
           content: [],

@@ -1,44 +1,28 @@
 import assert from "node:assert/strict"
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test from "node:test"
 
 import { initializeOpenChatXConfig, initializeOpenChatXState } from "../scripts/state-setup.js"
 import { defaultShellPath } from "../src/host-platform.js"
 import { loadPublicConfig } from "../src/public-config.cjs"
-import { SkillCatalog } from "../src/tools/skills/skill-catalog.js"
 import { tempDir } from "./helpers/temp.js"
 
-test("state setup creates AGENTS.md and create-skill without overwriting either", async (t) => {
+test("state setup creates AGENTS.md without creating a global skills catalog", async (t) => {
   const stateDir = await tempDir(t, "mcp-setup-state-")
 
   const initial = await initializeOpenChatXState(stateDir)
   assert.equal(initial.agentsCreated, true)
-  assert.equal(initial.starterSkillCreated, true)
   const agentsPath = join(stateDir, "AGENTS.md")
   const agentsTemplate = await readFile(agentsPath, "utf8")
   assert.match(agentsTemplate, /# OpenChatX Agent Instructions/u)
   assert.match(agentsTemplate, /\{\{CAPABILITY_CATALOG\}\}/u)
-  const skillPath = join(stateDir, "skills", "create-skill", "SKILL.md")
-  assert.match(await readFile(skillPath, "utf8"), /name: create-skill/u)
-
-  const catalog = new SkillCatalog(join(stateDir, "skills"))
-  assert.deepEqual(
-    (await catalog.list()).map(({ name }) => name),
-    ["create-skill"]
-  )
+  await assert.rejects(stat(join(stateDir, "skills")), /ENOENT/u)
 
   await writeFile(agentsPath, "# My Instructions\n", "utf8")
-  await writeFile(
-    skillPath,
-    "---\nname: create-skill\ndescription: My custom skill.\n---\n",
-    "utf8"
-  )
   const repeated = await initializeOpenChatXState(stateDir)
   assert.equal(repeated.agentsCreated, false)
-  assert.equal(repeated.starterSkillCreated, false)
   assert.equal(await readFile(agentsPath, "utf8"), "# My Instructions\n")
-  assert.match(await readFile(skillPath, "utf8"), /My custom skill/u)
 })
 
 test("setup creates tunnel-client defaults and preserves existing partial configs", async (t) => {

@@ -124,8 +124,8 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:grid-cols-[340px_1fr] lg:px-8">
-        <Card className="overflow-hidden">
+      <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:h-[calc(100dvh-178px)] lg:min-h-[560px] lg:grid-cols-[340px_1fr] lg:px-8">
+        <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
           <CardHeader className="flex-row items-center justify-between border-b">
             <div>
               <h2 className="text-sm font-semibold">{t("mcp.servers")}</h2>
@@ -138,7 +138,7 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
               {t("mcp.add")}
             </Button>
           </CardHeader>
-          <CardContent className="p-2">
+          <CardContent className="min-h-0 flex-1 overflow-y-auto p-2">
             {loading ? (
               <div className="p-4 text-sm text-muted-foreground">{t("mcp.loading")}</div>
             ) : serverIds.length === 0 ? (
@@ -176,9 +176,9 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
           {!selected || !selectedId ? (
-            <CardContent className="py-24 text-center text-sm text-muted-foreground">
+            <CardContent className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">
               {t("mcp.select")}
             </CardContent>
           ) : (
@@ -193,7 +193,7 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                   {t("common.delete")}
                 </Button>
               </CardHeader>
-              <CardContent className="space-y-5 pt-5">
+              <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto pt-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t("mcp.serverId")}>
                     <input

@@ -9,8 +9,10 @@ import { z } from "zod"
 
 import {
   isValidSkillName,
+  type LoadedSkill,
   MAX_SKILL_BYTES,
   parseSkillFrontmatter,
+  SkillCatalog,
   type SkillSummary,
 } from "../tools/skills/skill-catalog.js"
 import type { Tool } from "./tool.js"
@@ -233,20 +235,88 @@ export class ToolboxRegistry {
   }
 
   async readSkill(name: string, signal?: AbortSignal): Promise<{ path: string; content: string }> {
-    const separator = name.indexOf(".")
-    if (separator <= 0) throw new Error(`Unknown toolbox skill ${JSON.stringify(name)}.`)
-    const toolboxId = name.slice(0, separator)
-    const skillName = name.slice(separator + 1)
+    const { toolboxId, skillName } = this.parseSkillRef(name)
     const box = this.toolboxes.get(toolboxId)
     if (!box?.manifest.enabled || !isValidSkillName(skillName))
       throw new Error(`Unknown toolbox skill ${JSON.stringify(name)}.`)
     const settings = box.manifest.skills[skillName]
-    if (!settings?.enabled) throw new Error(`Toolbox skill ${JSON.stringify(name)} is disabled.`)
+    if (!settings) throw new Error(`Unknown toolbox skill ${JSON.stringify(name)}.`)
+    if (!settings.enabled) throw new Error(`Toolbox skill ${JSON.stringify(name)} is disabled.`)
     const path = join(box.path, "skills", skillName, "SKILL.md")
     const info = await stat(path)
     if (!info.isFile() || info.size > MAX_SKILL_BYTES)
       throw new Error(`Invalid toolbox skill ${JSON.stringify(name)}.`)
     return { path, content: await readFile(path, { encoding: "utf8", signal }) }
+  }
+
+  async createManagedSkill(
+    toolboxId: string,
+    input: { name: string; description?: string; markdown?: string }
+  ): Promise<LoadedSkill> {
+    const box = this.requireBox(toolboxId)
+    const catalog = new SkillCatalog(join(box.path, "skills"))
+    const loaded = await catalog.create(input)
+    box.manifest.skills[input.name] = {
+      enabled: true,
+      required: false,
+      ...(loaded.description ? { description: loaded.description } : {}),
+    }
+    await this.writeManifest(box)
+    await this.reload()
+    return loaded
+  }
+
+  async editManagedSkill(
+    toolboxId: string,
+    name: string,
+    input: { description?: string; markdown?: string }
+  ): Promise<LoadedSkill> {
+    const box = this.requireBox(toolboxId)
+    const loaded = await new SkillCatalog(join(box.path, "skills")).edit(name, input)
+    const current = box.manifest.skills[name] ?? { enabled: true, required: false }
+    box.manifest.skills[name] = {
+      ...current,
+      ...(loaded.description ? { description: loaded.description } : {}),
+    }
+    await this.writeManifest(box)
+    await this.reload()
+    return loaded
+  }
+
+  async deleteManagedSkill(toolboxId: string, name: string): Promise<void> {
+    await this.deleteSkill(toolboxId, name)
+  }
+
+  async importSkill(
+    toolboxId: string,
+    source: string,
+    options: { replace?: boolean } = {}
+  ): Promise<LoadedSkill> {
+    const box = this.requireBox(toolboxId)
+    const catalog = new SkillCatalog(join(box.path, "skills"))
+    const loaded = await catalog.importDirectory(source, options)
+    box.manifest.skills[loaded.name] = {
+      enabled: true,
+      required: false,
+      ...(loaded.description ? { description: loaded.description } : {}),
+    }
+    await this.writeManifest(box)
+    await this.reload()
+    return loaded
+  }
+
+  async exportSkill(
+    qualifiedName: string,
+    destinationRoot: string,
+    options: { replace?: boolean } = {}
+  ): Promise<string> {
+    const { toolboxId, skillName } = this.parseSkillRef(qualifiedName)
+    const box = this.requireBox(toolboxId)
+    return new SkillCatalog(join(box.path, "skills")).exportDirectory(
+      skillName,
+      destinationRoot,
+      options
+    )
   }
 
   async setToolboxEnabled(id: string, enabled: boolean): Promise<void> {
@@ -435,6 +505,16 @@ export class ToolboxRegistry {
     const box = this.toolboxes.get(id)
     if (!box) throw new Error(`Unknown toolbox ${JSON.stringify(id)}.`)
     return box
+  }
+
+  private parseSkillRef(name: string): { toolboxId: string; skillName: string } {
+    const separator = name.indexOf(".")
+    if (separator <= 0) throw new Error(`Unknown toolbox skill ${JSON.stringify(name)}.`)
+    const toolboxId = name.slice(0, separator)
+    const skillName = name.slice(separator + 1)
+    if (!ID_PATTERN.test(toolboxId) || !isValidSkillName(skillName))
+      throw new Error(`Unknown toolbox skill ${JSON.stringify(name)}.`)
+    return { toolboxId, skillName }
   }
 
   private async writeManifest(box: LoadedToolbox): Promise<void> {

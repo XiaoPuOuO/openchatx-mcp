@@ -64,12 +64,10 @@ final class RuntimeSupervisor: NSObject {
             from: runtimeRoot.appendingPathComponent("defaults/subagents.json"),
             to: configDirectory.appendingPathComponent("subagents.json")
         )
-        if !fileManager.fileExists(atPath: toolboxDirectory.path) {
-            try fileManager.copyItem(
-                at: runtimeRoot.appendingPathComponent("defaults/toolboxes", isDirectory: true),
-                to: toolboxDirectory
-            )
-        }
+        try syncDefaultToolboxes(
+            from: runtimeRoot.appendingPathComponent("defaults/toolboxes", isDirectory: true),
+            to: toolboxDirectory
+        )
     }
 
     func start() {
@@ -358,6 +356,49 @@ final class RuntimeSupervisor: NSObject {
     private func copyDefault(from source: URL, to destination: URL) throws {
         guard !fileManager.fileExists(atPath: destination.path) else { return }
         try fileManager.copyItem(at: source, to: destination)
+    }
+
+    private func syncDefaultToolboxes(from sourceRoot: URL, to destinationRoot: URL) throws {
+        try fileManager.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+        let defaultToolboxes = try fileManager.contentsOfDirectory(
+            at: sourceRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        for sourceToolbox in defaultToolboxes {
+            let values = try sourceToolbox.resourceValues(forKeys: [.isDirectoryKey])
+            guard values.isDirectory == true else { continue }
+            let destinationToolbox = destinationRoot.appendingPathComponent(
+                sourceToolbox.lastPathComponent,
+                isDirectory: true
+            )
+            if !fileManager.fileExists(atPath: destinationToolbox.path) {
+                try fileManager.copyItem(at: sourceToolbox, to: destinationToolbox)
+                continue
+            }
+
+            let sourceSkills = sourceToolbox.appendingPathComponent("skills", isDirectory: true)
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: sourceSkills.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else { continue }
+            let destinationSkills = destinationToolbox.appendingPathComponent("skills", isDirectory: true)
+            try fileManager.createDirectory(at: destinationSkills, withIntermediateDirectories: true)
+            for sourceSkill in try fileManager.contentsOfDirectory(
+                at: sourceSkills,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                let skillValues = try sourceSkill.resourceValues(forKeys: [.isDirectoryKey])
+                guard skillValues.isDirectory == true else { continue }
+                let destinationSkill = destinationSkills.appendingPathComponent(
+                    sourceSkill.lastPathComponent,
+                    isDirectory: true
+                )
+                if !fileManager.fileExists(atPath: destinationSkill.path) {
+                    try fileManager.copyItem(at: sourceSkill, to: destinationSkill)
+                }
+            }
+        }
     }
 
     private func runAndWait(
