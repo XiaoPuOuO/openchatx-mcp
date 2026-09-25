@@ -27,6 +27,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --force
+      - run: npm --prefix ui ci
       - run: npm run lint
       - run: npm run typecheck
       - run: npm --prefix ui run lint
@@ -58,6 +59,7 @@ jobs:
       - name: Install native test dependencies
         run: brew install ripgrep
       - run: npm ci
+      - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
       - run: npm test
       - run: npm run desktop:build
@@ -96,6 +98,7 @@ jobs:
         shell: powershell
         run: choco install innosetup --yes --no-progress
       - run: npm ci
+      - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
       - name: Windows platform tests
         run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts test/desktop-runtime.test.ts

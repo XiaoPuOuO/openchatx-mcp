@@ -209,7 +209,10 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
           </div>
           <div className="flex gap-2">
             <LanguageSwitcher />
-            <Button variant="outline" onClick={() => void run(reloadToolboxes, t("toolboxes.reloaded"))}>
+            <Button
+              variant="outline"
+              onClick={() => void run(reloadToolboxes, t("toolboxes.reloaded"))}
+            >
               <RefreshCw className="size-4" />
               {t("common.reload")}
             </Button>
@@ -225,7 +228,9 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
         <Card className="overflow-hidden">
           <CardHeader className="border-b">
             <h2 className="text-sm font-semibold">{t("toolboxes.folders")}</h2>
-            <p className="text-xs text-muted-foreground">{t("toolboxes.count", { count: toolboxes.length })}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("toolboxes.count", { count: toolboxes.length })}
+            </p>
           </CardHeader>
           <CardContent className="space-y-1 p-2">
             <button
@@ -256,12 +261,18 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`size-2 rounded-full ${box.enabled ? "bg-emerald-500" : "bg-neutral-300"}`} />
+                    <span
+                      className={`size-2 rounded-full ${box.enabled ? "bg-emerald-500" : "bg-neutral-300"}`}
+                    />
                     <span className="truncate text-sm font-medium">{box.name}</span>
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-foreground">{box.id}</p>
                 </div>
-                {box.builtin ? <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">{t("common.builtIn")}</span> : null}
+                {box.builtin ? (
+                  <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                    {t("common.builtIn")}
+                  </span>
+                ) : null}
               </button>
             ))}
           </CardContent>
@@ -282,7 +293,9 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
               <CardHeader className="flex-row items-start justify-between border-b">
                 <div>
                   <h2 className="text-base font-semibold">{selected.name}</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">{selected.description ?? selected.path}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selected.description ?? selected.path}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-2 text-xs">
@@ -291,7 +304,9 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                       type="checkbox"
                       checked={selected.enabled}
                       disabled={selected.tools.some((tool) => tool.required)}
-                      onChange={(event) => void run(() => setToolboxEnabled(selected.id, event.target.checked))}
+                      onChange={(event) =>
+                        void run(() => setToolboxEnabled(selected.id, event.target.checked))
+                      }
                     />
                   </label>
                   <Button variant="outline" size="sm" onClick={() => void openFinder()}>
@@ -314,10 +329,16 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                     type="button"
                     onClick={() => setTab(item)}
                     className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-                      tab === item ? "border border-b-background bg-background text-foreground" : "text-muted-foreground hover:text-foreground"
+                      tab === item
+                        ? "border border-b-background bg-background text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {item === "tools" ? t("toolboxes.tools") : item === "skills" ? t("toolboxes.skills") : t("toolboxes.rules")}
+                    {item === "tools"
+                      ? t("toolboxes.tools")
+                      : item === "skills"
+                        ? t("toolboxes.skills")
+                        : t("toolboxes.rules")}
                   </button>
                 ))}
               </div>
@@ -328,8 +349,14 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                   onAdd={() => void addTool()}
                   onOpen={(name: string) => void openFinder("tool", name)}
                   onDelete={(name: string) => {
-                    if (!selected.builtin && window.confirm(t("toolboxes.deleteToolConfirm", { name }))) {
-                      void run(() => deleteTool(selected.id, name), t("toolboxes.deletedTool", { name }))
+                    if (
+                      !selected.builtin &&
+                      window.confirm(t("toolboxes.deleteToolConfirm", { name }))
+                    ) {
+                      void run(
+                        () => deleteTool(selected.id, name),
+                        t("toolboxes.deletedTool", { name })
+                      )
                     }
                   }}
                   onToggle={(name: string, enabled: boolean) =>
@@ -344,7 +371,10 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                   onOpen={(name: string) => void openFinder("skill", name)}
                   onDelete={(name: string) => {
                     if (window.confirm(t("toolboxes.deleteSkillConfirm", { name }))) {
-                      void run(() => deleteToolboxSkill(selected.id, name), t("toolboxes.deletedSkill", { name }))
+                      void run(
+                        () => deleteToolboxSkill(selected.id, name),
+                        t("toolboxes.deletedSkill", { name })
+                      )
                     }
                   }}
                   onToggle={(name: string, enabled: boolean) =>
@@ -367,8 +397,16 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
             </Card>
           ) : null}
 
-          {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-          {message ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
+          {error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+          {message ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {message}
+            </div>
+          ) : null}
         </div>
       </div>
     </main>
@@ -443,20 +481,47 @@ function ToolContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
   return (
     <div>
       <div className="flex items-center justify-between px-5 py-3">
-        <span className="text-xs text-muted-foreground">{t("toolboxes.toolsCount", { count: selected.tools.length })}</span>
-        {!selected.builtin ? <Button variant="outline" size="sm" onClick={onAdd}><CirclePlus className="size-3.5" />{t("toolboxes.addTsTool")}</Button> : null}
+        <span className="text-xs text-muted-foreground">
+          {t("toolboxes.toolsCount", { count: selected.tools.length })}
+        </span>
+        {!selected.builtin ? (
+          <Button variant="outline" size="sm" onClick={onAdd}>
+            <CirclePlus className="size-3.5" />
+            {t("toolboxes.addTsTool")}
+          </Button>
+        ) : null}
       </div>
       <div className="divide-y border-t">
         {selected.tools.map((tool: any) => (
           <div key={tool.name} className="flex items-center justify-between gap-4 px-5 py-4">
             <div className="min-w-0">
-              <div className="flex items-center gap-2"><FileCode2 className="size-4 text-muted-foreground" /><span className="font-mono text-sm font-medium">{tool.name}</span></div>
-              <p className={`mt-1 text-xs ${tool.error ? "text-red-600" : "text-muted-foreground"}`}>{tool.error ?? tool.description ?? tool.path ?? t("toolboxes.tools")}</p>
+              <div className="flex items-center gap-2">
+                <FileCode2 className="size-4 text-muted-foreground" />
+                <span className="font-mono text-sm font-medium">{tool.name}</span>
+              </div>
+              <p
+                className={`mt-1 text-xs ${tool.error ? "text-red-600" : "text-muted-foreground"}`}
+              >
+                {tool.error ?? tool.description ?? tool.path ?? t("toolboxes.tools")}
+              </p>
             </div>
             <div className="flex items-center gap-2">
-              {tool.path ? <Button variant="ghost" size="sm" onClick={() => onOpen(tool.name)}><FolderOpen className="size-3.5" /></Button> : null}
-              {!selected.builtin ? <Button variant="ghost" size="sm" onClick={() => onDelete(tool.name)}><Trash2 className="size-3.5" /></Button> : null}
-              <input type="checkbox" checked={tool.enabled} disabled={tool.required} onChange={(e) => onToggle(tool.name, e.target.checked)} />
+              {tool.path ? (
+                <Button variant="ghost" size="sm" onClick={() => onOpen(tool.name)}>
+                  <FolderOpen className="size-3.5" />
+                </Button>
+              ) : null}
+              {!selected.builtin ? (
+                <Button variant="ghost" size="sm" onClick={() => onDelete(tool.name)}>
+                  <Trash2 className="size-3.5" />
+                </Button>
+              ) : null}
+              <input
+                type="checkbox"
+                checked={tool.enabled}
+                disabled={tool.required}
+                onChange={(e) => onToggle(tool.name, e.target.checked)}
+              />
             </div>
           </div>
         ))}
@@ -469,16 +534,45 @@ function SkillContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
   return (
     <div>
       <div className="flex items-center justify-between px-5 py-3">
-        <span className="text-xs text-muted-foreground">{t("toolboxes.skillsCount", { count: selected.skills.length })}</span>
-        <Button variant="outline" size="sm" onClick={onAdd}><CirclePlus className="size-3.5" />{t("toolboxes.addSkill")}</Button>
+        <span className="text-xs text-muted-foreground">
+          {t("toolboxes.skillsCount", { count: selected.skills.length })}
+        </span>
+        <Button variant="outline" size="sm" onClick={onAdd}>
+          <CirclePlus className="size-3.5" />
+          {t("toolboxes.addSkill")}
+        </Button>
       </div>
       <div className="divide-y border-t">
-        {selected.skills.length === 0 ? <div className="px-5 py-8 text-sm text-muted-foreground">{t("toolboxes.noSkills")}</div> : selected.skills.map((skill: any) => (
-          <div key={skill.name} className="flex items-center justify-between gap-4 px-5 py-4">
-            <div><div className="flex items-center gap-2"><Sparkles className="size-4 text-muted-foreground" /><span className="text-sm font-medium">{skill.name}</span></div><p className="mt-1 text-xs text-muted-foreground">{skill.description ?? skill.path}</p></div>
-            <div className="flex items-center gap-2"><Button variant="ghost" size="sm" onClick={() => onOpen(skill.name)}><FolderOpen className="size-3.5" /></Button><Button variant="ghost" size="sm" onClick={() => onDelete(skill.name)}><Trash2 className="size-3.5" /></Button><input type="checkbox" checked={skill.enabled} onChange={(e) => onToggle(skill.name, e.target.checked)} /></div>
-          </div>
-        ))}
+        {selected.skills.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("toolboxes.noSkills")}</div>
+        ) : (
+          selected.skills.map((skill: any) => (
+            <div key={skill.name} className="flex items-center justify-between gap-4 px-5 py-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{skill.name}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {skill.description ?? skill.path}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => onOpen(skill.name)}>
+                  <FolderOpen className="size-3.5" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onDelete(skill.name)}>
+                  <Trash2 className="size-3.5" />
+                </Button>
+                <input
+                  type="checkbox"
+                  checked={skill.enabled}
+                  onChange={(e) => onToggle(skill.name, e.target.checked)}
+                />
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
@@ -488,28 +582,107 @@ function RulesContent({ rules, draft, setDraft, onAdd, onEdit, onDelete, onSave,
   return (
     <div>
       <div className="flex items-center justify-between px-5 py-3">
-        <span className="text-xs text-muted-foreground">{t("toolboxes.rulesCount", { count: rules.length })}</span>
-        <Button variant="outline" size="sm" onClick={onAdd}><CirclePlus className="size-3.5" />{t("toolboxes.addRule")}</Button>
+        <span className="text-xs text-muted-foreground">
+          {t("toolboxes.rulesCount", { count: rules.length })}
+        </span>
+        <Button variant="outline" size="sm" onClick={onAdd}>
+          <CirclePlus className="size-3.5" />
+          {t("toolboxes.addRule")}
+        </Button>
       </div>
       {draft ? (
         <div className="border-t bg-muted/10 p-5">
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-medium">{t("toolboxes.ruleName")}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" value={draft.name} disabled={Boolean(draft.originalName)} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
-            <label className="text-xs font-medium">{t("toolboxes.ruleMode")}<select className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" value={draft.mode} onChange={(e) => setDraft({ ...draft, mode: e.target.value as RuleMode })}><option value="always">Always</option><option value="auto_attached">Auto Attached</option><option value="agent_requested">Agent Requested</option><option value="manual">Manual</option></select></label>
+            <label className="text-xs font-medium">
+              {t("toolboxes.ruleName")}
+              <input
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={draft.name}
+                disabled={Boolean(draft.originalName)}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+            </label>
+            <label className="text-xs font-medium">
+              {t("toolboxes.ruleMode")}
+              <select
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={draft.mode}
+                onChange={(e) => setDraft({ ...draft, mode: e.target.value as RuleMode })}
+              >
+                <option value="always">Always</option>
+                <option value="auto_attached">Auto Attached</option>
+                <option value="agent_requested">Agent Requested</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
           </div>
-          {draft.mode === "agent_requested" ? <label className="mt-3 block text-xs font-medium">{t("toolboxes.ruleDescription")}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label> : null}
-          {draft.mode === "auto_attached" ? <label className="mt-3 block text-xs font-medium">{t("toolboxes.ruleGlobs")}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" value={draft.globs} onChange={(e) => setDraft({ ...draft, globs: e.target.value })} placeholder="src/**/*.tsx, **/*.jsx" /></label> : null}
-          <label className="mt-3 block text-xs font-medium">{t("toolboxes.ruleMarkdown")}<textarea className="mt-1 min-h-48 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs" value={draft.markdown} onChange={(e) => setDraft({ ...draft, markdown: e.target.value })} /></label>
-          <div className="mt-3 flex justify-end gap-2"><Button variant="ghost" onClick={() => setDraft(undefined)}>{t("common.cancel")}</Button><Button onClick={onSave}>{t("common.save")}</Button></div>
+          {draft.mode === "agent_requested" ? (
+            <label className="mt-3 block text-xs font-medium">
+              {t("toolboxes.ruleDescription")}
+              <input
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={draft.description}
+                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              />
+            </label>
+          ) : null}
+          {draft.mode === "auto_attached" ? (
+            <label className="mt-3 block text-xs font-medium">
+              {t("toolboxes.ruleGlobs")}
+              <input
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={draft.globs}
+                onChange={(e) => setDraft({ ...draft, globs: e.target.value })}
+                placeholder="src/**/*.tsx, **/*.jsx"
+              />
+            </label>
+          ) : null}
+          <label className="mt-3 block text-xs font-medium">
+            {t("toolboxes.ruleMarkdown")}
+            <textarea
+              className="mt-1 min-h-48 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+              value={draft.markdown}
+              onChange={(e) => setDraft({ ...draft, markdown: e.target.value })}
+            />
+          </label>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDraft(undefined)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={onSave}>{t("common.save")}</Button>
+          </div>
         </div>
       ) : null}
       <div className="divide-y border-t">
-        {rules.length === 0 ? <div className="px-5 py-8 text-sm text-muted-foreground">{t("toolboxes.noRules")}</div> : rules.map((rule: RuleSummary) => (
-          <div key={rule.name} className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="min-w-0"><div className="flex items-center gap-2"><ScrollText className="size-4 text-muted-foreground" /><span className="text-sm font-medium">{rule.name}</span><span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{modeLabel(rule.mode)}</span></div><p className="mt-1 truncate text-xs text-muted-foreground">{rule.description ?? (rule.globs.length ? rule.globs.join(", ") : t("toolboxes.ruleManualHint"))}</p></div>
-            <div className="flex gap-1"><Button variant="ghost" size="sm" onClick={() => onEdit(rule)}>{t("common.edit")}</Button><Button variant="ghost" size="sm" onClick={() => onDelete(rule.name)}><Trash2 className="size-3.5" /></Button></div>
-          </div>
-        ))}
+        {rules.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-muted-foreground">{t("toolboxes.noRules")}</div>
+        ) : (
+          rules.map((rule: RuleSummary) => (
+            <div key={rule.name} className="flex items-center justify-between gap-4 px-5 py-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <ScrollText className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{rule.name}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                    {modeLabel(rule.mode)}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {rule.description ??
+                    (rule.globs.length ? rule.globs.join(", ") : t("toolboxes.ruleManualHint"))}
+                </p>
+              </div>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={() => onEdit(rule)}>
+                  {t("common.edit")}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onDelete(rule.name)}>
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
@@ -527,7 +700,10 @@ function ruleToDraft(rule: LoadedRule): RuleDraft {
 }
 
 function splitGlobs(value: string): string[] {
-  return value.split(",").map((item) => item.trim()).filter(Boolean)
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
 }
 
 function modeLabel(mode: RuleMode): string {

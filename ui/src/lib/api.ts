@@ -6,13 +6,13 @@ import type {
   CapabilityStoreEntry,
   CapabilityStoreReview,
   CapabilityStoreSourceTree,
+  LoadedRule,
   McpServerMap,
   PlatformOverview,
   ProjectRecord,
   RecommendedMcp,
   RuleMode,
   RuleSummary,
-  LoadedRule,
   SubagentConfig,
   ToolboxSnapshot,
 } from "../types"
@@ -487,7 +487,9 @@ export async function fetchAgentInstructions(): Promise<{ path: string; content:
   return { path: body.path, content: body.content }
 }
 
-export async function saveAgentInstructions(content: string): Promise<{ path: string; content: string }> {
+export async function saveAgentInstructions(
+  content: string
+): Promise<{ path: string; content: string }> {
   if (MOCK_DASHBOARD) return { path: "/mock/AGENTS.md", content }
   const response = await fetch("/ui/api/agent-instructions", {
     method: "PUT",
@@ -749,14 +751,17 @@ export async function saveRule(input: {
   markdown: string
 }): Promise<RuleSummary[]> {
   const response = await fetch(
-    input.originalName ? `/ui/api/rules/${encodeURIComponent(input.originalName)}` : "/ui/api/rules",
+    input.originalName
+      ? `/ui/api/rules/${encodeURIComponent(input.originalName)}`
+      : "/ui/api/rules",
     {
       method: input.originalName ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: input.name,
-        description: input.mode === "agent_requested" ? input.description ?? "" : input.description,
-        globs: input.mode === "auto_attached" ? input.globs ?? [] : [],
+        description:
+          input.mode === "agent_requested" ? (input.description ?? "") : input.description,
+        globs: input.mode === "auto_attached" ? (input.globs ?? []) : [],
         alwaysApply: input.mode === "always",
         markdown: input.markdown,
       }),

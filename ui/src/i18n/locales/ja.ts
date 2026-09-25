@@ -57,10 +57,12 @@ export const ja: Messages = {
   "overview.allGood": "問題はありません。",
   "agent.project": "プロジェクト: {id}",
   "agent.delete": "セッションを削除",
-  "agent.deleteConfirm": "このダッシュボードから {id} を削除しますか？ChatGPT 自体は停止しません。アクティブなセッションは次にツールを使うと再表示されます。",
+  "agent.deleteConfirm":
+    "このダッシュボードから {id} を削除しますか？ChatGPT 自体は停止しません。アクティブなセッションは次にツールを使うと再表示されます。",
   "agent.moreActivity": "ほか {count} 件のアクティビティ",
   "projects.title": "プロジェクト",
-  "projects.subtitle": "セッションのコンテキスト、既定の作業ディレクトリ、読み取り・書き込み・Shell 権限を提供するフォルダーです。",
+  "projects.subtitle":
+    "セッションのコンテキスト、既定の作業ディレクトリ、読み取り・書き込み・Shell 権限を提供するフォルダーです。",
   "projects.registerTitle": "プロジェクトを登録",
   "projects.projectId": "プロジェクト ID",
   "projects.name": "名前",
@@ -74,15 +76,19 @@ export const ja: Messages = {
   "projects.permission.read": "読み取り",
   "projects.permission.write": "書き込み",
   "projects.permission.shell": "Shell",
-  "projects.emptyPrefix": "まだプロジェクトが登録されていません。上でフォルダーを登録してから ChatGPT で",
+  "projects.emptyPrefix":
+    "まだプロジェクトが登録されていません。上でフォルダーを登録してから ChatGPT で",
   "projects.emptySuffix": "を使い、そのセッションのアクティブなプロジェクトに設定してください。",
   "store.title": "Capability Store",
   "store.subtitle": "組み込み機能と、GitHub から直接見つけたコミュニティソースです。",
   "store.communityWarningTitle": "コミュニティ機能は OpenChatX による審査・推奨を受けていません。",
-  "store.communityWarningPrefix": "コミュニティ検索は次の GitHub トピックが付いた公開リポジトリを使用します:",
-  "store.communityWarningSuffix": "インストール前にソースを確認するか、ChatGPT に対象リビジョンをレビューさせてください。",
+  "store.communityWarningPrefix":
+    "コミュニティ検索は次の GitHub トピックが付いた公開リポジトリを使用します:",
+  "store.communityWarningSuffix":
+    "インストール前にソースを確認するか、ChatGPT に対象リビジョンをレビューさせてください。",
   "store.picks": "OpenChatX おすすめ",
-  "store.picksHint": "OpenChatX が開始候補として選んだ MCP プロジェクトです。推奨はセキュリティ認証を意味しません。",
+  "store.picksHint":
+    "OpenChatX が開始候補として選んだ MCP プロジェクトです。推奨はセキュリティ認証を意味しません。",
   "store.byPublisher": "作成者: {publisher}",
   "store.recommended": "おすすめ",
   "store.searchPlaceholder": "機能を検索",
@@ -101,9 +107,12 @@ export const ja: Messages = {
   "store.achievement": "実績解除",
   "store.systemInfoName": "システム情報",
   "store.reviewSummary.highRisk": "高リスクのコードパターンがあり、手動確認が必要です。",
-  "store.reviewSummary.warning": "潜在的なリスクが検出されました。インストール前に該当ソースを確認してください。",
-  "store.reviewSummary.clear": "確認したテキストファイルに明らかな高リスクパターンは見つかりませんでした。",
-  "store.reviewNote": "これは静的解析であり、安全性の判定ではありません。インストール判断の前に ChatGPT で store_source_read を使い、該当ソースを確認してください。",
+  "store.reviewSummary.warning":
+    "潜在的なリスクが検出されました。インストール前に該当ソースを確認してください。",
+  "store.reviewSummary.clear":
+    "確認したテキストファイルに明らかな高リスクパターンは見つかりませんでした。",
+  "store.reviewNote":
+    "これは静的解析であり、安全性の判定ではありません。インストール判断の前に ChatGPT で store_source_read を使い、該当ソースを確認してください。",
   "store.reviewSeverity.info": "情報",
   "store.reviewSeverity.warning": "警告",
   "store.reviewSeverity.high": "高リスク",
@@ -118,7 +127,8 @@ export const ja: Messages = {
   "store.reviewFinding.filesystem": "ソースにファイルシステムアクセスの兆候があります。",
   "store.reviewFinding.secrets": "ソースが環境変数、資格情報、認証値を参照しています。",
   "store.reviewFinding.invalidPackageJson": "package.json は有効な JSON ではありません。",
-  "store.reviewFinding.undeclared": "観測された {permission} の動作が capability.json の permissions に宣言されていません。",
+  "store.reviewFinding.undeclared":
+    "観測された {permission} の動作が capability.json の permissions に宣言されていません。",
   "store.reviewFinding.lifecycle": "package.json に {name} lifecycle script が定義されています。",
   "store.install": "インストール",
   "store.sourceTitle": "ソース: {name}",
@@ -129,15 +139,21 @@ export const ja: Messages = {
   "store.installRevision": "このリビジョンをインストール",
   "store.selectSourceFile": "確認するソースファイルを選択してください。",
   "store.publishTitle": "コミュニティ機能を公開",
-  "store.publishPrefix": "OpenChatX Store サーバーは不要です。公開 GitHub リポジトリを作成し、ルートに",
+  "store.publishPrefix":
+    "OpenChatX Store サーバーは不要です。公開 GitHub リポジトリを作成し、ルートに",
   "store.publishMiddle": "を置いて、リポジトリトピック",
   "store.publishSuffix": "を追加します。OpenChatX は GitHub から直接検出します。公開前に",
-  "store.systemInfoDescription": "ローカル OS、アーキテクチャ、ホスト名、CPU 数、メモリを表示する小さな Toolbox 機能です。",
-  "store.recommended.openComputerUse": "アクセシビリティ API、スクリーンショット、クリック、入力、スクロール、ドラッグ、ネイティブ App 状態を使ったクロスプラットフォームのデスクトップ自動化。",
-  "store.recommended.openBrowserUse": "MCP サーバーとブラウザ拡張機能を介して、ローカルのログイン済み Chrome ブラウザを操作します。",
-  "store.recommended.blender": "MCP クライアントから Blender のシーン、オブジェクト、マテリアル、アセット、レンダリング、Blender Python を操作します。",
+  "store.systemInfoDescription":
+    "ローカル OS、アーキテクチャ、ホスト名、CPU 数、メモリを表示する小さな Toolbox 機能です。",
+  "store.recommended.openComputerUse":
+    "アクセシビリティ API、スクリーンショット、クリック、入力、スクロール、ドラッグ、ネイティブ App 状態を使ったクロスプラットフォームのデスクトップ自動化。",
+  "store.recommended.openBrowserUse":
+    "MCP サーバーとブラウザ拡張機能を介して、ローカルのログイン済み Chrome ブラウザを操作します。",
+  "store.recommended.blender":
+    "MCP クライアントから Blender のシーン、オブジェクト、マテリアル、アセット、レンダリング、Blender Python を操作します。",
   "status.title": "システム状態",
-  "status.subtitle": "ランタイム、トンネル、MCP サーバー、Toolbox、Provider の詳細な状態を表示します。",
+  "status.subtitle":
+    "ランタイム、トンネル、MCP サーバー、Toolbox、Provider の詳細な状態を表示します。",
   "status.capabilityHealth": "機能の稼働状態",
   "status.healthy": "正常",
   "status.unavailableCount": "{count} 件利用不可",
@@ -199,13 +215,15 @@ export const ja: Messages = {
   "toolCall.close": "ツール呼び出し詳細を閉じる",
   "toolboxes.agentsTemplate": "start_here テンプレート",
   "toolboxes.agentsTemplateTitle": "編集可能な start_here テンプレート",
-  "toolboxes.agentsTemplateHint": "静的な指示はここに置きます。実行時にプレースホルダーが選択モードと OpenChatX のライブ情報に置換されます。プレースホルダーを削除・移動・複製して start_here の注入内容を制御できます。",
+  "toolboxes.agentsTemplateHint":
+    "静的な指示はここに置きます。実行時にプレースホルダーが選択モードと OpenChatX のライブ情報に置換されます。プレースホルダーを削除・移動・複製して start_here の注入内容を制御できます。",
   "toolboxes.agentsSaved": "AGENTS.md を保存しました。",
   "toolboxes.placeholderMode": "選択中の start_here モード。",
   "toolboxes.placeholderTaskId": "現在のタスク ID。",
   "toolboxes.placeholderModeInstructions": "Coding や Code Review などモード固有の指示。",
   "toolboxes.placeholderProjectContext": "アクティブまたは登録済み Project のコンテキスト。",
-  "toolboxes.placeholderCapabilityCatalog": "MCP、Toolbox、Provider、Subagent のライブ能力サマリー。",
+  "toolboxes.placeholderCapabilityCatalog":
+    "MCP、Toolbox、Provider、Subagent のライブ能力サマリー。",
   "toolboxes.placeholderAlwaysRules": "Always モード Rule の完全な Markdown。",
   "toolboxes.title": "ツールボックス",
   "toolboxes.subtitle": "AGENTS.md、ツール、Skills、Rules を管理",

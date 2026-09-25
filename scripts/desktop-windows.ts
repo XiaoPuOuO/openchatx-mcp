@@ -22,6 +22,7 @@ const runtimeBin = join(runtimeRoot, "bin")
 const shellPublish = join(bundleRoot, "shell-publish")
 const zipPath = join(outputRoot, `OpenChatX-windows-${targetArch}.zip`)
 const nodeVersion = process.versions.node
+const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm"
 const packageVersion = await readPackageVersion()
 
 if (command === "build") {
@@ -50,8 +51,8 @@ if (command === "build") {
 }
 
 async function buildWindowsDesktop(): Promise<void> {
-  run("npm", ["run", "build"])
-  run("npm", ["--prefix", "ui", "run", "build"])
+  run(npmExecutable, ["run", "build"])
+  run(npmExecutable, ["--prefix", "ui", "run", "build"])
 
   await rm(bundleRoot, { recursive: true, force: true })
   await rm(zipPath, { force: true })

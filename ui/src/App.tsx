@@ -173,7 +173,9 @@ export function App() {
           </div>
         </header>
 
-        <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>{page}</div>
+        <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>
+          {page}
+        </div>
       </section>
     </div>
   )

@@ -57,7 +57,8 @@ export const zhTW: Messages = {
   "overview.allGood": "一切正常。",
   "agent.project": "專案：{id}",
   "agent.delete": "移除工作階段",
-  "agent.deleteConfirm": "要從此儀表板移除 {id} 嗎？這不會停止 ChatGPT；若仍在活動，之後使用工具時會再次出現。",
+  "agent.deleteConfirm":
+    "要從此儀表板移除 {id} 嗎？這不會停止 ChatGPT；若仍在活動，之後使用工具時會再次出現。",
   "agent.moreActivity": "另有 {count} 筆活動",
   "projects.title": "專案",
   "projects.subtitle": "提供工作階段內容、預設工作目錄，以及讀取、寫入與 Shell 權限的資料夾。",
@@ -103,7 +104,8 @@ export const zhTW: Messages = {
   "store.reviewSummary.highRisk": "偵測到高風險程式碼模式，需要人工檢查。",
   "store.reviewSummary.warning": "偵測到潛在風險；安裝前請檢查標示的原始碼檔案。",
   "store.reviewSummary.clear": "已審查的文字檔案中未發現明顯的高風險模式。",
-  "store.reviewNote": "這是靜態分析，不代表安全結論。決定是否安裝前，請讓 ChatGPT 使用 store_source_read 檢查標示的原始碼檔案。",
+  "store.reviewNote":
+    "這是靜態分析，不代表安全結論。決定是否安裝前，請讓 ChatGPT 使用 store_source_read 檢查標示的原始碼檔案。",
   "store.reviewSeverity.info": "資訊",
   "store.reviewSeverity.warning": "警告",
   "store.reviewSeverity.high": "高風險",
@@ -118,7 +120,8 @@ export const zhTW: Messages = {
   "store.reviewFinding.filesystem": "原始碼包含檔案系統存取跡象。",
   "store.reviewFinding.secrets": "原始碼引用環境變數、憑證或授權資訊。",
   "store.reviewFinding.invalidPackageJson": "package.json 不是有效的 JSON。",
-  "store.reviewFinding.undeclared": "觀察到的 {permission} 行為未在 capability.json 的 permissions 中宣告。",
+  "store.reviewFinding.undeclared":
+    "觀察到的 {permission} 行為未在 capability.json 的 permissions 中宣告。",
   "store.reviewFinding.lifecycle": "package.json 定義了 {name} lifecycle script。",
   "store.install": "安裝",
   "store.sourceTitle": "原始碼：{name}",
@@ -132,10 +135,14 @@ export const zhTW: Messages = {
   "store.publishPrefix": "不需要 OpenChatX Store 伺服器。發布公開 GitHub 儲存庫，並在根目錄放置",
   "store.publishMiddle": "，再加入儲存庫主題",
   "store.publishSuffix": "OpenChatX 會直接從 GitHub 探索。發布前請使用",
-  "store.systemInfoDescription": "小型工具箱能力，可回報本機作業系統、架構、主機名稱、CPU 數量與記憶體。",
-  "store.recommended.openComputerUse": "透過輔助使用 API、螢幕截圖、點擊、輸入、捲動、拖曳與原生 App 狀態，提供跨平台桌面自動化。",
-  "store.recommended.openBrowserUse": "透過 MCP 伺服器與瀏覽器擴充功能，在本機控制已登入的真實 Chrome 瀏覽器。",
-  "store.recommended.blender": "從 MCP 用戶端控制 Blender 場景、物件、材質、資產、渲染與 Blender Python。",
+  "store.systemInfoDescription":
+    "小型工具箱能力，可回報本機作業系統、架構、主機名稱、CPU 數量與記憶體。",
+  "store.recommended.openComputerUse":
+    "透過輔助使用 API、螢幕截圖、點擊、輸入、捲動、拖曳與原生 App 狀態，提供跨平台桌面自動化。",
+  "store.recommended.openBrowserUse":
+    "透過 MCP 伺服器與瀏覽器擴充功能，在本機控制已登入的真實 Chrome 瀏覽器。",
+  "store.recommended.blender":
+    "從 MCP 用戶端控制 Blender 場景、物件、材質、資產、渲染與 Blender Python。",
   "status.title": "系統狀態",
   "status.subtitle": "查看執行環境、通道、MCP 伺服器、工具箱與 Provider 的詳細健康狀態。",
   "status.capabilityHealth": "能力健康狀態",
@@ -199,7 +206,8 @@ export const zhTW: Messages = {
   "toolCall.close": "關閉工具呼叫詳情",
   "toolboxes.agentsTemplate": "start_here 範本",
   "toolboxes.agentsTemplateTitle": "可編輯的 start_here 範本",
-  "toolboxes.agentsTemplateHint": "靜態指示都放在這裡；執行時會把佔位符替換成所選模式與 OpenChatX 即時內容。你可以刪除、移動或重複佔位符來控制 start_here 注入的內容。",
+  "toolboxes.agentsTemplateHint":
+    "靜態指示都放在這裡；執行時會把佔位符替換成所選模式與 OpenChatX 即時內容。你可以刪除、移動或重複佔位符來控制 start_here 注入的內容。",
   "toolboxes.agentsSaved": "AGENTS.md 已儲存。",
   "toolboxes.placeholderMode": "目前選擇的 start_here 模式。",
   "toolboxes.placeholderTaskId": "目前任務識別碼。",

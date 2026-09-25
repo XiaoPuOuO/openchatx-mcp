@@ -196,8 +196,8 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             {t("store.communityWarningTitle")}
           </div>
           <p className="mt-1 text-muted-foreground">
-            {t("store.communityWarningPrefix")} <code>openchatx-capability</code>.
-            {" "}{t("store.communityWarningSuffix")}
+            {t("store.communityWarningPrefix")} <code>openchatx-capability</code>.{" "}
+            {t("store.communityWarningSuffix")}
           </p>
         </div>
 
@@ -468,7 +468,6 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             </CardContent>
           </Card>
         ) : null}
-
       </div>
     </main>
   )

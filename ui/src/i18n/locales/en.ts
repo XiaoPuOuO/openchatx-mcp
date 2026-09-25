@@ -57,10 +57,12 @@ export const en: Messages = {
   "overview.allGood": "Everything looks good.",
   "agent.project": "Project: {id}",
   "agent.delete": "Remove session",
-  "agent.deleteConfirm": "Remove {id} from this dashboard? This does not stop ChatGPT; an active session can appear again when it uses a tool.",
+  "agent.deleteConfirm":
+    "Remove {id} from this dashboard? This does not stop ChatGPT; an active session can appear again when it uses a tool.",
   "agent.moreActivity": "{count} more activities",
   "projects.title": "Projects",
-  "projects.subtitle": "Folders that provide session context, a default working directory, and read/write/shell permissions.",
+  "projects.subtitle":
+    "Folders that provide session context, a default working directory, and read/write/shell permissions.",
   "projects.registerTitle": "Register Project",
   "projects.projectId": "Project ID",
   "projects.name": "Name",
@@ -78,11 +80,14 @@ export const en: Messages = {
   "projects.emptySuffix": "in ChatGPT to make it the active Project for that session.",
   "store.title": "Capability Store",
   "store.subtitle": "Built-in capabilities and community source discovered directly from GitHub.",
-  "store.communityWarningTitle": "Community capabilities are not reviewed or endorsed by OpenChatX.",
+  "store.communityWarningTitle":
+    "Community capabilities are not reviewed or endorsed by OpenChatX.",
   "store.communityWarningPrefix": "Community discovery uses public GitHub repositories tagged",
-  "store.communityWarningSuffix": "Inspect the source or ask ChatGPT to review the exact revision before installing.",
+  "store.communityWarningSuffix":
+    "Inspect the source or ask ChatGPT to review the exact revision before installing.",
   "store.picks": "OpenChatX Picks",
-  "store.picksHint": "MCP projects curated by OpenChatX as useful starting points. Recommendation does not mean security certification.",
+  "store.picksHint":
+    "MCP projects curated by OpenChatX as useful starting points. Recommendation does not mean security certification.",
   "store.byPublisher": "by {publisher}",
   "store.recommended": "Recommended",
   "store.searchPlaceholder": "Search capabilities",
@@ -101,9 +106,12 @@ export const en: Messages = {
   "store.achievement": "Achievement unlocked",
   "store.systemInfoName": "System Info",
   "store.reviewSummary.highRisk": "High-risk code patterns require manual inspection.",
-  "store.reviewSummary.warning": "Potential risks were detected; inspect the cited source files before installing.",
-  "store.reviewSummary.clear": "No obvious high-risk patterns were found in the reviewed text files.",
-  "store.reviewNote": "This is static analysis, not a safety verdict. Ask ChatGPT to inspect the cited source files with store_source_read before deciding whether to install.",
+  "store.reviewSummary.warning":
+    "Potential risks were detected; inspect the cited source files before installing.",
+  "store.reviewSummary.clear":
+    "No obvious high-risk patterns were found in the reviewed text files.",
+  "store.reviewNote":
+    "This is static analysis, not a safety verdict. Ask ChatGPT to inspect the cited source files with store_source_read before deciding whether to install.",
   "store.reviewSeverity.info": "INFO",
   "store.reviewSeverity.warning": "WARNING",
   "store.reviewSeverity.high": "HIGH",
@@ -116,9 +124,11 @@ export const en: Messages = {
   "store.reviewFinding.shell": "Source references process or shell execution.",
   "store.reviewFinding.network": "Source contains network access indicators.",
   "store.reviewFinding.filesystem": "Source contains filesystem access indicators.",
-  "store.reviewFinding.secrets": "Source references environment variables, credentials, or authorization values.",
+  "store.reviewFinding.secrets":
+    "Source references environment variables, credentials, or authorization values.",
   "store.reviewFinding.invalidPackageJson": "package.json is not valid JSON.",
-  "store.reviewFinding.undeclared": "Observed {permission} behavior is not declared in capability.json permissions.",
+  "store.reviewFinding.undeclared":
+    "Observed {permission} behavior is not declared in capability.json permissions.",
   "store.reviewFinding.lifecycle": "package.json defines a {name} lifecycle script.",
   "store.install": "Install",
   "store.sourceTitle": "Source: {name}",
@@ -129,15 +139,21 @@ export const en: Messages = {
   "store.installRevision": "Install this revision",
   "store.selectSourceFile": "Select a source file to inspect it here.",
   "store.publishTitle": "Publish a community capability",
-  "store.publishPrefix": "No OpenChatX Store server is required. Publish a public GitHub repository and put",
+  "store.publishPrefix":
+    "No OpenChatX Store server is required. Publish a public GitHub repository and put",
   "store.publishMiddle": "at its root, then add the repository topic",
   "store.publishSuffix": "OpenChatX discovers it directly from GitHub. Before publishing, use",
-  "store.systemInfoDescription": "A small Toolbox capability that reports the local OS, architecture, hostname, CPU count, and memory.",
-  "store.recommended.openComputerUse": "Cross-platform desktop automation through accessibility APIs, screenshots, clicks, typing, scrolling, drag, and native app state.",
-  "store.recommended.openBrowserUse": "Drive a real signed-in Chrome browser locally through an MCP server and browser extension.",
-  "store.recommended.blender": "Control Blender scenes, objects, materials, assets, rendering, and Blender Python from an MCP client.",
+  "store.systemInfoDescription":
+    "A small Toolbox capability that reports the local OS, architecture, hostname, CPU count, and memory.",
+  "store.recommended.openComputerUse":
+    "Cross-platform desktop automation through accessibility APIs, screenshots, clicks, typing, scrolling, drag, and native app state.",
+  "store.recommended.openBrowserUse":
+    "Drive a real signed-in Chrome browser locally through an MCP server and browser extension.",
+  "store.recommended.blender":
+    "Control Blender scenes, objects, materials, assets, rendering, and Blender Python from an MCP client.",
   "status.title": "System Status",
-  "status.subtitle": "Detailed health for the runtime, tunnel, MCP servers, Toolboxes, and Providers.",
+  "status.subtitle":
+    "Detailed health for the runtime, tunnel, MCP servers, Toolboxes, and Providers.",
   "status.capabilityHealth": "Capability health",
   "status.healthy": "Healthy",
   "status.unavailableCount": "{count} unavailable",
@@ -200,13 +216,16 @@ export const en: Messages = {
   "toolCall.close": "Close tool call details",
   "toolboxes.agentsTemplate": "start_here template",
   "toolboxes.agentsTemplateTitle": "Editable start_here template",
-  "toolboxes.agentsTemplateHint": "Static instructions live here. Placeholders are replaced at runtime with the selected mode and live OpenChatX context. Remove or move placeholders to control what start_here injects.",
+  "toolboxes.agentsTemplateHint":
+    "Static instructions live here. Placeholders are replaced at runtime with the selected mode and live OpenChatX context. Remove or move placeholders to control what start_here injects.",
   "toolboxes.agentsSaved": "AGENTS.md saved.",
   "toolboxes.placeholderMode": "Selected start_here mode.",
   "toolboxes.placeholderTaskId": "Current task identifier.",
-  "toolboxes.placeholderModeInstructions": "Mode-specific instructions such as coding or code review.",
+  "toolboxes.placeholderModeInstructions":
+    "Mode-specific instructions such as coding or code review.",
   "toolboxes.placeholderProjectContext": "Active or registered Project context.",
-  "toolboxes.placeholderCapabilityCatalog": "Live MCP, Toolbox, Provider, and Subagent capability summary.",
+  "toolboxes.placeholderCapabilityCatalog":
+    "Live MCP, Toolbox, Provider, and Subagent capability summary.",
   "toolboxes.placeholderAlwaysRules": "Full Markdown for Rules in Always mode.",
   "toolboxes.title": "Toolboxes",
   "toolboxes.subtitle": "Manage AGENTS.md, tools, Skills, and Rules",
