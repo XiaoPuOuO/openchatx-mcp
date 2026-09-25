@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process"
 import { chmod, cp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
-import { basename, dirname, join, resolve } from "node:path"
+import { basename, dirname, join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 
@@ -82,7 +82,7 @@ async function buildDesktop(): Promise<void> {
   await cp(nodeExecutable, join(runtimeBinPath, "node"))
   await chmod(join(runtimeBinPath, "node"), 0o755)
 
-  const tunnelClient = resolveExecutable("tunnel-client")
+  const tunnelClient = await ensureBundledTunnelClient()
   await cp(tunnelClient, join(runtimeBinPath, "tunnel-client"))
   await chmod(join(runtimeBinPath, "tunnel-client"), 0o755)
 
@@ -147,6 +147,61 @@ async function ensureBundledNode(): Promise<string> {
   const url = `https://nodejs.org/dist/v${nodeVersion}/${folderName}.tar.gz`
   run("/usr/bin/curl", ["--fail", "--location", "--output", archive, url])
   run("/usr/bin/tar", ["-xzf", archive, "-C", cachePath])
+  return executable
+}
+
+async function ensureBundledTunnelClient(): Promise<string> {
+  const architecture = process.arch === "arm64" ? "arm64" : "amd64"
+  const releaseUrl = "https://api.github.com/repos/openai/tunnel-client/releases/latest"
+  const response = await fetch(releaseUrl, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "OpenChatX-Desktop-Packager",
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`Unable to resolve latest tunnel-client release: ${response.status}`)
+  }
+
+  const value: unknown = await response.json()
+  if (!isRecord(value) || typeof value.tag_name !== "string" || !Array.isArray(value.assets)) {
+    throw new Error("Unexpected tunnel-client release response.")
+  }
+
+  const asset = value.assets.find(
+    (item) =>
+      isRecord(item) &&
+      typeof item.name === "string" &&
+      typeof item.browser_download_url === "string" &&
+      item.name.startsWith("tunnel-client-v") &&
+      item.name.endsWith(`-darwin-${architecture}.zip`) &&
+      !item.name.includes("-runtime")
+  )
+  if (
+    !isRecord(asset) ||
+    typeof asset.name !== "string" ||
+    typeof asset.browser_download_url !== "string"
+  ) {
+    throw new Error(
+      `Latest tunnel-client release ${value.tag_name} has no macOS ${architecture} archive.`
+    )
+  }
+
+  const releaseCache = join(cachePath, "tunnel-client", value.tag_name, architecture)
+  const archive = join(releaseCache, asset.name)
+  const extracted = join(releaseCache, "extracted")
+  const executable = join(extracted, "tunnel-client")
+  try {
+    await stat(executable)
+    return executable
+  } catch {
+    // Download and extract the official tunnel-client release for this architecture.
+  }
+
+  await mkdir(extracted, { recursive: true })
+  run("/usr/bin/curl", ["--fail", "--location", "--output", archive, asset.browser_download_url])
+  run("/usr/bin/unzip", ["-q", "-o", archive, "-d", extracted])
+  await chmod(executable, 0o755)
   return executable
 }
 
@@ -518,12 +573,6 @@ async function copyIfMissing(source: string, destination: string): Promise<void>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function resolveExecutable(name: string): string {
-  const value = execFileSync("/usr/bin/which", [name], { encoding: "utf8" }).trim()
-  if (!value) throw new Error(`${name} executable was not found on PATH.`)
-  return resolve(value)
 }
 
 function run(executable: string, args: string[], options: { quiet?: boolean } = {}): void {

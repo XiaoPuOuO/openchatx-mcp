@@ -22,7 +22,6 @@ const runtimeBin = join(runtimeRoot, "bin")
 const shellPublish = join(bundleRoot, "shell-publish")
 const zipPath = join(outputRoot, `OpenChatX-windows-${targetArch}.zip`)
 const nodeVersion = process.versions.node
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm"
 const packageVersion = await readPackageVersion()
 
 if (command === "build") {
@@ -51,8 +50,8 @@ if (command === "build") {
 }
 
 async function buildWindowsDesktop(): Promise<void> {
-  run(npmExecutable, ["run", "build"])
-  run(npmExecutable, ["--prefix", "ui", "run", "build"])
+  runNpm(["run", "build"])
+  runNpm(["--prefix", "ui", "run", "build"])
 
   await rm(bundleRoot, { recursive: true, force: true })
   await rm(zipPath, { force: true })
@@ -511,6 +510,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFsError(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code
+}
+
+function runNpm(args: string[]): void {
+  if (process.platform === "win32") {
+    run("cmd.exe", ["/d", "/s", "/c", "npm", ...args])
+    return
+  }
+  run("npm", args)
 }
 
 function run(
