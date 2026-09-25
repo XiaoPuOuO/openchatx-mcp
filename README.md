@@ -106,7 +106,18 @@ The Desktop App stores the API key in the operating-system credential store:
 
 ### 5. Finish the ChatGPT MCP app
 
-Return to ChatGPT, select the newly created tunnel, choose **No authentication**, and finish creating the MCP app.
+Return to ChatGPT:
+
+1. Select the newly created `openchatx (tunnel_...)` tunnel.
+2. Set authentication to **No authentication**.
+3. Read and accept the custom MCP risk acknowledgement.
+4. Click **Create**.
+
+![Select the tunnel and create the OpenChatX app](docs/assets/secure-tunnel-chatgpt-finish.png)
+
+If you want ChatGPT to use OpenChatX tools without prompting for every tool call, you can set the OpenChatX app permission to **Allow all tools**.
+
+![Allow all OpenChatX tools](docs/assets/openchatx-allow-all-tools.png)
 
 Useful links:
 

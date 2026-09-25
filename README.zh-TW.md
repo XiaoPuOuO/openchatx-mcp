@@ -106,7 +106,18 @@ Desktop App 會把 API Key 存在系統安全儲存區：
 
 ### 5. 回到 ChatGPT 完成 MCP App
 
-回到 ChatGPT，選擇剛建立的 Tunnel，Authentication 選 **No authentication**，完成 MCP App 建立。
+回到 ChatGPT：
+
+1. 選擇剛建立的 `openchatx (tunnel_...)` Tunnel。
+2. Authentication 選 **No authentication**。
+3. 閱讀並接受 Custom MCP 的風險提示。
+4. 按 **Create** 完成建立。
+
+![選擇 Tunnel 並建立 OpenChatX App](docs/assets/secure-tunnel-chatgpt-finish.png)
+
+如果希望 ChatGPT 使用 OpenChatX Tools 時不要每次都詢問，也可以把 OpenChatX App 權限設成 **Allow all tools**。
+
+![允許所有 OpenChatX Tools](docs/assets/openchatx-allow-all-tools.png)
 
 相關連結：
 
