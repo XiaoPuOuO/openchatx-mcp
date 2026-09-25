@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { chmod, cp, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { chmod, cp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 import process from "node:process"
@@ -71,6 +71,7 @@ async function buildDesktop(): Promise<void> {
     "desktop/runtime-defaults/subagents.json",
     join(runtimePath, "defaults/subagents.json")
   )
+  pruneDevelopmentDependencies()
   await removePackageBinDirectories(join(runtimePath, "node_modules"))
 
   const nodeExecutable = await ensureBundledNode()
@@ -87,6 +88,7 @@ async function buildDesktop(): Promise<void> {
 
   await chmod(join(runtimePath, "vendor/apply-patch/apply_patch"), 0o755)
   const signingIdentity = resolveCodesignIdentity()
+  if (signingIdentity !== "-") await signNestedMachOBinaries(signingIdentity)
   signApp(signingIdentity)
 
   await createDmg()
@@ -322,6 +324,76 @@ function resolveCodesignIdentity(): string {
     )
   }
   return "-"
+}
+
+function pruneDevelopmentDependencies(): void {
+  run("npm", ["prune", "--omit=dev", "--ignore-scripts", "--prefix", runtimePath], { quiet: true })
+}
+
+async function signNestedMachOBinaries(identity: string): Promise<void> {
+  const candidates = await collectNativeCodeCandidates(resourcesPath)
+  let signed = 0
+  let preserved = 0
+
+  for (const candidate of candidates) {
+    if (!isMachO(candidate)) continue
+    if (hasReleaseSignature(candidate)) {
+      preserved += 1
+      continue
+    }
+    run(
+      "/usr/bin/codesign",
+      ["--force", "--options", "runtime", "--timestamp", "--sign", identity, candidate],
+      { quiet: true }
+    )
+    signed += 1
+  }
+
+  console.log(
+    `Nested code signing: ${signed} signed with OpenChatX Developer ID, ${preserved} existing Developer ID signatures preserved.`
+  )
+}
+
+async function collectNativeCodeCandidates(directory: string): Promise<string[]> {
+  const candidates: string[] = []
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const child = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      candidates.push(...(await collectNativeCodeCandidates(child)))
+      continue
+    }
+    if (!entry.isFile()) continue
+
+    const info = await stat(child)
+    if (
+      (info.mode & 0o111) !== 0 ||
+      child.endsWith(".node") ||
+      child.endsWith(".dylib") ||
+      child.endsWith(".so") ||
+      child.endsWith(".bundle")
+    ) {
+      candidates.push(child)
+    }
+  }
+  return candidates
+}
+
+function isMachO(path: string): boolean {
+  const result = spawnSync("/usr/bin/file", ["-b", path], { encoding: "utf8" })
+  return result.status === 0 && result.stdout.includes("Mach-O")
+}
+
+function hasReleaseSignature(path: string): boolean {
+  const result = spawnSync("/usr/bin/codesign", ["-dv", "--verbose=4", path], {
+    encoding: "utf8",
+  })
+  const details = `${result.stdout ?? ""}${result.stderr ?? ""}`
+  return (
+    result.status === 0 &&
+    details.includes("Authority=Developer ID Application:") &&
+    details.includes("runtime") &&
+    details.includes("Timestamp=")
+  )
 }
 
 function signApp(identity: string): void {
