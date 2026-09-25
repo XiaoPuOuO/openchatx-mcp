@@ -356,6 +356,16 @@ function registerAgentInstructionsRoutes(router: ReturnType<typeof Router>): voi
       toolboxError(res, error)
     }
   })
+
+  router.post("/api/agent-instructions/open-in-finder", (_req, res) => {
+    execFile("/usr/bin/open", ["-R", MCP_CONFIG.agentInstructionsFile], (error) => {
+      if (error) {
+        res.status(500).json({ error: `Failed to open Finder: ${error.message}` })
+        return
+      }
+      res.status(204).end()
+    })
+  })
 }
 
 function registerRuleRoutes(router: ReturnType<typeof Router>): void {

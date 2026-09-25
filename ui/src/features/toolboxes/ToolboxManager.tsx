@@ -28,6 +28,7 @@ import {
   fetchRule,
   fetchRules,
   fetchToolboxes,
+  openAgentInstructionsInFinder,
   openToolboxInFinder,
   reloadToolboxes,
   saveAgentInstructions,
@@ -182,6 +183,16 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
     }
   }
 
+  async function openAgentInstructionsFinder() {
+    setError(undefined)
+    try {
+      const opened = await openAgentInstructionsInFinder()
+      if (!opened) setMessage(t("toolboxes.mockFinder"))
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : String(openError))
+    }
+  }
+
   async function openFinder(kind?: "tool" | "skill", name?: string) {
     if (!selected) return
     try {
@@ -250,6 +261,9 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                   {t("toolboxes.agentsTemplate")}
                 </p>
               </div>
+              <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                {t("common.builtIn")}
+              </span>
             </button>
             {toolboxes.map((box) => (
               <button
@@ -287,6 +301,7 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
               dirty={agentInstructions !== savedAgentInstructions}
               onChange={setAgentInstructions}
               onSave={() => void persistAgentInstructions()}
+              onOpenFinder={() => void openAgentInstructionsFinder()}
               t={t}
             />
           ) : selected ? (
@@ -433,6 +448,7 @@ function AgentsEditor({
   dirty,
   onChange,
   onSave,
+  onOpenFinder,
   t,
 }: {
   path: string
@@ -440,6 +456,7 @@ function AgentsEditor({
   dirty: boolean
   onChange: (value: string) => void
   onSave: () => void
+  onOpenFinder: () => void
   t: (key: string, values?: Record<string, string | number>) => string
 }) {
   const placeholders = [
@@ -461,9 +478,15 @@ function AgentsEditor({
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{path}</p>
         </div>
-        <Button onClick={onSave} disabled={!dirty}>
-          {t("common.save")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onOpenFinder}>
+            <FolderOpen className="size-4" />
+            {t("common.openInFinder")}
+          </Button>
+          <Button onClick={onSave} disabled={!dirty}>
+            {t("common.save")}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4 p-5">
         <div>

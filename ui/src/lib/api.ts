@@ -615,6 +615,16 @@ export async function saveAgentInstructions(
   return { path: body.path, content: body.content }
 }
 
+export async function openAgentInstructionsInFinder(): Promise<boolean> {
+  if (MOCK_DASHBOARD) return false
+  const response = await fetch("/ui/api/agent-instructions/open-in-finder", { method: "POST" })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to open Finder (${response.status})`)
+  }
+  return true
+}
+
 export async function fetchToolboxes(): Promise<ToolboxSnapshot[]> {
   if (MOCK_DASHBOARD) return fetchMockToolboxes()
   const response = await fetch("/ui/api/toolboxes")
