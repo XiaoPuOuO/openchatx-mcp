@@ -84,6 +84,16 @@ export interface CapabilityStoreEntry {
   }
 }
 
+export interface RecommendedMcp {
+  id: string
+  name: string
+  description: string
+  publisher: string
+  repository: string
+  repositoryUrl: string
+  tags: string[]
+}
+
 export interface CapabilityStoreSourceTree {
   capability: CapabilityStoreEntry
   revision?: string

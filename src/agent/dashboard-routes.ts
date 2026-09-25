@@ -326,6 +326,14 @@ function registerStoreRoutes(
   router: ReturnType<typeof Router>,
   capabilityStore?: CapabilityStoreService
 ): void {
+  router.get("/api/store/recommended-mcps", async (_req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    res.json({ mcps: await capabilityStore.recommendedMcps() })
+  })
+
   router.get("/api/store", async (req, res) => {
     if (!capabilityStore) {
       res.status(503).json({ error: "Capability Store is unavailable." })

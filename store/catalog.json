@@ -8,5 +8,31 @@
       "bundle": "system-info",
       "tags": ["system", "diagnostics", "local"]
     }
+  ],
+  "recommended_mcps": [
+    {
+      "id": "open-computer-use",
+      "name": "Open Computer Use",
+      "description": "Cross-platform desktop automation through accessibility APIs, screenshots, clicks, typing, scrolling, drag, and native app state.",
+      "publisher": "QwenLM",
+      "repository": "QwenLM/open-computer-use",
+      "tags": ["computer-use", "desktop", "automation", "macos", "windows", "linux"]
+    },
+    {
+      "id": "open-browser-use",
+      "name": "Open Browser Use",
+      "description": "Drive a real signed-in Chrome browser locally through an MCP server and browser extension.",
+      "publisher": "Open Browser Use",
+      "repository": "open-browser-use/open-browser-use",
+      "tags": ["browser", "chrome", "automation", "web"]
+    },
+    {
+      "id": "mcp-for-blender",
+      "name": "MCP for Blender",
+      "description": "Control Blender scenes, objects, materials, assets, rendering, and Blender Python from an MCP client.",
+      "publisher": "ahujasid",
+      "repository": "ahujasid/mcp-for-blender",
+      "tags": ["blender", "3d", "modeling", "rendering"]
+    }
   ]
 }

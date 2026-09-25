@@ -23,7 +23,18 @@ const entrySchema = z.object({
   bundle: z.string().min(1),
   tags: z.array(z.string().min(1)).default([]),
 })
-const catalogSchema = z.object({ entries: z.array(entrySchema) })
+const recommendedMcpSchema = z.object({
+  id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  publisher: z.string().min(1),
+  repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
+  tags: z.array(z.string().min(1)).default([]),
+})
+const catalogSchema = z.object({
+  entries: z.array(entrySchema),
+  recommended_mcps: z.array(recommendedMcpSchema).default([]),
+})
 const installedSchema = z.object({
   installedAt: z.string(),
   targetPath: z.string(),
@@ -86,6 +97,16 @@ export interface CommunityStoreEntry {
 
 export type StoreEntry = BuiltinStoreEntry | CommunityStoreEntry
 
+export interface RecommendedMcp {
+  id: string
+  name: string
+  description: string
+  publisher: string
+  repository: string
+  repositoryUrl: string
+  tags: string[]
+}
+
 interface StoreState {
   installed: Record<
     string,
@@ -100,6 +121,7 @@ interface StoreState {
 
 export interface StoreBrowseResult {
   entries: StoreEntry[]
+  recommendedMcps: RecommendedMcp[]
   communityError?: string
 }
 
@@ -167,6 +189,14 @@ export class CapabilityStoreService {
     return this.listBuiltin()
   }
 
+  async recommendedMcps(): Promise<RecommendedMcp[]> {
+    const catalog = await this.loadCatalog()
+    return catalog.recommended_mcps.map((entry) => ({
+      ...entry,
+      repositoryUrl: `https://github.com/${entry.repository}`,
+    }))
+  }
+
   async browse(
     query = "",
     source: "all" | "builtin" | "community" = "all"
@@ -184,6 +214,7 @@ export class CapabilityStoreService {
     }
     return {
       entries,
+      recommendedMcps: await this.recommendedMcps(),
       ...(communityError ? { communityError } : {}),
     }
   }

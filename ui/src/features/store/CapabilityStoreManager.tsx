@@ -26,12 +26,14 @@ import type {
   CapabilityStoreEntry,
   CapabilityStoreReview,
   CapabilityStoreSourceTree,
+  RecommendedMcp,
 } from "../../types"
 
 type StoreSourceFilter = "all" | "builtin" | "community"
 
 export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<CapabilityStoreEntry[]>([])
+  const [recommendedMcps, setRecommendedMcps] = useState<RecommendedMcp[]>([])
   const [error, setError] = useState<string>()
   const [communityError, setCommunityError] = useState<string>()
   const [busy, setBusy] = useState<string>()
@@ -46,6 +48,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
     try {
       const result = await fetchStoreEntries(query, source)
       setEntries(result.entries)
+      setRecommendedMcps(result.recommendedMcps)
       setCommunityError(result.communityError)
       setError(undefined)
     } catch (cause) {
@@ -159,6 +162,50 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             revision before installing.
           </p>
         </div>
+
+        {recommendedMcps.length > 0 ? (
+          <section className="mb-6">
+            <div className="mb-3">
+              <h2 className="font-semibold">OpenChatX Picks</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                MCP projects curated by OpenChatX as useful starting points. Recommendation does not
+                mean security certification.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {recommendedMcps.map((mcp) => (
+                <Card key={mcp.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium">{mcp.name}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">by {mcp.publisher}</div>
+                      </div>
+                      <Badge>Recommended</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm leading-6 text-muted-foreground">{mcp.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {mcp.tags.slice(0, 4).map((tag) => (
+                        <Badge key={tag}>#{tag}</Badge>
+                      ))}
+                    </div>
+                    <a
+                      className="mt-4 inline-flex items-center gap-1 text-xs text-muted-foreground underline"
+                      href={mcp.repositoryUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink className="size-3" />
+                      {mcp.repository}
+                    </a>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <form
           className="mb-4 flex flex-col gap-2 sm:flex-row"

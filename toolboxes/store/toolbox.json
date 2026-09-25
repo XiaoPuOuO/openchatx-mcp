@@ -8,6 +8,10 @@
       "enabled": true,
       "description": "Browse built-in and GitHub community capabilities."
     },
+    "store_recommended_mcps": {
+      "enabled": true,
+      "description": "List MCP servers curated and recommended by OpenChatX."
+    },
     "store_get": {
       "enabled": true,
       "description": "Resolve one capability to an exact source revision."

@@ -8,6 +8,7 @@ import type {
   CapabilityStoreSourceTree,
   McpServerMap,
   PlatformOverview,
+  RecommendedMcp,
   SubagentConfig,
   ToolboxSnapshot,
 } from "../types"
@@ -89,9 +90,14 @@ export async function fetchPlatformOverview(): Promise<PlatformOverview> {
 export async function fetchStoreEntries(
   query = "",
   source: "all" | "builtin" | "community" = "all"
-): Promise<{ entries: CapabilityStoreEntry[]; communityError?: string }> {
+): Promise<{
+  entries: CapabilityStoreEntry[]
+  recommendedMcps: RecommendedMcp[]
+  communityError?: string
+}> {
   if (MOCK_DASHBOARD) {
     return {
+      recommendedMcps: [],
       entries: [
         {
           id: "system-info",
@@ -129,6 +135,7 @@ export async function fetchStoreEntries(
   if (!response.ok) throw new Error(`Failed to load Capability Store (${response.status})`)
   return (await response.json()) as {
     entries: CapabilityStoreEntry[]
+    recommendedMcps: RecommendedMcp[]
     communityError?: string
   }
 }

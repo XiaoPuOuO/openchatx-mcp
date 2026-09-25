@@ -28,6 +28,25 @@ export function registerStoreTools(server: McpServer, store: CapabilityStoreServ
   )
 
   server.registerTool(
+    "store_recommended_mcps",
+    {
+      description:
+        "List MCP servers officially recommended by OpenChatX. Recommendations are curated links, not security endorsements of third-party projects.",
+      inputSchema: z.object({}),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => ({
+      structuredContent: { mcps: await store.recommendedMcps() },
+      content: [],
+    })
+  )
+
+  server.registerTool(
     "store_get",
     {
       description:
