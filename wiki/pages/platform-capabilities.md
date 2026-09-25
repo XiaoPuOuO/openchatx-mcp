@@ -43,9 +43,15 @@ OpenChatX treats ChatGPT as the primary planner and the local runtime as a capab
 
 ## Capability Store
 
-\`src/store/store-service.ts\` owns the local Store catalog and installation state. Store bundles are copied into the normal Toolbox root, then the Toolbox registry hot reloads them. Ownership state under \`<state_dir>\` prevents the Store from deleting unrelated Toolbox directories.
+\`src/store/store-service.ts\` owns built-in Store bundles, Store installation state, exact-revision installation, source inspection, static review, and publish validation. Built-in bundles are copied into the normal Toolbox root, then the Toolbox registry hot reloads them. Ownership state under \`<state_dir>\` prevents the Store from deleting unrelated Toolbox directories.
 
-The checked-in \`store/catalog.json\` is intentionally small; it is the seed catalog and can evolve into a larger distribution mechanism without changing the Toolbox runtime contract.
+\`src/store/github-community-store.ts\` provides serverless Community discovery. It searches public GitHub repositories tagged \`openchatx-capability\`, resolves the selected repository to an immutable commit SHA, reads \`capability.json\`, exposes the source tree and blobs for inspection, and downloads only the selected Toolbox subtree. Symlinks, git submodules, unsafe relative paths, oversized trees, oversized files, and oversized installs are rejected at the Store boundary.
+
+Community capabilities are not reviewed or endorsed by OpenChatX. \`store_review\` performs bounded static analysis for shell/process execution, network access, filesystem access, credential/environment access, dynamic code execution, and package lifecycle scripts. It also compares observed behavior against declared \`capability.json\` permissions. The result is evidence, not a safety verdict; ChatGPT can inspect cited files through \`store_source_read\`.
+
+Community publishing requires no OpenChatX server. Authors publish a public GitHub repository, keep \`capability.json\` at the repository root, and add the \`openchatx-capability\` topic. \`store_publish_check\` validates a local directory before publication. \`GITHUB_TOKEN\` is optional and is used only for authenticated GitHub API rate limits.
+
+The checked-in \`store/catalog.json\` remains the built-in seed catalog and does not act as a moderation queue for Community capabilities.
 
 ## Multi-machine Nodes
 

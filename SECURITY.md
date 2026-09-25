@@ -11,3 +11,11 @@ Include the affected version or commit, reproduction steps, impact, and any sugg
 ## Scope
 
 The supported release targets are macOS (Apple Silicon or Intel) and native Windows 10/11. Direct localhost MCP access is intentionally unauthenticated; remote ChatGPT access is carried through OpenAI Secure MCP Tunnel, and OpenChatX binds trusted tool calls to the first observed OpenAI subject. See the README and [`wiki/pages/http-transport.md`](wiki/pages/http-transport.md) for the current trust model.
+
+## Community capabilities
+
+Community Capability Store entries are discovered directly from public GitHub repositories tagged `openchatx-capability`. They are not reviewed, approved, or endorsed by OpenChatX. Treat them like arbitrary third-party code.
+
+OpenChatX exposes the source tree, exact commit SHA, static review evidence, and individual source files before install. Static review can identify common risk indicators but cannot prove that a capability is safe. Install only code you are willing to run with your local user permissions.
+
+Community installation is pinned to an immutable commit revision, rejects symlinks and git submodules, enforces path and size limits, and records Store ownership so uninstall does not delete unrelated Toolbox directories. `GITHUB_TOKEN` is optional for API rate limits; never commit or paste that token into a capability repository.

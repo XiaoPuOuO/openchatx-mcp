@@ -1,12 +1,35 @@
 {
   "name": "Capability Store",
-  "description": "Browse, install, and remove reusable OpenChatX capabilities.",
+  "description": "Browse built-in capabilities and unreviewed GitHub community capabilities without an OpenChatX Store server.",
   "enabled": true,
   "builtin": "store",
   "tools": {
-    "store_list": { "enabled": true, "description": "Browse installable capabilities." },
-    "store_install": { "enabled": true, "description": "Install a capability." },
-    "store_uninstall": { "enabled": true, "description": "Remove a Store-installed capability." }
+    "store_list": {
+      "enabled": true,
+      "description": "Browse built-in and GitHub community capabilities."
+    },
+    "store_get": {
+      "enabled": true,
+      "description": "Resolve one capability to an exact source revision."
+    },
+    "store_source_tree": {
+      "enabled": true,
+      "description": "List capability source files before installation."
+    },
+    "store_source_read": {
+      "enabled": true,
+      "description": "Read one capability source file for inspection."
+    },
+    "store_review": { "enabled": true, "description": "Run static pre-install source analysis." },
+    "store_install": {
+      "enabled": true,
+      "description": "Install a capability, optionally pinned to an exact revision."
+    },
+    "store_uninstall": { "enabled": true, "description": "Remove a Store-installed capability." },
+    "store_publish_check": {
+      "enabled": true,
+      "description": "Validate a local capability for serverless GitHub community publishing."
+    }
   },
   "skills": {}
 }

@@ -54,13 +54,67 @@ export interface CapabilityHealthSnapshot {
 
 export interface CapabilityStoreEntry {
   id: string
+  source: "builtin" | "github"
   name: string
   description: string
   kind: "toolbox"
-  bundle: string
+  bundle?: string
   tags: string[]
   installed: boolean
   installedAt?: string
+  repository?: string
+  owner?: string
+  htmlUrl?: string
+  defaultBranch?: string
+  stars?: number
+  updatedAt?: string
+  revision?: string
+  manifest?: {
+    schema_version: 1
+    name: string
+    description: string
+    tags: string[]
+    toolbox_path: string
+    permissions: {
+      shell: boolean
+      network: boolean
+      filesystem: boolean
+      secrets: boolean
+    }
+  }
+}
+
+export interface CapabilityStoreSourceTree {
+  capability: CapabilityStoreEntry
+  revision?: string
+  files: Array<{ path: string; size?: number }>
+}
+
+export interface CapabilityStoreReview {
+  capability: CapabilityStoreEntry
+  revision?: string
+  summary: string
+  declaredPermissions?: {
+    shell: boolean
+    network: boolean
+    filesystem: boolean
+    secrets: boolean
+  }
+  observedPermissions: {
+    shell: boolean
+    network: boolean
+    filesystem: boolean
+    secrets: boolean
+  }
+  findings: Array<{
+    severity: "info" | "warning" | "high"
+    category: string
+    path: string
+    detail: string
+  }>
+  reviewedFiles: number
+  reviewedBytes: number
+  note: string
 }
 
 export interface PlatformOverview {

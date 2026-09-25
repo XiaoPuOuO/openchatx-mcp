@@ -4,6 +4,8 @@ import type {
   AgentInstruction,
   CapabilityHealthSnapshot,
   CapabilityStoreEntry,
+  CapabilityStoreReview,
+  CapabilityStoreSourceTree,
   McpServerMap,
   PlatformOverview,
   SubagentConfig,
@@ -84,30 +86,152 @@ export async function fetchPlatformOverview(): Promise<PlatformOverview> {
   return (await response.json()) as PlatformOverview
 }
 
-export async function fetchStoreEntries(): Promise<CapabilityStoreEntry[]> {
+export async function fetchStoreEntries(
+  query = "",
+  source: "all" | "builtin" | "community" = "all"
+): Promise<{ entries: CapabilityStoreEntry[]; communityError?: string }> {
   if (MOCK_DASHBOARD) {
-    return [
-      {
-        id: "system-info",
-        name: "System Info",
-        description: "Local machine diagnostics.",
-        kind: "toolbox",
-        bundle: "system-info",
-        tags: ["system", "diagnostics"],
-        installed: false,
-      },
-    ]
+    return {
+      entries: [
+        {
+          id: "system-info",
+          source: "builtin",
+          name: "System Info",
+          description: "Local machine diagnostics.",
+          kind: "toolbox",
+          bundle: "system-info",
+          tags: ["system", "diagnostics"],
+          installed: false,
+        },
+        {
+          id: "github:example/openchatx-demo",
+          source: "github",
+          repository: "example/openchatx-demo",
+          owner: "example",
+          name: "openchatx-demo",
+          description: "Community capability example",
+          kind: "toolbox",
+          tags: [],
+          installed: false,
+          htmlUrl: "https://github.com/example/openchatx-demo",
+          defaultBranch: "main",
+          stars: 42,
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    }
   }
-  const response = await fetch("/ui/api/store")
+  const params = new URLSearchParams()
+  if (query) params.set("q", query)
+  if (source !== "all") params.set("source", source)
+  const suffix = params.size > 0 ? `?${params.toString()}` : ""
+  const response = await fetch(`/ui/api/store${suffix}`)
   if (!response.ok) throw new Error(`Failed to load Capability Store (${response.status})`)
-  const body = (await response.json()) as { entries?: CapabilityStoreEntry[] }
-  return body.entries ?? []
+  return (await response.json()) as {
+    entries: CapabilityStoreEntry[]
+    communityError?: string
+  }
 }
 
-export async function installStoreEntry(id: string): Promise<void> {
+export async function fetchStoreSourceTree(
+  id: string,
+  revision?: string
+): Promise<CapabilityStoreSourceTree> {
+  if (MOCK_DASHBOARD) {
+    const community = id.startsWith("github:")
+    return {
+      capability: {
+        id,
+        source: community ? "github" : "builtin",
+        name: community ? "openchatx-demo" : "System Info",
+        description: community ? "Community capability example" : "Local machine diagnostics.",
+        kind: "toolbox",
+        tags: community ? ["demo"] : ["system"],
+        installed: false,
+        ...(community
+          ? {
+              repository: "example/openchatx-demo",
+              owner: "example",
+              htmlUrl: "https://github.com/example/openchatx-demo",
+              defaultBranch: "main",
+              stars: 42,
+              updatedAt: new Date().toISOString(),
+              revision: revision ?? "abc123",
+            }
+          : { bundle: "system-info" }),
+      },
+      ...(community ? { revision: revision ?? "abc123" } : {}),
+      files: [
+        { path: community ? "capability.json" : "toolbox.json", size: 120 },
+        { path: "tools/example.ts", size: 180 },
+      ],
+    }
+  }
+  const params = new URLSearchParams()
+  if (revision) params.set("revision", revision)
+  const suffix = params.size > 0 ? `?${params.toString()}` : ""
+  const response = await fetch(`/ui/api/store/${encodeURIComponent(id)}/source-tree${suffix}`)
+  if (!response.ok) throw new Error(`Failed to load capability source tree (${response.status})`)
+  return (await response.json()) as CapabilityStoreSourceTree
+}
+
+export async function fetchStoreSourceFile(
+  id: string,
+  path: string,
+  revision?: string
+): Promise<{ path: string; content: string; revision?: string }> {
+  if (MOCK_DASHBOARD) {
+    return {
+      path,
+      content: `// Mock source for ${id}\nexport const example = true\n`,
+      ...(revision ? { revision } : {}),
+    }
+  }
+  const params = new URLSearchParams({ path })
+  if (revision) params.set("revision", revision)
+  const response = await fetch(
+    `/ui/api/store/${encodeURIComponent(id)}/source?${params.toString()}`
+  )
+  if (!response.ok) throw new Error(`Failed to load capability source (${response.status})`)
+  return (await response.json()) as { path: string; content: string; revision?: string }
+}
+
+export async function fetchStoreReview(
+  id: string,
+  revision?: string
+): Promise<CapabilityStoreReview> {
+  if (MOCK_DASHBOARD) {
+    const tree = await fetchStoreSourceTree(id, revision)
+    return {
+      capability: tree.capability,
+      ...(tree.revision ? { revision: tree.revision } : {}),
+      summary: "No obvious high-risk patterns were found in the reviewed text files.",
+      observedPermissions: {
+        shell: false,
+        network: false,
+        filesystem: false,
+        secrets: false,
+      },
+      findings: [],
+      reviewedFiles: tree.files.length,
+      reviewedBytes: 300,
+      note: "Mock static analysis result.",
+    }
+  }
+  const params = new URLSearchParams()
+  if (revision) params.set("revision", revision)
+  const suffix = params.size > 0 ? `?${params.toString()}` : ""
+  const response = await fetch(`/ui/api/store/${encodeURIComponent(id)}/review${suffix}`)
+  if (!response.ok) throw new Error(`Failed to review capability (${response.status})`)
+  return (await response.json()) as CapabilityStoreReview
+}
+
+export async function installStoreEntry(id: string, revision?: string): Promise<void> {
   if (MOCK_DASHBOARD) return
   const response = await fetch(`/ui/api/store/${encodeURIComponent(id)}/install`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision }),
   })
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined

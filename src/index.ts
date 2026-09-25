@@ -15,6 +15,7 @@ import { ProjectRegistry } from "./projects/project-registry.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
+import { GithubCommunityStore } from "./store/github-community-store.js"
 import { CapabilityStoreService } from "./store/store-service.js"
 import { loadSubagentConfig } from "./subagents/config.js"
 import { SmartModelRouter } from "./subagents/router.js"
@@ -47,11 +48,14 @@ const jobManager = new JobManager()
 const projectRegistry = new ProjectRegistry()
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
+const communityStore = new GithubCommunityStore()
 const capabilityStore = new CapabilityStoreService(
   MCP_CONFIG.store.catalogFile,
   MCP_CONFIG.store.bundleRoot,
   MCP_CONFIG.toolboxes.root,
-  toolboxRegistry
+  toolboxRegistry,
+  MCP_CONFIG.stateDir,
+  communityStore
 )
 const providerHub = new ProviderHub(MCP_CONFIG.subagents.configFile, subagentRuntime)
 const smartRouter = new SmartModelRouter(MCP_CONFIG.subagents.configFile, subagentRuntime)

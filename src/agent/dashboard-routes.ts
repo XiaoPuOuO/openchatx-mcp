@@ -332,9 +332,49 @@ function registerStoreRoutes(
       return
     }
     const query = typeof req.query.q === "string" ? req.query.q.trim() : ""
-    res.json({
-      entries: query ? await capabilityStore.search(query) : await capabilityStore.list(),
-    })
+    const source =
+      req.query.source === "builtin" || req.query.source === "community" ? req.query.source : "all"
+    res.json(await capabilityStore.browse(query, source))
+  })
+
+  router.get("/api/store/:id/source-tree", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    try {
+      const revision = typeof req.query.revision === "string" ? req.query.revision : undefined
+      res.json(await capabilityStore.sourceTree(req.params.id, revision))
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.get("/api/store/:id/source", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    try {
+      const path = typeof req.query.path === "string" ? req.query.path : ""
+      const revision = typeof req.query.revision === "string" ? req.query.revision : undefined
+      res.json(await capabilityStore.sourceRead(req.params.id, path, revision))
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.get("/api/store/:id/review", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    try {
+      const revision = typeof req.query.revision === "string" ? req.query.revision : undefined
+      res.json(await capabilityStore.review(req.params.id, revision))
+    } catch (error) {
+      toolboxError(res, error)
+    }
   })
 
   router.post("/api/store/:id/install", async (req, res) => {
@@ -343,7 +383,8 @@ function registerStoreRoutes(
       return
     }
     try {
-      res.status(201).json({ entry: await capabilityStore.install(req.params.id) })
+      const revision = typeof req.body?.revision === "string" ? req.body.revision : undefined
+      res.status(201).json({ entry: await capabilityStore.install(req.params.id, revision) })
     } catch (error) {
       toolboxError(res, error)
     }

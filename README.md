@@ -40,7 +40,7 @@ I use AI agents heavily for real development work, and I once burned through 100
 - **Projects** — register existing project roots without moving files and give each root explicit read/write/shell permissions.
 - **Agent Teams** — run one task across multiple curated model profiles while ChatGPT remains the planner and integrator.
 - **Capability Composer** — save reusable cross-capability workflows that chain MCP/custom tools, subagents, teams, and durable jobs.
-- **Capability Store** — install reusable OpenChatX capability bundles from the local Store catalog.
+- **Capability Store** — install built-in bundles or discover unreviewed community capabilities directly from public GitHub repositories; inspect source and pin the exact reviewed commit before install.
 - **Multi-machine Nodes** — connect other OpenChatX machines and discover/call their tools from one primary ChatGPT connection.
 - **Platform Dashboard** — see projects, current work, capability health, Providers, Teams, Workflows, Nodes, and anything that needs attention.
 
@@ -323,11 +323,35 @@ OpenChatX adds platform-level primitives on top of ordinary tools:
 - **Projects** — `project_manage` registers an existing absolute path and its read/write/shell scope; OpenChatX never moves the project.
 - **Agent Teams** — `agent_team_manage` combines curated model profiles; `agent_team_run` runs members in parallel and returns separate work products to ChatGPT.
 - **Capability Composer** — `workflow_manage` creates sequential workflows from lazy MCP/Toolbox tools, subagents, teams, and durable jobs. Step templates can use `{{input}}` and `{{steps.<id>}}`.
-- **Capability Store** — `store_list`, `store_install`, and `store_uninstall` manage Store-owned capability bundles without overwriting unrelated Toolboxes.
+- **Capability Store** — built-ins stay local, while Community discovery searches public GitHub repositories tagged `openchatx-capability`; `store_source_tree`, `store_source_read`, and `store_review` expose the exact source revision before `store_install`. Community packages install from an immutable commit SHA and Store uninstall only removes Store-owned Toolbox directories.
 - **Nodes** — `node_manage`, `node_probe`, `node_tool_search`, and `node_tool_call` connect other OpenChatX machines.
 - **Capability health** — `capability_health` reports runtime, tunnel, MCP, Toolbox, and Provider status.
 
 Persistent definitions live under `state_dir` (default `~/.openchatx-mcp`), including projects, jobs, teams, workflows, nodes, and Store ownership state.
+
+### Publish a Community capability without an OpenChatX Store server
+
+Community publishing is GitHub-native. Put the capability in a public repository, keep `capability.json` at the repository root, and add the repository topic `openchatx-capability`. OpenChatX discovers it directly through the GitHub API; there is no OpenChatX upload server, account system, or package database.
+
+Example `capability.json`:
+
+```json
+{
+  "schema_version": 1,
+  "name": "Game Server Tools",
+  "description": "Manage my game server",
+  "tags": ["server", "deploy"],
+  "toolbox_path": ".",
+  "permissions": {
+    "shell": true,
+    "network": true,
+    "filesystem": false,
+    "secrets": true
+  }
+}
+```
+
+Run `store_publish_check` on the local directory before publishing. Community capabilities are not reviewed or endorsed by OpenChatX. The Dashboard can show the repository source tree inline, run static analysis, copy an Agent review prompt, and install the exact commit SHA that was inspected. Set `GITHUB_TOKEN` optionally if you need a higher GitHub API rate limit.
 
 ## Custom tools
 

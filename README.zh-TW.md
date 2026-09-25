@@ -40,7 +40,7 @@ ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 - **Projects** — 直接註冊既有 Project 路徑，不搬檔案，並分別設定 read / write / shell 權限。
 - **Agent Teams** — 同一個任務平行交給多個 curated model profiles，最後仍由 ChatGPT 規劃與整合。
 - **Capability Composer** — 把 MCP、自訂工具、Subagents、Teams、Durable Jobs 串成可重複使用的 Workflow。
-- **Capability Store** — 從本機 Store Catalog 安裝可重用的 OpenChatX Capability Bundle。
+- **Capability Store** — 除了內建 Bundle，也能直接從公開 GitHub Repository 發現未經 OpenChatX 審核的 Community Capability；安裝前可以看 Source、做靜態 Review，並鎖定實際檢查過的 Commit。
 - **Multi-machine Nodes** — 連接其他 OpenChatX 電腦，從主要 ChatGPT 連線直接 discover / call 遠端工具。
 - **Platform Dashboard** — 一次看到 Projects、目前工作、Capability Health、Providers、Teams、Workflows、Nodes 與需要處理的問題。
 
@@ -344,11 +344,35 @@ OpenChatX 不只提供單次 Tool Call，還把以下能力做成平台的一等
 - **Projects** — `project_manage` 直接註冊既有絕對路徑與 read / write / shell scope；OpenChatX 不會搬動 Project。
 - **Agent Teams** — `agent_team_manage` 組合 curated model profiles；`agent_team_run` 平行執行各成員並把結果交回 ChatGPT 整合。
 - **Capability Composer** — `workflow_manage` 可把 Lazy MCP / Toolbox Tools、Subagents、Teams、Durable Jobs 串成 Sequential Workflow；Step 可使用 `{{input}}` 與 `{{steps.<id>}}`。
-- **Capability Store** — `store_list`、`store_install`、`store_uninstall` 管理 Store-owned Capability Bundle，不會覆蓋無關 Toolbox。
+- **Capability Store** — Built-in Capability 留在本機；Community Discovery 直接搜尋帶有 `openchatx-capability` Topic 的公開 GitHub Repository。`store_source_tree`、`store_source_read`、`store_review` 可以在安裝前檢查指定 Revision；Community Install 會鎖定 Immutable Commit SHA，Uninstall 只會移除 Store 自己安裝的 Toolbox Directory。
 - **Nodes** — `node_manage`、`node_probe`、`node_tool_search`、`node_tool_call` 連接其他 OpenChatX 電腦。
 - **Capability Health** — `capability_health` 顯示 Runtime、Tunnel、MCP、Toolbox、Provider 狀態。
 
 Projects、Jobs、Teams、Workflows、Nodes 與 Store ownership 等持久資料都放在 `state_dir`（預設 `~/.openchatx-mcp`）。
+
+### 不架 OpenChatX Store Server 也能發布 Community Capability
+
+Community Publishing 直接使用 GitHub。作者只要把 Capability 放在公開 Repository、在 Repo Root 放 `capability.json`，再加上 `openchatx-capability` Topic，OpenChatX 就會直接透過 GitHub API 發現它；不需要 OpenChatX Upload Server、帳號系統或 Package Database。
+
+`capability.json` 範例：
+
+```json
+{
+  "schema_version": 1,
+  "name": "Game Server Tools",
+  "description": "Manage my game server",
+  "tags": ["server", "deploy"],
+  "toolbox_path": ".",
+  "permissions": {
+    "shell": true,
+    "network": true,
+    "filesystem": false,
+    "secrets": true
+  }
+}
+```
+
+發布前可以先讓 ChatGPT 對本機 Directory 跑 `store_publish_check`。Community Capability 不會經過 OpenChatX 審核或背書；Dashboard 可以直接看 Source Tree、做靜態分析、複製 Agent Review Prompt，並安裝實際檢查過的 Exact Commit SHA。若 GitHub API Rate Limit 不夠，可選擇設定 `GITHUB_TOKEN`。
 
 ## 自訂 Tools
 
