@@ -59,7 +59,21 @@ OpenChatX uses OpenAI Secure MCP Tunnel. The Desktop App manages the local runti
 
 ### 1. Create the ChatGPT MCP app
 
-In ChatGPT, enable Developer Mode, create a new MCP app, and choose **Tunnel** as the connection type.
+Open ChatGPT **Settings** and enable **Developer Mode**.
+
+![Open ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
+
+![Enable Developer Mode](docs/assets/enable-developer-mode-step-2.png)
+
+Then open **Plugins**, click **+**, choose **Create app**, and then choose **Create MCP app**.
+
+![Create app](docs/assets/create-chatgpt-plugin-step-1.png)
+
+![Create MCP app](docs/assets/create-chatgpt-plugin-step-2.png)
+
+Enter the app name and description, switch the connection type to **Tunnel**, and click **Create tunnel**.
+
+![Choose Tunnel and create a tunnel](docs/assets/secure-tunnel-chatgpt-create.png)
 
 ### 2. Create the tunnel in OpenAI Platform
 
