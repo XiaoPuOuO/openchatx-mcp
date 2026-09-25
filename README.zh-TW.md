@@ -341,7 +341,7 @@ OpenChatX 可以把工作委派給你明確設定的其他模型。Provider 不�
 OpenChatX 不只提供單次 Tool Call，還把以下能力做成平台的一等公民：
 
 - **Durable Jobs** — `job_start`、`job_list`、`job_read`、`job_cancel`。
-- **Projects** — `project_manage` 直接註冊既有絕對路徑與 read / write / shell scope；OpenChatX 不會搬動 Project。
+- **Projects** — `project_manage` 直接註冊既有資料夾、不搬檔案；`project_use` 可以把目前 ChatGPT Session 綁到某個 Project。之後內建 file / search / shell / image / patch / job 的相對路徑會預設從該 Project Root 開始，而且已註冊 Root 的 read / write / shell 權限連絕對路徑也會套用；明確傳 `project_id` 時則會把該次操作限制在指定 Root。Project 是 Context / Policy，不是 OS Sandbox；Custom Toolbox 與 External MCP 仍可能有自己的存取方式。
 - **Agent Teams** — `agent_team_manage` 組合 curated model profiles；`agent_team_run` 平行執行各成員並把結果交回 ChatGPT 整合。
 - **Capability Composer** — `workflow_manage` 可把 Lazy MCP / Toolbox Tools、Subagents、Teams、Durable Jobs 串成 Sequential Workflow；Step 可使用 `{{input}}` 與 `{{steps.<id>}}`。
 - **Capability Store** — Built-in Capability 留在本機；Community Discovery 直接搜尋帶有 `openchatx-capability` Topic 的公開 GitHub Repository。`store_source_tree`、`store_source_read`、`store_review` 可以在安裝前檢查指定 Revision；Community Install 會鎖定 Immutable Commit SHA，Uninstall 只會移除 Store 自己安裝的 Toolbox Directory。

@@ -15,6 +15,7 @@ export interface DurableJob {
   label: string
   command: string
   cwd: string
+  projectId?: string
   pid: number
   status: JobStatus
   createdAt: string
@@ -28,6 +29,7 @@ const jobSchema = z.object({
   label: z.string(),
   command: z.string(),
   cwd: z.string(),
+  projectId: z.string().optional(),
   pid: z.number().int().positive(),
   status: z.enum(["running", "completed", "failed", "cancelled"]),
   createdAt: z.string(),
@@ -41,6 +43,7 @@ const MAX_LOG_BYTES = 128 * 1024
 
 export class JobManager {
   private readonly jobs = new Map<string, DurableJob>()
+  private readonly ownedRunningPids = new Set<number>()
   private loadPromise?: Promise<void>
 
   constructor(
@@ -48,7 +51,12 @@ export class JobManager {
     private readonly statePath = join(root, "jobs.json")
   ) {}
 
-  async start(label: string, command: string, cwd = MCP_CONFIG.defaultCwd): Promise<DurableJob> {
+  async start(
+    label: string,
+    command: string,
+    cwd = MCP_CONFIG.defaultCwd,
+    projectId?: string
+  ): Promise<DurableJob> {
     await this.ensureLoaded()
     const resolvedCwd = resolve(cwd)
     await mkdir(this.root, { recursive: true, mode: 0o700 })
@@ -69,20 +77,24 @@ export class JobManager {
         child.once("spawn", resolvePromise)
       })
       if (!child.pid) throw new Error("Durable job started without a process id.")
+      const childPid = child.pid
       const job: DurableJob = {
         id,
         label,
         command,
         cwd: resolvedCwd,
-        pid: child.pid,
+        ...(projectId ? { projectId } : {}),
+        pid: childPid,
         status: "running",
         createdAt,
         updatedAt: createdAt,
         logPath,
       }
       this.jobs.set(id, job)
+      this.ownedRunningPids.add(childPid)
       await this.persist()
       child.once("exit", (code, signal) => {
+        this.ownedRunningPids.delete(childPid)
         const current = this.jobs.get(id)
         if (current?.status !== "running") return
         current.status = code === 0 ? "completed" : "failed"
@@ -172,7 +184,12 @@ export class JobManager {
   private async reconcile(): Promise<void> {
     let changed = false
     for (const job of this.jobs.values()) {
-      if (job.status !== "running" || isProcessRunning(job.pid)) continue
+      if (
+        job.status !== "running" ||
+        this.ownedRunningPids.has(job.pid) ||
+        isProcessRunning(job.pid)
+      )
+        continue
       job.status = "failed"
       job.updatedAt = new Date().toISOString()
       changed = true

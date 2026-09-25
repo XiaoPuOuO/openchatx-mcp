@@ -23,6 +23,15 @@ test("project registry persists roots and enforces scoped permissions", async (t
   assert.equal(project.path, projectRoot)
   assert.equal((await registry.resolve("demo", "read")).id, "demo")
   await assert.rejects(() => registry.resolve("demo", "write"), /does not grant/u)
+  await assert.rejects(
+    () =>
+      registry.upsert({
+        id: "duplicate",
+        name: "Duplicate",
+        path: projectRoot,
+      }),
+    /already registered/u
+  )
 
   const restored = new ProjectRegistry(statePath)
   assert.equal((await restored.get("demo")).permissions.shell, false)

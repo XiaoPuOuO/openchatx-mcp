@@ -23,6 +23,7 @@ test("platform overview aggregates counts, current work, and attention", async (
           label: "Build",
           status: "running",
           cwd: "/tmp/demo",
+          projectId: "demo",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
         {
@@ -57,13 +58,28 @@ test("platform overview aggregates counts, current work, and attention", async (
     workflows: { list: async () => [{ id: "release" }] } as never,
     nodes: { list: async () => [{ id: "desktop", enabled: true }] } as never,
     store: { list: async () => [{ id: "x", installed: false }] } as never,
+    agents: {
+      listAgents: () => [
+        {
+          id: "agent-1",
+          projectId: "demo",
+          firstSeenAt: Date.now(),
+          lastSeenAt: Date.now(),
+          recent: [],
+          instructions: [],
+        },
+      ],
+    } as never,
   })
 
   const snapshot = await overview.snapshot()
   assert.equal(snapshot.counts.capabilities, 2)
   assert.equal(snapshot.counts.projects, 1)
   assert.equal(snapshot.counts.nodes, 1)
+  assert.equal(snapshot.projects[0]?.activeAgents, 1)
+  assert.equal(snapshot.projects[0]?.runningJobs, 1)
   assert.equal(snapshot.currentWork[0]?.id, "running")
+  assert.equal(snapshot.currentWork[0]?.projectId, "demo")
   assert.deepEqual(
     snapshot.needsAttention.map((item) => item.id).sort((a, b) => a.localeCompare(b)),
     ["failed", "mcp:blender"]

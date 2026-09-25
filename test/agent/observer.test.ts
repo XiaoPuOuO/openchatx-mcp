@@ -6,7 +6,12 @@ import { createAgentObserver } from "../../src/agent/observer.js"
 test("tracks current and recent tool activity for one agent", () => {
   let timestamp = 1_000
   const observer = createAgentObserver(() => timestamp)
-  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "dashboard" }
+  const agent: AgentIdentity = {
+    sessionId: "session-a",
+    agent: "agent-1",
+    taskSlug: "dashboard",
+    projectId: "openchatx",
+  }
 
   const callId = observer.startTool(agent, "bash", { command: "npm test" })
   assert.ok(callId)
@@ -23,6 +28,7 @@ test("tracks current and recent tool activity for one agent", () => {
   timestamp = 1_500
   observer.finishTool(agent, callId)
   const snapshot = observer.listAgents()[0]
+  assert.equal(snapshot?.projectId, "openchatx")
   assert.equal(snapshot?.current, undefined)
   assert.equal(snapshot?.recent[0]?.status, "completed")
   assert.equal(snapshot?.recent[0]?.finishedAt, 1_500)

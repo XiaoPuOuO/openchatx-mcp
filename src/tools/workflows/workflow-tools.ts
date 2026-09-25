@@ -29,6 +29,7 @@ const workflowStepInput = z.discriminatedUnion("kind", [
     label: z.string().min(1),
     command: z.string().min(1),
     cwd: z.string().min(1).optional(),
+    project_id: z.string().min(1).optional(),
   }),
 ])
 

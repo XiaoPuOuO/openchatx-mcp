@@ -45,7 +45,11 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     (startHere.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum,
     ["code-review", "coding", "general"]
   )
-  assert.deepEqual(Object.keys(startHere.inputSchema.properties ?? {}), ["mode", "task_id"])
+  assert.deepEqual(Object.keys(startHere.inputSchema.properties ?? {}), [
+    "mode",
+    "task_id",
+    "project_id",
+  ])
   const bash = tools.tools.find((tool) => tool.name === "bash")
   const skillUse = tools.tools.find((tool) => tool.name === "skill_use")
   assert.ok(bash && skillUse)
@@ -69,7 +73,11 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.equal(webCompact?.default, false)
   assert.deepEqual(webFormat?.enum, ["markdown", "html"])
   assert.equal(fetchUrl.outputSchema, undefined)
-  assert.deepEqual(Object.keys(fileWrite.inputSchema.properties ?? {}), ["filePath", "content"])
+  assert.deepEqual(Object.keys(fileWrite.inputSchema.properties ?? {}), [
+    "filePath",
+    "content",
+    "project_id",
+  ])
   assert.equal(fileWrite.outputSchema, undefined)
 })
 

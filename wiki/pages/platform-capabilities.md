@@ -27,7 +27,11 @@ OpenChatX treats ChatGPT as the primary planner and the local runtime as a capab
 
 \`src/jobs/job-manager.ts\` persists long-running background commands under \`<state_dir>/jobs\`. Jobs outlive individual MCP requests and expose status plus retained logs.
 
-\`src/projects/project-registry.ts\` persists named existing filesystem roots and their read/write/shell permission scope. Registering a project never moves or copies the project. Project-scoped durable jobs resolve the project with \`shell\` permission before execution.
+\`src/projects/project-registry.ts\` persists named existing filesystem roots and their read/write/shell permission scope. Registering a project never moves or copies the project, duplicate normalized roots are rejected, and nested roots resolve to the deepest registered Project.
+
+\`src/projects/project-scope.ts\` binds an optional active Project to the process-wide ChatGPT session identity. \`project_use\` changes that session context. Relative built-in file/search/bash/terminal/image/apply-patch/job paths resolve from the active Project; explicit \`project_id\` resolves from that root and rejects lexical path escape. Absolute paths that fall under any registered Project automatically inherit that Project's permission policy even when no Project is active. Durable Jobs persist their \`projectId\`, Workflow job steps use the same scope, Agent snapshots expose their Project, and the Dashboard groups active agents/jobs by Project.
+
+Project permissions are an OpenChatX policy layer for built-in tools, not an operating-system sandbox. A shell or terminal process can perform actions beyond its initial cwd, and custom Toolboxes or external MCP servers may implement their own access model.
 
 ## Providers, Routing, and Teams
 

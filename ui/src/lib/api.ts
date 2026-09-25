@@ -8,6 +8,7 @@ import type {
   CapabilityStoreSourceTree,
   McpServerMap,
   PlatformOverview,
+  ProjectRecord,
   RecommendedMcp,
   SubagentConfig,
   ToolboxSnapshot,
@@ -76,6 +77,8 @@ export async function fetchPlatformOverview(): Promise<PlatformOverview> {
           name: "OpenChatX",
           path: "/mock/openchatx-mcp",
           permissions: { read: true, write: true, shell: true },
+          activeAgents: 1,
+          runningJobs: 0,
         },
       ],
       currentWork: [],
@@ -85,6 +88,78 @@ export async function fetchPlatformOverview(): Promise<PlatformOverview> {
   const response = await fetch("/ui/api/platform")
   if (!response.ok) throw new Error(`Failed to load platform overview (${response.status})`)
   return (await response.json()) as PlatformOverview
+}
+
+export async function fetchProjects(): Promise<ProjectRecord[]> {
+  if (MOCK_DASHBOARD) return []
+  const response = await fetch("/ui/api/projects")
+  if (!response.ok) throw new Error(`Failed to load projects (${response.status})`)
+  const body = (await response.json()) as { projects?: ProjectRecord[] }
+  return body.projects ?? []
+}
+
+export async function createProject(input: {
+  id: string
+  name: string
+  path: string
+  description?: string
+  permissions: ProjectRecord["permissions"]
+}): Promise<ProjectRecord> {
+  if (MOCK_DASHBOARD) {
+    const now = new Date().toISOString()
+    return { ...input, createdAt: now, updatedAt: now }
+  }
+  const response = await fetch("/ui/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { project?: ProjectRecord; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to create project (${response.status})`)
+  if (!body?.project) throw new Error("Project response was missing the created project.")
+  return body.project
+}
+
+export async function updateProject(
+  id: string,
+  input: Partial<Pick<ProjectRecord, "name" | "path" | "description" | "permissions">>
+): Promise<ProjectRecord> {
+  if (MOCK_DASHBOARD) {
+    const now = new Date().toISOString()
+    return {
+      id,
+      name: input.name ?? id,
+      path: input.path ?? "/mock/project",
+      description: input.description,
+      permissions: input.permissions ?? { read: true, write: true, shell: true },
+      createdAt: now,
+      updatedAt: now,
+    }
+  }
+  const response = await fetch(`/ui/api/projects/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { project?: ProjectRecord; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to update project (${response.status})`)
+  if (!body?.project) throw new Error("Project response was missing the updated project.")
+  return body.project
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(`/ui/api/projects/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to delete project (${response.status})`)
+  }
 }
 
 export async function fetchStoreEntries(

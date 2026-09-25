@@ -1,5 +1,5 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
-import { dirname, isAbsolute, resolve } from "node:path"
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
 
 import { z } from "zod"
 
@@ -56,6 +56,14 @@ export class ProjectRegistry {
     await this.ensureLoaded()
     if (!isAbsolute(input.path)) throw new Error("Project paths must be absolute.")
     const root = resolve(input.path)
+    const duplicate = [...this.projects.values()].find(
+      (candidate) => candidate.id !== input.id && candidate.path === root
+    )
+    if (duplicate) {
+      throw new Error(
+        `Project path ${root} is already registered as ${JSON.stringify(duplicate.id)}.`
+      )
+    }
     const info = await stat(root)
     if (!info.isDirectory()) throw new Error(`Project path is not a directory: ${root}`)
     const now = new Date().toISOString()
@@ -94,6 +102,14 @@ export class ProjectRegistry {
     return project
   }
 
+  async findForPath(path: string): Promise<RegisteredProject | undefined> {
+    await this.ensureLoaded()
+    const absolute = resolve(path)
+    return [...this.projects.values()]
+      .filter((project) => containsPath(project.path, absolute))
+      .sort((left, right) => right.path.length - left.path.length)[0]
+  }
+
   private async ensureLoaded(): Promise<void> {
     this.loadPromise ??= this.load()
     await this.loadPromise
@@ -116,4 +132,9 @@ export class ProjectRegistry {
       { encoding: "utf8", mode: 0o600 }
     )
   }
+}
+
+function containsPath(root: string, path: string): boolean {
+  const rel = relative(root, path)
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }

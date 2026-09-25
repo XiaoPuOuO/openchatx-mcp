@@ -7,6 +7,7 @@ import { signalProcessGroup } from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
 import { shellCommandArgs } from "../../host-platform.js"
 import { toToolError } from "../../mcp/tool-error.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 import { tokenPrefix } from "../../tokenizer.js"
 import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
 import type { BashProcessManager } from "./bash-process-manager.js"
@@ -14,7 +15,11 @@ import { prepareShellCommand } from "./rtk.js"
 
 const MAX_CAPTURE_BYTES = 1024 * 1024
 
-export function registerBashTool(server: McpServer, processManager?: BashProcessManager): void {
+export function registerBashTool(
+  server: McpServer,
+  processManager?: BashProcessManager,
+  projectScope?: ProjectScope
+): void {
   server.registerTool(
     "bash",
     {
@@ -26,7 +31,16 @@ export function registerBashTool(server: McpServer, processManager?: BashProcess
           .string()
           .min(1)
           .optional()
-          .describe("Working directory. Relative paths resolve from the user's home directory."),
+          .describe(
+            "Working directory. Defaults to the active Project root, otherwise the user's home directory."
+          ),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional Project id. Shell permission is enforced and relative workdir resolves from that Project."
+          ),
         timeout_ms: z
           .int()
           .min(1)
@@ -52,9 +66,9 @@ export function registerBashTool(server: McpServer, processManager?: BashProcess
         openWorldHint: true,
       },
     },
-    async ({ command, workdir, timeout_ms, keep, max_output_tokens }, context) => {
+    async ({ command, workdir, project_id, timeout_ms, keep, max_output_tokens }, context) => {
       try {
-        const cwd = resolveWorkdir(workdir)
+        const cwd = await resolveWorkdir(workdir, projectScope, project_id)
         const executableCommand = prepareShellCommand(command, cwd, process.env)
         if (keep) {
           if (!processManager) throw new Error("Managed bash processes are not available.")
@@ -89,7 +103,12 @@ export function registerBashTool(server: McpServer, processManager?: BashProcess
   )
 }
 
-function resolveWorkdir(workdir?: string): string {
+async function resolveWorkdir(
+  workdir: string | undefined,
+  projectScope?: ProjectScope,
+  projectId?: string
+): Promise<string> {
+  if (projectScope) return (await projectScope.resolvePath(workdir, "shell", projectId)).path
   if (!workdir) return MCP_CONFIG.defaultCwd
   return isAbsolute(workdir) ? workdir : resolve(MCP_CONFIG.defaultCwd, workdir)
 }

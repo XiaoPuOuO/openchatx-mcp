@@ -12,8 +12,9 @@ test("durable jobs persist status and logs across manager instances", {
   const root = await mkdtemp(join(tmpdir(), "openchatx-jobs-"))
   t.after(() => rm(root, { recursive: true, force: true }))
   const first = new JobManager(root, join(root, "jobs.json"))
-  const started = await first.start("smoke", "printf durable-job")
+  const started = await first.start("smoke", "printf durable-job", undefined, "openchatx")
   assert.equal(started.status, "running")
+  assert.equal(started.projectId, "openchatx")
 
   let finished = await first.get(started.id)
   for (let attempt = 0; attempt < 50 && finished.status === "running"; attempt += 1) {
@@ -28,4 +29,5 @@ test("durable jobs persist status and logs across manager instances", {
   const restored = await second.get(started.id)
   assert.equal(restored.status, "completed")
   assert.equal(restored.label, "smoke")
+  assert.equal(restored.projectId, "openchatx")
 })

@@ -19,3 +19,7 @@ Community Capability Store entries are discovered directly from public GitHub re
 OpenChatX exposes the source tree, exact commit SHA, static review evidence, and individual source files before install. Static review can identify common risk indicators but cannot prove that a capability is safe. Install only code you are willing to run with your local user permissions.
 
 Community installation is pinned to an immutable commit revision, rejects symlinks and git submodules, enforces path and size limits, and records Store ownership so uninstall does not delete unrelated Toolbox directories. `GITHUB_TOKEN` is optional for API rate limits; never commit or paste that token into a capability repository.
+
+## Project scopes
+
+Registered Projects provide an OpenChatX policy layer around built-in file, search, shell startup, image, patch, durable-job, and workflow-job path resolution. Their read/write/shell flags are not an operating-system sandbox. Shell commands and interactive terminals execute with the current OS user's permissions, and code reached through custom Toolboxes or external MCP servers may not pass through Project path checks. Use Project permissions to make agent intent and default scope explicit, not as a substitute for OS-level isolation.

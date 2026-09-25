@@ -171,6 +171,7 @@ export function buildMcpInstructions(): string {
     "# Runtime\n\n" +
     "- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n" +
     "- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n" +
+    "- Projects are named existing folders, not copied workspaces. Use project_list/project_use when a task belongs to a registered Project. Relative file/search/shell paths resolve from the active Project, and registered Project read/write/shell permissions are enforced.\n" +
     "- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n" +
     "- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n" +
     "- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."

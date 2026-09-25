@@ -8,6 +8,7 @@ import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
+import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import {
   loadSubagentConfig,
@@ -27,6 +28,7 @@ export interface DashboardServices {
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
   platformOverview?: PlatformOverviewService
+  projectRegistry?: ProjectRegistry
 }
 
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
@@ -42,6 +44,7 @@ export function createDashboardRouter(
     capabilityRegistry,
     capabilityStore,
     platformOverview,
+    projectRegistry,
   } = services
   const router = Router()
 
@@ -51,6 +54,7 @@ export function createDashboardRouter(
 
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
+  registerProjectRoutes(router, projectRegistry)
 
   router.get("/api/platform", async (_req, res) => {
     if (!platformOverview) {
@@ -405,6 +409,92 @@ function registerStoreRoutes(
     }
     try {
       await capabilityStore.uninstall(req.params.id)
+      res.status(204).end()
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+}
+
+function registerProjectRoutes(
+  router: ReturnType<typeof Router>,
+  projects?: ProjectRegistry
+): void {
+  router.get("/api/projects", async (_req, res) => {
+    if (!projects) {
+      res.status(503).json({ error: "Project registry is unavailable." })
+      return
+    }
+    res.json({ projects: await projects.list() })
+  })
+
+  router.post("/api/projects", async (req, res) => {
+    if (!projects) {
+      res.status(503).json({ error: "Project registry is unavailable." })
+      return
+    }
+    try {
+      const project = await projects.upsert({
+        id: String(req.body?.id ?? "").trim(),
+        name: String(req.body?.name ?? "").trim(),
+        path: String(req.body?.path ?? "").trim(),
+        description:
+          typeof req.body?.description === "string" && req.body.description.trim()
+            ? req.body.description.trim()
+            : undefined,
+        permissions: {
+          read: req.body?.permissions?.read !== false,
+          write: req.body?.permissions?.write !== false,
+          shell: req.body?.permissions?.shell !== false,
+        },
+      })
+      res.status(201).json({ project })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.patch("/api/projects/:id", async (req, res) => {
+    if (!projects) {
+      res.status(503).json({ error: "Project registry is unavailable." })
+      return
+    }
+    try {
+      const current = await projects.get(req.params.id)
+      let description = current.description
+      if (req.body?.description === null) description = undefined
+      else if (typeof req.body?.description === "string")
+        description = req.body.description.trim() || undefined
+      const project = await projects.upsert({
+        id: current.id,
+        name:
+          typeof req.body?.name === "string" && req.body.name.trim()
+            ? req.body.name.trim()
+            : current.name,
+        path:
+          typeof req.body?.path === "string" && req.body.path.trim()
+            ? req.body.path.trim()
+            : current.path,
+        description,
+        permissions: {
+          read: req.body?.permissions?.read ?? current.permissions.read,
+          write: req.body?.permissions?.write ?? current.permissions.write,
+          shell: req.body?.permissions?.shell ?? current.permissions.shell,
+        },
+      })
+      res.json({ project })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.delete("/api/projects/:id", async (req, res) => {
+    if (!projects) {
+      res.status(503).json({ error: "Project registry is unavailable." })
+      return
+    }
+    try {
+      await projects.remove(req.params.id)
       res.status(204).end()
     } catch (error) {
       toolboxError(res, error)

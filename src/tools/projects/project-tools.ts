@@ -3,12 +3,18 @@ import { z } from "zod"
 
 import { toToolError } from "../../mcp/tool-error.js"
 import type { ProjectRegistry } from "../../projects/project-registry.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 
-export function registerProjectTools(server: McpServer, projects: ProjectRegistry): void {
+export function registerProjectTools(
+  server: McpServer,
+  projects: ProjectRegistry,
+  scope?: ProjectScope
+): void {
   server.registerTool(
     "project_list",
     {
-      description: "List registered project roots and their OpenChatX permission scopes.",
+      description:
+        "List registered project roots and permission scopes. The current ChatGPT session's active project is included when available.",
       inputSchema: z.object({}),
       annotations: {
         readOnlyHint: true,
@@ -17,13 +23,20 @@ export function registerProjectTools(server: McpServer, projects: ProjectRegistr
         openWorldHint: false,
       },
     },
-    async () => ({ structuredContent: { projects: await projects.list() }, content: [] })
+    async () => ({
+      structuredContent: {
+        projects: await projects.list(),
+        active_project: await scope?.current(),
+      },
+      content: [],
+    })
   )
 
   server.registerTool(
     "project_manage",
     {
-      description: "Register, update, or remove a project without moving its files.",
+      description:
+        "Register, update, or remove a named existing project directory without moving its files.",
       inputSchema: z.discriminatedUnion("action", [
         z.object({
           action: z.literal("upsert"),
@@ -47,6 +60,8 @@ export function registerProjectTools(server: McpServer, projects: ProjectRegistr
     async (input) => {
       try {
         if (input.action === "remove") {
+          const active = await scope?.current()
+          if (active?.id === input.id) await scope?.use(undefined)
           await projects.remove(input.id)
           return { structuredContent: { removed: input.id }, content: [] }
         }
@@ -64,6 +79,38 @@ export function registerProjectTools(server: McpServer, projects: ProjectRegistr
         return { structuredContent: { project }, content: [] }
       } catch (error) {
         throw toToolError(error, "PROJECT_MANAGE_FAILED")
+      }
+    }
+  )
+
+  server.registerTool(
+    "project_use",
+    {
+      description:
+        "Set or clear the active Project for this ChatGPT session. Relative file/search/shell paths then resolve from that Project and its permissions are enforced.",
+      inputSchema: z.object({
+        project_id: z.string().min(1).nullable(),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ project_id }) => {
+      try {
+        if (!scope) throw new Error("Project session scope is unavailable.")
+        const project = await scope.use(project_id ?? undefined)
+        return {
+          structuredContent: {
+            active_project: project ?? null,
+            default_cwd: project?.path ?? null,
+          },
+          content: [],
+        }
+      } catch (error) {
+        throw toToolError(error, "PROJECT_USE_FAILED")
       }
     }
   )

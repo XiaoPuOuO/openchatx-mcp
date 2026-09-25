@@ -10,6 +10,7 @@ import { z } from "zod"
 import { MCP_CONFIG } from "../../config.js"
 import { interactiveReadyCommand, interactiveShellArgs } from "../../host-platform.js"
 import { toToolError } from "../../mcp/tool-error.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 import { createTranscriptBuffer, type TranscriptBuffer } from "./transcript.js"
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/u
@@ -155,7 +156,11 @@ export class InteractiveShellManager {
   }
 }
 
-export function registerTerminalTool(server: McpServer, manager: InteractiveShellManager): void {
+export function registerTerminalTool(
+  server: McpServer,
+  manager: InteractiveShellManager,
+  projectScope?: ProjectScope
+): void {
   const sessionId = z.string().min(3).max(128)
   const waitMs = z.int().min(0).max(MAX_WAIT_MS).default(DEFAULT_WAIT_MS)
   const maxOutputTokens = z
@@ -169,6 +174,13 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
       action: z.literal("create"),
       session_id: sessionId,
       cwd: z.string().min(1).optional(),
+      project_id: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Optional Project id. Shell permission is enforced and relative cwd resolves from that Project."
+        ),
       command: z.string().min(1).optional(),
       wait_ms: waitMs,
       max_output_tokens: maxOutputTokens,
@@ -213,16 +225,19 @@ export function registerTerminalTool(server: McpServer, manager: InteractiveShel
     },
     async (input, context) => {
       if (input.action === "create") {
-        return interactiveResult(() =>
-          manager.startSession({
+        return interactiveResult(async () => {
+          const cwd = projectScope
+            ? (await projectScope.resolvePath(input.cwd, "shell", input.project_id)).path
+            : input.cwd
+          return manager.startSession({
             sessionId: input.session_id,
-            cwd: input.cwd,
+            cwd,
             command: input.command,
             waitMs: input.wait_ms,
             maxOutputTokens: input.max_output_tokens,
             signal: context.mcpReq.signal,
           })
-        )
+        })
       }
       if (input.action === "write") {
         return interactiveResult(() =>

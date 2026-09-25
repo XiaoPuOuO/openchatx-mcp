@@ -12,6 +12,7 @@ import { createMcpServerFactory } from "./mcp/server-factory.js"
 import { NodeRegistry } from "./nodes/node-registry.js"
 import { PlatformOverviewService } from "./platform/overview.js"
 import { ProjectRegistry } from "./projects/project-registry.js"
+import { ProjectScope } from "./projects/project-scope.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
@@ -46,6 +47,7 @@ const interactiveShellManager = new InteractiveShellManager(
 const bashProcessManager = new BashProcessManager()
 const jobManager = new JobManager()
 const projectRegistry = new ProjectRegistry()
+const projectScope = new ProjectScope(projectRegistry)
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 const communityStore = new GithubCommunityStore()
@@ -66,6 +68,7 @@ const workflows = new WorkflowService({
   subagents: subagentRuntime,
   teams: agentTeams,
   jobs: jobManager,
+  projectScope,
 })
 const nodes = new NodeRegistry()
 const platformOverview = new PlatformOverviewService({
@@ -78,6 +81,7 @@ const platformOverview = new PlatformOverviewService({
   teams: agentTeams,
   workflows,
   nodes,
+  agents: agentObserver,
 })
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
@@ -97,6 +101,7 @@ try {
       providerHub,
       smartRouter,
       projectRegistry,
+      projectScope,
       agentTeams,
       workflows,
       nodes,
@@ -111,6 +116,7 @@ try {
     capabilityRegistry,
     capabilityStore,
     platformOverview,
+    projectRegistry,
   })
 } catch (error) {
   await closeRuntimeServices()

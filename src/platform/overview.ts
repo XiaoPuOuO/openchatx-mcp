@@ -1,3 +1,4 @@
+import type { AgentObserver } from "../agent/observer.js"
 import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import type { JobManager } from "../jobs/job-manager.js"
@@ -24,6 +25,8 @@ export interface PlatformOverview {
     name: string
     path: string
     permissions: { read: boolean; write: boolean; shell: boolean }
+    activeAgents: number
+    runningJobs: number
   }>
   currentWork: Array<{
     id: string
@@ -31,6 +34,7 @@ export interface PlatformOverview {
     status: string
     cwd: string
     updatedAt: string
+    projectId?: string
   }>
   needsAttention: Array<{
     id: string
@@ -50,7 +54,10 @@ export interface PlatformOverviewServices {
   teams?: AgentTeamService
   workflows?: WorkflowService
   nodes?: NodeRegistry
+  agents?: AgentObserver
 }
+
+const ACTIVE_AGENT_MS = 30_000
 
 export class PlatformOverviewService {
   constructor(private readonly services: PlatformOverviewServices) {}
@@ -68,6 +75,7 @@ export class PlatformOverviewService {
     const capabilities = this.services.capabilities?.list() ?? []
     const providers = this.services.subagents?.providerSummaries() ?? []
     const profiles = this.services.subagents?.profiles() ?? []
+    const agents = this.services.agents?.listAgents() ?? []
 
     const needsAttention: PlatformOverview["needsAttention"] = []
     for (const component of health?.components ?? []) {
@@ -105,6 +113,12 @@ export class PlatformOverviewService {
         name: project.name,
         path: project.path,
         permissions: project.permissions,
+        activeAgents: agents.filter(
+          (agent) =>
+            agent.projectId === project.id && Date.now() - agent.lastSeenAt < ACTIVE_AGENT_MS
+        ).length,
+        runningJobs: jobs.filter((job) => job.projectId === project.id && job.status === "running")
+          .length,
       })),
       currentWork: jobs
         .filter((job) => job.status === "running")
@@ -115,6 +129,7 @@ export class PlatformOverviewService {
           status: job.status,
           cwd: job.cwd,
           updatedAt: job.updatedAt,
+          ...(job.projectId ? { projectId: job.projectId } : {}),
         })),
       needsAttention: needsAttention.slice(0, 12),
     }

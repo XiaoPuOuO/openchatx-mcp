@@ -7,6 +7,7 @@ import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
 import { toToolError } from "../../mcp/tool-error.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_READ_BYTES = 50 * 1024
@@ -43,7 +44,7 @@ const BINARY_EXTENSIONS = new Set([
   ".pyo",
 ])
 
-export function registerFileReadTool(server: McpServer): void {
+export function registerFileReadTool(server: McpServer, projectScope?: ProjectScope): void {
   server.registerTool(
     "file_read",
     {
@@ -54,7 +55,7 @@ export function registerFileReadTool(server: McpServer): void {
           .string()
           .min(1)
           .describe(
-            "The absolute path to the file or directory to read. Relative paths resolve from the workspace."
+            "File or directory to read. Relative paths resolve from the active Project root when selected, otherwise the user's home directory."
           ),
         offset: z
           .int()
@@ -67,6 +68,13 @@ export function registerFileReadTool(server: McpServer): void {
           .max(DEFAULT_READ_LIMIT)
           .optional()
           .describe("Maximum number of lines or directory entries to read (defaults to 2000)."),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional Project id. Relative paths resolve from that Project and read permission is enforced."
+          ),
       }),
       annotations: {
         readOnlyHint: true,
@@ -75,9 +83,9 @@ export function registerFileReadTool(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ filePath: inputPath, offset, limit }, ctx) => {
-      const filePath = resolveLocalPath(inputPath)
+    async ({ filePath: inputPath, offset, limit, project_id }, ctx) => {
       try {
+        const filePath = await resolveLocalPath(inputPath, "read", projectScope, project_id)
         return await readLocalPath(
           filePath,
           offset ?? 1,
@@ -192,7 +200,7 @@ function readTextFile(filePath: string, data: Buffer, offset: number, limit: num
   }
 }
 
-export function registerFileWriteTool(server: McpServer): void {
+export function registerFileWriteTool(server: McpServer, projectScope?: ProjectScope): void {
   server.registerTool(
     "file_write",
     {
@@ -202,8 +210,17 @@ export function registerFileWriteTool(server: McpServer): void {
         filePath: z
           .string()
           .min(1)
-          .describe("The file to create or overwrite. Relative paths resolve from the workspace."),
+          .describe(
+            "File to create or overwrite. Relative paths resolve from the active Project root when selected, otherwise the user's home directory."
+          ),
         content: z.string().describe("The complete text content to write to the file."),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional Project id. Relative paths resolve from that Project and write permission is enforced."
+          ),
       }),
       outputSchema: z.object({
         path: z.string(),
@@ -217,9 +234,9 @@ export function registerFileWriteTool(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ filePath: inputPath, content }, ctx) => {
-      const filePath = resolveLocalPath(inputPath)
+    async ({ filePath: inputPath, content, project_id }, ctx) => {
       try {
+        const filePath = await resolveLocalPath(inputPath, "write", projectScope, project_id)
         return await withFileEditLock(filePath, async () => {
           let before = ""
           let created = false
@@ -246,7 +263,7 @@ export function registerFileWriteTool(server: McpServer): void {
   )
 }
 
-export function registerFileEditTool(server: McpServer): void {
+export function registerFileEditTool(server: McpServer, projectScope?: ProjectScope): void {
   server.registerTool(
     "file_edit",
     {
@@ -256,7 +273,9 @@ export function registerFileEditTool(server: McpServer): void {
         filePath: z
           .string()
           .min(1)
-          .describe("File to edit. Relative paths resolve from the user's home directory."),
+          .describe(
+            "File to edit. Relative paths resolve from the active Project root when selected, otherwise the user's home directory."
+          ),
         oldString: z
           .string()
           .min(1)
@@ -267,6 +286,13 @@ export function registerFileEditTool(server: McpServer): void {
           .optional()
           .default(false)
           .describe("Replace every occurrence instead of requiring one unique match."),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional Project id. Relative paths resolve from that Project and write permission is enforced."
+          ),
       }),
       outputSchema: z.object({
         path: z.string(),
@@ -280,9 +306,9 @@ export function registerFileEditTool(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ filePath: inputPath, oldString, newString, replaceAll }, ctx) => {
-      const filePath = resolveLocalPath(inputPath)
+    async ({ filePath: inputPath, oldString, newString, replaceAll, project_id }, ctx) => {
       try {
+        const filePath = await resolveLocalPath(inputPath, "write", projectScope, project_id)
         return await editLocalFile({
           filePath,
           oldString,
@@ -478,6 +504,12 @@ function isFsError(error: unknown, code: string): error is NodeJS.ErrnoException
   return error instanceof Error && "code" in error && error.code === code
 }
 
-function resolveLocalPath(path: string): string {
+async function resolveLocalPath(
+  path: string,
+  permission: "read" | "write",
+  projectScope?: ProjectScope,
+  projectId?: string
+): Promise<string> {
+  if (projectScope) return (await projectScope.resolvePath(path, permission, projectId)).path
   return isAbsolute(path) ? path : resolve(MCP_CONFIG.defaultCwd, path)
 }

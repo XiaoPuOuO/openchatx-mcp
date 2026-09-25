@@ -11,6 +11,7 @@ import {
   type ProcessGroupTermination,
   startProcessGroupTermination,
 } from "../../child-process-termination.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 import { tokenPrefix } from "../../tokenizer.js"
 import { summarizePatchExecution } from "./patch-summary.js"
 
@@ -24,7 +25,7 @@ export function isApplyPatchSupported(platform: NodeJS.Platform = process.platfo
   return platform === "darwin"
 }
 
-export function registerApplyPatchTool(server: McpServer): void {
+export function registerApplyPatchTool(server: McpServer, projectScope?: ProjectScope): void {
   server.registerTool(
     "apply_patch",
     {
@@ -38,8 +39,16 @@ export function registerApplyPatchTool(server: McpServer): void {
           ),
         cwd: z
           .string()
-          .refine(isAbsolute, "cwd must be an absolute path.")
-          .describe("Absolute directory used as the patch root."),
+          .min(1)
+          .optional()
+          .describe("Patch root. Defaults to the active Project root when one is selected."),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional Project id. Write permission is enforced and cwd must stay inside that Project."
+          ),
       }),
       outputSchema: z.object({
         status: z.enum(["completed", "failed", "partial"]),
@@ -72,11 +81,14 @@ export function registerApplyPatchTool(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ patch, cwd }, ctx) => {
+    async ({ patch, cwd, project_id }, ctx) => {
       try {
+        const resolvedCwd = projectScope
+          ? (await projectScope.resolvePath(cwd, "write", project_id)).path
+          : requireAbsoluteCwd(cwd)
         const result = await applyPatch({
           patch,
-          cwd,
+          cwd: resolvedCwd,
           executable: DEFAULT_APPLY_PATCH_BINARY,
           signal: ctx.mcpReq.signal,
         })
@@ -260,6 +272,12 @@ export async function applyPatch(input: ApplyPatchInput): Promise<ApplyPatchResu
     ...processResult,
     ...summary,
   }
+}
+
+function requireAbsoluteCwd(cwd: string | undefined): string {
+  if (!cwd) throw new Error("cwd is required when Project scope is unavailable.")
+  if (!isAbsolute(cwd)) throw new Error("cwd must be an absolute path.")
+  return cwd
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {

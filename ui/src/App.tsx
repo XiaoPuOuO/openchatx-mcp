@@ -15,6 +15,7 @@ import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
+import { ProjectManager } from "./features/projects/ProjectManager"
 import { StatusPage } from "./features/status/StatusPage"
 import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
@@ -24,7 +25,7 @@ import { useI18n } from "./i18n"
 
 export function App() {
   const [view, setView] = useState<
-    "dashboard" | "mcp-servers" | "toolboxes" | "subagents" | "store" | "status"
+    "dashboard" | "mcp-servers" | "toolboxes" | "subagents" | "store" | "status" | "projects"
   >("dashboard")
   if (view === "mcp-servers") {
     return <McpServerManager onBack={() => setView("dashboard")} />
@@ -41,6 +42,9 @@ export function App() {
   if (view === "status") {
     return <StatusPage onBack={() => setView("dashboard")} />
   }
+  if (view === "projects") {
+    return <ProjectManager onBack={() => setView("dashboard")} />
+  }
   return (
     <Dashboard
       onOpenMcpServers={() => setView("mcp-servers")}
@@ -48,6 +52,7 @@ export function App() {
       onOpenSubagents={() => setView("subagents")}
       onOpenStore={() => setView("store")}
       onOpenStatus={() => setView("status")}
+      onOpenProjects={() => setView("projects")}
     />
   )
 }
@@ -58,12 +63,14 @@ function Dashboard({
   onOpenSubagents,
   onOpenStore,
   onOpenStatus,
+  onOpenProjects,
 }: {
   onOpenMcpServers: () => void
   onOpenToolboxes: () => void
   onOpenSubagents: () => void
   onOpenStore: () => void
   onOpenStatus: () => void
+  onOpenProjects: () => void
 }) {
   const { agents, connected, loading, error } = useAgents()
   const { t } = useI18n()
@@ -130,7 +137,7 @@ function Dashboard({
       </header>
 
       <div className="mx-auto max-w-[1500px] px-5 py-6 lg:px-8">
-        <PlatformHomePanel />
+        <PlatformHomePanel onOpenProjects={onOpenProjects} />
         {error ? (
           <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}

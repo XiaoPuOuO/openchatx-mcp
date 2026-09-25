@@ -9,6 +9,8 @@ import { z } from "zod"
 import { setAgentTaskSlug } from "../../agent/context.js"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import type { CapabilityDescriptor } from "../../capabilities/catalog.js"
+import type { RegisteredProject } from "../../projects/project-registry.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const SHARED_PROMPT_NAME = "shared"
@@ -27,7 +29,8 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../.
 
 export function registerStartHereTool(
   server: McpServer,
-  capabilityCatalog?: () => CapabilityCatalog
+  capabilityCatalog?: () => CapabilityCatalog,
+  projectScope?: ProjectScope
 ): void {
   const modes = discoverPromptModes()
   const [firstMode, ...remainingModes] = modes
@@ -41,6 +44,11 @@ export function registerStartHereTool(
       inputSchema: z.object({
         mode: z.enum([firstMode, ...remainingModes]),
         task_id: z.string().min(1).max(128),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional registered Project to make active for this ChatGPT session."),
       }),
       annotations: {
         readOnlyHint: true,
@@ -49,12 +57,17 @@ export function registerStartHereTool(
         openWorldHint: false,
       },
     },
-    async ({ mode, task_id }) => {
+    async ({ mode, task_id, project_id }) => {
       const { value: instructions, reused } = await loadStartInstructions(mode, () =>
         buildStartHereInstructions(mode)
       )
       setAgentTaskSlug(task_id)
+      const activeProject = project_id
+        ? await projectScope?.use(project_id)
+        : await projectScope?.current()
+      const registeredProjects = !activeProject && projectScope ? await projectScope.list() : []
       const capabilities = capabilityCatalog ? renderCapabilityCatalog(capabilityCatalog()) : ""
+      const projectContext = renderProjectContext(activeProject, registeredProjects)
       return {
         content: [
           {
@@ -62,16 +75,39 @@ export function registerStartHereTool(
             text: reused
               ? [
                   `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
+                  projectContext,
                   capabilities,
                 ]
                   .filter(Boolean)
                   .join("\n\n")
-              : [instructions, capabilities].filter(Boolean).join("\n\n"),
+              : [instructions, projectContext, capabilities].filter(Boolean).join("\n\n"),
           },
         ],
       }
     }
   )
+}
+
+function renderProjectContext(
+  activeProject: RegisteredProject | undefined,
+  registeredProjects: RegisteredProject[]
+): string {
+  if (activeProject) {
+    return [
+      "# Active Project",
+      `- ${activeProject.id} (${activeProject.name}) — ${activeProject.path}`,
+      `- permissions: read=${activeProject.permissions.read}, write=${activeProject.permissions.write}, shell=${activeProject.permissions.shell}`,
+      "Relative file/search/shell paths resolve from this Project until project_use changes or clears it.",
+    ].join("\n")
+  }
+  if (registeredProjects.length === 0) return ""
+  return [
+    "# Registered Projects",
+    ...registeredProjects
+      .slice(0, 8)
+      .map((project) => `- ${project.id} (${project.name}) — ${project.path}`),
+    "No Project is active. Use project_use before project-focused work so relative paths and permission scope are explicit.",
+  ].join("\n")
 }
 
 export function renderCapabilityCatalog(catalog: CapabilityCatalog): string {

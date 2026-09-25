@@ -7,6 +7,7 @@ import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
 import type { NodeRegistry } from "../nodes/node-registry.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
+import type { ProjectScope } from "../projects/project-scope.js"
 import type { ProviderHub } from "../providers/provider-hub.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
@@ -64,6 +65,7 @@ export interface CreateMcpServerOptions {
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
   projectRegistry?: ProjectRegistry
+  projectScope?: ProjectScope
   agentTeams?: AgentTeamService
   workflows?: WorkflowService
   nodes?: NodeRegistry
@@ -85,6 +87,7 @@ export interface McpCapabilityServices {
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
   projectRegistry?: ProjectRegistry
+  projectScope?: ProjectScope
   agentTeams?: AgentTeamService
   workflows?: WorkflowService
   nodes?: NodeRegistry
@@ -161,37 +164,45 @@ function registerToolboxRuntime(
 ): void {
   const capabilityRegistry = options.capabilityRegistry
   registerBuiltinToolbox(server, registry, "system", () => {
-    registerStartHereTool(server, capabilityRegistry ? () => capabilityRegistry.list() : undefined)
+    registerStartHereTool(
+      server,
+      capabilityRegistry ? () => capabilityRegistry.list() : undefined,
+      options.projectScope
+    )
     if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
     if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
   })
   registerBuiltinToolbox(server, registry, "shell", () => {
-    registerBashTool(server, options.bashProcessManager)
+    registerBashTool(server, options.bashProcessManager, options.projectScope)
     if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
     if (options.interactiveShellManager)
-      registerTerminalTool(server, options.interactiveShellManager)
+      registerTerminalTool(server, options.interactiveShellManager, options.projectScope)
   })
   registerBuiltinToolbox(server, registry, "files", () => {
-    if (isApplyPatchSupported()) registerApplyPatchTool(server)
-    registerFileReadTool(server)
-    registerFileWriteTool(server)
-    registerFileEditTool(server)
+    if (isApplyPatchSupported()) registerApplyPatchTool(server, options.projectScope)
+    registerFileReadTool(server, options.projectScope)
+    registerFileWriteTool(server, options.projectScope)
+    registerFileEditTool(server, options.projectScope)
   })
   registerBuiltinToolbox(server, registry, "web", () =>
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   )
   registerBuiltinToolbox(server, registry, "skills", () => registerSkillTools(server, registry))
-  registerBuiltinToolbox(server, registry, "media", () => registerImageTools(server))
-  registerBuiltinToolbox(server, registry, "search", () => registerSearchTools(server))
+  registerBuiltinToolbox(server, registry, "media", () =>
+    registerImageTools(server, options.projectScope)
+  )
+  registerBuiltinToolbox(server, registry, "search", () =>
+    registerSearchTools(server, options.projectScope)
+  )
   const jobManager = options.jobManager
   if (jobManager)
     registerBuiltinToolbox(server, registry, "jobs", () =>
-      registerJobTools(server, jobManager, options.projectRegistry)
+      registerJobTools(server, jobManager, options.projectScope)
     )
   const projectRegistry = options.projectRegistry
   if (projectRegistry)
     registerBuiltinToolbox(server, registry, "projects", () =>
-      registerProjectTools(server, projectRegistry)
+      registerProjectTools(server, projectRegistry, options.projectScope)
     )
   registerBuiltinToolbox(server, registry, "toolbox-manager", () =>
     registerToolboxManagementTools(server, registry)
@@ -236,29 +247,35 @@ function registerDirectRuntime(
   profile: McpRuntimeProfile
 ): void {
   const capabilityRegistry = options.capabilityRegistry
-  registerStartHereTool(server, capabilityRegistry ? () => capabilityRegistry.list() : undefined)
+  registerStartHereTool(
+    server,
+    capabilityRegistry ? () => capabilityRegistry.list() : undefined,
+    options.projectScope
+  )
   if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
   if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
   if (profile.tools.shell) {
-    registerBashTool(server, options.bashProcessManager)
+    registerBashTool(server, options.bashProcessManager, options.projectScope)
     if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
     if (options.interactiveShellManager)
-      registerTerminalTool(server, options.interactiveShellManager)
+      registerTerminalTool(server, options.interactiveShellManager, options.projectScope)
   }
-  if (profile.tools.applyPatch && isApplyPatchSupported()) registerApplyPatchTool(server)
-  if (profile.tools.fileRead) registerFileReadTool(server)
-  if (profile.tools.fileWrite) registerFileWriteTool(server)
-  if (profile.tools.fileWrite) registerFileEditTool(server)
+  if (profile.tools.applyPatch && isApplyPatchSupported())
+    registerApplyPatchTool(server, options.projectScope)
+  if (profile.tools.fileRead) registerFileReadTool(server, options.projectScope)
+  if (profile.tools.fileWrite) registerFileWriteTool(server, options.projectScope)
+  if (profile.tools.fileWrite) registerFileEditTool(server, options.projectScope)
   if (profile.tools.web)
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (profile.tools.skills) registerSkillTools(server)
-  if (profile.tools.image) registerImageTools(server)
+  if (profile.tools.image) registerImageTools(server, options.projectScope)
   registerDirectPlatformTools(server, options)
 }
 
 function registerDirectPlatformTools(server: McpServer, options: CreateMcpServerOptions): void {
-  if (options.jobManager) registerJobTools(server, options.jobManager, options.projectRegistry)
-  if (options.projectRegistry) registerProjectTools(server, options.projectRegistry)
+  if (options.jobManager) registerJobTools(server, options.jobManager, options.projectScope)
+  if (options.projectRegistry)
+    registerProjectTools(server, options.projectRegistry, options.projectScope)
   if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)

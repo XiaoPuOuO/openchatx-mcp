@@ -3,23 +3,27 @@ import { z } from "zod"
 
 import type { JobManager } from "../../jobs/job-manager.js"
 import { toToolError } from "../../mcp/tool-error.js"
-import type { ProjectRegistry } from "../../projects/project-registry.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 
 export function registerJobTools(
   server: McpServer,
   jobs: JobManager,
-  projects?: ProjectRegistry
+  projectScope?: ProjectScope
 ): void {
   server.registerTool(
     "job_start",
     {
       description:
-        "Start a durable background command that continues after the current ChatGPT tool call disconnects.",
+        "Start a durable background command that continues after the current ChatGPT tool call disconnects. Defaults to the active Project root when one is selected.",
       inputSchema: z.object({
         label: z.string().min(1).max(120),
         command: z.string().min(1),
         cwd: z.string().min(1).optional(),
-        project_id: z.string().min(1).optional(),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional Project id. Shell permission is enforced."),
       }),
       annotations: {
         readOnlyHint: false,
@@ -28,20 +32,18 @@ export function registerJobTools(
         openWorldHint: true,
       },
     },
-    async (input) => {
+    async ({ label, command, cwd, project_id }) => {
       try {
-        if (input.cwd && input.project_id)
-          throw new Error("job_start accepts either cwd or project_id, not both.")
-        const project = input.project_id
-          ? await projects?.resolve(input.project_id, "shell")
-          : undefined
-        if (input.project_id && !project)
-          throw new Error("Project registry is unavailable for project-scoped jobs.")
-        const job = await jobs.start(input.label, input.command, project?.path ?? input.cwd)
+        const resolved = projectScope
+          ? await projectScope.resolvePath(cwd, "shell", project_id)
+          : { path: cwd, project: undefined }
+        const job = await jobs.start(label, command, resolved.path, resolved.project?.id)
         return {
           structuredContent: {
             job,
-            ...(project ? { project: { id: project.id, name: project.name } } : {}),
+            ...(resolved.project
+              ? { project: { id: resolved.project.id, name: resolved.project.name } }
+              : {}),
           },
           content: [],
         }
@@ -54,8 +56,10 @@ export function registerJobTools(
   server.registerTool(
     "job_list",
     {
-      description: "List durable jobs and their persisted status.",
-      inputSchema: z.object({}),
+      description: "List durable jobs and their persisted status, including Project association.",
+      inputSchema: z.object({
+        project_id: z.string().min(1).optional(),
+      }),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -63,7 +67,15 @@ export function registerJobTools(
         openWorldHint: false,
       },
     },
-    async () => ({ structuredContent: { jobs: await jobs.list() }, content: [] })
+    async ({ project_id }) => {
+      const jobsList = await jobs.list()
+      return {
+        structuredContent: {
+          jobs: project_id ? jobsList.filter((job) => job.projectId === project_id) : jobsList,
+        },
+        content: [],
+      }
+    }
   )
 
   server.registerTool(

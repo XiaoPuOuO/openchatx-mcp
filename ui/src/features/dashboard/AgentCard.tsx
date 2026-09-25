@@ -27,6 +27,11 @@ export function AgentCard({ agent, now }: { agent: Agent; now: number }) {
             <p className="mt-1 truncate text-sm text-muted-foreground">
               {agent.taskSlug ?? t("agent.noTask")}
             </p>
+            {agent.projectId ? (
+              <div className="mt-2">
+                <Badge>Project: {agent.projectId}</Badge>
+              </div>
+            ) : null}
           </div>
           <Badge
             className={active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : undefined}

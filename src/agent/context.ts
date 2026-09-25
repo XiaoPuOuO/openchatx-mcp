@@ -4,12 +4,14 @@ export interface AgentIdentity {
   readonly sessionId: string
   readonly agent: string
   readonly taskSlug?: string
+  readonly projectId?: string
 }
 
 interface StoredAgentIdentity {
   sessionId: string
   agent: string
   taskSlug?: string
+  projectId?: string
 }
 
 const agents = new Map<string, StoredAgentIdentity>()
@@ -26,6 +28,12 @@ export function getAgentIdentity(): AgentIdentity | undefined {
 export function setAgentTaskSlug(taskSlug: string): void {
   const identity = currentAgent.getStore()
   if (identity) identity.taskSlug = taskSlug
+}
+
+export function setAgentProjectId(projectId: string | undefined): void {
+  const identity = currentAgent.getStore()
+  if (!identity) return
+  identity.projectId = projectId
 }
 
 function agentForSession(sessionId: string): StoredAgentIdentity {

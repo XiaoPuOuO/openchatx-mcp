@@ -11,11 +11,12 @@ import {
 import { useEffect, useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
+import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { fetchPlatformOverview } from "../../lib/api"
 import type { PlatformOverview } from "../../types"
 
-export function PlatformHomePanel() {
+export function PlatformHomePanel({ onOpenProjects }: { onOpenProjects: () => void }) {
   const [overview, setOverview] = useState<PlatformOverview>()
   const [error, setError] = useState<string>()
 
@@ -113,20 +114,33 @@ export function PlatformHomePanel() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="font-medium">Projects</div>
-              <Badge>{overview.projects.length}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge>{overview.projects.length}</Badge>
+                <Button variant="outline" size="sm" onClick={onOpenProjects}>
+                  Manage
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {overview.projects.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Register project roots to make project context and permissions explicit.
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Register an existing folder so ChatGPT sessions can use it as their default
+                  context and permission scope.
+                </p>
+                <Button variant="outline" size="sm" onClick={onOpenProjects}>
+                  Register Project
+                </Button>
+              </div>
             ) : (
               overview.projects.slice(0, 6).map((project) => (
                 <div key={project.id} className="rounded-md border px-3 py-2">
                   <div className="text-sm font-medium">{project.name}</div>
                   <div className="mt-1 truncate text-xs text-muted-foreground">{project.path}</div>
-                  <div className="mt-2 flex gap-1.5">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Badge>{project.activeAgents} agents</Badge>
+                    <Badge>{project.runningJobs} jobs</Badge>
                     {(["read", "write", "shell"] as const).map((permission) => (
                       <Badge key={permission}>
                         {permission}:{project.permissions[permission] ? "on" : "off"}
@@ -152,7 +166,10 @@ export function PlatformHomePanel() {
             ) : (
               overview.currentWork.map((job) => (
                 <div key={job.id} className="rounded-md border px-3 py-2">
-                  <div className="text-sm font-medium">{job.label}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium">{job.label}</div>
+                    {job.projectId ? <Badge>{job.projectId}</Badge> : null}
+                  </div>
                   <div className="mt-1 truncate text-xs text-muted-foreground">{job.cwd}</div>
                 </div>
               ))

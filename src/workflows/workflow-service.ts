@@ -7,6 +7,7 @@ import { z } from "zod"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
+import type { ProjectScope } from "../projects/project-scope.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { AgentTeamService } from "../teams/team-service.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
@@ -38,6 +39,7 @@ const jobStepSchema = z.object({
   label: z.string().min(1),
   command: z.string().min(1),
   cwd: z.string().min(1).optional(),
+  project_id: z.string().min(1).optional(),
 })
 
 const workflowStepSchema = z.discriminatedUnion("kind", [
@@ -93,6 +95,7 @@ export interface WorkflowServices {
   subagents?: SubagentRuntime
   teams?: AgentTeamService
   jobs?: JobManager
+  projectScope?: ProjectScope
 }
 
 const TEMPLATE_RE = /\{\{\s*(input|steps\.([A-Za-z0-9._-]+))\s*\}\}/gu
@@ -212,10 +215,15 @@ export class WorkflowService {
     }
 
     if (!this.services.jobs) throw new Error("Durable Jobs runtime is unavailable.")
+    const cwd = step.cwd ? renderTemplate(step.cwd, input, values) : undefined
+    const resolved = this.services.projectScope
+      ? await this.services.projectScope.resolvePath(cwd, "shell", step.project_id)
+      : { path: cwd, project: undefined }
     return this.services.jobs.start(
       renderTemplate(step.label, input, values),
       renderTemplate(step.command, input, values),
-      step.cwd ? renderTemplate(step.cwd, input, values) : undefined
+      resolved.path,
+      resolved.project?.id
     )
   }
 

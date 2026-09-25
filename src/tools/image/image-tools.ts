@@ -6,9 +6,10 @@ import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
 import { ToolError, toToolError } from "../../mcp/tool-error.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 import { encodeImageForMcp, formatBytes, ImageEncodingError } from "./image-encoding.js"
 
-export function registerImageTools(server: McpServer): void {
+export function registerImageTools(server: McpServer, projectScope?: ProjectScope): void {
   server.registerTool(
     "image_view",
     {
@@ -17,7 +18,14 @@ export function registerImageTools(server: McpServer): void {
         path: z
           .string()
           .min(1)
-          .describe("Local image path. Relative paths resolve from the user's home directory."),
+          .describe(
+            "Local image path. Relative paths resolve from the active Project root, otherwise the user's home directory."
+          ),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional Project id. Read permission is enforced."),
       }),
       annotations: {
         readOnlyHint: true,
@@ -26,9 +34,11 @@ export function registerImageTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ path }, ctx) => {
-      const imagePath = isAbsolute(path) ? path : resolve(MCP_CONFIG.defaultCwd, path)
+    async ({ path, project_id }, ctx) => {
       try {
+        let imagePath = isAbsolute(path) ? path : resolve(MCP_CONFIG.defaultCwd, path)
+        if (projectScope)
+          imagePath = (await projectScope.resolvePath(path, "read", project_id)).path
         const encoded = await encodeImageForMcp(
           await readFile(imagePath, { signal: ctx.mcpReq.signal })
         )

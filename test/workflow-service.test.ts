@@ -61,3 +61,52 @@ test("Capability Composer persists workflows and passes prior results through te
   const restored = new WorkflowService({}, join(root, "workflows.json"))
   assert.equal((await restored.list())[0]?.id, "pipeline")
 })
+
+test("Capability Composer project-scopes durable job steps", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-workflow-project-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const calls: Array<{ cwd: string | undefined; projectId: string | undefined }> = []
+  const service = new WorkflowService(
+    {
+      jobs: {
+        async start(_label: string, _command: string, cwd?: string, projectId?: string) {
+          calls.push({ cwd, projectId })
+          return { id: "job-1" }
+        },
+      } as never,
+      projectScope: {
+        async resolvePath(cwd: string | undefined, permission: string, projectId?: string) {
+          assert.equal(permission, "shell")
+          assert.equal(projectId, "demo")
+          assert.equal(cwd, "scripts")
+          return {
+            path: "/tmp/demo/scripts",
+            project: { id: "demo", name: "Demo" },
+          }
+        },
+      } as never,
+    },
+    join(root, "workflows.json")
+  )
+
+  await service.upsert({
+    id: "project-job",
+    name: "Project Job",
+    steps: [
+      {
+        id: "job",
+        kind: "job",
+        label: "Build",
+        command: "npm test",
+        cwd: "scripts",
+        project_id: "demo",
+      },
+    ],
+  })
+
+  const result = await service.run("project-job", "", {
+    mcpReq: { signal: new AbortController().signal },
+  } as never)
+  assert.equal(result.steps[0]?.ok, true)
+  assert.deepEqual(calls, [{ cwd: "/tmp/demo/scripts", projectId: "demo" }])
+})

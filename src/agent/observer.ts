@@ -26,9 +26,10 @@ interface AgentInstructionSnapshot {
   deliveredAt?: number
 }
 
-interface AgentSnapshot {
+export interface AgentSnapshot {
   id: string
   taskSlug?: string
+  projectId?: string
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCallSnapshot
@@ -78,6 +79,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     const existing = agentsBySession.get(identity.sessionId)
     if (existing) {
       existing.taskSlug = identity.taskSlug
+      existing.projectId = identity.projectId
       existing.lastSeenAt = now()
       return existing
     }
@@ -86,6 +88,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     const state: AgentState = {
       id: identity.agent,
       taskSlug: identity.taskSlug,
+      projectId: identity.projectId,
       sessionId: identity.sessionId,
       firstSeenAt: timestamp,
       lastSeenAt: timestamp,
@@ -140,6 +143,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     if (!agent || !activeCall) return
     const timestamp = now()
     agent.taskSlug = identity.taskSlug
+    agent.projectId = identity.projectId
     const call: AgentCallSnapshot = {
       ...activeCall,
       ...(status === "completed"
@@ -231,6 +235,7 @@ function toSnapshot(agent: AgentState): AgentSnapshot {
   return {
     id: agent.id,
     taskSlug: agent.taskSlug,
+    projectId: agent.projectId,
     firstSeenAt: agent.firstSeenAt,
     lastSeenAt: agent.lastSeenAt,
     current: agent.current ? { ...agent.current } : undefined,

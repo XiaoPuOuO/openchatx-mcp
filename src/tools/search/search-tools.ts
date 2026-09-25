@@ -7,12 +7,13 @@ import { z } from "zod"
 
 import { MCP_CONFIG } from "../../config.js"
 import { ToolError, toToolError } from "../../mcp/tool-error.js"
+import type { ProjectScope } from "../../projects/project-scope.js"
 
 const RESULT_LIMIT = 100
 const STDOUT_LIMIT_BYTES = 4 * 1024 * 1024
 const TRAILING_LINE_BREAK_RE = /\r?\n$/u
 
-export function registerSearchTools(server: McpServer): void {
+export function registerSearchTools(server: McpServer, projectScope?: ProjectScope): void {
   server.registerTool(
     "glob",
     {
@@ -24,7 +25,14 @@ export function registerSearchTools(server: McpServer): void {
           .string()
           .min(1)
           .optional()
-          .describe("Directory to search. Defaults to the user's home directory."),
+          .describe(
+            "Directory to search. Defaults to the active Project root, otherwise the user's home directory."
+          ),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional Project id. Read permission is enforced."),
       }),
       outputSchema: z.object({
         files: z.array(z.string()),
@@ -38,9 +46,9 @@ export function registerSearchTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ pattern, path }, context) => {
+    async ({ pattern, path, project_id }, context) => {
       try {
-        const searchRoot = resolveSearchPath(path)
+        const searchRoot = await resolveSearchPath(path, projectScope, project_id)
         const info = await stat(searchRoot)
         if (!info.isDirectory())
           throw new ToolError("GLOB_FAILED", `glob path must be a directory: ${searchRoot}`)
@@ -99,12 +107,19 @@ export function registerSearchTools(server: McpServer): void {
           .string()
           .min(1)
           .optional()
-          .describe("File or directory to search. Defaults to the user's home directory."),
+          .describe(
+            "File or directory to search. Defaults to the active Project root, otherwise the user's home directory."
+          ),
         include: z
           .string()
           .min(1)
           .optional()
           .describe('Optional file glob such as "*.ts" or "*.{ts,tsx}".'),
+        project_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Optional Project id. Read permission is enforced."),
       }),
       outputSchema: z.object({
         matches: z.array(
@@ -124,9 +139,9 @@ export function registerSearchTools(server: McpServer): void {
         openWorldHint: false,
       },
     },
-    async ({ pattern, path, include }, context) => {
+    async ({ pattern, path, include, project_id }, context) => {
       try {
-        const requested = resolveSearchPath(path)
+        const requested = await resolveSearchPath(path, projectScope, project_id)
         const requestedInfo = await stat(requested).catch(() => undefined)
         const cwd = requestedInfo?.isFile() ? dirname(requested) : requested
         const target = requestedInfo?.isFile() ? basename(requested) : "."
@@ -160,7 +175,12 @@ interface RgMatch {
   text: string
 }
 
-function resolveSearchPath(path?: string): string {
+async function resolveSearchPath(
+  path: string | undefined,
+  projectScope?: ProjectScope,
+  projectId?: string
+): Promise<string> {
+  if (projectScope) return (await projectScope.resolvePath(path, "read", projectId)).path
   if (!path) return MCP_CONFIG.defaultCwd
   return isAbsolute(path) ? path : join(MCP_CONFIG.defaultCwd, path)
 }

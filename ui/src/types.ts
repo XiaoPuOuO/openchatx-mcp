@@ -24,6 +24,7 @@ export interface AgentInstruction {
 export interface Agent {
   id: string
   taskSlug?: string
+  projectId?: string
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCall
@@ -127,6 +128,20 @@ export interface CapabilityStoreReview {
   note: string
 }
 
+export interface ProjectRecord {
+  id: string
+  name: string
+  path: string
+  description?: string
+  permissions: {
+    read: boolean
+    write: boolean
+    shell: boolean
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 export interface PlatformOverview {
   counts: {
     capabilities: number
@@ -147,6 +162,8 @@ export interface PlatformOverview {
       write: boolean
       shell: boolean
     }
+    activeAgents: number
+    runningJobs: number
   }>
   currentWork: Array<{
     id: string
@@ -154,6 +171,7 @@ export interface PlatformOverview {
     status: string
     cwd: string
     updatedAt: string
+    projectId?: string
   }>
   needsAttention: Array<{
     id: string

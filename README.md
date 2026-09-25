@@ -320,7 +320,7 @@ Configure profiles from the Dashboard or in the gitignored `subagents.json`.
 OpenChatX adds platform-level primitives on top of ordinary tools:
 
 - **Durable Jobs** — `job_start`, `job_list`, `job_read`, `job_cancel`.
-- **Projects** — `project_manage` registers an existing absolute path and its read/write/shell scope; OpenChatX never moves the project.
+- **Projects** — `project_manage` registers an existing folder without moving it, and `project_use` binds a ChatGPT session to that Project. Relative built-in file/search/shell/image/patch/job paths then default to the Project root. Registered roots enforce read/write/shell permissions even for absolute paths, while explicit `project_id` hard-scopes an operation to that root. Projects are context and policy, not an OS sandbox; custom Toolboxes and external MCPs may have their own access rules.
 - **Agent Teams** — `agent_team_manage` combines curated model profiles; `agent_team_run` runs members in parallel and returns separate work products to ChatGPT.
 - **Capability Composer** — `workflow_manage` creates sequential workflows from lazy MCP/Toolbox tools, subagents, teams, and durable jobs. Step templates can use `{{input}}` and `{{steps.<id>}}`.
 - **Capability Store** — built-ins stay local, while Community discovery searches public GitHub repositories tagged `openchatx-capability`; `store_source_tree`, `store_source_read`, and `store_review` expose the exact source revision before `store_install`. Community packages install from an immutable commit SHA and Store uninstall only removes Store-owned Toolbox directories.
