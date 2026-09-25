@@ -149,10 +149,8 @@ async function installWindowsRuntimeDependencies(): Promise<void> {
       "--package-lock=false",
       "--no-audit",
       "--no-fund",
-      "--prefix",
-      runtimeRoot,
     ],
-    { env }
+    { env, cwd: runtimeRoot }
   )
 }
 
