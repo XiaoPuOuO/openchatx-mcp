@@ -1,0 +1,12 @@
+{
+  "name": "Capability Composer",
+  "description": "Compose reusable cross-capability workflows from MCP tools, custom tools, subagents, teams, and durable jobs.",
+  "enabled": true,
+  "builtin": "workflows",
+  "tools": {
+    "workflow_list": { "enabled": true, "description": "List composed workflows." },
+    "workflow_manage": { "enabled": true, "description": "Create or update a workflow." },
+    "workflow_run": { "enabled": true, "description": "Run a composed workflow." }
+  },
+  "skills": {}
+}

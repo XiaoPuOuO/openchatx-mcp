@@ -22,6 +22,7 @@ import { ToolboxRegistry } from "./toolbox/registry.js"
 import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
+import { WorkflowService } from "./workflows/workflow-service.js"
 
 const auditLogPath = fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
 const auditLogger = new McpAuditLogger(auditLogPath)
@@ -53,6 +54,13 @@ const capabilityStore = new CapabilityStoreService(
 const providerHub = new ProviderHub(MCP_CONFIG.subagents.configFile, subagentRuntime)
 const smartRouter = new SmartModelRouter(MCP_CONFIG.subagents.configFile, subagentRuntime)
 const agentTeams = new AgentTeamService(subagentRuntime)
+const workflows = new WorkflowService({
+  toolboxes: toolboxRegistry,
+  externalMcp,
+  subagents: subagentRuntime,
+  teams: agentTeams,
+  jobs: jobManager,
+})
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -72,6 +80,7 @@ try {
       smartRouter,
       projectRegistry,
       agentTeams,
+      workflows,
     }),
     auditLogger,
     authStore,

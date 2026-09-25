@@ -44,6 +44,8 @@ import { registerAgentTeamTools } from "../tools/teams/team-tools.js"
 import { registerToolboxManagementTools } from "../tools/toolbox-management/toolbox-management-tools.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
 import { registerWebTool } from "../tools/web/web-tool.js"
+import { registerWorkflowTools } from "../tools/workflows/workflow-tools.js"
+import type { WorkflowService } from "../workflows/workflow-service.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
 export interface CreateMcpServerOptions {
@@ -61,6 +63,7 @@ export interface CreateMcpServerOptions {
   smartRouter?: SmartModelRouter
   projectRegistry?: ProjectRegistry
   agentTeams?: AgentTeamService
+  workflows?: WorkflowService
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -80,6 +83,7 @@ export interface McpCapabilityServices {
   smartRouter?: SmartModelRouter
   projectRegistry?: ProjectRegistry
   agentTeams?: AgentTeamService
+  workflows?: WorkflowService
 }
 
 export interface McpRuntimeProfile {
@@ -212,6 +216,11 @@ function registerToolboxRuntime(
     registerBuiltinToolbox(server, registry, "teams", () =>
       registerAgentTeamTools(server, agentTeams)
     )
+  const workflows = options.workflows
+  if (workflows)
+    registerBuiltinToolbox(server, registry, "workflows", () =>
+      registerWorkflowTools(server, workflows)
+    )
 }
 
 function registerDirectRuntime(
@@ -247,6 +256,7 @@ function registerDirectPlatformTools(server: McpServer, options: CreateMcpServer
   if (options.providerHub) registerProviderTools(server, options.providerHub)
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
   if (options.agentTeams) registerAgentTeamTools(server, options.agentTeams)
+  if (options.workflows) registerWorkflowTools(server, options.workflows)
 }
 
 function registerBuiltinToolbox(
