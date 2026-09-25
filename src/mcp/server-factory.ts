@@ -5,6 +5,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { JobManager } from "../jobs/job-manager.js"
+import type { NodeRegistry } from "../nodes/node-registry.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { ProviderHub } from "../providers/provider-hub.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
@@ -25,6 +26,7 @@ import {
 import { registerImageTools } from "../tools/image/image-tools.js"
 import { registerJobTools } from "../tools/jobs/job-tools.js"
 import { registerMcpServerManagementTools } from "../tools/mcp-server-management/mcp-server-management-tools.js"
+import { registerNodeTools } from "../tools/nodes/node-tools.js"
 import { registerProjectTools } from "../tools/projects/project-tools.js"
 import { registerProviderTools } from "../tools/providers/provider-tools.js"
 import { registerSearchTools } from "../tools/search/search-tools.js"
@@ -64,6 +66,7 @@ export interface CreateMcpServerOptions {
   projectRegistry?: ProjectRegistry
   agentTeams?: AgentTeamService
   workflows?: WorkflowService
+  nodes?: NodeRegistry
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -84,6 +87,7 @@ export interface McpCapabilityServices {
   projectRegistry?: ProjectRegistry
   agentTeams?: AgentTeamService
   workflows?: WorkflowService
+  nodes?: NodeRegistry
 }
 
 export interface McpRuntimeProfile {
@@ -221,6 +225,9 @@ function registerToolboxRuntime(
     registerBuiltinToolbox(server, registry, "workflows", () =>
       registerWorkflowTools(server, workflows)
     )
+  const nodes = options.nodes
+  if (nodes)
+    registerBuiltinToolbox(server, registry, "nodes", () => registerNodeTools(server, nodes))
 }
 
 function registerDirectRuntime(
@@ -257,6 +264,7 @@ function registerDirectPlatformTools(server: McpServer, options: CreateMcpServer
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
   if (options.agentTeams) registerAgentTeamTools(server, options.agentTeams)
   if (options.workflows) registerWorkflowTools(server, options.workflows)
+  if (options.nodes) registerNodeTools(server, options.nodes)
 }
 
 function registerBuiltinToolbox(

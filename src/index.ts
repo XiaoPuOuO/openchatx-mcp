@@ -9,6 +9,7 @@ import { MCP_CONFIG } from "./config.js"
 import { createExternalMcpRegistry } from "./external-mcp/registry.js"
 import { JobManager } from "./jobs/job-manager.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
+import { NodeRegistry } from "./nodes/node-registry.js"
 import { ProjectRegistry } from "./projects/project-registry.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
@@ -61,6 +62,7 @@ const workflows = new WorkflowService({
   teams: agentTeams,
   jobs: jobManager,
 })
+const nodes = new NodeRegistry()
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -81,6 +83,7 @@ try {
       projectRegistry,
       agentTeams,
       workflows,
+      nodes,
     }),
     auditLogger,
     authStore,
