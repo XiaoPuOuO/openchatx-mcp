@@ -57,22 +57,62 @@ https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest
 
 OpenChatX uses OpenAI Secure MCP Tunnel. The Desktop App manages the local runtime and bundled `tunnel-client`; you only need to create the tunnel once.
 
-1. In ChatGPT, enable Developer Mode and create a new MCP app using **Tunnel**.
-2. In OpenAI Platform, create a tunnel for OpenChatX and copy its `tunnel_...` ID.
-3. Create an OpenAI runtime API key for the tunnel.
-4. Open OpenChatX Desktop → **More → Connect Tunnel…**
-5. Enter the Tunnel ID and API key.
-6. Return to ChatGPT, select that tunnel, use **No authentication**, and finish creating the MCP app.
+### 1. Create the ChatGPT MCP app
+
+In ChatGPT, enable Developer Mode, create a new MCP app, and choose **Tunnel** as the connection type.
+
+### 2. Create the tunnel in OpenAI Platform
+
+Open the OpenAI Platform Tunnels page:
+
+https://platform.openai.com/settings/organization/tunnels
+
+Click **Create tunnel**, then configure:
+
+1. **Name** — for example, `OpenChatX Tunnel`.
+2. **Description** — for example, `OpenChatX Tunnel`.
+3. **Organizations** — select the organization that should own the tunnel.
+4. **ChatGPT workspaces** — select the ChatGPT workspace that will use OpenChatX.
+5. Click **Create**.
+
+![Create the OpenChatX tunnel](docs/assets/secure-tunnel-platform-create.png)
+
+After creation, copy the resulting `tunnel_...` ID. You will enter this in OpenChatX Desktop.
+
+### 3. Create the Runtime API key
+
+Open the OpenAI Platform API Keys page:
+
+https://platform.openai.com/settings/organization/api-keys
+
+Create a new secret key for the OpenChatX tunnel runtime. A name such as `OpenChatX Runtime Key` makes it easier to identify later.
+
+![Create the OpenChatX runtime API key](docs/assets/secure-tunnel-runtime-key.png)
+
+Copy the secret when it is shown. Do not commit it to Git or paste it into chat.
+
+### 4. Connect the Desktop App
+
+Open OpenChatX Desktop → **More → Connect Tunnel…**
+
+Enter:
+
+- **Tunnel ID** — the `tunnel_...` ID from step 2.
+- **Control-plane API key** — the Runtime API key from step 3.
+
+The Desktop App stores the API key in the operating-system credential store:
+- macOS: Keychain
+- Windows: Credential Manager
+
+### 5. Finish the ChatGPT MCP app
+
+Return to ChatGPT, select the newly created tunnel, choose **No authentication**, and finish creating the MCP app.
 
 Useful links:
 
 - OpenAI Secure MCP Tunnel guide: https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
 - OpenAI Tunnels settings: https://platform.openai.com/settings/organization/tunnels
 - OpenAI API keys: https://platform.openai.com/settings/organization/api-keys
-
-The Desktop App stores the tunnel API key in the operating system credential store:
-- macOS: Keychain
-- Windows: Credential Manager
 
 ## What OpenChatX gives ChatGPT
 

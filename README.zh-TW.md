@@ -57,22 +57,62 @@ https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest
 
 OpenChatX 使用 OpenAI Secure MCP Tunnel。Desktop App 已經內建本機 Runtime 與 `tunnel-client`，只需要設定一次 Tunnel。
 
-1. 在 ChatGPT 開啟 Developer Mode，建立新的 MCP App，Connection Type 選 **Tunnel**。
-2. 到 OpenAI Platform 建立一個給 OpenChatX 的 Tunnel，複製 `tunnel_...` ID。
-3. 建立一把給 Tunnel Runtime 使用的 OpenAI API Key。
-4. 打開 OpenChatX Desktop → **More → Connect Tunnel…**
-5. 填入 Tunnel ID 與 API Key。
-6. 回到 ChatGPT，選擇剛建立的 Tunnel，Authentication 選 **No authentication**，完成 MCP App 建立。
+### 1. 在 ChatGPT 建立 MCP App
+
+在 ChatGPT 開啟 Developer Mode，建立新的 MCP App，Connection Type 選 **Tunnel**。
+
+### 2. 在 OpenAI Platform 建立 Tunnel
+
+打開 OpenAI Platform 的 Tunnels 頁面：
+
+https://platform.openai.com/settings/organization/tunnels
+
+按右上角 **Create tunnel**，然後設定：
+
+1. **Name** — 例如 `OpenChatX Tunnel`。
+2. **Description** — 例如 `OpenChatX Tunnel`。
+3. **Organizations** — 選擇要擁有這個 Tunnel 的 Organization。
+4. **ChatGPT workspaces** — 選擇要使用 OpenChatX 的 ChatGPT Workspace。
+5. 按 **Create**。
+
+![建立 OpenChatX Tunnel](docs/assets/secure-tunnel-platform-create.png)
+
+建立完成後，複製產生的 `tunnel_...` ID。等等要填進 OpenChatX Desktop。
+
+### 3. 建立 Runtime API Key
+
+打開 OpenAI Platform 的 API Keys 頁面：
+
+https://platform.openai.com/settings/organization/api-keys
+
+建立一把給 OpenChatX Tunnel Runtime 使用的 Secret Key。建議名稱用 `OpenChatX Runtime Key`，之後比較容易辨識。
+
+![建立 OpenChatX Runtime API Key](docs/assets/secure-tunnel-runtime-key.png)
+
+Secret 只會完整顯示一次，請先複製保存。不要 commit 到 Git，也不要貼進 ChatGPT 對話。
+
+### 4. 在 Desktop App 連接 Tunnel
+
+打開 OpenChatX Desktop → **More → Connect Tunnel…**
+
+填入：
+
+- **Tunnel ID** — 第 2 步取得的 `tunnel_...` ID。
+- **Control-plane API key** — 第 3 步建立的 Runtime API Key。
+
+Desktop App 會把 API Key 存在系統安全儲存區：
+- macOS：Keychain
+- Windows：Credential Manager
+
+### 5. 回到 ChatGPT 完成 MCP App
+
+回到 ChatGPT，選擇剛建立的 Tunnel，Authentication 選 **No authentication**，完成 MCP App 建立。
 
 相關連結：
 
 - OpenAI Secure MCP Tunnel：https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
 - Tunnel 設定：https://platform.openai.com/settings/organization/tunnels
 - API Keys：https://platform.openai.com/settings/organization/api-keys
-
-Desktop App 會把 Tunnel API Key 存在系統安全儲存區：
-- macOS：Keychain
-- Windows：Credential Manager
 
 ## OpenChatX 提供什麼
 
