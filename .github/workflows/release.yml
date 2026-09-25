@@ -61,8 +61,15 @@ jobs:
       - run: npm ci
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
+      - name: Verify Apple signing secrets
+        shell: bash
+        run: |
+          test -n "$APPLE_CERTIFICATE_P12_BASE64"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_NOTARY_KEY_P8_BASE64"
+          test -n "$APPLE_NOTARY_KEY_ID"
+          test -n "$APPLE_NOTARY_ISSUER_ID"
       - name: Import Developer ID certificate
-        if: env.APPLE_CERTIFICATE_P12_BASE64 != ''
         shell: bash
         run: |
           KEYCHAIN="$RUNNER_TEMP/openchatx.keychain-db"
@@ -75,19 +82,16 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k openchatx "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
       - name: Configure Apple notarization
-        if: env.APPLE_CERTIFICATE_P12_BASE64 != '' && env.APPLE_NOTARY_KEY_P8_BASE64 != '' && env.APPLE_NOTARY_KEY_ID != '' && env.APPLE_NOTARY_ISSUER_ID != ''
         shell: bash
         run: |
           KEY="$RUNNER_TEMP/AuthKey.p8"
           echo "$APPLE_NOTARY_KEY_P8_BASE64" | base64 --decode > "$KEY"
-          xcrun notarytool store-credentials openchatx-notary             --key "$KEY"             --key-id "$APPLE_NOTARY_KEY_ID"             --issuer "$APPLE_NOTARY_ISSUER_ID"
-          echo "OPENCHATX_RELEASE_NOTARIZE=1" >> "$GITHUB_ENV"
+          xcrun notarytool store-credentials openchatx-notary \
+            --key "$KEY" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID"
       - name: Build signed/notarized desktop
-        if: env.OPENCHATX_RELEASE_NOTARIZE == '1'
         run: npm run desktop:notarize
-      - name: Build desktop
-        if: env.OPENCHATX_RELEASE_NOTARIZE != '1'
-        run: npm run desktop:build
       - run: npm run desktop:smoke
       - name: Name release artifacts
         shell: bash
@@ -111,9 +115,6 @@ jobs:
         arch: [x64, arm64]
     runs-on: windows-latest
     timeout-minutes: 45
-    env:
-      WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -129,26 +130,11 @@ jobs:
       - run: npm ci
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
-      - name: Import Windows code-signing certificate
-        if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
-        shell: powershell
-        run: |
-          $pfx = Join-Path $env:RUNNER_TEMP "openchatx.pfx"
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
-          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          "OPENCHATX_WINDOWS_CERT_SHA1=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build desktop and installer
+      - name: Build unsigned desktop and installer
         run: node --import tsx scripts/desktop-windows.ts installer ${{ matrix.arch }}
       - name: Smoke test x64 runtime
         if: matrix.arch == 'x64'
         run: npm run desktop:windows:smoke
-      - name: Sign installer
-        if: env.OPENCHATX_WINDOWS_CERT_SHA1 != ''
-        shell: powershell
-        run: |
-          $setup = "dist-desktop\windows-installer\OpenChatX-Setup-${{ matrix.arch }}.exe"
-          signtool.exe sign /sha1 $env:OPENCHATX_WINDOWS_CERT_SHA1 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows-${{ matrix.arch }}
