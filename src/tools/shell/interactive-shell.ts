@@ -96,6 +96,14 @@ export class InteractiveShellManager {
 
     terminal.write(`${interactiveReadyCommand()}\r`)
     await waitForPrompt(session, input.signal)
+    if (input.command) {
+      await waitForQuiet(
+        session,
+        session.transcript.end,
+        Math.min(input.waitMs, OUTPUT_QUIET_MS * 2),
+        input.signal
+      )
+    }
     const cursor = input.command ? session.transcript.end : 0
     if (input.command) {
       terminal.write(`${input.command}\r`)
