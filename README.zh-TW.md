@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <strong>把 ChatGPT 變成真正的本機 Agent Runtime。</strong><br>
-  讓 ChatGPT 直接操作你的電腦、使用本機工具、發現外部 MCP，並調度你自己的模型，只需要一個 MCP 連線。
+  <strong>只連一次 MCP，讓 ChatGPT 取得你電腦上的所有能力。</strong><br>
+  OpenChatX 是 ChatGPT 的 Capability Runtime：本機執行、MCP、自訂工具、Providers、Agents、Workflows、Projects 與遠端 OpenChatX Nodes 全部集中在一個連線。
 </p>
 
 <p align="center">
@@ -32,14 +32,19 @@ ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 
 我自己做專案時 AI Agent 用量非常大，甚至曾經半天就把 Pro 20x 的 Codex Weekly Usage 燒到 100%。我不想讓整個工作流綁死在單一 Agent Runtime 的額度上，所以做了 OpenChatX：讓 ChatGPT 可以直接從一般對話操作本機、使用工具、接 MCP、調度自己的模型，而不是一定要把 Codex 當成執行後端。
 
-- **本機執行** — 在 macOS 或原生 Windows 上跑 shell、改檔案、看圖片、使用互動式 Terminal。
-- **MCP 聚合** — 把本機 stdio 與遠端 HTTP MCP Server 集中到同一個 ChatGPT MCP 連線。
-- **Capability Discovery** — ChatGPT 知道 Blender、Unreal、Browser Automation 等能力存在，但不必一次載入所有 Tool Schema。
-- **Toolboxes** — 用資料夾式 Plugin 加入自己的 TypeScript tools 與 reusable skills。
-- **Provider-backed Subagents** — 把本地 GPU、自架模型或其他 API 當成可委派 worker，ChatGPT 仍然是主要 Planner。
-- **Dashboard** — 從本機 UI 管理 MCP Servers、Toolboxes 與 Subagents。
+- **Universal MCP Gateway** — 把本機 stdio 與遠端 HTTP MCP Server 都收進同一個 ChatGPT 連線。
+- **統一 Capability Catalog** — MCP、Toolboxes、模型 Profile 與 Provider 不再是四套分離功能，而是同一個能力目錄。
+- **Custom Toolboxes** — 用可 Hot Reload 的資料夾式 Plugin 加入自己的 TypeScript tools 與 reusable skills。
+- **Provider Hub + Smart Routing** — 連 OpenAI-compatible API、Ollama、LM Studio、vLLM 等 Provider，並依 tags、locality、context size、cost tier 自動選模型。
+- **Durable Jobs** — 長時間工作不綁在單次 MCP Request，之後還能查狀態與 Logs。
+- **Projects** — 直接註冊既有 Project 路徑，不搬檔案，並分別設定 read / write / shell 權限。
+- **Agent Teams** — 同一個任務平行交給多個 curated model profiles，最後仍由 ChatGPT 規劃與整合。
+- **Capability Composer** — 把 MCP、自訂工具、Subagents、Teams、Durable Jobs 串成可重複使用的 Workflow。
+- **Capability Store** — 從本機 Store Catalog 安裝可重用的 OpenChatX Capability Bundle。
+- **Multi-machine Nodes** — 連接其他 OpenChatX 電腦，從主要 ChatGPT 連線直接 discover / call 遠端工具。
+- **Platform Dashboard** — 一次看到 Projects、目前工作、Capability Health、Providers、Teams、Workflows、Nodes 與需要處理的問題。
 
-外部 MCP Tools 與自訂 Toolbox Tools 都採 lazy loading。`start_here` 只提供輕量 Capability Catalog，真正需要某個能力時才透過 `tool_search` 找工具。
+外部 MCP 與自訂 Toolbox Tools 都採 Lazy Loading。`start_here` 先提供輕量能力摘要；`capability_list` 提供統一 Catalog，真正需要底層 Tool Schema 時才透過 `tool_search` 載入。
 
 ## 系統需求
 
@@ -328,6 +333,22 @@ OpenChatX 可以把工作委派給你明確設定的其他模型。Provider 不�
 
 - `subagent_list` — 列出 curated profiles 與用途。
 - `subagent_run` — 把一個任務委派給指定 Profile。
+- `subagent_route` / `subagent_route_run` — 依 tags、locality、context size、cost tier 自動選 Profile。
+- `provider_presets` / `provider_install` / `provider_probe` — 設定與驗證 Provider Hub。
+
+## Platform Primitives
+
+OpenChatX 不只提供單次 Tool Call，還把以下能力做成平台的一等公民：
+
+- **Durable Jobs** — `job_start`、`job_list`、`job_read`、`job_cancel`。
+- **Projects** — `project_manage` 直接註冊既有絕對路徑與 read / write / shell scope；OpenChatX 不會搬動 Project。
+- **Agent Teams** — `agent_team_manage` 組合 curated model profiles；`agent_team_run` 平行執行各成員並把結果交回 ChatGPT 整合。
+- **Capability Composer** — `workflow_manage` 可把 Lazy MCP / Toolbox Tools、Subagents、Teams、Durable Jobs 串成 Sequential Workflow；Step 可使用 `{{input}}` 與 `{{steps.<id>}}`。
+- **Capability Store** — `store_list`、`store_install`、`store_uninstall` 管理 Store-owned Capability Bundle，不會覆蓋無關 Toolbox。
+- **Nodes** — `node_manage`、`node_probe`、`node_tool_search`、`node_tool_call` 連接其他 OpenChatX 電腦。
+- **Capability Health** — `capability_health` 顯示 Runtime、Tunnel、MCP、Toolbox、Provider 狀態。
+
+Projects、Jobs、Teams、Workflows、Nodes 與 Store ownership 等持久資料都放在 `state_dir`（預設 `~/.openchatx-mcp`）。
 
 ## 自訂 Tools
 
@@ -376,6 +397,9 @@ OpenChatX Dashboard 永遠可以從 `/ui` 使用。
 | 指令 | 用途 |
 | --- | --- |
 | `npm start` | Build 並啟動 / reload OpenChatX 與 tunnel-client |
+| `npm run desktop:install` | 安裝 macOS / Windows 的本機 OpenChatX Launcher |
+| `npm run desktop:uninstall` | 移除本機 OpenChatX Launcher |
+| `npm run update` | 在 working tree 乾淨時 Fast-forward 到 `origin/main`、重裝 dependencies 並 rebuild |
 | `npm run restart` | Rebuild 並 reload services |
 | `npm run restart -- --hard` | 從外部 Terminal 重建專用 PM2 daemon |
 | `npm run status` | 查看 service 狀態 |

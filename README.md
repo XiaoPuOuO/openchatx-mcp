@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <strong>Turn ChatGPT into a local agent runtime.</strong><br>
-  Operate your computer, use local tools, discover MCP servers, and delegate work to your own models through one MCP connection.
+  <strong>One MCP connection. Every capability on your machine.</strong><br>
+  OpenChatX is a capability runtime for ChatGPT: local execution, MCPs, custom tools, providers, agents, workflows, projects, and remote OpenChatX nodes behind one connection.
 </p>
 
 <p align="center">
@@ -32,14 +32,19 @@ ChatGPT is the planner. OpenChatX gives it hands.
 
 I use AI agents heavily for real development work, and I once burned through 100% of my Pro 20x Codex Weekly Usage in about half a day. I did not want my entire workflow tied to the usage limits of a single agent runtime, so I built OpenChatX: ChatGPT can work directly with my local machine, tools, MCP servers, and models from a normal conversation instead of requiring Codex as the execution backend.
 
-- **Local execution** — run shell commands, edit files, inspect images, and use an interactive terminal on macOS or native Windows.
-- **MCP aggregation** — connect local stdio and remote HTTP MCP servers behind one ChatGPT connection.
-- **Capability discovery** — ChatGPT knows Blender, Unreal, browser automation, and other capabilities exist without loading every tool schema into context.
-- **Toolboxes** — add your own TypeScript tools and reusable skills as folder-backed plugins.
-- **Provider-backed subagents** — delegate bounded work to local GPU models, self-hosted inference, or external APIs while ChatGPT stays the primary planner.
-- **Dashboard** — manage MCP servers, toolboxes, and subagents from a local UI.
+- **Universal MCP gateway** — connect local stdio and remote HTTP MCP servers behind one ChatGPT connection.
+- **Unified capabilities** — MCP servers, Toolboxes, model profiles, and Providers are exposed through one capability catalog instead of four disconnected concepts.
+- **Custom Toolboxes** — add TypeScript tools and reusable skills as hot-reloadable folder-backed plugins.
+- **Provider Hub + smart routing** — connect hosted APIs, Ollama, LM Studio, vLLM, or other OpenAI-compatible Providers and route work by tags, locality, context size, and cost tier.
+- **Durable Jobs** — keep long-running commands alive beyond one MCP request and inspect them later.
+- **Projects** — register existing project roots without moving files and give each root explicit read/write/shell permissions.
+- **Agent Teams** — run one task across multiple curated model profiles while ChatGPT remains the planner and integrator.
+- **Capability Composer** — save reusable cross-capability workflows that chain MCP/custom tools, subagents, teams, and durable jobs.
+- **Capability Store** — install reusable OpenChatX capability bundles from the local Store catalog.
+- **Multi-machine Nodes** — connect other OpenChatX machines and discover/call their tools from one primary ChatGPT connection.
+- **Platform Dashboard** — see projects, current work, capability health, Providers, Teams, Workflows, Nodes, and anything that needs attention.
 
-External MCP tools and custom toolbox tools stay lazy. `start_here` exposes a lightweight capability catalog; ChatGPT uses `tool_search` only when it needs the underlying tools.
+External MCP and custom Toolbox tools stay lazy. `start_here` exposes lightweight capability summaries; `capability_list` provides the unified catalog and `tool_search` loads underlying tool schemas only when needed.
 
 ## Requirements
 
@@ -307,6 +312,22 @@ Configure profiles from the Dashboard or in the gitignored `subagents.json`.
 
 - `subagent_list` — list curated profiles and their intended use.
 - `subagent_run` — delegate one task to one selected profile.
+- `subagent_route` / `subagent_route_run` — choose a profile automatically using tags, locality, context size, and cost tier.
+- `provider_presets` / `provider_install` / `provider_probe` — configure and verify Provider Hub entries.
+
+## Platform primitives
+
+OpenChatX adds platform-level primitives on top of ordinary tools:
+
+- **Durable Jobs** — `job_start`, `job_list`, `job_read`, `job_cancel`.
+- **Projects** — `project_manage` registers an existing absolute path and its read/write/shell scope; OpenChatX never moves the project.
+- **Agent Teams** — `agent_team_manage` combines curated model profiles; `agent_team_run` runs members in parallel and returns separate work products to ChatGPT.
+- **Capability Composer** — `workflow_manage` creates sequential workflows from lazy MCP/Toolbox tools, subagents, teams, and durable jobs. Step templates can use `{{input}}` and `{{steps.<id>}}`.
+- **Capability Store** — `store_list`, `store_install`, and `store_uninstall` manage Store-owned capability bundles without overwriting unrelated Toolboxes.
+- **Nodes** — `node_manage`, `node_probe`, `node_tool_search`, and `node_tool_call` connect other OpenChatX machines.
+- **Capability health** — `capability_health` reports runtime, tunnel, MCP, Toolbox, and Provider status.
+
+Persistent definitions live under `state_dir` (default `~/.openchatx-mcp`), including projects, jobs, teams, workflows, nodes, and Store ownership state.
 
 ## Custom tools
 
@@ -355,6 +376,9 @@ The OpenChatX Dashboard is always available at `/ui`.
 | Command | Purpose |
 | --- | --- |
 | `npm start` | Build and start/reload OpenChatX and tunnel-client |
+| `npm run desktop:install` | Install a local OpenChatX launcher for macOS or Windows |
+| `npm run desktop:uninstall` | Remove the local OpenChatX launcher |
+| `npm run update` | Fast-forward a clean checkout to `origin/main`, reinstall dependencies, and rebuild |
 | `npm run restart` | Rebuild and reload services |
 | `npm run restart -- --hard` | Rebuild and recreate the dedicated PM2 daemon from an external terminal |
 | `npm run status` | Show service status |

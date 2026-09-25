@@ -2,7 +2,7 @@
   "name": "openchatx-mcp",
   "version": "0.2.0",
   "private": false,
-  "description": "Turn ChatGPT into a local agent runtime with computer control, MCP aggregation, toolboxes, and subagents.",
+  "description": "A capability runtime for ChatGPT: MCPs, custom tools, providers, agents, workflows, projects, and multi-machine nodes behind one connection.",
   "homepage": "https://github.com/XiaoPuOuO/openchatx-mcp#readme",
   "repository": {
     "type": "git",
