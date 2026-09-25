@@ -51,6 +51,8 @@ For ordinary filename discovery or content search, use `glob` or `grep` instead 
 
 {{PROJECT_CONTEXT}}
 
+{{GOAL_CONTEXT}}
+
 {{CAPABILITY_CATALOG}}
 
 {{ALWAYS_RULES}}

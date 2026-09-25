@@ -2,6 +2,7 @@ import {
   Activity,
   Blocks,
   BrainCircuit,
+  ExternalLink,
   FolderKanban,
   Gauge,
   PackageOpen,
@@ -22,6 +23,7 @@ import { SubagentManager } from "./features/subagents/SubagentManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
+import { fetchUpdateCheck, type UpdateCheck } from "./lib/api"
 
 type View =
   | "dashboard"
@@ -48,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "status", labelKey: "nav.systemStatus", icon: Activity },
 ]
 
-const WORKSPACE_NAV = NAV_ITEMS.filter((item) => item.id === "dashboard" || item.id === "projects")
+const WORKSPACE_NAV = NAV_ITEMS.filter((item) => ["dashboard", "projects"].includes(item.id))
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
 )
@@ -59,10 +61,17 @@ export function App() {
   const { agents, connected, loading, error, removeAgent } = useAgents()
   const { t } = useI18n()
   const [now, setNow] = useState(Date.now())
+  const [update, setUpdate] = useState<UpdateCheck>()
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    void fetchUpdateCheck()
+      .then(setUpdate)
+      .catch(() => undefined)
   }, [])
 
   const activeCount = agents.filter((agent) => now - agent.lastSeenAt < 30_000).length
@@ -174,6 +183,29 @@ export function App() {
         </header>
 
         <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>
+          {update?.updateAvailable ? (
+            <div className="mx-5 mt-4 flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
+              <div className="min-w-0">
+                <div className="font-medium">{t("update.available")}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("update.versionMessage", {
+                    current: update.currentVersion,
+                    latest: update.latestVersion ?? "?",
+                  })}
+                </div>
+              </div>
+              {update.releaseUrl ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open(update.releaseUrl, "_blank", "noopener,noreferrer")}
+                >
+                  <ExternalLink className="size-4" />
+                  {t("update.viewRelease")}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           {page}
         </div>
       </section>

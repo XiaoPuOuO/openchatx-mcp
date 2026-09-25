@@ -2,6 +2,7 @@
   "name": "Toolbox Manager",
   "description": "Agent-facing management for plugins, TypeScript tools, and skills.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "toolbox-manager",
   "tools": {
     "toolbox_list": {

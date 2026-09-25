@@ -67,7 +67,7 @@ export class CapabilityRegistry {
     return (
       this.toolboxes
         ?.snapshots()
-        .filter((toolbox) => !toolbox.builtin)
+        .filter((toolbox) => !toolbox.builtin || toolbox.dynamic)
         .map((toolbox) => ({
           id: toolbox.id,
           name: toolbox.name,
@@ -75,8 +75,12 @@ export class CapabilityRegistry {
           kind: "toolbox" as const,
           invocation: "tool_search" as const,
           available: toolbox.enabled,
-          toolCount: toolbox.tools.filter((tool) => tool.enabled).length,
-          skillCount: toolbox.skills.filter((skill) => skill.enabled).length,
+          ...(toolbox.dynamic
+            ? {}
+            : {
+                toolCount: toolbox.tools.filter((tool) => tool.enabled).length,
+                skillCount: toolbox.skills.filter((skill) => skill.enabled).length,
+              }),
         })) ?? []
     )
   }

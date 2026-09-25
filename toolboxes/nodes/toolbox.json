@@ -2,6 +2,7 @@
   "name": "Nodes",
   "description": "Connect multiple OpenChatX machines and discover or call tools on remote nodes.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "nodes",
   "tools": {
     "node_list": { "enabled": true, "description": "List configured OpenChatX nodes." },

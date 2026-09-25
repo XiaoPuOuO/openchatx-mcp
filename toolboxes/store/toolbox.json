@@ -2,6 +2,7 @@
   "name": "Capability Store",
   "description": "Browse built-in capabilities and unreviewed GitHub community capabilities without an OpenChatX Store server.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "store",
   "tools": {
     "store_list": {

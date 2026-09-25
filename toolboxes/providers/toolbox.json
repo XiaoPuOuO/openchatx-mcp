@@ -2,6 +2,7 @@
   "name": "Provider Hub",
   "description": "Configure and probe hosted or local model providers.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "providers",
   "tools": {
     "provider_presets": { "enabled": true, "description": "List Provider Hub presets." },

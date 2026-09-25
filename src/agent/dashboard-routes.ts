@@ -21,6 +21,7 @@ import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { RuleCatalog } from "../tools/rules/rule-catalog.js"
 import { readAgentInstructionsTemplate } from "../tools/start-here/start-here.js"
+import { checkForOpenChatXUpdate } from "../update/version-check.js"
 import type { AgentObserver } from "./observer.js"
 
 export interface DashboardServices {
@@ -54,17 +55,11 @@ export function createDashboardRouter(
   registerAgentRoutes(router, agentObserver)
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
-  registerProjectRoutes(router, projectRegistry)
+  registerWorkspaceRoutes(router, projectRegistry)
+  registerUpdateRoutes(router)
   registerAgentInstructionsRoutes(router)
   registerRuleRoutes(router)
-
-  router.get("/api/platform", async (_req, res) => {
-    if (!platformOverview) {
-      res.status(503).json({ error: "Platform overview is unavailable." })
-      return
-    }
-    res.json(await platformOverview.snapshot())
-  })
+  registerPlatformRoute(router, platformOverview)
 
   router.get("/api/events", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream")
@@ -191,7 +186,10 @@ export function createDashboardRouter(
   router.patch("/api/toolboxes/:toolboxId", async (req, res) => {
     if (!toolboxRegistry) return unavailableToolboxes(res)
     try {
-      await toolboxRegistry.setToolboxEnabled(req.params.toolboxId, Boolean(req.body?.enabled))
+      if (typeof req.body?.enabled === "boolean")
+        await toolboxRegistry.setToolboxEnabled(req.params.toolboxId, req.body.enabled)
+      if (typeof req.body?.dynamic === "boolean")
+        await toolboxRegistry.setToolboxDynamic(req.params.toolboxId, req.body.dynamic)
       res.json({ toolboxes: toolboxRegistry.snapshots() })
     } catch (error) {
       toolboxError(res, error)
@@ -301,6 +299,35 @@ export function createDashboardRouter(
   const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
   router.use(expressStatic(dashboardDir, { index: "index.html" }))
   return router
+}
+
+function registerUpdateRoutes(router: ReturnType<typeof Router>): void {
+  router.get("/api/update", async (req, res) => {
+    try {
+      const force = req.query.force === "1"
+      res.json(await checkForOpenChatXUpdate(force))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      res.status(502).json({
+        currentVersion: MCP_CONFIG.server.version,
+        updateAvailable: false,
+        error: message,
+      })
+    }
+  })
+}
+
+function registerPlatformRoute(
+  router: ReturnType<typeof Router>,
+  platformOverview?: PlatformOverviewService
+): void {
+  router.get("/api/platform", async (_req, res) => {
+    if (!platformOverview) {
+      res.status(503).json({ error: "Platform overview is unavailable." })
+      return
+    }
+    res.json(await platformOverview.snapshot())
+  })
 }
 
 function registerAgentInstructionsRoutes(router: ReturnType<typeof Router>): void {
@@ -555,6 +582,12 @@ function registerProjectRoutes(
         id: String(req.body?.id ?? "").trim(),
         name: String(req.body?.name ?? "").trim(),
         path: String(req.body?.path ?? "").trim(),
+        additionalPaths: Array.isArray(req.body?.additionalPaths)
+          ? req.body.additionalPaths
+              .filter((value: unknown): value is string => typeof value === "string")
+              .map((value: string) => value.trim())
+              .filter(Boolean)
+          : [],
         description:
           typeof req.body?.description === "string" && req.body.description.trim()
             ? req.body.description.trim()
@@ -592,6 +625,12 @@ function registerProjectRoutes(
           typeof req.body?.path === "string" && req.body.path.trim()
             ? req.body.path.trim()
             : current.path,
+        additionalPaths: Array.isArray(req.body?.additionalPaths)
+          ? req.body.additionalPaths
+              .filter((value: unknown): value is string => typeof value === "string")
+              .map((value: string) => value.trim())
+              .filter(Boolean)
+          : current.additionalPaths,
         description,
         permissions: {
           read: req.body?.permissions?.read ?? current.permissions.read,
@@ -617,6 +656,13 @@ function registerProjectRoutes(
       toolboxError(res, error)
     }
   })
+}
+
+function registerWorkspaceRoutes(
+  router: ReturnType<typeof Router>,
+  projects?: ProjectRegistry
+): void {
+  registerProjectRoutes(router, projects)
 }
 
 function preserveRedactedSecrets(existing: SubagentConfig, incoming: unknown): unknown {

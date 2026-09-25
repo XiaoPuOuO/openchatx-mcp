@@ -1,9 +1,23 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
-
+import {
+  grantAgentProjectExternalAccessOnce,
+  setAgentProjectExternalAccessAll,
+} from "../../agent/context.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import type { ProjectRegistry } from "../../projects/project-registry.js"
 import type { ProjectScope } from "../../projects/project-scope.js"
+
+interface ProjectUpsertInput {
+  id: string
+  name: string
+  path: string
+  additional_paths?: string[]
+  description?: string
+  read?: boolean
+  write?: boolean
+  shell?: boolean
+}
 
 export function registerProjectTools(
   server: McpServer,
@@ -43,6 +57,7 @@ export function registerProjectTools(
           id: z.string().min(1),
           name: z.string().min(1),
           path: z.string().min(1),
+          additional_paths: z.array(z.string().min(1)).optional(),
           description: z.string().min(1).optional(),
           read: z.boolean().optional(),
           write: z.boolean().optional(),
@@ -65,21 +80,39 @@ export function registerProjectTools(
           await projects.remove(input.id)
           return { structuredContent: { removed: input.id }, content: [] }
         }
-        const project = await projects.upsert({
-          id: input.id,
-          name: input.name,
-          path: input.path,
-          description: input.description,
-          permissions: {
-            ...(input.read === undefined ? {} : { read: input.read }),
-            ...(input.write === undefined ? {} : { write: input.write }),
-            ...(input.shell === undefined ? {} : { shell: input.shell }),
-          },
-        })
+        const project = await upsertProject(projects, scope, input)
         return { structuredContent: { project }, content: [] }
       } catch (error) {
         throw toToolError(error, "PROJECT_MANAGE_FAILED")
       }
+    }
+  )
+
+  server.registerTool(
+    "project_access",
+    {
+      description:
+        "Grant or revoke access outside the active Project for this ChatGPT session. Call grant_once only after the user explicitly approves the specific requested path. Call grant_all_session only after the user explicitly says not to ask again or grants unrestricted out-of-project access for this session.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({ action: z.literal("grant_once"), path: z.string().min(1) }),
+        z.object({ action: z.literal("grant_all_session") }),
+        z.object({ action: z.literal("revoke_all_session") }),
+      ]),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (input) => {
+      if (input.action === "grant_once") {
+        grantAgentProjectExternalAccessOnce(input.path)
+        return { structuredContent: { granted_once: input.path }, content: [] }
+      }
+      const enabled = input.action === "grant_all_session"
+      setAgentProjectExternalAccessAll(enabled)
+      return { structuredContent: { external_access_all: enabled }, content: [] }
     }
   )
 
@@ -142,4 +175,37 @@ export function registerProjectTools(
       }
     }
   )
+}
+
+async function upsertProject(
+  projects: ProjectRegistry,
+  scope: ProjectScope | undefined,
+  input: ProjectUpsertInput
+) {
+  const active = await scope?.current()
+  if (active && active.id !== input.id) {
+    throw new Error(
+      `Project ${JSON.stringify(active.id)} is active. Clear it with project_use before registering or editing a different Project.`
+    )
+  }
+  if (active?.id === input.id && scope) {
+    const nextRoots = [input.path, ...(input.additional_paths ?? active.additionalPaths)]
+    for (const root of nextRoots) {
+      if (root !== active.path && !active.additionalPaths.includes(root)) {
+        await scope.resolvePath(root, "read")
+      }
+    }
+  }
+  return projects.upsert({
+    id: input.id,
+    name: input.name,
+    path: input.path,
+    additionalPaths: input.additional_paths,
+    description: input.description,
+    permissions: {
+      ...(input.read === undefined ? {} : { read: input.read }),
+      ...(input.write === undefined ? {} : { write: input.write }),
+      ...(input.shell === undefined ? {} : { shell: input.shell }),
+    },
+  })
 }

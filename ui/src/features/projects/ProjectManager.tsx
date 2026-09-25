@@ -1,4 +1,4 @@
-import { ArrowLeft, FolderKanban, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, FolderKanban, Pencil, Plus, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
@@ -19,10 +19,19 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState<string>()
+  const [editingId, setEditingId] = useState<string>()
+  const [editDraft, setEditDraft] = useState<{
+    name: string
+    path: string
+    additionalPaths: string
+    description: string
+    permissions: ProjectRecord["permissions"]
+  }>()
   const [draft, setDraft] = useState({
     id: "",
     name: "",
     path: "",
+    additionalPaths: "",
     description: "",
     permissions: { ...DEFAULT_PERMISSIONS },
   })
@@ -47,6 +56,10 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
         id: draft.id.trim(),
         name: draft.name.trim(),
         path: draft.path.trim(),
+        additionalPaths: draft.additionalPaths
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean),
         ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
         permissions: draft.permissions,
       })
@@ -54,6 +67,7 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
         id: "",
         name: "",
         path: "",
+        additionalPaths: "",
         description: "",
         permissions: { ...DEFAULT_PERMISSIONS },
       })
@@ -77,6 +91,41 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
           [permission]: !project.permissions[permission],
         },
       })
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const startEditing = (project: ProjectRecord) => {
+    setEditingId(project.id)
+    setEditDraft({
+      name: project.name,
+      path: project.path,
+      additionalPaths: project.additionalPaths.join("\n"),
+      description: project.description ?? "",
+      permissions: { ...project.permissions },
+    })
+  }
+
+  const saveEdit = async (project: ProjectRecord) => {
+    if (!editDraft) return
+    setBusy(project.id)
+    try {
+      await updateProject(project.id, {
+        name: editDraft.name.trim(),
+        path: editDraft.path.trim(),
+        additionalPaths: editDraft.additionalPaths
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        description: editDraft.description.trim() || undefined,
+        permissions: editDraft.permissions,
+      })
+      setEditingId(undefined)
+      setEditDraft(undefined)
       await load()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -140,11 +189,32 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
               />
               <div className="md:col-span-2">
                 <Field
-                  label={t("projects.folderPath")}
+                  label={t("projects.primaryFolderPath")}
                   value={draft.path}
                   placeholder="/Users/me/MyProject/openchatx-mcp"
                   onChange={(value) => setDraft((current) => ({ ...current, path: value }))}
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                    {t("projects.additionalFolderPaths")}
+                  </span>
+                  <textarea
+                    className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    value={draft.additionalPaths}
+                    placeholder={"/Users/me/CompanyData\n/Users/me/DesignAssets"}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        additionalPaths: event.target.value,
+                      }))
+                    }
+                  />
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {t("projects.additionalFolderPathsHint")}
+                  </span>
+                </label>
               </div>
               <div className="md:col-span-2">
                 <Field
@@ -200,37 +270,150 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
                     <div className="font-medium">{project.name}</div>
                     <div className="mt-1 text-xs text-muted-foreground">{project.id}</div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === project.id}
-                    onClick={() => void remove(project.id)}
-                  >
-                    <Trash2 className="size-4" />
-                    {t("projects.unregister")}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy === project.id}
+                      onClick={() =>
+                        editingId === project.id
+                          ? (setEditingId(undefined), setEditDraft(undefined))
+                          : startEditing(project)
+                      }
+                    >
+                      <Pencil className="size-4" />
+                      {editingId === project.id ? t("common.cancel") : t("common.edit")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy === project.id}
+                      onClick={() => void remove(project.id)}
+                    >
+                      <Trash2 className="size-4" />
+                      {t("projects.unregister")}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="break-all text-sm text-muted-foreground">{project.path}</div>
-                {project.description ? (
-                  <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>
-                ) : null}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(["read", "write", "shell"] as const).map((permission) => (
-                    <button
-                      key={permission}
-                      type="button"
-                      disabled={busy === project.id}
-                      onClick={() => void togglePermission(project, permission)}
-                    >
-                      <Badge>
-                        {t(`projects.permission.${permission}`)}:
-                        {project.permissions[permission] ? t("projects.on") : t("projects.off")}
-                      </Badge>
-                    </button>
-                  ))}
-                </div>
+                {editingId === project.id && editDraft ? (
+                  <div className="space-y-3">
+                    <Field
+                      label={t("projects.name")}
+                      value={editDraft.name}
+                      placeholder="OpenChatX"
+                      onChange={(value) =>
+                        setEditDraft((current) => (current ? { ...current, name: value } : current))
+                      }
+                    />
+                    <Field
+                      label={t("projects.primaryFolderPath")}
+                      value={editDraft.path}
+                      placeholder="/Users/me/MyProject/openchatx-mcp"
+                      onChange={(value) =>
+                        setEditDraft((current) => (current ? { ...current, path: value } : current))
+                      }
+                    />
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                        {t("projects.additionalFolderPaths")}
+                      </span>
+                      <textarea
+                        className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        value={editDraft.additionalPaths}
+                        placeholder={"/Users/me/CompanyData\n/Users/me/DesignAssets"}
+                        onChange={(event) =>
+                          setEditDraft((current) =>
+                            current ? { ...current, additionalPaths: event.target.value } : current
+                          )
+                        }
+                      />
+                    </label>
+                    <Field
+                      label={t("projects.description")}
+                      value={editDraft.description}
+                      placeholder={t("projects.optional")}
+                      onChange={(value) =>
+                        setEditDraft((current) =>
+                          current ? { ...current, description: value } : current
+                        )
+                      }
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {(["read", "write", "shell"] as const).map((permission) => (
+                        <Button
+                          key={permission}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setEditDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    permissions: {
+                                      ...current.permissions,
+                                      [permission]: !current.permissions[permission],
+                                    },
+                                  }
+                                : current
+                            )
+                          }
+                        >
+                          {t(`projects.permission.${permission}`)}:{" "}
+                          {editDraft.permissions[permission] ? t("projects.on") : t("projects.off")}
+                        </Button>
+                      ))}
+                      <Button
+                        size="sm"
+                        disabled={
+                          busy === project.id || !editDraft.name.trim() || !editDraft.path.trim()
+                        }
+                        onClick={() => void saveEdit(project)}
+                      >
+                        {t("common.save")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {t("projects.primaryRoot")}
+                    </div>
+                    <div className="break-all text-sm text-muted-foreground">{project.path}</div>
+                    {project.additionalPaths.length > 0 ? (
+                      <div className="mt-3 space-y-1">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          {t("projects.additionalRoots")}
+                        </div>
+                        {project.additionalPaths.map((path) => (
+                          <div key={path} className="break-all text-sm text-muted-foreground">
+                            {path}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {project.description ? (
+                      <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>
+                    ) : null}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {(["read", "write", "shell"] as const).map((permission) => (
+                        <button
+                          key={permission}
+                          type="button"
+                          disabled={busy === project.id}
+                          onClick={() => void togglePermission(project, permission)}
+                        >
+                          <Badge>
+                            {t(`projects.permission.${permission}`)}:
+                            {project.permissions[permission] ? t("projects.on") : t("projects.off")}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           ))}

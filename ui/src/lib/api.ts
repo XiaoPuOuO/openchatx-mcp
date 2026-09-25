@@ -6,6 +6,8 @@ import type {
   CapabilityStoreEntry,
   CapabilityStoreReview,
   CapabilityStoreSourceTree,
+  GoalRecord,
+  GoalStatus,
   LoadedRule,
   McpServerMap,
   PlatformOverview,
@@ -105,6 +107,25 @@ export async function fetchPlatformOverview(): Promise<PlatformOverview> {
   return (await response.json()) as PlatformOverview
 }
 
+export type UpdateCheck = {
+  currentVersion: string
+  latestVersion?: string
+  updateAvailable: boolean
+  releaseUrl?: string
+  checkedAt?: string
+  error?: string
+}
+
+export async function fetchUpdateCheck(force = false): Promise<UpdateCheck> {
+  if (MOCK_DASHBOARD) {
+    return { currentVersion: "0.2.0", updateAvailable: false }
+  }
+  const response = await fetch(`/ui/api/update${force ? "?force=1" : ""}`)
+  const body = (await response.json().catch(() => undefined)) as UpdateCheck | undefined
+  if (!response.ok && !body) throw new Error(`Failed to check for updates (${response.status})`)
+  return body ?? { currentVersion: "unknown", updateAvailable: false }
+}
+
 export async function fetchProjects(): Promise<ProjectRecord[]> {
   if (MOCK_DASHBOARD) return []
   const response = await fetch("/ui/api/projects")
@@ -117,12 +138,18 @@ export async function createProject(input: {
   id: string
   name: string
   path: string
+  additionalPaths?: string[]
   description?: string
   permissions: ProjectRecord["permissions"]
 }): Promise<ProjectRecord> {
   if (MOCK_DASHBOARD) {
     const now = new Date().toISOString()
-    return { ...input, createdAt: now, updatedAt: now }
+    return {
+      ...input,
+      additionalPaths: input.additionalPaths ?? [],
+      createdAt: now,
+      updatedAt: now,
+    }
   }
   const response = await fetch("/ui/api/projects", {
     method: "POST",
@@ -139,7 +166,9 @@ export async function createProject(input: {
 
 export async function updateProject(
   id: string,
-  input: Partial<Pick<ProjectRecord, "name" | "path" | "description" | "permissions">>
+  input: Partial<
+    Pick<ProjectRecord, "name" | "path" | "additionalPaths" | "description" | "permissions">
+  >
 ): Promise<ProjectRecord> {
   if (MOCK_DASHBOARD) {
     const now = new Date().toISOString()
@@ -147,6 +176,7 @@ export async function updateProject(
       id,
       name: input.name ?? id,
       path: input.path ?? "/mock/project",
+      additionalPaths: input.additionalPaths ?? [],
       description: input.description,
       permissions: input.permissions ?? { read: true, write: true, shell: true },
       createdAt: now,
@@ -174,6 +204,86 @@ export async function deleteProject(id: string): Promise<void> {
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
     throw new Error(body?.error ?? `Failed to delete project (${response.status})`)
+  }
+}
+
+export async function fetchGoals(
+  filter: { projectId?: string; status?: GoalStatus } = {}
+): Promise<GoalRecord[]> {
+  if (MOCK_DASHBOARD) return []
+  const params = new URLSearchParams()
+  if (filter.projectId) params.set("project_id", filter.projectId)
+  if (filter.status) params.set("status", filter.status)
+  const suffix = params.size > 0 ? `?${params.toString()}` : ""
+  const response = await fetch(`/ui/api/goals${suffix}`)
+  if (!response.ok) throw new Error(`Failed to load goals (${response.status})`)
+  const body = (await response.json()) as { goals?: GoalRecord[] }
+  return body.goals ?? []
+}
+
+export async function createGoal(input: {
+  id: string
+  title: string
+  description?: string
+  projectId?: string
+}): Promise<GoalRecord> {
+  if (MOCK_DASHBOARD) {
+    const now = new Date().toISOString()
+    return { ...input, status: "pending", createdAt: now, updatedAt: now }
+  }
+  const response = await fetch("/ui/api/goals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { goal?: GoalRecord; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to create goal (${response.status})`)
+  if (!body?.goal) throw new Error("Goal response was missing the created goal.")
+  return body.goal
+}
+
+export async function updateGoal(
+  id: string,
+  input: Partial<Pick<GoalRecord, "title" | "description" | "projectId" | "status">> & {
+    description?: string | null
+    projectId?: string | null
+  }
+): Promise<GoalRecord> {
+  if (MOCK_DASHBOARD) {
+    const now = new Date().toISOString()
+    return {
+      id,
+      title: input.title ?? id,
+      description: input.description ?? undefined,
+      projectId: input.projectId ?? undefined,
+      status: input.status ?? "pending",
+      createdAt: now,
+      updatedAt: now,
+    }
+  }
+  const response = await fetch(`/ui/api/goals/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { goal?: GoalRecord; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to update goal (${response.status})`)
+  if (!body?.goal) throw new Error("Goal response was missing the updated goal.")
+  return body.goal
+}
+
+export async function deleteGoal(id: string): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(`/ui/api/goals/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to delete goal (${response.status})`)
   }
 }
 
@@ -543,7 +653,15 @@ export function createToolbox(id: string): Promise<ToolboxSnapshot[]> {
     },
     (current) => [
       ...current,
-      { id, name: id, enabled: true, path: `/mock/toolboxes/${id}`, tools: [], skills: [] },
+      {
+        id,
+        name: id,
+        enabled: true,
+        dynamic: true,
+        path: `/mock/toolboxes/${id}`,
+        tools: [],
+        skills: [],
+      },
     ]
   )
 }
@@ -557,6 +675,18 @@ export function setToolboxEnabled(id: string, enabled: boolean): Promise<Toolbox
       body: JSON.stringify({ enabled }),
     },
     (current) => current.map((box) => (box.id === id ? { ...box, enabled } : box))
+  )
+}
+
+export function setToolboxDynamic(id: string, dynamic: boolean): Promise<ToolboxSnapshot[]> {
+  return toolboxRequest(
+    `/ui/api/toolboxes/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dynamic }),
+    },
+    (current) => current.map((box) => (box.id === id ? { ...box, dynamic } : box))
   )
 }
 

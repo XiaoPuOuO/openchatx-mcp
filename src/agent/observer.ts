@@ -30,6 +30,7 @@ export interface AgentSnapshot {
   id: string
   taskSlug?: string
   projectId?: string
+  goalId?: string
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCallSnapshot
@@ -88,6 +89,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     if (existing) {
       existing.taskSlug = identity.taskSlug
       existing.projectId = identity.projectId
+      existing.goalId = identity.goalId
       existing.lastSeenAt = now()
       return existing
     }
@@ -97,6 +99,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
       id: identity.agent,
       taskSlug: identity.taskSlug,
       projectId: identity.projectId,
+      goalId: identity.goalId,
       sessionId: identity.sessionId,
       firstSeenAt: timestamp,
       lastSeenAt: timestamp,
@@ -164,6 +167,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     const timestamp = now()
     agent.taskSlug = identity.taskSlug
     agent.projectId = identity.projectId
+    agent.goalId = identity.goalId
     const call: AgentCallSnapshot = {
       ...activeCall,
       ...(status === "completed"
@@ -257,6 +261,7 @@ function toSnapshot(agent: AgentState): AgentSnapshot {
     id: agent.id,
     taskSlug: agent.taskSlug,
     projectId: agent.projectId,
+    goalId: agent.goalId,
     firstSeenAt: agent.firstSeenAt,
     lastSeenAt: agent.lastSeenAt,
     current: agent.current ? { ...agent.current } : undefined,

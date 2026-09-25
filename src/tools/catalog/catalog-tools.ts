@@ -4,10 +4,11 @@ import { z } from "zod"
 import type { ExternalMcpRegistry } from "../../external-mcp/registry.js"
 import { ToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
+import type { LazyBuiltinTools } from "./lazy-builtin-tools.js"
 
 interface CatalogEntry {
   id: string
-  source: "toolbox" | "mcp"
+  source: "builtin" | "toolbox" | "mcp"
   server?: string
   name: string
   description?: string
@@ -19,11 +20,12 @@ const WHITESPACE_RE = /\s+/u
 export function registerCatalogTools(
   server: McpServer,
   toolboxes: ToolboxRegistry,
-  externalMcp: ExternalMcpRegistry
+  externalMcp: ExternalMcpRegistry,
+  builtins?: LazyBuiltinTools
 ): void {
   const searchInput = z.object({
     query: z.string().min(1),
-    source: z.enum(["all", "toolbox", "mcp"]).default("all"),
+    source: z.enum(["all", "builtin", "toolbox", "mcp"]).default("all"),
     server: z
       .string()
       .min(1)
@@ -41,7 +43,7 @@ export function registerCatalogTools(
 
   const searchCallback = async (input: z.infer<typeof searchInput>) => {
     const results = searchCatalog(
-      catalog(toolboxes, externalMcp),
+      catalog(toolboxes, externalMcp, builtins),
       input.query,
       input.source,
       input.server
@@ -68,6 +70,10 @@ export function registerCatalogTools(
 
   const callCallback = async (input: z.infer<typeof callInput>, context: ServerContext) => {
     const argumentsValue = parseToolArguments(input.arguments_json)
+    if (input.tool.startsWith("builtin:")) {
+      if (!builtins) throw new ToolError("UNKNOWN_TOOL", "Lazy built-ins are unavailable.")
+      return builtins.call(input.tool, argumentsValue, context)
+    }
     if (input.tool.startsWith("toolbox:")) {
       return toolboxes.callCustomTool(input.tool, argumentsValue, context)
     }
@@ -78,7 +84,8 @@ export function registerCatalogTools(
   Reflect.apply(server.registerTool, server, [
     "tool_search",
     {
-      description: "Find custom toolbox or external MCP tools not loaded in the main tool list.",
+      description:
+        "Find lazy built-in, custom toolbox, or external MCP tools not loaded in the main tool list.",
       inputSchema: searchInput,
       annotations: {
         readOnlyHint: true,
@@ -120,8 +127,13 @@ function parseToolArguments(value: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(parsed))
 }
 
-function catalog(toolboxes: ToolboxRegistry, externalMcp: ExternalMcpRegistry): CatalogEntry[] {
+function catalog(
+  toolboxes: ToolboxRegistry,
+  externalMcp: ExternalMcpRegistry,
+  builtins?: LazyBuiltinTools
+): CatalogEntry[] {
   return [
+    ...(builtins?.catalog() ?? []),
     ...toolboxes.customToolCatalog().map((tool) => ({
       id: tool.id,
       source: "toolbox" as const,
@@ -143,7 +155,7 @@ function catalog(toolboxes: ToolboxRegistry, externalMcp: ExternalMcpRegistry): 
 function searchCatalog(
   entries: CatalogEntry[],
   query: string,
-  source: "all" | "toolbox" | "mcp",
+  source: "all" | "builtin" | "toolbox" | "mcp",
   server?: string
 ): CatalogEntry[] {
   const terms = query.toLowerCase().split(WHITESPACE_RE).filter(Boolean)

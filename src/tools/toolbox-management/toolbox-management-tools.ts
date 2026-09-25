@@ -5,7 +5,7 @@ import { toToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
 
 const kindSchema = z.enum(["toolbox", "tool", "skill"])
-const actionSchema = z.enum(["create", "delete", "enable", "disable", "reload"])
+const actionSchema = z.enum(["create", "delete", "enable", "disable", "dynamic", "eager", "reload"])
 
 export function registerToolboxManagementTools(server: McpServer, registry: ToolboxRegistry): void {
   server.registerTool(
@@ -31,7 +31,7 @@ export function registerToolboxManagementTools(server: McpServer, registry: Tool
     "toolbox_manage",
     {
       description:
-        "Create, delete, enable, disable, or reload toolboxes/plugins, TypeScript tools, and toolbox-owned skills.",
+        "Create, delete, enable, disable, switch dynamic/eager loading, or reload toolboxes/plugins, TypeScript tools, and toolbox-owned skills.",
       inputSchema: z.object({
         action: actionSchema,
         kind: kindSchema.default("toolbox"),
@@ -95,6 +95,10 @@ async function applyManagementAction(
     }
     if (input.action === "delete") {
       await registry.deleteToolbox(toolboxId)
+      return undefined
+    }
+    if (input.action === "dynamic" || input.action === "eager") {
+      await registry.setToolboxDynamic(toolboxId, input.action === "dynamic")
       return undefined
     }
     await registry.setToolboxEnabled(toolboxId, input.action === "enable")

@@ -19,7 +19,7 @@ test("loads a custom TypeScript toolbox tool and exposes it through MCP", async 
   await mkdir(join(box, "skills"), { recursive: true })
   await writeFile(
     join(box, "toolbox.json"),
-    JSON.stringify({ name: "Demo", enabled: true, tools: {}, skills: {} })
+    JSON.stringify({ name: "Demo", enabled: true, dynamic: false, tools: {}, skills: {} })
   )
   await writeFile(
     join(box, "tools", "hello.ts"),
@@ -82,12 +82,16 @@ test("toolbox settings persist tool toggles and required toolboxes stay enabled"
   await registry.reload()
   await registry.setToolEnabled("system", "optional", false)
   assert.equal(registry.isToolEnabled("system", "optional"), false)
+  assert.equal(registry.isToolboxDynamic("system"), false)
+  await assert.rejects(registry.setToolboxDynamic("system", true), /must remain eager/u)
   await assert.rejects(registry.setToolEnabled("system", "start_here", false), /required/u)
   await assert.rejects(registry.setToolboxEnabled("system", false), /required/u)
 
   const manifest = JSON.parse(await readFile(join(box, "toolbox.json"), "utf8")) as {
+    dynamic?: boolean
     tools: { optional: { enabled: boolean } }
   }
+  assert.equal(manifest.dynamic, undefined)
   assert.equal(manifest.tools.optional.enabled, false)
 })
 

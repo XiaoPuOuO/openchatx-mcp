@@ -2,6 +2,7 @@
   "name": "Agent Teams",
   "description": "Coordinate multiple configured subagent profiles as a team while ChatGPT remains the integrator.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "teams",
   "tools": {
     "agent_team_list": { "enabled": true, "description": "List configured agent teams." },

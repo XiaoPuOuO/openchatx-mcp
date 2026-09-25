@@ -1,6 +1,6 @@
 {
   "name": "openchatx-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "description": "A capability runtime for ChatGPT: MCPs, custom tools, providers, agents, workflows, projects, and multi-machine nodes behind one connection.",
   "homepage": "https://github.com/XiaoPuOuO/openchatx-mcp#readme",

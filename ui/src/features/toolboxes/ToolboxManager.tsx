@@ -32,6 +32,7 @@ import {
   reloadToolboxes,
   saveAgentInstructions,
   saveRule,
+  setToolboxDynamic,
   setToolboxEnabled,
   setToolboxSkillEnabled,
   setToolEnabled,
@@ -298,6 +299,17 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs">
+                    {t("toolboxes.dynamic")}
+                    <input
+                      type="checkbox"
+                      checked={selected.dynamic}
+                      disabled={selected.builtin === "system"}
+                      onChange={(event) =>
+                        void run(() => setToolboxDynamic(selected.id, event.target.checked))
+                      }
+                    />
+                  </label>
                   <label className="flex items-center gap-2 text-xs">
                     {t("common.enabled")}
                     <input

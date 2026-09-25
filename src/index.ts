@@ -7,6 +7,8 @@ import { CapabilityRegistry } from "./capabilities/catalog.js"
 import { CapabilityHealthService } from "./capabilities/health.js"
 import { MCP_CONFIG } from "./config.js"
 import { createExternalMcpRegistry } from "./external-mcp/registry.js"
+import { GoalRegistry } from "./goals/goal-registry.js"
+import { GoalScope } from "./goals/goal-scope.js"
 import { JobManager } from "./jobs/job-manager.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
 import { NodeRegistry } from "./nodes/node-registry.js"
@@ -50,6 +52,8 @@ const bashProcessManager = new BashProcessManager()
 const jobManager = new JobManager()
 const projectRegistry = new ProjectRegistry()
 const projectScope = new ProjectScope(projectRegistry)
+const goalRegistry = new GoalRegistry()
+const goalScope = new GoalScope(goalRegistry, projectScope)
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 const communityStore = new GithubCommunityStore()
@@ -104,6 +108,8 @@ try {
       smartRouter,
       projectRegistry,
       projectScope,
+      goalRegistry,
+      goalScope,
       agentTeams,
       workflows,
       nodes,

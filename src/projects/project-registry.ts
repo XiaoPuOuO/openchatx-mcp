@@ -15,6 +15,7 @@ const projectSchema = z.object({
   id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u),
   name: z.string().min(1),
   path: z.string().min(1),
+  additionalPaths: z.array(z.string().min(1)).default([]),
   permissions: permissionSchema.default({ read: true, write: true, shell: true }),
   description: z.string().optional(),
   createdAt: z.string(),
@@ -35,7 +36,7 @@ export class ProjectRegistry {
   async list(): Promise<RegisteredProject[]> {
     await this.ensureLoaded()
     return [...this.projects.values()]
-      .map((project) => ({ ...project, permissions: { ...project.permissions } }))
+      .map(cloneProject)
       .sort((left, right) => left.name.localeCompare(right.name))
   }
 
@@ -43,31 +44,43 @@ export class ProjectRegistry {
     await this.ensureLoaded()
     const project = this.projects.get(id)
     if (!project) throw new Error(`Unknown project ${JSON.stringify(id)}.`)
-    return { ...project, permissions: { ...project.permissions } }
+    return cloneProject(project)
   }
 
   async upsert(input: {
     id: string
     name: string
     path: string
+    additionalPaths?: string[]
     description?: string
     permissions?: Partial<RegisteredProject["permissions"]>
   }): Promise<RegisteredProject> {
     await this.ensureLoaded()
     if (!isAbsolute(input.path)) throw new Error("Project paths must be absolute.")
     const root = resolve(input.path)
-    const duplicate = [...this.projects.values()].find(
-      (candidate) => candidate.id !== input.id && candidate.path === root
-    )
+    const previous = this.projects.get(input.id)
+    const additionalPaths = (input.additionalPaths ?? previous?.additionalPaths ?? [])
+      .map((path) => {
+        if (!isAbsolute(path)) throw new Error("Project paths must be absolute.")
+        return resolve(path)
+      })
+      .filter((path, index, all) => path !== root && all.indexOf(path) === index)
+    const roots = [root, ...additionalPaths]
+    const duplicate = [...this.projects.values()].find((candidate) => {
+      if (candidate.id === input.id) return false
+      const candidateRoots = projectRoots(candidate)
+      return roots.some((candidateRoot) => candidateRoots.includes(candidateRoot))
+    })
     if (duplicate) {
       throw new Error(
-        `Project path ${root} is already registered as ${JSON.stringify(duplicate.id)}.`
+        `One of the Project paths is already registered as ${JSON.stringify(duplicate.id)}.`
       )
     }
-    const info = await stat(root)
-    if (!info.isDirectory()) throw new Error(`Project path is not a directory: ${root}`)
+    for (const projectRoot of roots) {
+      const info = await stat(projectRoot)
+      if (!info.isDirectory()) throw new Error(`Project path is not a directory: ${projectRoot}`)
+    }
     const now = new Date().toISOString()
-    const previous = this.projects.get(input.id)
     const permissions = {
       read: input.permissions?.read ?? previous?.permissions.read ?? true,
       write: input.permissions?.write ?? previous?.permissions.write ?? true,
@@ -77,6 +90,7 @@ export class ProjectRegistry {
       id: input.id,
       name: input.name,
       path: root,
+      additionalPaths,
       permissions,
       ...(input.description ? { description: input.description } : {}),
       createdAt: previous?.createdAt ?? now,
@@ -84,7 +98,7 @@ export class ProjectRegistry {
     })
     this.projects.set(project.id, project)
     await this.persist()
-    return { ...project, permissions: { ...project.permissions } }
+    return cloneProject(project)
   }
 
   async remove(id: string): Promise<void> {
@@ -106,8 +120,12 @@ export class ProjectRegistry {
     await this.ensureLoaded()
     const absolute = resolve(path)
     return [...this.projects.values()]
-      .filter((project) => containsPath(project.path, absolute))
-      .sort((left, right) => right.path.length - left.path.length)[0]
+      .filter((project) => projectRoots(project).some((root) => containsPath(root, absolute)))
+      .sort((left, right) => {
+        const leftMatch = longestMatchingRoot(left, absolute)
+        const rightMatch = longestMatchingRoot(right, absolute)
+        return rightMatch.length - leftMatch.length
+      })[0]
   }
 
   private async ensureLoaded(): Promise<void> {
@@ -131,6 +149,26 @@ export class ProjectRegistry {
       `${JSON.stringify({ projects: [...this.projects.values()] }, null, 2)}\n`,
       { encoding: "utf8", mode: 0o600 }
     )
+  }
+}
+
+export function projectRoots(project: RegisteredProject): string[] {
+  return [project.path, ...project.additionalPaths]
+}
+
+function longestMatchingRoot(project: RegisteredProject, path: string): string {
+  return (
+    projectRoots(project)
+      .filter((root) => containsPath(root, path))
+      .sort((left, right) => right.length - left.length)[0] ?? ""
+  )
+}
+
+function cloneProject(project: RegisteredProject): RegisteredProject {
+  return {
+    ...project,
+    additionalPaths: [...project.additionalPaths],
+    permissions: { ...project.permissions },
   }
 }
 

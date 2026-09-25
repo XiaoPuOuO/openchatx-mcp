@@ -2,6 +2,7 @@
   "name": "MCP Manager",
   "description": "Agent-facing management for external MCP server connections.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "mcp-manager",
   "tools": {
     "mcp_server_list": {

@@ -10,6 +10,8 @@ import { setAgentTaskSlug } from "../../agent/context.js"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import type { CapabilityDescriptor } from "../../capabilities/catalog.js"
 import { MCP_CONFIG } from "../../config.js"
+import type { RegisteredGoal } from "../../goals/goal-registry.js"
+import type { GoalScope } from "../../goals/goal-scope.js"
 import type { RegisteredProject } from "../../projects/project-registry.js"
 import type { ProjectScope } from "../../projects/project-scope.js"
 import type { LoadedRule } from "../rules/rule-catalog.js"
@@ -32,6 +34,7 @@ export interface StartHereTemplateContext {
   taskId: string
   modeInstructions: string
   projectContext: string
+  goalContext: string
   capabilityCatalog: string
   alwaysRules: string
 }
@@ -42,6 +45,7 @@ export function registerStartHereTool(
   server: McpServer,
   capabilityCatalog?: () => CapabilityCatalog,
   projectScope?: ProjectScope,
+  goalScope?: GoalScope,
   alwaysAppliedRules?: () => Promise<LoadedRule[]>
 ): void {
   const modes = discoverPromptModes()
@@ -80,7 +84,10 @@ export function registerStartHereTool(
         : await projectScope?.current()
       const registeredProjects = !activeProject && projectScope ? await projectScope.list() : []
       const capabilities = capabilityCatalog ? renderCapabilityCatalog(capabilityCatalog()) : ""
-      const projectContext = renderProjectContext(activeProject, registeredProjects)
+      const projectContext = projectScope
+        ? renderProjectContext(activeProject, registeredProjects)
+        : ""
+      const goalContext = goalScope ? renderGoalContext(await goalScope.open(), activeProject) : ""
       const ruleContext = alwaysAppliedRules
         ? renderAlwaysAppliedRules(await alwaysAppliedRules())
         : ""
@@ -90,6 +97,7 @@ export function registerStartHereTool(
         taskId: task_id,
         modeInstructions,
         projectContext,
+        goalContext,
         capabilityCatalog: capabilities,
         alwaysRules: ruleContext,
       })
@@ -101,6 +109,7 @@ export function registerStartHereTool(
               ? [
                   `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
                   projectContext,
+                  goalContext,
                   capabilities,
                   ruleContext,
                 ]
@@ -112,6 +121,23 @@ export function registerStartHereTool(
       }
     }
   )
+}
+
+function renderGoalContext(
+  goals: RegisteredGoal[],
+  activeProject: RegisteredProject | undefined
+): string {
+  if (goals.length === 0) return ""
+  return [
+    "# Tasks for this workspace session",
+    activeProject
+      ? `These unfinished tasks belong to Project ${JSON.stringify(activeProject.id)}. Work on them when relevant to the user's request and keep their status accurate with goal_manage.`
+      : "These unfinished tasks are unscoped and apply only while no Project is active. Work on them when relevant to the user's request and keep their status accurate with goal_manage.",
+    ...goals.map((goal) => {
+      const detail = goal.description ? ` — ${goal.description}` : ""
+      return `- [${goal.status}] ${goal.id}: ${goal.title}${detail}`
+    }),
+  ].join("\n")
 }
 
 function renderAlwaysAppliedRules(rules: LoadedRule[]): string {
@@ -131,17 +157,29 @@ function renderProjectContext(
     return [
       "# Active Project",
       `- ${activeProject.id} (${activeProject.name}) — ${activeProject.path}`,
+      ...(activeProject.additionalPaths.length > 0
+        ? activeProject.additionalPaths.map((path) => `- additional root: ${path}`)
+        : []),
       `- permissions: read=${activeProject.permissions.read}, write=${activeProject.permissions.write}, shell=${activeProject.permissions.shell}`,
       "Relative file/search/shell paths resolve from this Project until project_use changes or clears it.",
     ].join("\n")
   }
-  if (registeredProjects.length === 0) return ""
+  if (registeredProjects.length === 0) {
+    return [
+      "# Projects",
+      "No Projects are registered yet.",
+      "For each new user task, decide whether it belongs to a durable Project. If it does, locate the relevant project folders, choose exactly one primary root, include any additional roots that belong to the same workspace, create the Project with project_manage, then activate it with project_use before project-focused work. Leave machine/global tasks unscoped.",
+    ].join("\n")
+  }
   return [
     "# Registered Projects",
     ...registeredProjects
       .slice(0, 8)
-      .map((project) => `- ${project.id} (${project.name}) — ${project.path}`),
-    "No Project is active. Use project_use before project-focused work so relative paths and permission scope are explicit.",
+      .map(
+        (project) =>
+          `- ${project.id} (${project.name}) — primary: ${project.path}${project.additionalPaths.length > 0 ? `; additional: ${project.additionalPaths.join(", ")}` : ""}`
+      ),
+    "No Project is active. For each new user task, decide whether it is project-scoped. Reuse and activate a matching Project before project-focused work. If no registered Project matches, locate the relevant folders, choose one primary root plus any additional roots, create it with project_manage, then activate it with project_use. Leave machine/global tasks unscoped.",
   ].join("\n")
 }
 
@@ -179,6 +217,7 @@ export async function buildStartHereInstructions(
     taskId: context.taskId ?? "",
     modeInstructions: selected.prompt.trim(),
     projectContext: context.projectContext ?? "",
+    goalContext: context.goalContext ?? "",
     capabilityCatalog: context.capabilityCatalog ?? "",
     alwaysRules: context.alwaysRules ?? "",
   })
@@ -197,17 +236,22 @@ export function renderStartHereTemplate(
   template: string,
   context: StartHereTemplateContext
 ): string {
+  const hadGoalPlaceholder = template.includes("{{GOAL_CONTEXT}}")
   const replacements: Record<string, string> = {
     "{{MODE}}": context.mode,
     "{{TASK_ID}}": context.taskId,
     "{{MODE_INSTRUCTIONS}}": context.modeInstructions,
     "{{PROJECT_CONTEXT}}": context.projectContext,
+    "{{GOAL_CONTEXT}}": context.goalContext,
     "{{CAPABILITY_CATALOG}}": context.capabilityCatalog,
     "{{ALWAYS_RULES}}": context.alwaysRules,
   }
   let output = template
   for (const [placeholder, value] of Object.entries(replacements)) {
     output = output.replaceAll(placeholder, value)
+  }
+  if (!hadGoalPlaceholder && context.goalContext) {
+    output = `${output.trim()}\n\n${context.goalContext}`
   }
   return output.trim()
 }

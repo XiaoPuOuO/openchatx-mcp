@@ -54,9 +54,12 @@ export function AgentCard({
             <p className="mt-1 truncate text-[12px] text-muted-foreground">
               {agent.taskSlug ?? t("agent.noTask")}
             </p>
-            {agent.projectId ? (
-              <div className="mt-1.5">
-                <Badge>{t("agent.project", { id: agent.projectId })}</Badge>
+            {agent.projectId || agent.goalId ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {agent.projectId ? (
+                  <Badge>{t("agent.project", { id: agent.projectId })}</Badge>
+                ) : null}
+                {agent.goalId ? <Badge>{t("agent.goal", { id: agent.goalId })}</Badge> : null}
               </div>
             ) : null}
           </div>

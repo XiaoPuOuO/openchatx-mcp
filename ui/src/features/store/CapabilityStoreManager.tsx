@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   Bot,
-  CheckCircle2,
   Code2,
   Copy,
   Download,
@@ -9,11 +8,11 @@ import {
   PackageOpen,
   Search,
   ShieldAlert,
-  Sparkles,
   Trash2,
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
+import { NotificationToastStack, useNotificationToasts } from "../../components/notification-toast"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
@@ -48,7 +47,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   const [tree, setTree] = useState<CapabilityStoreSourceTree>()
   const [sourceFile, setSourceFile] = useState<{ path: string; content: string }>()
   const [review, setReview] = useState<CapabilityStoreReview>()
-  const [toast, setToast] = useState<string>()
+  const { toasts, pushToast, dismissToast } = useNotificationToasts()
 
   const load = useCallback(async () => {
     try {
@@ -65,12 +64,6 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     void load()
   }, [load])
-
-  useEffect(() => {
-    if (!toast) return
-    const timer = window.setTimeout(() => setToast(undefined), 2200)
-    return () => window.clearTimeout(timer)
-  }, [toast])
 
   const mutate = async (id: string, action: () => Promise<void>) => {
     setBusy(id)
@@ -138,7 +131,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
       `Review OpenChatX capability ${tree.capability.id}${revision} before I install it. ` +
       "Use store_review, store_source_tree, and store_source_read. Inspect the cited files and explain concrete risks; do not treat static analysis as a safety guarantee."
     await navigator.clipboard.writeText(prompt)
-    setToast(t("store.reviewPromptCopied"))
+    pushToast(t("store.reviewPromptCopied"))
   }
 
   const copyRecommendedInstallPrompt = async (mcp: RecommendedMcp) => {
@@ -146,7 +139,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
       `Install and configure the MCP server from https://github.com/${mcp.repository} in OpenChatX. ` +
       "First inspect the repository README and installation instructions, then add the correct MCP server configuration and verify it works. Do not use unrelated global setup."
     await navigator.clipboard.writeText(prompt)
-    setToast(t("store.installPromptCopied", { name: mcp.name }))
+    pushToast(t("store.installPromptCopied", { name: mcp.name }))
   }
 
   const resolvedEntry = tree?.capability
@@ -176,18 +169,11 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      {toast ? (
-        <div className="fixed right-5 top-16 z-50 flex items-center gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
-          <div className="relative flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-            <CheckCircle2 className="size-4" />
-            <Sparkles className="absolute -right-1 -top-1 size-3 text-amber-500" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold">{t("store.achievement")}</div>
-            <div className="text-xs text-muted-foreground">{toast}</div>
-          </div>
-        </div>
-      ) : null}
+      <NotificationToastStack
+        toasts={toasts}
+        title={t("store.systemNotification")}
+        onDismiss={dismissToast}
+      />
 
       <div className="mx-auto max-w-6xl px-5 py-6">
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">

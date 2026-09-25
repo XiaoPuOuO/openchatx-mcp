@@ -4,7 +4,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import { getAgentIdentity, runWithAgent } from "../src/agent/context.js"
+import {
+  getAgentIdentity,
+  grantAgentProjectExternalAccessOnce,
+  runWithAgent,
+  setAgentProjectExternalAccessAll,
+} from "../src/agent/context.js"
 import { ProjectRegistry } from "../src/projects/project-registry.js"
 import { ProjectScope } from "../src/projects/project-scope.js"
 
@@ -12,14 +17,16 @@ test("active Project controls relative roots and enforces read/write/shell permi
   const root = await mkdtemp(join(tmpdir(), "openchatx-project-scope-"))
   t.after(() => rm(root, { recursive: true, force: true }))
   const app = join(root, "app")
+  const appAssets = join(root, "app-assets")
   const other = join(root, "other")
-  await Promise.all([mkdir(app), mkdir(other)])
+  await Promise.all([mkdir(app), mkdir(appAssets), mkdir(other)])
 
   const registry = new ProjectRegistry(join(root, "projects.json"))
   await registry.upsert({
     id: "app",
     name: "App",
     path: app,
+    additionalPaths: [appAssets],
     permissions: { read: true, write: false, shell: false },
   })
   await registry.upsert({
@@ -40,14 +47,41 @@ test("active Project controls relative roots and enforces read/write/shell permi
       /does not grant "write"/u
     )
     await assert.rejects(() => scope.resolvePath(undefined, "shell"), /does not grant "shell"/u)
-    await assert.rejects(() => scope.resolvePath("../escape.txt", "read"), /outside project/u)
+    await assert.rejects(
+      () => scope.resolvePath("../escape.txt", "read"),
+      /outside active Project/u
+    )
+    assert.equal(
+      (await scope.resolvePath(join(appAssets, "design.fig"), "read")).path,
+      join(appAssets, "design.fig")
+    )
 
     const otherPath = join(other, "file.txt")
-    const resolvedOther = await scope.resolvePath(otherPath, "write")
-    assert.equal(resolvedOther.project?.id, "other")
-    assert.equal(resolvedOther.path, otherPath)
+    await assert.rejects(
+      () => scope.resolvePath(otherPath, "read"),
+      /PROJECT_EXTERNAL_ACCESS_REQUIRED|outside active Project/u
+    )
+    await assert.rejects(
+      () => scope.resolvePath(otherPath, "read", "other"),
+      /not the active Project/u
+    )
 
-    await assert.rejects(() => scope.resolvePath(otherPath, "read", "app"), /outside project/u)
+    grantAgentProjectExternalAccessOnce(other)
+    assert.equal((await scope.resolvePath(otherPath, "read")).path, otherPath)
+    await assert.rejects(() => scope.resolvePath(otherPath, "read"), /outside active Project/u)
+
+    setAgentProjectExternalAccessAll(true)
+    assert.equal((await scope.resolvePath(otherPath, "read")).path, otherPath)
+    assert.equal(
+      (await scope.resolvePath(join(root, "anywhere.txt"), "read")).path,
+      join(root, "anywhere.txt")
+    )
+
+    setAgentProjectExternalAccessAll(false)
+    await assert.rejects(
+      () => scope.resolvePath(otherPath, "read", "app"),
+      /outside active Project/u
+    )
 
     await scope.use(undefined)
     assert.equal(getAgentIdentity()?.projectId, undefined)

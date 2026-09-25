@@ -5,10 +5,12 @@ import test from "node:test"
 
 import { Client } from "@modelcontextprotocol/client"
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
+import { z } from "zod"
 
 import type { ExternalMcpRegistry } from "../src/external-mcp/registry.js"
 import { ToolboxRegistry } from "../src/toolbox/registry.js"
 import { registerCatalogTools } from "../src/tools/catalog/catalog-tools.js"
+import { LazyBuiltinTools } from "../src/tools/catalog/lazy-builtin-tools.js"
 import { tempDir } from "./helpers/temp.js"
 
 test("tool_search discovers lazy custom and external tools and tool_call executes them", async (t) => {
@@ -77,7 +79,16 @@ export default {
   }
 
   const server = new McpServer({ name: "catalog-test", version: "1.0.0" })
-  registerCatalogTools(server, toolboxes, external)
+  const builtins = new LazyBuiltinTools()
+  builtins.server().registerTool(
+    "project_list",
+    {
+      description: "List registered Projects",
+      inputSchema: z.object({}),
+    },
+    async () => ({ content: [{ type: "text" as const, text: "builtin-projects" }] })
+  )
+  registerCatalogTools(server, toolboxes, external, builtins)
   const client = new Client({ name: "catalog-client", version: "1.0.0" })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
@@ -89,6 +100,13 @@ export default {
   })
   const searchText = search.content.find((item) => item.type === "text")?.text ?? ""
   assert.match(searchText, /toolbox:demo:hello/u)
+
+  const builtinSearch = await client.callTool({
+    name: "tool_search",
+    arguments: { query: "project list", source: "builtin" },
+  })
+  const builtinSearchText = builtinSearch.content.find((item) => item.type === "text")?.text ?? ""
+  assert.match(builtinSearchText, /builtin:project_list/u)
 
   const blenderSearch = await client.callTool({
     name: "tool_search",
@@ -103,6 +121,12 @@ export default {
     arguments: { tool: "toolbox:demo:hello", arguments_json: JSON.stringify({ name: "X" }) },
   })
   assert.equal(custom.content.find((item) => item.type === "text")?.text, "Hello X")
+
+  const builtin = await client.callTool({
+    name: "tool_call",
+    arguments: { tool: "builtin:project_list", arguments_json: "{}" },
+  })
+  assert.equal(builtin.content.find((item) => item.type === "text")?.text, "builtin-projects")
 
   const externalCall = await client.callTool({
     name: "tool_call",

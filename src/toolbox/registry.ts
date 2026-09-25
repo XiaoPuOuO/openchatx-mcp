@@ -42,6 +42,7 @@ const manifestSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   enabled: z.boolean().default(true),
+  dynamic: z.boolean().optional(),
   builtin: z.string().optional(),
   tools: z.record(z.string(), itemSettingsSchema).default({}),
   skills: z.record(z.string(), itemSettingsSchema).default({}),
@@ -63,6 +64,7 @@ export interface ToolboxSnapshot {
   name: string
   description?: string
   enabled: boolean
+  dynamic: boolean
   builtin?: string
   path: string
   tools: ToolboxItemSnapshot[]
@@ -137,6 +139,11 @@ export class ToolboxRegistry {
     return this.toolboxes.get(id)?.manifest.enabled ?? false
   }
 
+  isToolboxDynamic(id: string): boolean {
+    const box = this.toolboxes.get(id)
+    return box ? toolboxIsDynamic(box) : false
+  }
+
   isToolEnabled(id: string, name: string): boolean {
     const box = this.toolboxes.get(id)
     if (!box?.manifest.enabled) return false
@@ -146,7 +153,7 @@ export class ToolboxRegistry {
 
   registerCustomTools(server: McpServer): void {
     for (const box of this.toolboxes.values()) {
-      if (!box.manifest.enabled || box.manifest.builtin) continue
+      if (!box.manifest.enabled || box.manifest.builtin || toolboxIsDynamic(box)) continue
       for (const [name, tool] of box.customTools) {
         if (box.loadErrors.has(name)) continue
         if (!this.isToolEnabled(box.id, name)) continue
@@ -159,7 +166,7 @@ export class ToolboxRegistry {
   customToolCatalog(): CustomToolCatalogEntry[] {
     const result: CustomToolCatalogEntry[] = []
     for (const box of this.toolboxes.values()) {
-      if (!box.manifest.enabled || box.manifest.builtin) continue
+      if (!box.manifest.enabled || box.manifest.builtin || !toolboxIsDynamic(box)) continue
       for (const [name, tool] of box.customTools) {
         if (box.loadErrors.has(name) || !this.isToolEnabled(box.id, name)) continue
         result.push({
@@ -248,6 +255,16 @@ export class ToolboxRegistry {
       throw new Error(`${box.manifest.name} contains required tools and cannot be disabled.`)
     }
     box.manifest.enabled = enabled
+    await this.writeManifest(box)
+    await this.reload()
+  }
+
+  async setToolboxDynamic(id: string, dynamic: boolean): Promise<void> {
+    const box = this.requireBox(id)
+    if (dynamic && box.manifest.builtin === "system") {
+      throw new Error("System toolbox must remain eager because it owns start_here.")
+    }
+    box.manifest.dynamic = dynamic
     await this.writeManifest(box)
     await this.reload()
   }
@@ -387,6 +404,7 @@ export class ToolboxRegistry {
       name: box.manifest.name,
       ...(box.manifest.description ? { description: box.manifest.description } : {}),
       enabled: box.manifest.enabled,
+      dynamic: toolboxIsDynamic(box),
       ...(box.manifest.builtin ? { builtin: box.manifest.builtin } : {}),
       path: box.path,
       tools: [...toolNames].sort().map((name) => ({
@@ -422,6 +440,10 @@ export class ToolboxRegistry {
   private async writeManifest(box: LoadedToolbox): Promise<void> {
     await writeFile(box.manifestPath, `${JSON.stringify(box.manifest, null, 2)}\n`, "utf8")
   }
+}
+
+function toolboxIsDynamic(box: LoadedToolbox): boolean {
+  return box.manifest.dynamic ?? box.manifest.builtin === undefined
 }
 
 async function loadTsTool(sourcePath: string): Promise<Tool> {

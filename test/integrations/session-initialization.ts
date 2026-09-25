@@ -21,6 +21,7 @@ test("renders editable AGENTS.md placeholders into start_here output", () => {
       "task={{TASK_ID}}",
       "{{MODE_INSTRUCTIONS}}",
       "{{PROJECT_CONTEXT}}",
+      "{{GOAL_CONTEXT}}",
       "{{CAPABILITY_CATALOG}}",
       "{{ALWAYS_RULES}}",
     ].join("\n"),
@@ -29,6 +30,7 @@ test("renders editable AGENTS.md placeholders into start_here output", () => {
       taskId: "editable-template",
       modeInstructions: "MODE BODY",
       projectContext: "PROJECT BODY",
+      goalContext: "GOAL BODY",
       capabilityCatalog: "CAPABILITY BODY",
       alwaysRules: "RULE BODY",
     }
@@ -40,10 +42,26 @@ test("renders editable AGENTS.md placeholders into start_here output", () => {
       "task=editable-template",
       "MODE BODY",
       "PROJECT BODY",
+      "GOAL BODY",
       "CAPABILITY BODY",
       "RULE BODY",
     ].join("\n")
   )
+})
+
+test("appends Goal context for older editable templates without the new placeholder", () => {
+  const rendered = renderStartHereTemplate("{{MODE_INSTRUCTIONS}}", {
+    mode: "coding",
+    taskId: "legacy-template",
+    modeInstructions: "MODE BODY",
+    projectContext: "",
+    goalContext: "# Tasks for this workspace session\n- [pending] ship: Ship release",
+    capabilityCatalog: "",
+    alwaysRules: "",
+  })
+  assert.match(rendered, /MODE BODY/u)
+  assert.match(rendered, /Tasks for this workspace session/u)
+  assert.match(rendered, /ship: Ship release/u)
 })
 
 test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async (t) => {

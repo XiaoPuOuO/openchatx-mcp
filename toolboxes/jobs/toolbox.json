@@ -2,6 +2,7 @@
   "name": "Durable Jobs",
   "description": "Run and inspect background work that survives individual ChatGPT requests.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "jobs",
   "tools": {
     "job_start": { "enabled": true, "description": "Start durable background work." },

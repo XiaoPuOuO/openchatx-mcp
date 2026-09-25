@@ -25,6 +25,7 @@ export interface Agent {
   id: string
   taskSlug?: string
   projectId?: string
+  goalId?: string
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCall
@@ -139,6 +140,7 @@ export interface ProjectRecord {
   id: string
   name: string
   path: string
+  additionalPaths: string[]
   description?: string
   permissions: {
     read: boolean
@@ -147,6 +149,19 @@ export interface ProjectRecord {
   }
   createdAt: string
   updatedAt: string
+}
+
+export type GoalStatus = "pending" | "in_progress" | "blocked" | "completed" | "cancelled"
+
+export interface GoalRecord {
+  id: string
+  title: string
+  description?: string
+  projectId?: string
+  status: GoalStatus
+  createdAt: string
+  updatedAt: string
+  completedAt?: string
 }
 
 export interface PlatformOverview {
@@ -224,6 +239,7 @@ export interface ToolboxSnapshot {
   name: string
   description?: string
   enabled: boolean
+  dynamic: boolean
   builtin?: string
   path: string
   tools: ToolboxItem[]

@@ -4,6 +4,8 @@ import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { GoalRegistry } from "../goals/goal-registry.js"
+import type { GoalScope } from "../goals/goal-scope.js"
 import type { JobManager } from "../jobs/job-manager.js"
 import type { NodeRegistry } from "../nodes/node-registry.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
@@ -19,11 +21,13 @@ import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-pa
 import { registerCapabilityTools } from "../tools/capabilities/capability-tools.js"
 import { registerCapabilityHealthTool } from "../tools/capabilities/health-tool.js"
 import { registerCatalogTools } from "../tools/catalog/catalog-tools.js"
+import { LazyBuiltinTools } from "../tools/catalog/lazy-builtin-tools.js"
 import {
   registerFileEditTool,
   registerFileReadTool,
   registerFileWriteTool,
 } from "../tools/file/file-tools.js"
+import { registerGoalTools } from "../tools/goals/goal-tools.js"
 import { registerImageTools } from "../tools/image/image-tools.js"
 import { registerJobTools } from "../tools/jobs/job-tools.js"
 import { registerMcpServerManagementTools } from "../tools/mcp-server-management/mcp-server-management-tools.js"
@@ -61,6 +65,8 @@ export interface CreateMcpServerOptions {
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
   jobManager?: JobManager
+  goalRegistry?: GoalRegistry
+  goalScope?: GoalScope
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
@@ -83,6 +89,8 @@ export interface McpCapabilityServices {
   webPageOpener?: WebPageOpener
   subagentRuntime?: SubagentRuntime
   jobManager?: JobManager
+  goalRegistry?: GoalRegistry
+  goalScope?: GoalScope
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
@@ -145,13 +153,15 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
     auditRequest: options.auditRequest,
   })
 
+  let lazyBuiltins: LazyBuiltinTools | undefined
   if (options.toolboxRegistry) {
-    registerToolboxRuntime(server, options, options.toolboxRegistry)
+    lazyBuiltins = new LazyBuiltinTools()
+    registerToolboxRuntime(server, options, options.toolboxRegistry, lazyBuiltins)
   } else {
     registerDirectRuntime(server, options, profile)
   }
   if (options.toolboxRegistry && options.externalMcp) {
-    registerCatalogTools(server, options.toolboxRegistry, options.externalMcp)
+    registerCatalogTools(server, options.toolboxRegistry, options.externalMcp, lazyBuiltins)
   } else {
     options.externalMcp?.registerTools(server)
   }
@@ -162,88 +172,113 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
 function registerToolboxRuntime(
   server: McpServer,
   options: CreateMcpServerOptions,
-  registry: ToolboxRegistry
+  registry: ToolboxRegistry,
+  lazyBuiltins: LazyBuiltinTools
 ): void {
   const capabilityRegistry = options.capabilityRegistry
   const ruleCatalog = new RuleCatalog(MCP_CONFIG.rules.root)
-  registerBuiltinToolbox(server, registry, "system", () => {
+  const lazyServer = lazyBuiltins.server()
+  registerConfiguredBuiltin(server, lazyServer, registry, "system", (target) => {
     registerStartHereTool(
-      server,
+      target,
       capabilityRegistry ? () => capabilityRegistry.list() : undefined,
       options.projectScope,
+      options.goalScope,
       () => ruleCatalog.alwaysApplied()
     )
-    if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
-    if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
+    if (capabilityRegistry) registerCapabilityTools(target, capabilityRegistry)
+    if (options.capabilityHealth) registerCapabilityHealthTool(target, options.capabilityHealth)
   })
-  registerBuiltinToolbox(server, registry, "shell", () => {
-    registerBashTool(server, options.bashProcessManager, options.projectScope)
-    if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
+  registerConfiguredBuiltin(server, lazyServer, registry, "shell", (target) => {
+    registerBashTool(target, options.bashProcessManager, options.projectScope)
+    if (options.bashProcessManager) registerBashProcessTool(target, options.bashProcessManager)
     if (options.interactiveShellManager)
-      registerTerminalTool(server, options.interactiveShellManager, options.projectScope)
+      registerTerminalTool(target, options.interactiveShellManager, options.projectScope)
   })
-  registerBuiltinToolbox(server, registry, "files", () => {
-    if (isApplyPatchSupported()) registerApplyPatchTool(server, options.projectScope)
-    registerFileReadTool(server, options.projectScope)
-    registerFileWriteTool(server, options.projectScope)
-    registerFileEditTool(server, options.projectScope)
+  registerConfiguredBuiltin(server, lazyServer, registry, "files", (target) => {
+    if (isApplyPatchSupported()) registerApplyPatchTool(target, options.projectScope)
+    registerFileReadTool(target, options.projectScope)
+    registerFileWriteTool(target, options.projectScope)
+    registerFileEditTool(target, options.projectScope)
   })
-  registerBuiltinToolbox(server, registry, "web", () =>
-    registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
+  registerConfiguredBuiltin(server, lazyServer, registry, "web", (target) =>
+    registerWebTool(target, requireCapabilityService(options.webPageOpener, "web"))
   )
-  registerBuiltinToolbox(server, registry, "skills", () => registerSkillTools(server, registry))
-  registerBuiltinToolbox(server, registry, "rules", () => registerRuleTools(server))
-  registerBuiltinToolbox(server, registry, "media", () =>
-    registerImageTools(server, options.projectScope)
+  registerConfiguredBuiltin(server, lazyServer, registry, "skills", (target) =>
+    registerSkillTools(target, registry)
   )
-  registerBuiltinToolbox(server, registry, "search", () =>
-    registerSearchTools(server, options.projectScope)
+  registerConfiguredBuiltin(server, lazyServer, registry, "rules", (target) =>
+    registerRuleTools(target)
   )
+  registerConfiguredBuiltin(server, lazyServer, registry, "media", (target) =>
+    registerImageTools(target, options.projectScope)
+  )
+  registerConfiguredBuiltin(server, lazyServer, registry, "search", (target) =>
+    registerSearchTools(target, options.projectScope)
+  )
+  registerPlatformTools(server, lazyServer, options, registry)
+
+  const subagentRuntime = options.subagentRuntime
+  if (subagentRuntime)
+    registerConfiguredBuiltin(server, lazyServer, registry, "subagents", (target) => {
+      registerSubagentTools(target, subagentRuntime)
+      if (options.smartRouter) registerSmartRoutingTools(target, options.smartRouter)
+    })
+  registry.registerCustomTools(server)
+}
+
+function registerPlatformTools(
+  server: McpServer,
+  lazyServer: McpServer,
+  options: CreateMcpServerOptions,
+  registry: ToolboxRegistry
+): void {
   const jobManager = options.jobManager
   if (jobManager)
-    registerBuiltinToolbox(server, registry, "jobs", () =>
-      registerJobTools(server, jobManager, options.projectScope)
+    registerConfiguredBuiltin(server, lazyServer, registry, "jobs", (target) =>
+      registerJobTools(target, jobManager, options.projectScope)
     )
   const projectRegistry = options.projectRegistry
   if (projectRegistry)
-    registerBuiltinToolbox(server, registry, "projects", () =>
-      registerProjectTools(server, projectRegistry, options.projectScope)
+    registerConfiguredBuiltin(server, lazyServer, registry, "projects", (target) =>
+      registerProjectTools(target, projectRegistry, options.projectScope)
     )
-  registerBuiltinToolbox(server, registry, "toolbox-manager", () =>
-    registerToolboxManagementTools(server, registry)
+  const goalRegistry = options.goalRegistry
+  if (goalRegistry)
+    registerConfiguredBuiltin(server, lazyServer, registry, "goals", (target) =>
+      registerGoalTools(target, goalRegistry, options.goalScope)
+    )
+  registerConfiguredBuiltin(server, lazyServer, registry, "toolbox-manager", (target) =>
+    registerToolboxManagementTools(target, registry)
   )
-  registerBuiltinToolbox(server, registry, "mcp-manager", () =>
-    registerMcpServerManagementTools(server, MCP_CONFIG.externalMcp.configFile, options.externalMcp)
+  registerConfiguredBuiltin(server, lazyServer, registry, "mcp-manager", (target) =>
+    registerMcpServerManagementTools(target, MCP_CONFIG.externalMcp.configFile, options.externalMcp)
   )
   const capabilityStore = options.capabilityStore
   if (capabilityStore)
-    registerBuiltinToolbox(server, registry, "store", () =>
-      registerStoreTools(server, capabilityStore)
+    registerConfiguredBuiltin(server, lazyServer, registry, "store", (target) =>
+      registerStoreTools(target, capabilityStore)
     )
-  const subagentRuntime = options.subagentRuntime
-  if (subagentRuntime)
-    registerBuiltinToolbox(server, registry, "subagents", () => {
-      registerSubagentTools(server, subagentRuntime)
-      if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
-    })
   const providerHub = options.providerHub
   if (providerHub)
-    registerBuiltinToolbox(server, registry, "providers", () =>
-      registerProviderTools(server, providerHub)
+    registerConfiguredBuiltin(server, lazyServer, registry, "providers", (target) =>
+      registerProviderTools(target, providerHub)
     )
   const agentTeams = options.agentTeams
   if (agentTeams)
-    registerBuiltinToolbox(server, registry, "teams", () =>
-      registerAgentTeamTools(server, agentTeams)
+    registerConfiguredBuiltin(server, lazyServer, registry, "teams", (target) =>
+      registerAgentTeamTools(target, agentTeams)
     )
   const workflows = options.workflows
   if (workflows)
-    registerBuiltinToolbox(server, registry, "workflows", () =>
-      registerWorkflowTools(server, workflows)
+    registerConfiguredBuiltin(server, lazyServer, registry, "workflows", (target) =>
+      registerWorkflowTools(target, workflows)
     )
   const nodes = options.nodes
   if (nodes)
-    registerBuiltinToolbox(server, registry, "nodes", () => registerNodeTools(server, nodes))
+    registerConfiguredBuiltin(server, lazyServer, registry, "nodes", (target) =>
+      registerNodeTools(target, nodes)
+    )
 }
 
 function registerDirectRuntime(
@@ -257,6 +292,7 @@ function registerDirectRuntime(
     server,
     capabilityRegistry ? () => capabilityRegistry.list() : undefined,
     options.projectScope,
+    options.goalScope,
     () => ruleCatalog.alwaysApplied()
   )
   if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
@@ -284,12 +320,24 @@ function registerDirectPlatformTools(server: McpServer, options: CreateMcpServer
   if (options.jobManager) registerJobTools(server, options.jobManager, options.projectScope)
   if (options.projectRegistry)
     registerProjectTools(server, options.projectRegistry, options.projectScope)
+  if (options.goalRegistry) registerGoalTools(server, options.goalRegistry, options.goalScope)
   if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
   if (options.agentTeams) registerAgentTeamTools(server, options.agentTeams)
   if (options.workflows) registerWorkflowTools(server, options.workflows)
   if (options.nodes) registerNodeTools(server, options.nodes)
+}
+
+function registerConfiguredBuiltin(
+  server: McpServer,
+  lazyServer: McpServer,
+  registry: ToolboxRegistry,
+  toolboxId: string,
+  register: (target: McpServer) => void
+): void {
+  const target = registry.isToolboxDynamic(toolboxId) ? lazyServer : server
+  registerBuiltinToolbox(target, registry, toolboxId, () => register(target))
 }
 
 function registerBuiltinToolbox(

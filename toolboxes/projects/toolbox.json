@@ -2,10 +2,15 @@
   "name": "Projects",
   "description": "Register project roots and enforce project-scoped read, write, and shell permissions.",
   "enabled": true,
+  "dynamic": true,
   "builtin": "projects",
   "tools": {
     "project_list": { "enabled": true, "description": "List registered projects." },
     "project_manage": { "enabled": true, "description": "Register or update project permissions." },
+    "project_access": {
+      "enabled": true,
+      "description": "Grant session-scoped access outside the active Project after user approval."
+    },
     "project_use": {
       "enabled": true,
       "description": "Set or clear the active Project for this ChatGPT session."

@@ -164,6 +164,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "System",
     description: "Required platform initialization tools.",
     enabled: true,
+    dynamic: false,
     builtin: "system",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/system",
     tools: [
@@ -181,6 +182,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Shell",
     description: "Non-interactive commands and interactive terminal sessions.",
     enabled: true,
+    dynamic: false,
     builtin: "shell",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/shell",
     tools: ["bash", "terminal"].map((name) => ({ name, enabled: true, required: false })),
@@ -191,6 +193,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Files",
     description: "Local file reading, writing, and patch editing.",
     enabled: true,
+    dynamic: false,
     builtin: "files",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/files",
     tools: ["apply_patch", "file_read", "file_write", "file_edit"].map((name) => ({
@@ -205,6 +208,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Search",
     description: "Fast project file and content search without shell command construction.",
     enabled: true,
+    dynamic: false,
     builtin: "search",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/search",
     tools: ["glob", "grep"].map((name) => ({ name, enabled: true, required: false })),
@@ -215,6 +219,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Web",
     description: "HTTP and document fetching.",
     enabled: true,
+    dynamic: false,
     builtin: "web",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/web",
     tools: [{ name: "fetch_url", enabled: true, required: false }],
@@ -225,6 +230,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Media",
     description: "Local media inspection tools.",
     enabled: true,
+    dynamic: false,
     builtin: "media",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/media",
     tools: [{ name: "image_view", enabled: true, required: false }],
@@ -235,6 +241,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Skills",
     description: "Reusable instruction bundles from the workspace and toolboxes.",
     enabled: true,
+    dynamic: false,
     builtin: "skills",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/skills",
     tools: ["skill_search", "skill_load", "skill_manage"].map((name) => ({
@@ -249,6 +256,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Rules",
     description: "Persistent .mdc rules with always, glob, intelligent, and manual activation.",
     enabled: true,
+    dynamic: false,
     builtin: "rules",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/rules",
     tools: ["rule_resolve", "rule_load", "rule_manage", "rule_import", "rule_export"].map(
@@ -265,6 +273,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Toolbox Manager",
     description: "Agent-facing management for plugins, TypeScript tools, and skills.",
     enabled: true,
+    dynamic: true,
     builtin: "toolbox-manager",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/toolbox-manager",
     tools: ["toolbox_list", "toolbox_manage"].map((name) => ({
@@ -287,6 +296,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "MCP Manager",
     description: "Agent-facing management for external MCP server connections.",
     enabled: true,
+    dynamic: true,
     builtin: "mcp-manager",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/mcp-manager",
     tools: ["mcp_server_list", "mcp_server_manage"].map((name) => ({
@@ -301,6 +311,7 @@ let toolboxes: ToolboxSnapshot[] = [
     name: "Subagents",
     description: "Delegate work to curated provider-backed model profiles.",
     enabled: true,
+    dynamic: false,
     builtin: "subagents",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/subagents",
     tools: ["subagent_list", "subagent_run"].map((name) => ({
