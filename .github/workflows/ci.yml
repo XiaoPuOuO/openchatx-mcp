@@ -28,6 +28,7 @@ jobs:
           cache: npm
       - run: npm ci --force
       - run: npm --prefix ui ci
+      - run: npm run setup -- --config-only
       - run: npm run lint
       - run: npm run typecheck
       - run: npm --prefix ui run lint

@@ -60,6 +60,7 @@ jobs:
       - run: brew install ripgrep
       - run: npm ci
       - run: npm --prefix ui ci
+      - run: npm run setup -- --config-only
       - name: Import Developer ID certificate
         if: env.APPLE_CERTIFICATE_P12_BASE64 != ''
         shell: bash
@@ -127,6 +128,7 @@ jobs:
         run: choco install innosetup --yes --no-progress
       - run: npm ci
       - run: npm --prefix ui ci
+      - run: npm run setup -- --config-only
       - name: Import Windows code-signing certificate
         if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
         shell: powershell
