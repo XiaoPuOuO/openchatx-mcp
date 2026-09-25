@@ -1,4 +1,5 @@
 ---
+name: plugin-authoring
 description: Create or revise openchatx-mcp Toolbox plugins and TypeScript tools from a user's natural-language request.
 ---
 

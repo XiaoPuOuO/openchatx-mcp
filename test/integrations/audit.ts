@@ -33,14 +33,14 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   })
   await connected.client.callTool({ name: "bash", arguments: { command: "printf audit" } })
   await connected.client.callTool({
-    name: "skill_list",
-    arguments: {},
+    name: "skill_search",
+    arguments: { query: "create skill" },
   })
 
   const log = await readFile(auditPath, "utf8")
   assert.match(log, /--- # bash /u)
   assert.match(log, /command: \|-/u)
-  assert.match(log, /--- # skill_list /u)
+  assert.match(log, /--- # skill_search /u)
   assert.match(log, /session: "agent-1"/u)
   assert.doesNotMatch(log, /child-session/u)
 })

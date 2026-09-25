@@ -427,90 +427,21 @@ extension DesktopError: LocalizedError {
 }
 
 private extension NSToolbarItem.Identifier {
-    static let runtimeStatus = NSToolbarItem.Identifier("openchatx.runtime-status")
-    static let startRuntime = NSToolbarItem.Identifier("openchatx.start-runtime")
-    static let stopRuntime = NSToolbarItem.Identifier("openchatx.stop-runtime")
-    static let restartRuntime = NSToolbarItem.Identifier("openchatx.restart-runtime")
-    static let connectTunnel = NSToolbarItem.Identifier("openchatx.connect-tunnel")
-    static let openLogs = NSToolbarItem.Identifier("openchatx.open-logs")
+    static let runtimeControl = NSToolbarItem.Identifier("openchatx.runtime-control")
+    static let moreActions = NSToolbarItem.Identifier("openchatx.more-actions")
 }
 
-final class RuntimeStatusView: NSView {
-    private let runtimeDot = NSImageView()
-    private let runtimeLabel = NSTextField(labelWithString: "Starting…")
-    private let tunnelDot = NSImageView()
-    private let tunnelLabel = NSTextField(labelWithString: "Checking…")
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        translatesAutoresizingMaskIntoConstraints = false
-
-        runtimeDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
-        tunnelDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
-        runtimeDot.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 7, weight: .semibold)
-        tunnelDot.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 7, weight: .semibold)
-
-        runtimeLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        tunnelLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        runtimeLabel.textColor = .secondaryLabelColor
-        tunnelLabel.textColor = .secondaryLabelColor
-
-        let runtime = makeStatusStack(dot: runtimeDot, label: runtimeLabel)
-        let tunnel = makeStatusStack(dot: tunnelDot, label: tunnelLabel)
-        let stack = NSStackView(views: [runtime, tunnel])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            widthAnchor.constraint(greaterThanOrEqualToConstant: 205),
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func update(runtimeHealthy: Bool, tunnelHealthy: Bool, tunnelProfile: Bool) {
-        runtimeDot.contentTintColor = runtimeHealthy ? .systemGreen : .systemOrange
-        runtimeLabel.stringValue = runtimeHealthy ? "Runtime" : "Runtime offline"
-
-        tunnelDot.contentTintColor = tunnelHealthy
-            ? .systemGreen
-            : (tunnelProfile ? .systemOrange : .systemGray)
-        tunnelLabel.stringValue = tunnelHealthy
-            ? "Tunnel"
-            : (tunnelProfile ? "Tunnel offline" : "Tunnel setup")
-    }
-
-    private func makeStatusStack(dot: NSImageView, label: NSTextField) -> NSStackView {
-        let stack = NSStackView(views: [dot, label])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 5
-        return stack
-    }
-}
-
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSToolbarDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate {
     private let supervisor = RuntimeSupervisor()
     private var window: NSWindow!
     private var webView: WKWebView!
-    private let runtimeStatusView = RuntimeStatusView()
-    private var startToolbarItem: NSToolbarItem?
-    private var stopToolbarItem: NSToolbarItem?
-    private var restartToolbarItem: NSToolbarItem?
-    private var connectToolbarItem: NSToolbarItem?
+    private var runtimeToolbarItem: NSToolbarItem?
+    private var moreToolbarItem: NSMenuToolbarItem?
     private var timer: Timer?
     private var lastSnapshot: RuntimeSupervisor.Snapshot?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        buildMainMenu()
         buildWindow()
         supervisor.onSnapshot = { [weak self] snapshot in
             self?.render(snapshot)
@@ -532,6 +463,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    private func buildMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu(title: "OpenChatX")
+        appMenuItem.submenu = appMenu
+        appMenu.addItem(
+            withTitle: "Quit OpenChatX",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenuItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(
+            withTitle: "Paste and Match Style",
+            action: #selector(NSTextView.pasteAsPlainText(_:)),
+            keyEquivalent: "V"
+        )
+        editMenu.addItem(withTitle: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
+        editMenu.addItem(.separator())
+        editMenu.addItem(
+            withTitle: "Select All",
+            action: #selector(NSText.selectAll(_:)),
+            keyEquivalent: "a"
+        )
+
+        NSApp.mainMenu = mainMenu
     }
 
     private func buildWindow() {
@@ -560,6 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         webView = WKWebView()
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(webView)
 
@@ -577,25 +548,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
-            .runtimeStatus,
             .flexibleSpace,
-            .startRuntime,
-            .stopRuntime,
-            .restartRuntime,
-            .connectTunnel,
-            .openLogs,
+            .runtimeControl,
+            .moreActions,
         ]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
-            .runtimeStatus,
             .flexibleSpace,
-            .startRuntime,
-            .stopRuntime,
-            .restartRuntime,
-            .connectTunnel,
-            .openLogs,
+            .runtimeControl,
+            .moreActions,
         ]
     }
 
@@ -605,55 +568,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         switch itemIdentifier {
-        case .runtimeStatus:
-            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-            item.view = runtimeStatusView
-            item.label = "Status"
-            item.paletteLabel = "Status"
-            return item
-        case .startRuntime:
+        case .runtimeControl:
             let item = toolbarButton(
                 identifier: itemIdentifier,
-                label: "Start",
+                label: "Start Runtime",
                 symbol: "play.fill",
-                action: #selector(startRuntime)
+                action: #selector(toggleRuntime)
             )
-            startToolbarItem = item
+            runtimeToolbarItem = item
             return item
-        case .stopRuntime:
-            let item = toolbarButton(
-                identifier: itemIdentifier,
-                label: "Stop",
-                symbol: "stop.fill",
-                action: #selector(stopRuntime)
-            )
-            stopToolbarItem = item
+        case .moreActions:
+            let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = "More"
+            item.paletteLabel = "More"
+            item.toolTip = "More"
+            item.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "More")
+            item.menu = makeMoreMenu()
+            moreToolbarItem = item
             return item
-        case .restartRuntime:
-            let item = toolbarButton(
-                identifier: itemIdentifier,
-                label: "Restart",
-                symbol: "arrow.clockwise",
-                action: #selector(restartRuntime)
-            )
-            restartToolbarItem = item
-            return item
-        case .connectTunnel:
-            let item = toolbarButton(
-                identifier: itemIdentifier,
-                label: "Connect Tunnel",
-                symbol: "link",
-                action: #selector(setupTunnel)
-            )
-            connectToolbarItem = item
-            return item
-        case .openLogs:
-            return toolbarButton(
-                identifier: itemIdentifier,
-                label: "Logs",
-                symbol: "doc.text.magnifyingglass",
-                action: #selector(openLogs)
-            )
         default:
             return nil
         }
@@ -677,15 +609,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func render(_ snapshot: RuntimeSupervisor.Snapshot) {
         lastSnapshot = snapshot
-        runtimeStatusView.update(
-            runtimeHealthy: snapshot.backend,
-            tunnelHealthy: snapshot.tunnel,
-            tunnelProfile: snapshot.tunnelProfile
+        runtimeToolbarItem?.label = snapshot.backend ? "Stop Runtime" : "Start Runtime"
+        runtimeToolbarItem?.toolTip = runtimeToolbarItem?.label
+        runtimeToolbarItem?.image = NSImage(
+            systemSymbolName: snapshot.backend ? "stop.fill" : "play.fill",
+            accessibilityDescription: runtimeToolbarItem?.label
         )
-        startToolbarItem?.isEnabled = !snapshot.backend
-        stopToolbarItem?.isEnabled = snapshot.backend
-        restartToolbarItem?.isEnabled = snapshot.backend
-        connectToolbarItem?.isEnabled = !snapshot.tunnel
+        moreToolbarItem?.menu = makeMoreMenu()
 
         if snapshot.backend {
             if webView.url?.host != dashboardURL.host {
@@ -694,6 +624,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         } else {
             showStartingPage()
         }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
+            NSWorkspace.shared.open(url)
+        }
+        return nil
     }
 
     private func showStartingPage() {
@@ -707,12 +649,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         )
     }
 
-    @objc private func startRuntime() { supervisor.start() }
-    @objc private func stopRuntime() { supervisor.stop() }
+    @objc private func toggleRuntime() {
+        if lastSnapshot?.backend == true {
+            supervisor.stop()
+        } else {
+            supervisor.start()
+        }
+    }
+
     @objc private func restartRuntime() { supervisor.restart() }
 
     @objc private func openLogs() {
         NSWorkspace.shared.open(supervisor.logsDirectory)
+    }
+
+    private func makeMoreMenu() -> NSMenu {
+        let menu = NSMenu(title: "")
+
+        let restart = NSMenuItem(
+            title: "Restart Runtime",
+            action: #selector(restartRuntime),
+            keyEquivalent: ""
+        )
+        restart.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        restart.target = self
+        restart.isEnabled = lastSnapshot?.backend == true
+        menu.addItem(restart)
+
+        let tunnel = NSMenuItem(
+            title: lastSnapshot?.tunnel == true ? "Tunnel Connected" : "Connect Tunnel…",
+            action: #selector(setupTunnel),
+            keyEquivalent: ""
+        )
+        tunnel.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        tunnel.target = self
+        tunnel.isEnabled = lastSnapshot?.tunnel != true
+        menu.addItem(tunnel)
+
+        menu.addItem(.separator())
+
+        let logs = NSMenuItem(title: "Open Logs", action: #selector(openLogs), keyEquivalent: "")
+        logs.image = NSImage(
+            systemSymbolName: "doc.text.magnifyingglass",
+            accessibilityDescription: nil
+        )
+        logs.target = self
+        menu.addItem(logs)
+
+        return menu
     }
 
     @objc private func setupTunnel() {

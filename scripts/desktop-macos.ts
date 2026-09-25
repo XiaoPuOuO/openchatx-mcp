@@ -58,10 +58,14 @@ async function buildDesktop(): Promise<void> {
     copyTree("node_modules", join(runtimePath, "node_modules")),
     copyTree("store", join(runtimePath, "store")),
     copyTree("src/tools/start-here/prompts", join(runtimePath, "src/tools/start-here/prompts")),
+    copyFile(
+      "src/tools/start-here/AGENTS.template.md",
+      join(runtimePath, "src/tools/start-here/AGENTS.template.md")
+    ),
     copyTree("vendor/apply-patch", join(runtimePath, "vendor/apply-patch")),
     copyTree("toolboxes", join(runtimePath, "defaults/toolboxes")),
   ])
-  await copyFile("package.json", join(runtimePath, "package.json"))
+  await writeRuntimePackageJson(join(runtimePath, "package.json"))
   await writeDesktopConfig(join(runtimePath, ".openchatx/config.toml"))
   await copyFile(
     "desktop/runtime-defaults/mcp-servers.json",
@@ -72,7 +76,7 @@ async function buildDesktop(): Promise<void> {
     join(runtimePath, "defaults/subagents.json")
   )
   pruneDevelopmentDependencies()
-  await removePackageBinDirectories(join(runtimePath, "node_modules"))
+  await prunePackagedRuntime()
 
   const nodeExecutable = await ensureBundledNode()
   await cp(nodeExecutable, join(runtimeBinPath, "node"))
@@ -226,6 +230,29 @@ async function writeInfoPlist(): Promise<void> {
   await writeFile(join(contentsPath, "Info.plist"), plist, "utf8")
 }
 
+async function writeRuntimePackageJson(destination: string): Promise<void> {
+  const raw = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"))
+  if (!isRecord(raw) || !isRecord(raw.dependencies)) {
+    throw new Error("package.json is missing dependencies.")
+  }
+  const dependencies = Object.fromEntries(
+    Object.entries(raw.dependencies).filter(([name]) => name !== "pm2" && name !== "js-yaml")
+  )
+  const payload = JSON.stringify(
+    {
+      name: raw.name,
+      version: raw.version,
+      private: true,
+      type: "module",
+      dependencies,
+    },
+    null,
+    2
+  )
+
+  await writeFile(destination, `${payload}\n`, "utf8")
+}
+
 async function writeDesktopConfig(destination: string): Promise<void> {
   await mkdir(dirname(destination), { recursive: true })
   await writeFile(
@@ -328,6 +355,54 @@ function resolveCodesignIdentity(): string {
 
 function pruneDevelopmentDependencies(): void {
   run("npm", ["prune", "--omit=dev", "--ignore-scripts", "--prefix", runtimePath], { quiet: true })
+}
+
+async function prunePackagedRuntime(): Promise<void> {
+  const modules = join(runtimePath, "node_modules")
+  await removePackageBinDirectories(modules)
+  await rm(join(runtimePath, "package-lock.json"), { force: true })
+
+  const nodePty = join(modules, "node-pty")
+  const targetPrebuild = process.arch === "arm64" ? "darwin-arm64" : "darwin-x64"
+  for (const entry of [
+    "binding.gyp",
+    "deps",
+    "scripts",
+    "src",
+    "third_party",
+    "typings",
+    "README.md",
+  ]) {
+    await rm(join(nodePty, entry), { recursive: true, force: true })
+  }
+  for (const entry of ["darwin-arm64", "darwin-x64", "win32-arm64", "win32-x64"]) {
+    if (entry !== targetPrebuild) {
+      await rm(join(nodePty, "prebuilds", entry), { recursive: true, force: true })
+    }
+  }
+
+  await removeRuntimeMetadata(modules)
+}
+
+async function removeRuntimeMetadata(directory: string): Promise<void> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const child = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      await removeRuntimeMetadata(child)
+      continue
+    }
+    if (!entry.isFile()) continue
+    if (
+      entry.name.endsWith(".d.ts") ||
+      entry.name.endsWith(".d.mts") ||
+      entry.name.endsWith(".d.cts") ||
+      entry.name.endsWith(".map") ||
+      /^readme(?:\..*)?$/iu.test(entry.name) ||
+      /^changelog(?:\..*)?$/iu.test(entry.name)
+    ) {
+      await rm(child, { force: true })
+    }
+  }
 }
 
 async function signNestedMachOBinaries(identity: string): Promise<void> {

@@ -180,18 +180,19 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
       'url=https://example.com/docs title="Example Page" status=200 content_type="text/html; charset=utf-8" next_cursor=cursor-2\n\ncontent:\n# Heading\n\nPage body.',
   },
   {
-    tool: "skill_list",
+    tool: "skill_search",
     structuredContent: { skills: [{ name: "create-skill", description: longSkillDescription }] },
     expected: `skills:\n\n- name=create-skill\n\n  description:\n    ${longSkillDescription}`,
   },
   {
-    tool: "skill_use",
+    tool: "skill_load",
     structuredContent: {
+      name: "create-skill",
       path: "/workspace/skills/create-skill/SKILL.md",
-      instructions: "# Skill\n\nDo the work.",
+      markdown: "# Skill\n\nDo the work.",
     },
     expected:
-      "path=/workspace/skills/create-skill/SKILL.md\n\ninstructions:\n# Skill\n\nDo the work.",
+      "name=create-skill path=/workspace/skills/create-skill/SKILL.md\n\nmarkdown:\n# Skill\n\nDo the work.",
   },
 ]
 

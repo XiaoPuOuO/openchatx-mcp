@@ -31,7 +31,7 @@ export function registerToolboxManagementTools(server: McpServer, registry: Tool
     "toolbox_manage",
     {
       description:
-        "Create, delete, enable, disable, or reload toolboxes/plugins, TypeScript tools, and skills. For authoring a new plugin, load the toolbox-manager.plugin-authoring skill first.",
+        "Create, delete, enable, disable, or reload toolboxes/plugins, TypeScript tools, and toolbox-owned skills.",
       inputSchema: z.object({
         action: actionSchema,
         kind: kindSchema.default("toolbox"),

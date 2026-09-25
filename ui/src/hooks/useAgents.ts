@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
-import { fetchAgents, subscribeToAgents } from "../lib/api"
+import { deleteAgent, fetchAgents, subscribeToAgents } from "../lib/api"
 import type { Agent } from "../types"
 
 export function useAgents() {
@@ -19,18 +19,26 @@ export function useAgents() {
       )
       .finally(() => setLoading(false))
 
-    return subscribeToAgents(({ agent }) => {
+    return subscribeToAgents((event) => {
       setAgents((current) => {
-        const index = current.findIndex((item) => item.id === agent.id)
-        if (index === -1) return [...current, agent]
+        if (event.type === "agent_removed") {
+          return current.filter((item) => item.id !== event.agentId)
+        }
+        const index = current.findIndex((item) => item.id === event.agent.id)
+        if (index === -1) return [...current, event.agent]
         const next = [...current]
-        next[index] = agent
+        next[index] = event.agent
         return next
       })
     }, setConnected)
   }, [])
 
-  return { agents, connected, loading, error }
+  const removeAgent = useCallback(async (agentId: string) => {
+    await deleteAgent(agentId)
+    setAgents((current) => current.filter((agent) => agent.id !== agentId))
+  }, [])
+
+  return { agents, connected, loading, error, removeAgent }
 }
 
 function mergeInitialSnapshot(current: Agent[], snapshot: Agent[]): Agent[] {

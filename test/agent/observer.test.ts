@@ -178,13 +178,36 @@ test("emits snapshots when agent state changes", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
   const events: string[] = []
-  const unsubscribe = observer.subscribe((event) => events.push(`${event.type}:${event.agent.id}`))
+  const unsubscribe = observer.subscribe((event) => {
+    if (event.type === "agent_changed") events.push(`${event.type}:${event.agent.id}`)
+  })
 
   const callId = observer.startTool(agent, "fetch_url", { url: "https://example.com" })
   observer.finishTool(agent, callId)
   unsubscribe()
 
   assert.deepEqual(events, ["agent_changed:agent-1", "agent_changed:agent-1"])
+})
+
+test("deletes an observed agent and emits a removal event", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
+  const events: string[] = []
+  const unsubscribe = observer.subscribe((event) => {
+    events.push(
+      event.type === "agent_changed"
+        ? `agent_changed:${event.agent.id}`
+        : `agent_removed:${event.agentId}`
+    )
+  })
+
+  observer.startTool(agent, "bash", { command: "pwd" })
+  assert.equal(observer.deleteAgent("agent-1"), true)
+  assert.equal(observer.deleteAgent("agent-1"), false)
+  assert.deepEqual(observer.listAgents(), [])
+  unsubscribe()
+
+  assert.deepEqual(events, ["agent_changed:agent-1", "agent_removed:agent-1"])
 })
 
 test("keeps concurrent tool calls from the same agent", () => {

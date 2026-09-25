@@ -33,8 +33,14 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "file_write",
       "file_edit",
       "fetch_url",
-      "skill_list",
-      "skill_use",
+      "skill_search",
+      "skill_load",
+      "skill_manage",
+      "rule_resolve",
+      "rule_load",
+      "rule_manage",
+      "rule_import",
+      "rule_export",
       "image_view",
     ]
   )
@@ -51,9 +57,14 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     "project_id",
   ])
   const bash = tools.tools.find((tool) => tool.name === "bash")
-  const skillUse = tools.tools.find((tool) => tool.name === "skill_use")
-  assert.ok(bash && skillUse)
-  assert.deepEqual(Object.keys(skillUse.inputSchema.properties ?? {}), ["name"])
+  const skillLoad = tools.tools.find((tool) => tool.name === "skill_load")
+  const ruleManage = tools.tools.find((tool) => tool.name === "rule_manage")
+  assert.ok(bash && skillLoad && ruleManage)
+  assert.deepEqual(Object.keys(skillLoad.inputSchema.properties ?? {}), ["name"])
+  assert.deepEqual(
+    (ruleManage.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum,
+    ["always", "auto_attached", "agent_requested", "manual"]
+  )
 
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
   const fileWrite = tools.tools.find((tool) => tool.name === "file_write")
@@ -133,9 +144,19 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
   const tools = await connected.client.listTools()
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
-    ["start_here", "skill_list", "skill_use"]
+    [
+      "start_here",
+      "skill_search",
+      "skill_load",
+      "skill_manage",
+      "rule_resolve",
+      "rule_load",
+      "rule_manage",
+      "rule_import",
+      "rule_export",
+    ]
   )
-  assert.equal(tools.tools.find((tool) => tool.name === "skill_list")?.outputSchema, undefined)
+  assert.equal(tools.tools.find((tool) => tool.name === "skill_search")?.outputSchema, undefined)
 })
 
 test("one HTTP observer drives dashboard state and tool observation", {
@@ -170,7 +191,7 @@ test("one HTTP observer drives dashboard state and tool observation", {
   assert.equal(local?.recent[0]?.tool, "bash")
 })
 
-test("publishes only start_here when every optional tool group is disabled", {
+test("publishes start_here and core rule tools when optional groups are disabled", {
   timeout: 10_000,
 }, async (t) => {
   const running = await startMcpHttpServer({
@@ -193,7 +214,7 @@ test("publishes only start_here when every optional tool group is disabled", {
   const tools = await connected.client.listTools()
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
-    ["start_here"]
+    ["start_here", "rule_resolve", "rule_load", "rule_manage", "rule_import", "rule_export"]
   )
 })
 

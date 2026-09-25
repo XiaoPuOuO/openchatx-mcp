@@ -30,6 +30,14 @@
       "description": "Install a capability, optionally pinned to an exact revision."
     },
     "store_uninstall": { "enabled": true, "description": "Remove a Store-installed capability." },
+    "store_skill_import": {
+      "enabled": true,
+      "description": "Import a portable SKILL.md folder into the user skill catalog."
+    },
+    "store_skill_export": {
+      "enabled": true,
+      "description": "Export a user skill as a portable SKILL.md folder."
+    },
     "store_publish_check": {
       "enabled": true,
       "description": "Validate a local capability for serverless GitHub community publishing."

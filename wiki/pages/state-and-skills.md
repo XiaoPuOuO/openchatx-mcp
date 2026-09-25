@@ -1,49 +1,73 @@
 ---
-summary: "OpenChatX persistent state, default tool cwd behavior, AGENTS.md, and the dynamic reusable-skill catalog."
-paths:
-  - src/tools/skills/skill-tools.ts
-  - src/tools/skills/skill-catalog.ts
-  - src/agent/load-deduper.ts
-  - src/config.ts
-  - src/public-config.cts
-  - src/tools/start-here/
-  - scripts/state-setup.ts
-  - scripts/start.ts
-  - skills/create-skill/SKILL.md
-  - test/tools/skills/skill-catalog.test.ts
-  - test/state-setup.test.ts
+summary: "Persistent Agent Skills and Cursor-style Rule state."
 ---
 
-# State and Skills
+# State, Skills, and Rules
 
-## What This Is
+## Editable start_here template
 
-This page documents the persistent OpenChatX state directory, default tool cwd, AGENTS.md, and dynamic skill catalog.
+`<state_dir>/AGENTS.md` is the runtime template for `start_here`. Static operating guidance lives there instead of in the server implementation. Dynamic context is inserted only through placeholders:
 
-## Persistent State and Default CWD
+- `{{MODE}}`
+- `{{TASK_ID}}`
+- `{{MODE_INSTRUCTIONS}}`
+- `{{PROJECT_CONTEXT}}`
+- `{{CAPABILITY_CATALOG}}`
+- `{{ALWAYS_RULES}}`
 
-`.openchatx/config.toml` exposes `state_dir`, which defaults to `~/.openchatx-mcp`. Full `npm run setup` creates that directory, creates `<state_dir>/AGENTS.md` only when absent, and copies the repository's `create-skill` starter into `<state_dir>/skills/create-skill/SKILL.md` only when absent. Re-running setup preserves customized instructions and skills. There is no separate `agent-workspace` directory or configurable workspace root.
-
-Shell, file, search, and image tools still need a base for relative paths. `MCP_CONFIG.defaultCwd` is the operating-system user's home directory, so relative tool paths resolve from `~`; callers can pass an absolute cwd/path for any project. This is convenience, not a sandbox (`src/config.ts`, `src/index.ts`, `scripts/setup.ts`, `scripts/state-setup.ts`, `test/state-setup.test.ts`).
+The Toolbox Dashboard exposes this file at the same level as Toolbox folders. Users can move, repeat, or remove placeholders to control the final prompt shape. Bundled mode prompts remain separately selectable/overridable and are injected through `{{MODE_INSTRUCTIONS}}`.
 
 ## Persistent Skills
 
-Reusable agent workflows live under `<state_dir>/skills/<name>/SKILL.md`. `src/tools/skills/skill-catalog.ts` owns filesystem discovery, name validation, frontmatter descriptions, symlink-compatible lookup, and the byte ceiling. `src/tools/skills/skill-tools.ts` is the MCP adapter: `skill_list` scans through the catalog and `skill_use` returns complete instructions plus the local `SKILL.md` path. The catalog validates names at its own boundary, so direct callers do not depend on MCP-schema validation for path safety.
+Reusable agent workflows live under `<state_dir>/skills/<name>/SKILL.md`. `SKILL.md` stays portable and uses the standard `name` and `description` frontmatter plus Markdown instructions. `skill_search` returns at most five relevant names/descriptions without loading instructions; `skill_load` returns the complete Markdown for one exact skill; `skill_manage` creates, edits, or deletes user-owned skills.
 
-Repeated loads of the same skill by the same `AgentIdentity` within five seconds reuse the pending load and return a short reuse notice; failed loads remain retryable. `src/agent/load-deduper.ts` owns this per-agent load pattern and is also used by `start_here`. Callers without session identity are not deduplicated. Skills are dynamic data rather than MCP schema entries, so adding or removing a skill does not require rebuilding the server (`src/tools/skills/skill-catalog.ts`, `src/tools/skills/skill-tools.ts`, `src/agent/load-deduper.ts`, `src/mcp/server-factory.ts`).
+Skills are always on-demand. No skill name, description, or body is injected by `start_here`, and Skills do not have `alwaysApply` or an OpenChatX startup-loading flag. `store_skill_import` and `store_skill_export` copy portable skill folders, including optional `scripts/`, `references/`, and `assets/`, between OpenChatX and other Agent Skills consumers.
 
-The persistent skill catalog is intentionally not enumerated here because it is dynamic and can change without an OpenChatX rebuild. Directory symlinks are supported, so selected shared skills can stay single-sourced while still appearing under `<state_dir>/skills` (`src/tools/skills/skill-catalog.ts`, `test/tools/skills/skill-catalog.test.ts`).
+New managed skill names use lowercase kebab-case; safe legacy names remain readable for compatibility. `SKILL.md` is capped at 256 KiB.
 
-Skill names may begin with an alphanumeric character or underscore and may otherwise contain letters, numbers, dots, underscores, and hyphens. A leading underscore can be used for installation-local skills such as `_web-search`. The restricted character set prevents path traversal while still allowing a named skill entry to be a symlink. `SKILL.md` is capped at 256 KiB; broken or oversized entries are omitted from `skill_list`, while direct `skill_use` calls return explicit errors (`src/tools/skills/skill-catalog.ts`, `src/tools/skills/skill-tools.ts`, `test/tools/skills/skill-catalog.test.ts`).
+## Persistent Rules
+
+Rules are a separate system under `<state_dir>/rules/*.mdc`. The format follows the common Cursor-style MDC shape:
+
+```md
+---
+description: "React component conventions"
+globs:
+  - "src/**/*.tsx"
+alwaysApply: false
+---
+
+# React
+
+Use accessible labels and named exports.
+```
+
+Rule activation modes are first-class in the API and derived from metadata:
+
+- **Always** (`mode=always`): `alwaysApply: true`; the full Markdown body is injected by `start_here`.
+- **Auto Attached** (`mode=auto_attached`): `alwaysApply: false` with `globs`; `rule_resolve` selects the rule when a relevant file path matches.
+- **Agent Requested** (`mode=agent_requested`): `alwaysApply: false`, no globs, and a `description`; `rule_resolve` selects it by task-query relevance.
+- **Manual** (`mode=manual`): no description, no globs, and `alwaysApply: false`; it is loaded only through `rule_load` when explicitly referenced.
+
+`rule_manage` creates, edits, or deletes `.mdc` files and accepts the four mode names directly. The mode itself is not duplicated into the file; `description`, `globs`, and `alwaysApply` remain the canonical persisted metadata.
+
+## Compatibility
+
+`rule_import` and `rule_export` bridge three external formats:
+
+- **Cursor**: native `.mdc`; all four OpenChatX modes can round-trip without losing activation metadata.
+- **Claude Code**: `.claude/rules/*.md`; no `paths` maps to Always, while `paths` maps to Auto Attached.
+- **AGENTS.md / OpenCode-style instructions**: imports as Always by default because directory scope is carried by the file location rather than rule metadata.
+
+Claude and AGENTS.md cannot losslessly represent OpenChatX Agent Requested or Manual activation. `rule_export` rejects those conversions unless `allow_lossy=true`, and returns a warning when the exported rule's activation semantics change. Import callers can override `mode`, `description`, and `globs` to choose an exact OpenChatX mode.
 
 ## Skill Bootstrap Boundary
 
-`skills/create-skill/SKILL.md` is repository-owned bootstrap source, while `<state_dir>/skills/create-skill/SKILL.md` becomes installation-owned state after the first setup copy. Runtime discovery scans only `<state_dir>/skills`; repository-level skill files do not enter `skill_list` or `skill_use` unless setup or another explicit mechanism places them there (`scripts/state-setup.ts`, `skills/create-skill/SKILL.md`, `src/tools/skills/skill-catalog.ts`).
+`skills/create-skill/SKILL.md` is repository-owned bootstrap source, while `<state_dir>/skills/create-skill/SKILL.md` becomes installation-owned state after the first setup copy. Runtime discovery scans only `<state_dir>/skills`.
 
 ## Related
 
 - [Project Overview](./project-overview.md)
 - [Configuration and Startup](./operations/configuration-and-startup.md)
 - [MCP Tool Surface](./mcp-tool-surface.md)
-- [Persistent Shell Runtime](./persistent-shell-runtime.md)
-- [apply_patch](./tools/apply-patch.md)
+- [Tool Naming and Schema Design](./tool-naming-and-schema-design.md)

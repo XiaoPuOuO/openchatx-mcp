@@ -26,7 +26,7 @@ Prefer:
 <domain>_<specific action>
 ```
 
-Examples: `skill_list`, `skill_use`, `shell_run`, `shell_poll`, `computer_click`.
+Examples: `skill_search`, `skill_load`, `skill_manage`, `shell_run`, `shell_poll`, `computer_click`.
 
 Use concrete conventional verbs such as `list`, `load`, `read`, `fetch`, `run`, `poll`, `create`, `delete`, `reset`, and `close`. Avoid vague verbs such as `use`, `manage`, `handle`, or `process` when a precise action exists.
 
@@ -156,7 +156,7 @@ Good uses include:
 Example:
 
 ```text
-name: Skill name returned by `skill_list`.
+name: Exact skill name returned by `skill_search`.
 ```
 
 Do not repeat information that remains visible in the advertised schema, such as enum values, required status, defaults, or retained ranges. If a validation-only rule is pruned from the advertised schema but the agent needs it to construct the value correctly, state that rule briefly in the parameter description.

@@ -1,12 +1,15 @@
 import {
   ArrowLeft,
   Bot,
+  CheckCircle2,
   Code2,
+  Copy,
   Download,
   ExternalLink,
   PackageOpen,
   Search,
   ShieldAlert,
+  Sparkles,
   Trash2,
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -14,6 +17,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { useI18n } from "../../i18n"
 import {
   fetchStoreEntries,
   fetchStoreReview,
@@ -32,6 +36,7 @@ import type {
 type StoreSourceFilter = "all" | "builtin" | "community"
 
 export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
+  const { t } = useI18n()
   const [entries, setEntries] = useState<CapabilityStoreEntry[]>([])
   const [recommendedMcps, setRecommendedMcps] = useState<RecommendedMcp[]>([])
   const [error, setError] = useState<string>()
@@ -43,6 +48,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   const [tree, setTree] = useState<CapabilityStoreSourceTree>()
   const [sourceFile, setSourceFile] = useState<{ path: string; content: string }>()
   const [review, setReview] = useState<CapabilityStoreReview>()
+  const [toast, setToast] = useState<string>()
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +65,12 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = window.setTimeout(() => setToast(undefined), 2200)
+    return () => window.clearTimeout(timer)
+  }, [toast])
 
   const mutate = async (id: string, action: () => Promise<void>) => {
     setBusy(id)
@@ -126,10 +138,27 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
       `Review OpenChatX capability ${tree.capability.id}${revision} before I install it. ` +
       "Use store_review, store_source_tree, and store_source_read. Inspect the cited files and explain concrete risks; do not treat static analysis as a safety guarantee."
     await navigator.clipboard.writeText(prompt)
+    setToast(t("store.reviewPromptCopied"))
+  }
+
+  const copyRecommendedInstallPrompt = async (mcp: RecommendedMcp) => {
+    const prompt =
+      `Install and configure the MCP server from https://github.com/${mcp.repository} in OpenChatX. ` +
+      "First inspect the repository README and installation instructions, then add the correct MCP server configuration and verify it works. Do not use unrelated global setup."
+    await navigator.clipboard.writeText(prompt)
+    setToast(t("store.installPromptCopied", { name: mcp.name }))
   }
 
   const resolvedEntry = tree?.capability
   const installRevision = tree?.revision
+  const visibleRecommended = recommendedMcps.filter((mcp) => {
+    if (source === "builtin") return false
+    if (!query) return true
+    const needle = query.toLowerCase()
+    return [mcp.name, mcp.publisher, mcp.repository, mcp.description, ...mcp.tags].some((value) =>
+      value.toLowerCase().includes(needle)
+    )
+  })
 
   return (
     <main className="min-h-screen">
@@ -137,75 +166,40 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-4">
           <Button variant="outline" size="sm" onClick={onBack}>
             <ArrowLeft className="size-4" />
-            Back
+            {t("common.back")}
           </Button>
           <PackageOpen className="size-5" />
           <div>
-            <h1 className="font-semibold">Capability Store</h1>
-            <p className="text-xs text-muted-foreground">
-              Built-in capabilities plus unreviewed community source discovered directly from
-              GitHub.
-            </p>
+            <h1 className="font-semibold">{t("store.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("store.subtitle")}</p>
           </div>
         </div>
       </header>
+
+      {toast ? (
+        <div className="fixed right-5 top-16 z-50 flex items-center gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
+          <div className="relative flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+            <CheckCircle2 className="size-4" />
+            <Sparkles className="absolute -right-1 -top-1 size-3 text-amber-500" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold">{t("store.achievement")}</div>
+            <div className="text-xs text-muted-foreground">{toast}</div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mx-auto max-w-6xl px-5 py-6">
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">
           <div className="flex items-center gap-2 font-medium">
             <ShieldAlert className="size-4 text-amber-600" />
-            Community capabilities are not reviewed or endorsed by OpenChatX.
+            {t("store.communityWarningTitle")}
           </div>
           <p className="mt-1 text-muted-foreground">
-            Community discovery uses public GitHub repositories tagged{" "}
-            <code>openchatx-capability</code>. Inspect the source or ask ChatGPT to review the exact
-            revision before installing.
+            {t("store.communityWarningPrefix")} <code>openchatx-capability</code>.
+            {" "}{t("store.communityWarningSuffix")}
           </p>
         </div>
-
-        {recommendedMcps.length > 0 ? (
-          <section className="mb-6">
-            <div className="mb-3">
-              <h2 className="font-semibold">OpenChatX Picks</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                MCP projects curated by OpenChatX as useful starting points. Recommendation does not
-                mean security certification.
-              </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              {recommendedMcps.map((mcp) => (
-                <Card key={mcp.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium">{mcp.name}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">by {mcp.publisher}</div>
-                      </div>
-                      <Badge>Recommended</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm leading-6 text-muted-foreground">{mcp.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {mcp.tags.slice(0, 4).map((tag) => (
-                        <Badge key={tag}>#{tag}</Badge>
-                      ))}
-                    </div>
-                    <a
-                      className="mt-4 inline-flex items-center gap-1 text-xs text-muted-foreground underline"
-                      href={mcp.repositoryUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ExternalLink className="size-3" />
-                      {mcp.repository}
-                    </a>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-        ) : null}
 
         <form
           className="mb-4 flex flex-col gap-2 sm:flex-row"
@@ -219,7 +213,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             <input
               value={draftQuery}
               onChange={(event) => setDraftQuery(event.target.value)}
-              placeholder="Search capabilities"
+              placeholder={t("store.searchPlaceholder")}
               className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
           </div>
@@ -228,12 +222,12 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             onChange={(event) => setSource(event.target.value as StoreSourceFilter)}
             className="h-9 rounded-md border bg-background px-3 text-sm"
           >
-            <option value="all">Built-in + Community</option>
-            <option value="builtin">Built-in</option>
-            <option value="community">Community</option>
+            <option value="all">{t("store.filterAll")}</option>
+            <option value="builtin">{t("store.filterBuiltin")}</option>
+            <option value="community">{t("store.filterCommunity")}</option>
           </select>
           <Button type="submit" size="sm">
-            Search
+            {t("store.search")}
           </Button>
         </form>
 
@@ -244,26 +238,76 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
         ) : null}
         {communityError ? (
           <div className="mb-4 rounded-md border border-amber-500/30 p-3 text-sm text-amber-700">
-            Community discovery unavailable: {communityError}
+            {t("store.communityUnavailable")}: {communityError}
           </div>
         ) : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleRecommended.map((mcp) => (
+            <Card key={mcp.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{mcp.name}</div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {t("store.byPublisher", { publisher: mcp.publisher })}
+                    </div>
+                  </div>
+                  <Badge>{t("store.recommended")}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-sm leading-6 text-muted-foreground">
+                  {localizeRecommendedDescription(mcp.id, mcp.description, t)}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {mcp.tags.slice(0, 4).map((tag) => (
+                    <Badge key={tag}>#{tag}</Badge>
+                  ))}
+                </div>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(mcp.repositoryUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <Code2 className="size-4" />
+                    {t("store.inspectSource")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void copyRecommendedInstallPrompt(mcp)}
+                  >
+                    <Copy className="size-4" />
+                    {t("store.copyInstallPrompt")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
           {entries.map((entry) => (
             <Card key={entry.id}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{entry.name}</div>
+                    <div className="truncate font-medium">
+                      {localizeEntryName(entry.id, entry.name, t)}
+                    </div>
                     <div className="mt-1 truncate text-xs text-muted-foreground">
                       {entry.source === "github" ? entry.repository : entry.id}
                     </div>
                   </div>
-                  <Badge>{entry.source === "github" ? "community" : "built-in"}</Badge>
+                  <Badge>
+                    {entry.source === "github" ? t("store.community") : t("store.builtin")}
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="mb-4 text-sm leading-6 text-muted-foreground">{entry.description}</p>
+                <p className="mb-4 text-sm leading-6 text-muted-foreground">
+                  {localizeEntryDescription(entry.id, entry.description, t)}
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {entry.tags.map((tag) => (
                     <Badge key={tag}>#{tag}</Badge>
@@ -280,7 +324,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                     onClick={() => void inspect(entry)}
                   >
                     <Code2 className="size-4" />
-                    Inspect source
+                    {t("store.inspectSource")}
                   </Button>
                   {entry.source === "github" && entry.htmlUrl ? (
                     <Button
@@ -300,7 +344,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                       onClick={() => void mutate(entry.id, () => uninstallStoreEntry(entry.id))}
                     >
                       <Trash2 className="size-4" />
-                      Uninstall
+                      {t("store.uninstall")}
                     </Button>
                   ) : entry.source === "builtin" ? (
                     <Button
@@ -309,7 +353,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                       onClick={() => void mutate(entry.id, () => installStoreEntry(entry.id))}
                     >
                       <Download className="size-4" />
-                      Install
+                      {t("store.install")}
                     </Button>
                   ) : null}
                 </div>
@@ -323,19 +367,23 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-medium">Source: {resolvedEntry.name}</div>
+                  <div className="font-medium">
+                    {t("store.sourceTitle", { name: resolvedEntry.name })}
+                  </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {tree.revision ? `Pinned revision ${tree.revision}` : "Built-in source"}
+                    {tree.revision
+                      ? t("store.pinnedRevision", { revision: tree.revision })
+                      : t("store.builtinSource")}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => void runReview()}>
                     <ShieldAlert className="size-4" />
-                    Static review
+                    {t("store.staticReview")}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => void copyAgentReviewPrompt()}>
                     <Bot className="size-4" />
-                    Copy Agent review prompt
+                    {t("store.copyReviewPrompt")}
                   </Button>
                   {!resolvedEntry.installed ? (
                     <Button
@@ -348,7 +396,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                       }
                     >
                       <Download className="size-4" />
-                      Install this revision
+                      {t("store.installRevision")}
                     </Button>
                   ) : null}
                 </div>
@@ -357,8 +405,10 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
             <CardContent>
               {review ? (
                 <div className="mb-4 rounded-md border p-3 text-sm">
-                  <div className="font-medium">{review.summary}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{review.note}</div>
+                  <div className="font-medium">{localizeReviewSummary(review.summary, t)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {localizeReviewNote(review.note, t)}
+                  </div>
                   {review.findings.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       {review.findings.slice(0, 12).map((finding) => (
@@ -369,10 +419,13 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                           onClick={() => void readSource(finding.path)}
                         >
                           <span className="font-medium">
-                            {finding.severity.toUpperCase()} · {finding.category}
+                            {t(`store.reviewSeverity.${finding.severity}`)} ·{" "}
+                            {localizeFindingCategory(finding.category, t)}
                           </span>
                           <span className="ml-2 text-muted-foreground">{finding.path}</span>
-                          <div className="mt-1 text-xs text-muted-foreground">{finding.detail}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {localizeFindingDetail(finding.detail, t)}
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -407,7 +460,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                     </>
                   ) : (
                     <div className="py-16 text-center text-sm text-muted-foreground">
-                      Select a source file to inspect it here.
+                      {t("store.selectSourceFile")}
                     </div>
                   )}
                 </div>
@@ -416,18 +469,119 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
           </Card>
         ) : null}
 
-        <Card className="mt-6">
-          <CardHeader>
-            <div className="font-medium">Publish a community capability</div>
-          </CardHeader>
-          <CardContent className="text-sm leading-6 text-muted-foreground">
-            No OpenChatX Store server is required. Publish a public GitHub repository, put{" "}
-            <code>capability.json</code> at its root, and add the repository topic{" "}
-            <code>openchatx-capability</code>. OpenChatX discovers it directly from GitHub. In
-            ChatGPT, use <code>store_publish_check</code> on your local directory before publishing.
-          </CardContent>
-        </Card>
       </div>
     </main>
   )
+}
+
+function localizeEntryName(
+  id: string,
+  fallback: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (id === "system-info") return t("store.systemInfoName")
+  return fallback
+}
+
+function localizeReviewSummary(
+  summary: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const key = REVIEW_SUMMARY_KEYS[summary]
+  return key ? t(key) : summary
+}
+
+function localizeReviewNote(
+  note: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (
+    note ===
+    "This is static analysis, not a safety verdict. Ask ChatGPT to inspect the cited source files with store_source_read before deciding whether to install."
+  ) {
+    return t("store.reviewNote")
+  }
+  return note
+}
+
+function localizeFindingCategory(
+  category: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const key = FINDING_CATEGORY_KEYS[category]
+  return key ? t(key) : category
+}
+
+function localizeFindingDetail(
+  detail: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const exact = FINDING_DETAIL_KEYS[detail]
+  if (exact) return t(exact)
+
+  const undeclared = detail.match(
+    /^Observed (shell|network|filesystem|secrets) behavior is not declared in capability\.json permissions\.$/
+  )
+  if (undeclared) {
+    return t("store.reviewFinding.undeclared", {
+      permission: t(`store.reviewCategory.${undeclared[1]}`),
+    })
+  }
+
+  const lifecycle = detail.match(/^package\.json defines a (.+) lifecycle script\.$/)
+  if (lifecycle) {
+    return t("store.reviewFinding.lifecycle", { name: lifecycle[1] })
+  }
+
+  return detail
+}
+
+const REVIEW_SUMMARY_KEYS: Record<string, string> = {
+  "High-risk code patterns require manual inspection.": "store.reviewSummary.highRisk",
+  "Potential risks were detected; inspect the cited source files before installing.":
+    "store.reviewSummary.warning",
+  "No obvious high-risk patterns were found in the reviewed text files.":
+    "store.reviewSummary.clear",
+}
+
+const FINDING_CATEGORY_KEYS: Record<string, string> = {
+  shell: "store.reviewCategory.shell",
+  network: "store.reviewCategory.network",
+  filesystem: "store.reviewCategory.filesystem",
+  secrets: "store.reviewCategory.secrets",
+  manifest: "store.reviewCategory.manifest",
+  package: "store.reviewCategory.package",
+}
+
+const FINDING_DETAIL_KEYS: Record<string, string> = {
+  "Source references process or shell execution.": "store.reviewFinding.shell",
+  "Source contains network access indicators.": "store.reviewFinding.network",
+  "Source contains filesystem access indicators.": "store.reviewFinding.filesystem",
+  "Source references environment variables, credentials, or authorization values.":
+    "store.reviewFinding.secrets",
+  "package.json is not valid JSON.": "store.reviewFinding.invalidPackageJson",
+}
+
+function localizeRecommendedDescription(
+  id: string,
+  fallback: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const key = RECOMMENDED_DESCRIPTION_KEYS[id]
+  return key ? t(key) : fallback
+}
+
+function localizeEntryDescription(
+  id: string,
+  fallback: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (id === "system-info") return t("store.systemInfoDescription")
+  return fallback
+}
+
+const RECOMMENDED_DESCRIPTION_KEYS: Record<string, string> = {
+  "open-codex-computer-use": "store.recommended.openComputerUse",
+  "open-browser-use": "store.recommended.openBrowserUse",
+  "mcp-for-blender": "store.recommended.blender",
 }

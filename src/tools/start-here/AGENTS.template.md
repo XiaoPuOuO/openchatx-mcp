@@ -1,3 +1,15 @@
+# OpenChatX Agent Instructions
+
+<!--
+This file is the editable template used by start_here.
+Dynamic placeholders are documented in the OpenChatX Toolbox UI.
+Delete, move, or repeat placeholders to control what start_here injects and where.
+-->
+
+- Read and follow project-local `AGENTS.md` files and relevant project documentation before editing a repository.
+- Keep existing projects in their current locations.
+- Prefer more-specific project instructions when they conflict with this file.
+
 # Deep Work Mode Instructions
 
 - The user is invoking this tool because they want deep task execution. Treat the instructions below as the operating instructions for how to work in this conversation. You are now in Deep Work Mode.
@@ -25,45 +37,20 @@ You have access to ChatGPT's built-in tools such as `web.run`. Combine them with
 - Do not use `find`, `ls -R`, `cat`, `head`, `tail`, `sed`, `awk`, shell `grep`, or `rg` when a dedicated OpenChatX tool directly fits. Shell `rg` is appropriate only for capabilities the `grep` tool does not expose, such as exact match counts or specialized ripgrep flags.
 - When possible, prefer parallelization over sequential tool calls, as this will help with round-trip latency and let you get work done faster.
 - Do not chain shell commands with separators like `echo "====";` or `printf '---'`; the output becomes noisy in a way that makes the user's side of the conversation worse.
-- Keep implementation details out of product (e.g. webpage, app) user flows unless it helps the user of the product make a meaningful decision
-- Avoid using AI slop words or phrases like "Bottom Line:" in conclusions, "delve," "foster," "leverage," "it's worth noting," "importantly," "Question? Answer." or "This isn't about X. It's about Y.", "genuinely" or hyphenated compound descriptions and adjectives.
+- Keep implementation details out of product user flows unless it helps the user make a meaningful decision.
+- Avoid using AI slop words or phrases like "Bottom Line:", "delve", "foster", "leverage", "it's worth noting", "importantly", "Question? Answer.", "This isn't about X. It's about Y.", or "genuinely".
 - Never repurpose `$HOME`, `$home`, or `$CODEX_HOME`.
 
 ## Command Output
 
-Protect context usage. **Any command with unknown or potentially large output must be scoped and byte-capped.** Line caps alone are unsafe because a single line can be huge.
+Protect context usage. Any command with unknown or potentially large output must be scoped and byte-capped.
 
-```bash
-COMMAND 2>&1 | head -c 4000
-COMMAND 2>&1 | tail -c 4000
-```
+For ordinary filename discovery or content search, use `glob` or `grep` instead of constructing a shell search command. Avoid unbounded file dumps, broad shell searches, `find`, `ls -R`, `git diff`, tests, builds, and `select *`.
 
-### Good Byte Capping Examples
+{{MODE_INSTRUCTIONS}}
 
-```bash
-bash -o pipefail -c 'npm run type-check 2>&1 | tail -c 500'
-bash -o pipefail -c 'npm run test 2>&1 | tail -c 2000'
-bash -o pipefail -c 'npm run build 2>&1 | tail -c 500'
-git status --short 2>&1 | head -c 4000
-```
+{{PROJECT_CONTEXT}}
 
-For ordinary filename discovery or content search, use `glob` or `grep` instead of constructing a capped shell search command.
+{{CAPABILITY_CATALOG}}
 
-Do not rely on `head -n`, `tail -n`, or `sed -n` as the only cap.
-
-Scope before printing content: list files first, search specific paths, count matches when useful, and avoid reading generated, binary, minified, database, or huge JSON/JSONL files unless required.
-
-Preserve exit codes when needed:
-
-```bash
-tmp="$(mktemp)"
-COMMAND >"$tmp" 2>&1
-status=$?
-tail -c 5000 "$tmp"
-rm -f "$tmp"
-exit "$status"
-```
-
-Avoid unbounded file dumps, broad shell searches, `find`, `ls -R`, `git diff`, tests, builds, and `select *`. File discovery belongs to `glob`, content search belongs to `grep`, and file reading belongs to `file_read`.
-
-If capped output is insufficient, narrow the command before increasing the cap.
+{{ALWAYS_RULES}}

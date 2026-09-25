@@ -16,7 +16,9 @@ test("state setup creates AGENTS.md and create-skill without overwriting either"
   assert.equal(initial.agentsCreated, true)
   assert.equal(initial.starterSkillCreated, true)
   const agentsPath = join(stateDir, "AGENTS.md")
-  assert.match(await readFile(agentsPath, "utf8"), /# OpenChatX Agent Instructions/u)
+  const agentsTemplate = await readFile(agentsPath, "utf8")
+  assert.match(agentsTemplate, /# OpenChatX Agent Instructions/u)
+  assert.match(agentsTemplate, /\{\{CAPABILITY_CATALOG\}\}/u)
   const skillPath = join(stateDir, "skills", "create-skill", "SKILL.md")
   assert.match(await readFile(skillPath, "utf8"), /name: create-skill/u)
 

@@ -9,11 +9,13 @@ import { z } from "zod"
 import { setAgentTaskSlug } from "../../agent/context.js"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import type { CapabilityDescriptor } from "../../capabilities/catalog.js"
+import { MCP_CONFIG } from "../../config.js"
 import type { RegisteredProject } from "../../projects/project-registry.js"
 import type { ProjectScope } from "../../projects/project-scope.js"
+import type { LoadedRule } from "../rules/rule-catalog.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
-const SHARED_PROMPT_NAME = "shared"
+const AGENT_TEMPLATE_NAME = "AGENTS.template.md"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const START_HERE_COOLDOWN_MS = 5_000
 const loadStartInstructions = createAgentLoadDeduper<string>(START_HERE_COOLDOWN_MS)
@@ -25,12 +27,22 @@ type PromptSource = {
 
 export type CapabilityCatalog = CapabilityDescriptor[]
 
+export interface StartHereTemplateContext {
+  mode: string
+  taskId: string
+  modeInstructions: string
+  projectContext: string
+  capabilityCatalog: string
+  alwaysRules: string
+}
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
 export function registerStartHereTool(
   server: McpServer,
   capabilityCatalog?: () => CapabilityCatalog,
-  projectScope?: ProjectScope
+  projectScope?: ProjectScope,
+  alwaysAppliedRules?: () => Promise<LoadedRule[]>
 ): void {
   const modes = discoverPromptModes()
   const [firstMode, ...remainingModes] = modes
@@ -58,9 +70,10 @@ export function registerStartHereTool(
       },
     },
     async ({ mode, task_id, project_id }) => {
-      const { value: instructions, reused } = await loadStartInstructions(mode, () =>
-        buildStartHereInstructions(mode)
-      )
+      const { value: modeInstructions, reused } = await loadStartInstructions(mode, async () => {
+        const selected = await readStartPrompt(mode)
+        return selected.prompt.trim()
+      })
       setAgentTaskSlug(task_id)
       const activeProject = project_id
         ? await projectScope?.use(project_id)
@@ -68,6 +81,18 @@ export function registerStartHereTool(
       const registeredProjects = !activeProject && projectScope ? await projectScope.list() : []
       const capabilities = capabilityCatalog ? renderCapabilityCatalog(capabilityCatalog()) : ""
       const projectContext = renderProjectContext(activeProject, registeredProjects)
+      const ruleContext = alwaysAppliedRules
+        ? renderAlwaysAppliedRules(await alwaysAppliedRules())
+        : ""
+      const template = await readAgentInstructionsTemplate()
+      const instructions = renderStartHereTemplate(template, {
+        mode,
+        taskId: task_id,
+        modeInstructions,
+        projectContext,
+        capabilityCatalog: capabilities,
+        alwaysRules: ruleContext,
+      })
       return {
         content: [
           {
@@ -77,15 +102,25 @@ export function registerStartHereTool(
                   `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
                   projectContext,
                   capabilities,
+                  ruleContext,
                 ]
                   .filter(Boolean)
                   .join("\n\n")
-              : [instructions, projectContext, capabilities].filter(Boolean).join("\n\n"),
+              : instructions,
           },
         ],
       }
     }
   )
+}
+
+function renderAlwaysAppliedRules(rules: LoadedRule[]): string {
+  if (rules.length === 0) return ""
+  return [
+    "# Always-applied rules",
+    "The following persistent .mdc rules apply to every request in this session.",
+    ...rules.map((rule) => `## ${rule.name}\n\n${rule.markdown}`),
+  ].join("\n")
 }
 
 function renderProjectContext(
@@ -131,20 +166,60 @@ export function renderCapabilityCatalog(catalog: CapabilityCatalog): string {
 
 export async function buildStartHereInstructions(
   mode: string,
-  root = repositoryRoot
+  root = repositoryRoot,
+  template?: string,
+  context: Partial<Omit<StartHereTemplateContext, "mode" | "modeInstructions">> = {}
 ): Promise<string> {
-  const [selected, shared] = await Promise.all([
+  const [selected, agentTemplate] = await Promise.all([
     readStartPrompt(mode, root),
-    readStartPrompt(SHARED_PROMPT_NAME, root),
+    template === undefined ? readBundledAgentTemplate(root) : Promise.resolve(template),
   ])
-  return [shared.prompt.trim(), selected.prompt.trim()].filter(Boolean).join("\n\n")
+  return renderStartHereTemplate(agentTemplate, {
+    mode,
+    taskId: context.taskId ?? "",
+    modeInstructions: selected.prompt.trim(),
+    projectContext: context.projectContext ?? "",
+    capabilityCatalog: context.capabilityCatalog ?? "",
+    alwaysRules: context.alwaysRules ?? "",
+  })
+}
+
+export async function readAgentInstructionsTemplate(): Promise<string> {
+  try {
+    return await readFile(MCP_CONFIG.agentInstructionsFile, "utf8")
+  } catch (error) {
+    if (!isFsError(error, "ENOENT")) throw error
+    return readBundledAgentTemplate(repositoryRoot)
+  }
+}
+
+export function renderStartHereTemplate(
+  template: string,
+  context: StartHereTemplateContext
+): string {
+  const replacements: Record<string, string> = {
+    "{{MODE}}": context.mode,
+    "{{TASK_ID}}": context.taskId,
+    "{{MODE_INSTRUCTIONS}}": context.modeInstructions,
+    "{{PROJECT_CONTEXT}}": context.projectContext,
+    "{{CAPABILITY_CATALOG}}": context.capabilityCatalog,
+    "{{ALWAYS_RULES}}": context.alwaysRules,
+  }
+  let output = template
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    output = output.replaceAll(placeholder, value)
+  }
+  return output.trim()
+}
+
+async function readBundledAgentTemplate(root: string): Promise<string> {
+  return readFile(join(root, "src", "tools", "start-here", AGENT_TEMPLATE_NAME), "utf8")
 }
 
 export function discoverPromptModes(root = repositoryRoot): string[] {
   const bundledDirectory = join(root, "src", "tools", "start-here", "prompts")
   const localDirectory = join(root, ".openchatx", "prompts")
   const names = new Set([...readPromptSlugs(bundledDirectory), ...readPromptSlugs(localDirectory)])
-  names.delete(SHARED_PROMPT_NAME)
   return [...names].sort()
 }
 

@@ -1,6 +1,6 @@
 import type {
   Agent,
-  AgentChangedEvent,
+  AgentEvent,
   AgentInstruction,
   CapabilityHealthSnapshot,
   CapabilityStoreEntry,
@@ -10,11 +10,15 @@ import type {
   PlatformOverview,
   ProjectRecord,
   RecommendedMcp,
+  RuleMode,
+  RuleSummary,
+  LoadedRule,
   SubagentConfig,
   ToolboxSnapshot,
 } from "../types"
 import {
   cancelMockSteer,
+  deleteMockAgent,
   fetchMockAgents,
   fetchMockMcpServers,
   fetchMockSubagentConfig,
@@ -34,6 +38,17 @@ export async function fetchAgents(): Promise<Agent[]> {
   if (!response.ok) throw new Error(`Failed to load agents (${response.status})`)
   const body = (await response.json()) as { agents?: Agent[] }
   return body.agents ?? []
+}
+
+export async function deleteAgent(agentId: string): Promise<void> {
+  if (MOCK_DASHBOARD) return deleteMockAgent(agentId)
+  const response = await fetch(`/ui/api/agents/${encodeURIComponent(agentId)}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to delete agent (${response.status})`)
+  }
 }
 
 export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot> {
@@ -333,7 +348,7 @@ export async function uninstallStoreEntry(id: string): Promise<void> {
 }
 
 export function subscribeToAgents(
-  onEvent: (event: AgentChangedEvent) => void,
+  onEvent: (event: AgentEvent) => void,
   onConnection: (connected: boolean) => void
 ): () => void {
   if (MOCK_DASHBOARD) return subscribeToMockAgents(onEvent, onConnection)
@@ -341,8 +356,8 @@ export function subscribeToAgents(
   source.onopen = () => onConnection(true)
   source.onerror = () => onConnection(false)
   source.onmessage = (message) => {
-    const event = JSON.parse(message.data) as AgentChangedEvent
-    if (event.type === "agent_changed") onEvent(event)
+    const event = JSON.parse(message.data) as AgentEvent
+    if (event.type === "agent_changed" || event.type === "agent_removed") onEvent(event)
   }
   return () => source.close()
 }
@@ -452,6 +467,40 @@ export async function openSubagentConfigInFinder(): Promise<boolean> {
     throw new Error(body?.error ?? `Failed to open Finder (${response.status})`)
   }
   return true
+}
+
+export async function fetchAgentInstructions(): Promise<{ path: string; content: string }> {
+  if (MOCK_DASHBOARD) {
+    return {
+      path: "/mock/AGENTS.md",
+      content:
+        "# OpenChatX Agent Instructions\n\n{{MODE_INSTRUCTIONS}}\n\n{{PROJECT_CONTEXT}}\n\n{{CAPABILITY_CATALOG}}\n\n{{ALWAYS_RULES}}\n",
+    }
+  }
+  const response = await fetch("/ui/api/agent-instructions")
+  const body = (await response.json().catch(() => undefined)) as
+    | { path?: string; content?: string; error?: string }
+    | undefined
+  if (!response.ok || body?.content === undefined || !body.path) {
+    throw new Error(body?.error ?? `Failed to load AGENTS.md (${response.status})`)
+  }
+  return { path: body.path, content: body.content }
+}
+
+export async function saveAgentInstructions(content: string): Promise<{ path: string; content: string }> {
+  if (MOCK_DASHBOARD) return { path: "/mock/AGENTS.md", content }
+  const response = await fetch("/ui/api/agent-instructions", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { path?: string; content?: string; error?: string }
+    | undefined
+  if (!response.ok || body?.content === undefined || !body.path) {
+    throw new Error(body?.error ?? `Failed to save AGENTS.md (${response.status})`)
+  }
+  return { path: body.path, content: body.content }
 }
 
 export async function fetchToolboxes(): Promise<ToolboxSnapshot[]> {
@@ -670,4 +719,63 @@ export async function openToolboxInFinder(
     throw new Error(body?.error ?? `Failed to open Finder (${response.status})`)
   }
   return true
+}
+
+export async function fetchRules(): Promise<RuleSummary[]> {
+  if (MOCK_DASHBOARD) return []
+  const response = await fetch("/ui/api/rules")
+  if (!response.ok) throw new Error(`Failed to load rules (${response.status})`)
+  const body = (await response.json()) as { rules?: RuleSummary[] }
+  return body.rules ?? []
+}
+
+export async function fetchRule(name: string): Promise<LoadedRule> {
+  const response = await fetch(`/ui/api/rules/${encodeURIComponent(name)}`)
+  const body = (await response.json().catch(() => undefined)) as
+    | { rule?: LoadedRule; error?: string }
+    | undefined
+  if (!response.ok || !body?.rule) {
+    throw new Error(body?.error ?? `Failed to load rule (${response.status})`)
+  }
+  return body.rule
+}
+
+export async function saveRule(input: {
+  originalName?: string
+  name: string
+  mode: RuleMode
+  description?: string
+  globs?: string[]
+  markdown: string
+}): Promise<RuleSummary[]> {
+  const response = await fetch(
+    input.originalName ? `/ui/api/rules/${encodeURIComponent(input.originalName)}` : "/ui/api/rules",
+    {
+      method: input.originalName ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: input.name,
+        description: input.mode === "agent_requested" ? input.description ?? "" : input.description,
+        globs: input.mode === "auto_attached" ? input.globs ?? [] : [],
+        alwaysApply: input.mode === "always",
+        markdown: input.markdown,
+      }),
+    }
+  )
+  const body = (await response.json().catch(() => undefined)) as
+    | { rules?: RuleSummary[]; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Rule save failed (${response.status})`)
+  return body?.rules ?? []
+}
+
+export async function deleteRule(name: string): Promise<RuleSummary[]> {
+  const response = await fetch(`/ui/api/rules/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { rules?: RuleSummary[]; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Rule delete failed (${response.status})`)
+  return body?.rules ?? []
 }

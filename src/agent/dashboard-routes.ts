@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { mkdir, writeFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { static as expressStatic, Router } from "express"
 
@@ -18,6 +19,8 @@ import {
 } from "../subagents/config.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
+import { RuleCatalog } from "../tools/rules/rule-catalog.js"
+import { readAgentInstructionsTemplate } from "../tools/start-here/start-here.js"
 import type { AgentObserver } from "./observer.js"
 
 export interface DashboardServices {
@@ -48,13 +51,12 @@ export function createDashboardRouter(
   } = services
   const router = Router()
 
-  router.get("/api/agents", (_req, res) => {
-    res.json({ agents: agentObserver.listAgents() })
-  })
-
+  registerAgentRoutes(router, agentObserver)
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
   registerProjectRoutes(router, projectRegistry)
+  registerAgentInstructionsRoutes(router)
+  registerRuleRoutes(router)
 
   router.get("/api/platform", async (_req, res) => {
     if (!platformOverview) {
@@ -299,6 +301,121 @@ export function createDashboardRouter(
   const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
   router.use(expressStatic(dashboardDir, { index: "index.html" }))
   return router
+}
+
+function registerAgentInstructionsRoutes(router: ReturnType<typeof Router>): void {
+  router.get("/api/agent-instructions", async (_req, res) => {
+    try {
+      res.json({
+        path: MCP_CONFIG.agentInstructionsFile,
+        content: await readAgentInstructionsTemplate(),
+      })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.put("/api/agent-instructions", async (req, res) => {
+    try {
+      const content = String(req.body?.content ?? "")
+      if (Buffer.byteLength(content, "utf8") > 256 * 1024) {
+        res.status(400).json({ error: "AGENTS.md exceeds the 256 KiB limit." })
+        return
+      }
+      await mkdir(MCP_CONFIG.stateDir, { recursive: true })
+      await writeFile(MCP_CONFIG.agentInstructionsFile, content, "utf8")
+      res.json({ path: MCP_CONFIG.agentInstructionsFile, content })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+}
+
+function registerRuleRoutes(router: ReturnType<typeof Router>): void {
+  const rules = new RuleCatalog(MCP_CONFIG.rules.root)
+
+  router.get("/api/rules", async (_req, res) => {
+    try {
+      res.json({ rules: await rules.list() })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.get("/api/rules/:ruleName", async (req, res) => {
+    try {
+      res.json({ rule: await rules.load(req.params.ruleName) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.post("/api/rules", async (req, res) => {
+    try {
+      const rule = await rules.create({
+        name: String(req.body?.name ?? "").trim(),
+        ...(req.body?.description !== undefined
+          ? { description: String(req.body.description) }
+          : {}),
+        ...(Array.isArray(req.body?.globs)
+          ? { globs: req.body.globs.map((value: unknown) => String(value)) }
+          : {}),
+        ...(req.body?.alwaysApply !== undefined
+          ? { alwaysApply: Boolean(req.body.alwaysApply) }
+          : {}),
+        ...(req.body?.markdown !== undefined ? { markdown: String(req.body.markdown) } : {}),
+      })
+      res.status(201).json({ rule, rules: await rules.list() })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.patch("/api/rules/:ruleName", async (req, res) => {
+    try {
+      const rule = await rules.edit(req.params.ruleName, {
+        ...(req.body?.description !== undefined
+          ? { description: String(req.body.description) }
+          : {}),
+        ...(Array.isArray(req.body?.globs)
+          ? { globs: req.body.globs.map((value: unknown) => String(value)) }
+          : {}),
+        ...(req.body?.alwaysApply !== undefined
+          ? { alwaysApply: Boolean(req.body.alwaysApply) }
+          : {}),
+        ...(req.body?.markdown !== undefined ? { markdown: String(req.body.markdown) } : {}),
+      })
+      res.json({ rule, rules: await rules.list() })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.delete("/api/rules/:ruleName", async (req, res) => {
+    try {
+      await rules.delete(req.params.ruleName)
+      res.json({ rules: await rules.list() })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+}
+
+function registerAgentRoutes(
+  router: ReturnType<typeof Router>,
+  agentObserver: AgentObserver
+): void {
+  router.get("/api/agents", (_req, res) => {
+    res.json({ agents: agentObserver.listAgents() })
+  })
+
+  router.delete("/api/agents/:agentId", (req, res) => {
+    if (!agentObserver.deleteAgent(req.params.agentId)) {
+      res.status(404).json({ error: "agent not found" })
+      return
+    }
+    res.status(204).end()
+  })
 }
 
 function registerCapabilityRoutes(

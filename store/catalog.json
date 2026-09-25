@@ -11,19 +11,19 @@
   ],
   "recommended_mcps": [
     {
-      "id": "open-computer-use",
-      "name": "Open Computer Use",
+      "id": "open-codex-computer-use",
+      "name": "Open Codex Computer Use",
       "description": "Cross-platform desktop automation through accessibility APIs, screenshots, clicks, typing, scrolling, drag, and native app state.",
-      "publisher": "QwenLM",
-      "repository": "QwenLM/open-computer-use",
+      "publisher": "iFurySt",
+      "repository": "iFurySt/open-codex-computer-use",
       "tags": ["computer-use", "desktop", "automation", "macos", "windows", "linux"]
     },
     {
       "id": "open-browser-use",
       "name": "Open Browser Use",
       "description": "Drive a real signed-in Chrome browser locally through an MCP server and browser extension.",
-      "publisher": "Open Browser Use",
-      "repository": "open-browser-use/open-browser-use",
+      "publisher": "iFurySt",
+      "repository": "iFurySt/open-browser-use",
       "tags": ["browser", "chrome", "automation", "web"]
     },
     {

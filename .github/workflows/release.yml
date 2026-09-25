@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: 22.18.0
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          VERSION="v$(node -p "require('./package.json').version")"
+          test "$VERSION" = "$GITHUB_REF_NAME"
+
+  macos:
+    name: macOS ${{ matrix.arch }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: brew install ripgrep
+      - run: npm ci
+      - name: Import Developer ID certificate
+        if: env.APPLE_CERTIFICATE_P12_BASE64 != ''
+        shell: bash
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/openchatx.keychain-db"
+          CERT="$RUNNER_TEMP/openchatx.p12"
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT"
+          security create-keychain -p openchatx "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p openchatx "$KEYCHAIN"
+          security import "$CERT" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k openchatx "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+      - name: Configure Apple notarization
+        if: env.APPLE_CERTIFICATE_P12_BASE64 != '' && env.APPLE_NOTARY_KEY_P8_BASE64 != '' && env.APPLE_NOTARY_KEY_ID != '' && env.APPLE_NOTARY_ISSUER_ID != ''
+        shell: bash
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey.p8"
+          echo "$APPLE_NOTARY_KEY_P8_BASE64" | base64 --decode > "$KEY"
+          xcrun notarytool store-credentials openchatx-notary             --key "$KEY"             --key-id "$APPLE_NOTARY_KEY_ID"             --issuer "$APPLE_NOTARY_ISSUER_ID"
+          echo "OPENCHATX_RELEASE_NOTARIZE=1" >> "$GITHUB_ENV"
+      - name: Build signed/notarized desktop
+        if: env.OPENCHATX_RELEASE_NOTARIZE == '1'
+        run: npm run desktop:notarize
+      - name: Build desktop
+        if: env.OPENCHATX_RELEASE_NOTARIZE != '1'
+        run: npm run desktop:build
+      - run: npm run desktop:smoke
+      - name: Name release artifacts
+        shell: bash
+        run: |
+          mv dist-desktop/OpenChatX.dmg "dist-desktop/OpenChatX-macos-${{ matrix.arch }}.dmg"
+          ditto -c -k --keepParent dist-desktop/OpenChatX.app "dist-desktop/OpenChatX-macos-${{ matrix.arch }}.app.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-${{ matrix.arch }}
+          path: |
+            dist-desktop/OpenChatX-macos-${{ matrix.arch }}.dmg
+            dist-desktop/OpenChatX-macos-${{ matrix.arch }}.app.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows ${{ matrix.arch }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+      - run: npm ci
+      - name: Import Windows code-signing certificate
+        if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
+        shell: powershell
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "openchatx.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          "OPENCHATX_WINDOWS_CERT_SHA1=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build desktop and installer
+        run: node --import tsx scripts/desktop-windows.ts installer ${{ matrix.arch }}
+      - name: Smoke test x64 runtime
+        if: matrix.arch == 'x64'
+        run: npm run desktop:windows:smoke
+      - name: Sign installer
+        if: env.OPENCHATX_WINDOWS_CERT_SHA1 != ''
+        shell: powershell
+        run: |
+          $setup = "dist-desktop\windows-installer\OpenChatX-Setup-${{ matrix.arch }}.exe"
+          signtool.exe sign /sha1 $env:OPENCHATX_WINDOWS_CERT_SHA1 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: |
+            dist-desktop/OpenChatX-windows-${{ matrix.arch }}.zip
+            dist-desktop/windows-installer/OpenChatX-Setup-${{ matrix.arch }}.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --generate-notes --title "OpenChatX $GITHUB_REF_NAME"
+          fi

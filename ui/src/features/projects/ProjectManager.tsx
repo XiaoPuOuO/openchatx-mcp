@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { useI18n } from "../../i18n"
 import { createProject, deleteProject, fetchProjects, updateProject } from "../../lib/api"
 import type { ProjectRecord } from "../../types"
 
@@ -14,6 +15,7 @@ const DEFAULT_PERMISSIONS: ProjectRecord["permissions"] = {
 }
 
 export function ProjectManager({ onBack }: { onBack: () => void }) {
+  const { t } = useI18n()
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState<string>()
@@ -101,15 +103,12 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-4">
           <Button variant="outline" size="sm" onClick={onBack}>
             <ArrowLeft className="size-4" />
-            Back
+            {t("common.back")}
           </Button>
           <FolderKanban className="size-5" />
           <div>
-            <h1 className="font-semibold">Projects</h1>
-            <p className="text-xs text-muted-foreground">
-              Named existing folders that provide session context, default cwd, and read/write/shell
-              policy.
-            </p>
+            <h1 className="font-semibold">{t("projects.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("projects.subtitle")}</p>
           </div>
         </div>
       </header>
@@ -123,25 +122,25 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
 
         <Card>
           <CardHeader>
-            <div className="font-medium">Register Project</div>
+            <div className="font-medium">{t("projects.registerTitle")}</div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 md:grid-cols-2">
               <Field
-                label="Project id"
+                label={t("projects.projectId")}
                 value={draft.id}
                 placeholder="openchatx"
                 onChange={(value) => setDraft((current) => ({ ...current, id: value }))}
               />
               <Field
-                label="Name"
+                label={t("projects.name")}
                 value={draft.name}
                 placeholder="OpenChatX"
                 onChange={(value) => setDraft((current) => ({ ...current, name: value }))}
               />
               <div className="md:col-span-2">
                 <Field
-                  label="Absolute folder path"
+                  label={t("projects.folderPath")}
                   value={draft.path}
                   placeholder="/Users/me/MyProject/openchatx-mcp"
                   onChange={(value) => setDraft((current) => ({ ...current, path: value }))}
@@ -149,9 +148,9 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
               </div>
               <div className="md:col-span-2">
                 <Field
-                  label="Description"
+                  label={t("projects.description")}
                   value={draft.description}
-                  placeholder="Optional"
+                  placeholder={t("projects.optional")}
                   onChange={(value) => setDraft((current) => ({ ...current, description: value }))}
                 />
               </div>
@@ -174,7 +173,8 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
                     }))
                   }
                 >
-                  {permission}: {draft.permissions[permission] ? "on" : "off"}
+                  {t(`projects.permission.${permission}`)}:{" "}
+                  {draft.permissions[permission] ? t("projects.on") : t("projects.off")}
                 </Button>
               ))}
               <Button
@@ -185,7 +185,7 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
                 onClick={() => void submit()}
               >
                 <Plus className="size-4" />
-                Register
+                {t("projects.register")}
               </Button>
             </div>
           </CardContent>
@@ -207,7 +207,7 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
                     onClick={() => void remove(project.id)}
                   >
                     <Trash2 className="size-4" />
-                    Unregister
+                    {t("projects.unregister")}
                   </Button>
                 </div>
               </CardHeader>
@@ -225,7 +225,8 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
                       onClick={() => void togglePermission(project, permission)}
                     >
                       <Badge>
-                        {permission}:{project.permissions[permission] ? "on" : "off"}
+                        {t(`projects.permission.${permission}`)}:
+                        {project.permissions[permission] ? t("projects.on") : t("projects.off")}
                       </Badge>
                     </button>
                   ))}
@@ -238,8 +239,7 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
         {projects.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No Projects registered yet. Register an existing folder above, then use{" "}
-              <code>project_use</code> in ChatGPT to make it the active Project for that session.
+              {t("projects.emptyPrefix")} <code>project_use</code> {t("projects.emptySuffix")}
             </CardContent>
           </Card>
         ) : null}

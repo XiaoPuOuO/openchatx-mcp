@@ -35,6 +35,8 @@ ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 - **Universal MCP Gateway** — 把本機 stdio 與遠端 HTTP MCP Server 都收進同一個 ChatGPT 連線。
 - **統一 Capability Catalog** — MCP、Toolboxes、模型 Profile 與 Provider 不再是四套分離功能，而是同一個能力目錄。
 - **Custom Toolboxes** — 用可 Hot Reload 的資料夾式 Plugin 加入自己的 TypeScript tools 與 reusable skills。
+- **標準 Agent Skills** — 使用可攜的 `SKILL.md`；透過 `skill_search` / `skill_load` 延遲載入，支援 CRUD 與跨其他 Agent Skills 生態匯入 / 匯出。
+- **Rules** — 使用 `.mdc`，提供 Always、Auto Attached、Agent Requested、Manual 四種模式，並可和 Cursor Rules、Claude Rules、`AGENTS.md` 互相匯入 / 匯出。
 - **Provider Hub + Smart Routing** — 連 OpenAI-compatible API、Ollama、LM Studio、vLLM 等 Provider，並依 tags、locality、context size、cost tier 自動選模型。
 - **Durable Jobs** — 長時間工作不綁在單次 MCP Request，之後還能查狀態與 Logs。
 - **Projects** — 直接註冊既有 Project 路徑，不搬檔案，並分別設定 read / write / shell 權限。
@@ -42,7 +44,7 @@ ChatGPT 是 Planner，OpenChatX 給它真正能動手做事的能力。
 - **Capability Composer** — 把 MCP、自訂工具、Subagents、Teams、Durable Jobs 串成可重複使用的 Workflow。
 - **Capability Store** — 除了內建 Bundle，也能直接從公開 GitHub Repository 發現未經 OpenChatX 審核的 Community Capability；安裝前可以看 Source、做靜態 Review，並鎖定實際檢查過的 Commit。
 - **Multi-machine Nodes** — 連接其他 OpenChatX 電腦，從主要 ChatGPT 連線直接 discover / call 遠端工具。
-- **Platform Dashboard** — 一次看到 Projects、目前工作、Capability Health、Providers、Teams、Workflows、Nodes 與需要處理的問題。
+- **Platform Dashboard** — macOS 風格 Sidebar，集中管理 Projects、能力商店、Subagents、Toolboxes、MCP Servers、System Status 與即時 ChatGPT Sessions；Session 可以直接發送指示或從 Dashboard 移除。
 
 外部 MCP 與自訂 Toolbox Tools 都採 Lazy Loading。`start_here` 先提供輕量能力摘要；`capability_list` 提供統一 Catalog，真正需要底層 Tool Schema 時才透過 `tool_search` 載入。
 
@@ -347,8 +349,10 @@ OpenChatX 不只提供單次 Tool Call，還把以下能力做成平台的一等
 - **Capability Store** — Built-in Capability 留在本機；Community Discovery 直接搜尋帶有 `openchatx-capability` Topic 的公開 GitHub Repository。`store_source_tree`、`store_source_read`、`store_review` 可以在安裝前檢查指定 Revision；Community Install 會鎖定 Immutable Commit SHA，Uninstall 只會移除 Store 自己安裝的 Toolbox Directory。
 - **Nodes** — `node_manage`、`node_probe`、`node_tool_search`、`node_tool_call` 連接其他 OpenChatX 電腦。
 - **Capability Health** — `capability_health` 顯示 Runtime、Tunnel、MCP、Toolbox、Provider 狀態。
+- **Skills** — `skill_search` 最多只回傳 5 個相符的名稱 / 說明，`skill_load` 才載入完整 `SKILL.md`，`skill_manage` 負責新增、編輯、刪除。Skill 不會在 Startup 預先注入。
+- **Rules** — `rule_resolve`、`rule_load`、`rule_manage` 支援 Always / Auto Attached / Agent Requested / Manual；`rule_import`、`rule_export` 可橋接 Cursor `.mdc`、Claude `.claude/rules/*.md` 與 `AGENTS.md`。
 
-Projects、Jobs、Teams、Workflows、Nodes 與 Store ownership 等持久資料都放在 `state_dir`（預設 `~/.openchatx-mcp`）。
+Skills、Rules、Projects、Jobs、Teams、Workflows、Nodes 與 Store ownership 等持久資料都放在 `state_dir`（預設 `~/.openchatx-mcp`）。
 
 ### 不架 OpenChatX Store Server 也能發布 Community Capability
 
@@ -373,6 +377,50 @@ Community Publishing 直接使用 GitHub。作者只要把 Capability 放在公�
 ```
 
 發布前可以先讓 ChatGPT 對本機 Directory 跑 `store_publish_check`。Community Capability 不會經過 OpenChatX 審核或背書；Dashboard 可以直接看 Source Tree、做靜態分析、複製 Agent Review Prompt，並安裝實際檢查過的 Exact Commit SHA。若 GitHub API Rate Limit 不夠，可選擇設定 `GITHUB_TOKEN`。
+
+## Skills 與 Rules
+
+OpenChatX 把「可編輯的 Session 範本」、「可重複使用的工作流」和「持久規則」分開。
+
+### AGENTS.md / start_here 範本
+
+`<state_dir>/AGENTS.md` 就是 `start_here` 實際使用的可編輯範本。工具箱 UI 會把它和其他 Toolbox Folder 放在同一層，所以不需要改 Source Code 就能調整 Prompt。執行時才透過 `{{MODE_INSTRUCTIONS}}`、`{{PROJECT_CONTEXT}}`、`{{CAPABILITY_CATALOG}}`、`{{ALWAYS_RULES}}` 等佔位符注入即時內容；移動或刪除佔位符就會直接改變 `start_here` 回傳的內容與位置。
+
+### Skills
+
+Skill 使用可攜的 Agent Skills 格式：
+
+```text
+<state_dir>/skills/<name>/SKILL.md
+```
+
+`SKILL.md` 只使用標準的 `name` / `description` frontmatter 與 Markdown 內容。OpenChatX 不會在 Startup 列出或注入 Skill。只有使用者明確提到某個 Skill / Workflow 時，Agent 才透過 `skill_search` 找最多 5 個相符名稱與說明，再用 `skill_load` 載入選定 Skill 的完整 Markdown。`skill_manage` 提供 CRUD；`store_skill_import` / `store_skill_export` 可搬移 portable skill folder。
+
+### Rules
+
+Rule 放在 `<state_dir>/rules/*.mdc`，格式採 Cursor-style metadata + Markdown：
+
+```md
+---
+description: "React component conventions"
+globs:
+  - "src/**/*.tsx"
+alwaysApply: false
+---
+
+# React
+
+Use accessible labels and named exports.
+```
+
+OpenChatX 有四個 Rule Mode：
+
+- **Always** — `alwaysApply: true`，由 `start_here` 自動載入。
+- **Auto Attached** — 透過 `globs`，依相關檔案路徑自動套用。
+- **Agent Requested** — 有 `description`、沒有 globs，依任務相關性由 `rule_resolve` 選取。
+- **Manual** — 沒有 description / globs，只在明確指定時透過 `rule_load` 載入。
+
+`rule_import` / `rule_export` 可以原樣處理 Cursor `.mdc`；Claude `.claude/rules/*.md` 的 `paths` 會映射成 Auto Attached；`AGENTS.md` 預設映射成 Always。無法無損表示 Agent Requested / Manual 的格式會拒絕匯出，除非明確允許 lossy export。
 
 ## 自訂 Tools
 
@@ -412,13 +460,13 @@ toolboxes/              # built-in 與 custom toolboxes
 
 OpenChatX 使用 `[tunnel]` 指定的 `tunnel-client` profile。預設 profile 是 `openchatx`，Tunnel 管理 UI 預設是 `http://127.0.0.1:8080/ui`。
 
-OpenChatX 的持久化狀態都放在 `state_dir`（預設 `~/.openchatx-mcp`）。Setup 會在這裡建立 `~/.openchatx-mcp/AGENTS.md` 與 `~/.openchatx-mcp/skills/`，而且不會覆蓋已經存在的自訂內容。OpenChatX 不再另外建立 Agent Workspace；shell / file / search / image 工具使用相對路徑時，預設從目前使用者的 Home Directory 開始，必要時可以直接傳絕對路徑。
+OpenChatX 的持久化狀態都放在 `state_dir`（預設 `~/.openchatx-mcp`）。Setup 會建立 `~/.openchatx-mcp/AGENTS.md`、`~/.openchatx-mcp/skills/` 與 `~/.openchatx-mcp/rules/`，而且不會覆蓋已經存在的自訂內容。OpenChatX 不再另外建立 Agent Workspace；shell / file / search / image 工具使用相對路徑時，預設從目前使用者的 Home Directory 開始，必要時可以直接傳絕對路徑。
 
 OpenChatX Dashboard 永遠可以從 `/ui` 使用。
 
 ## macOS Desktop
 
-OpenChatX 現在有真正的 macOS 原生 App。一般使用者不需要安裝 npm、也不需要知道 PM2；App 會直接管理 OpenChatX Runtime 與 Secure MCP Tunnel 的啟動、停止與重新啟動，並把 Dashboard 直接嵌在 App 裡。
+OpenChatX 現在有真正的 macOS 原生 App。一般使用者不需要安裝 npm、也不需要知道 PM2；App 會直接管理 OpenChatX Runtime 與 Secure MCP Tunnel，低頻 Runtime 操作收進原生 macOS Toolbar，Dashboard 則使用 macOS-style Sidebar，整合即時 ChatGPT Session、Session 移除、Projects、能力商店、MCP、Toolboxes、Subagents 與 System Status。
 
 Desktop Bundle 會內建官方 Node Runtime 與 `tunnel-client`。Logs 放在 `~/Library/Application Support/OpenChatX/logs`，MCP / Provider / Toolbox 等使用者設定放在 `~/Library/Application Support/OpenChatX/`，Tunnel Control-plane API Key 則只存進 macOS Keychain。
 
@@ -428,6 +476,19 @@ Build 會產生：
 - `dist-desktop/OpenChatX.dmg`
 
 DMG 裡有 OpenChatX App 與 Applications 捷徑。如果 Keychain 裡剛好有一張有效的 `Developer ID Application` 憑證，`desktop:build` 會自動使用該憑證、Hardened Runtime 與 Apple Timestamp 簽署 App 和 DMG；沒有時才退回 ad-hoc signing。正式公開發佈時，先用 `xcrun notarytool store-credentials openchatx-notary ...` 把 Notary Service 認證存進 Keychain，再執行 `npm run desktop:notarize`，流程會送審、等待、Staple 並驗證 App 與 DMG。需要時可用 `OPENCHATX_CODESIGN_IDENTITY` 或 `OPENCHATX_NOTARY_PROFILE` 覆寫。
+
+## Windows Desktop
+
+OpenChatX 也有原生 Windows Desktop Shell，使用 WinForms + WebView2。產品行為和 macOS 版一致：一般使用者不需要安裝 Node、npm 或 PM2；Bundle 內建官方 Windows Node Runtime 與 OpenAI `tunnel-client`，App 自己管理 Runtime / Tunnel lifecycle、嵌入 Dashboard，外部連結會交給系統預設瀏覽器，Tunnel Control-plane API Key 則存進 Windows Credential Manager。
+
+Windows App Data 放在 `%LOCALAPPDATA%\OpenChatX`：Logs 在 `logs\`、App-managed Config 在 `config\`、Tunnel Profiles 在 `tunnel-profiles\`、Desktop 管理的 Toolboxes 在 `toolboxes\`。AGENTS.md、Skills、Rules 等 OpenChatX 持久狀態仍使用設定的 `state_dir`（預設 `~/.openchatx-mcp`）。
+
+Windows Packager 支援 x64 與 ARM64，會產生 self-contained Portable Bundle 與 ZIP，例如：
+
+- `dist-desktop/windows-x64/OpenChatX/OpenChatX.exe`
+- `dist-desktop/OpenChatX-windows-x64.zip`
+
+Windows 原生 Shell 需要目標 Windows 已有 Microsoft Edge WebView2 Runtime。專案也包含 Inno Setup Installer 定義，會以 per-user 方式安裝到 `%LOCALAPPDATA%\Programs\OpenChatX`；在 Windows 上執行 `npm run desktop:windows:installer` 即可產生 Installer。若要 Authenticode 簽署，可設定 `OPENCHATX_WINDOWS_CERT_SHA1` 並使用 `signtool.exe`。
 
 ## 操作與維護
 
@@ -439,6 +500,10 @@ DMG 裡有 OpenChatX App 與 Applications 捷徑。如果 Keychain 裡剛好有�
 | `npm run desktop:notarize` | Build、Developer ID 簽署、送 Apple Notary Service、Staple 並驗證 App + DMG |
 | `npm run desktop:smoke` | 用隔離 Port 啟動 Bundle 內的 Backend 並驗證 Dashboard |
 | `npm run desktop:uninstall` | 移除 `~/Applications/OpenChatX.app`，保留 Application Support 使用者資料 |
+| `npm run desktop:windows:build` | Cross-build Windows x64 self-contained Portable Bundle 與 ZIP |
+| `npm run desktop:windows:build:arm64` | Cross-build Windows ARM64 Portable Bundle 與 ZIP |
+| `npm run desktop:windows:installer` | 在 Windows 上 Build x64 Inno Setup Installer |
+| `npm run desktop:windows:install` | 在 Windows 上 Build 並安裝 x64 App 到 `%LOCALAPPDATA%\Programs\OpenChatX` |
 | `npm run update` | 在 working tree 乾淨時 Fast-forward 到 `origin/main`、重裝 dependencies 並 rebuild |
 | `npm run restart` | Rebuild 並 reload services |
 | `npm run restart -- --hard` | 從外部 Terminal 重建專用 PM2 daemon |

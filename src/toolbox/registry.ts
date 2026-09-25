@@ -7,7 +7,12 @@ import { pathToFileURL } from "node:url"
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { isValidSkillName, MAX_SKILL_BYTES } from "../tools/skills/skill-catalog.js"
+import {
+  isValidSkillName,
+  MAX_SKILL_BYTES,
+  parseSkillFrontmatter,
+  type SkillSummary,
+} from "../tools/skills/skill-catalog.js"
 import type { Tool } from "./tool.js"
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
@@ -194,16 +199,27 @@ export class ToolboxRegistry {
     })
   }
 
-  listSkills(): Array<{ name: string; description?: string }> {
-    const result: Array<{ name: string; description?: string }> = []
+  async listSkills(signal?: AbortSignal): Promise<SkillSummary[]> {
+    const result: SkillSummary[] = []
     for (const box of this.toolboxes.values()) {
       if (!box.manifest.enabled) continue
       for (const [name, settings] of Object.entries(box.manifest.skills)) {
+        signal?.throwIfAborted()
         if (!settings.enabled) continue
-        result.push({
-          name: `${box.id}.${name}`,
-          ...(settings.description ? { description: settings.description } : {}),
-        })
+        const path = join(box.path, "skills", name, "SKILL.md")
+        try {
+          const content = await readFile(path, { encoding: "utf8", signal })
+          const metadata = parseSkillFrontmatter(content)
+          result.push({
+            name: `${box.id}.${name}`,
+            ...(metadata.description || settings.description
+              ? { description: metadata.description ?? settings.description }
+              : {}),
+          })
+        } catch (error) {
+          if (isFsError(error, "ENOENT")) continue
+          throw error
+        }
       }
     }
     return result.sort((a, b) => a.name.localeCompare(b.name))
@@ -306,10 +322,24 @@ export class ToolboxRegistry {
     }
     await writeFile(
       path,
-      `---\ndescription: ${name}\n---\n\n# ${name}\n\nAdd instructions here.\n`,
+      [
+        "---",
+        `name: ${JSON.stringify(name)}`,
+        `description: ${JSON.stringify(name)}`,
+        "---",
+        "",
+        `# ${name}`,
+        "",
+        "Add instructions here.",
+        "",
+      ].join("\n"),
       "utf8"
     )
-    box.manifest.skills[name] = { enabled: true, required: false, description: name }
+    box.manifest.skills[name] = {
+      enabled: true,
+      required: false,
+      description: name,
+    }
     await this.writeManifest(box)
     await this.reload()
     return path

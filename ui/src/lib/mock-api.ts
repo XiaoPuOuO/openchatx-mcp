@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentChangedEvent,
+  AgentEvent,
   AgentInstruction,
   McpServerMap,
   SubagentConfig,
@@ -121,7 +122,7 @@ let agents: Agent[] = [
   },
 ]
 
-const listeners = new Set<(event: AgentChangedEvent) => void>()
+const listeners = new Set<(event: AgentEvent) => void>()
 
 let mcpServers: McpServerMap = {
   blender: {
@@ -236,7 +237,21 @@ let toolboxes: ToolboxSnapshot[] = [
     enabled: true,
     builtin: "skills",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/skills",
-    tools: ["skill_list", "skill_use"].map((name) => ({
+    tools: ["skill_search", "skill_load", "skill_manage"].map((name) => ({
+      name,
+      enabled: true,
+      required: false,
+    })),
+    skills: [],
+  },
+  {
+    id: "rules",
+    name: "Rules",
+    description: "Persistent .mdc rules with always, glob, intelligent, and manual activation.",
+    enabled: true,
+    builtin: "rules",
+    path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/rules",
+    tools: ["rule_resolve", "rule_load", "rule_manage", "rule_import", "rule_export"].map((name) => ({
       name,
       enabled: true,
       required: false,
@@ -299,8 +314,17 @@ export async function fetchMockAgents(): Promise<Agent[]> {
   return structuredClone(agents)
 }
 
+export async function deleteMockAgent(agentId: string): Promise<void> {
+  if (!agents.some((agent) => agent.id === agentId)) {
+    throw new Error(`Unknown mock agent: ${agentId}`)
+  }
+  agents = agents.filter((agent) => agent.id !== agentId)
+  const event: AgentEvent = { type: "agent_removed", agentId }
+  for (const listener of listeners) listener(event)
+}
+
 export function subscribeToMockAgents(
-  onEvent: (event: AgentChangedEvent) => void,
+  onEvent: (event: AgentEvent) => void,
   onConnection: (connected: boolean) => void
 ): () => void {
   listeners.add(onEvent)

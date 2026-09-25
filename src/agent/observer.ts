@@ -42,13 +42,21 @@ interface AgentState extends AgentSnapshot {
   activeCalls: Map<string, AgentCallSnapshot>
 }
 
-interface AgentObserverEvent {
+interface AgentChangedEvent {
   type: "agent_changed"
   agent: AgentSnapshot
 }
 
+interface AgentRemovedEvent {
+  type: "agent_removed"
+  agentId: string
+}
+
+type AgentObserverEvent = AgentChangedEvent | AgentRemovedEvent
+
 export interface AgentObserver {
   listAgents(): AgentSnapshot[]
+  deleteAgent(agentId: string): boolean
   startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
   finishTool(agent: AgentIdentity | undefined, callId: string | undefined, result?: unknown): void
   failTool(agent: AgentIdentity | undefined, callId: string | undefined, error?: unknown): void
@@ -105,7 +113,19 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     events.emit("event", {
       type: "agent_changed",
       agent: toSnapshot(agent),
-    } satisfies AgentObserverEvent)
+    } satisfies AgentChangedEvent)
+  }
+
+  function deleteAgent(agentId: string): boolean {
+    const sessionId = sessionsByAgentId.get(agentId)
+    if (!sessionId) return false
+    sessionsByAgentId.delete(agentId)
+    agentsBySession.delete(sessionId)
+    events.emit("event", {
+      type: "agent_removed",
+      agentId,
+    } satisfies AgentRemovedEvent)
+    return true
   }
 
   function startTool(
@@ -213,6 +233,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
 
   return {
     listAgents,
+    deleteAgent,
     startTool,
     finishTool: (agent, callId, result) => settleTool(agent, callId, "completed", result),
     failTool: (agent, callId, error) => settleTool(agent, callId, "failed", error),

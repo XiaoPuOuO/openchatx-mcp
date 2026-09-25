@@ -11,6 +11,8 @@
       "**",
       "!!dist",
       "!!dist-desktop",
+      "!!desktop/windows/bin",
+      "!!desktop/windows/obj",
       "!!coverage",
       "!!vendor",
       "!!ui",

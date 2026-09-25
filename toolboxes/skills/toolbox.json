@@ -4,8 +4,18 @@
   "enabled": true,
   "builtin": "skills",
   "tools": {
-    "skill_list": { "enabled": true, "description": "List available reusable skills." },
-    "skill_use": { "enabled": true, "description": "Load a reusable skill." }
+    "skill_search": {
+      "enabled": true,
+      "description": "Search reusable skills by keyword without loading their Markdown."
+    },
+    "skill_load": {
+      "enabled": true,
+      "description": "Load the complete Markdown for one skill."
+    },
+    "skill_manage": {
+      "enabled": true,
+      "description": "Create, edit, or delete user-owned SKILL.md skills."
+    }
   },
   "skills": {}
 }

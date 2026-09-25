@@ -101,19 +101,19 @@ test("toolbox skills are discovered, toggled, and loaded", async (t) => {
   )
   await writeFile(
     join(box, "skills", "debug-level", "SKILL.md"),
-    "---\ndescription: Debug a game level\n---\n\n# Debug Level\n"
+    "---\nname: debug-level\ndescription: Debug a game level\n---\n\n# Debug Level\n"
   )
 
   const registry = new ToolboxRegistry(root)
   await registry.reload()
   assert.deepEqual(
-    registry.listSkills().map((skill) => skill.name),
+    (await registry.listSkills()).map((skill) => skill.name),
     ["game.debug-level"]
   )
   const skill = await registry.readSkill("game.debug-level")
   assert.match(skill.content, /Debug Level/u)
   await registry.setSkillEnabled("game", "debug-level", false)
-  assert.deepEqual(registry.listSkills(), [])
+  assert.deepEqual(await registry.listSkills(), [])
 })
 
 test("createTool writes a TypeScript SDK template", async (t) => {

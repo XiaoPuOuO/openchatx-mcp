@@ -37,6 +37,13 @@ export interface AgentChangedEvent {
   agent: Agent
 }
 
+export interface AgentRemovedEvent {
+  type: "agent_removed"
+  agentId: string
+}
+
+export type AgentEvent = AgentChangedEvent | AgentRemovedEvent
+
 export type CapabilityHealthStatus = "healthy" | "degraded" | "unavailable" | "disabled"
 
 export interface CapabilityHealthComponent {
@@ -221,6 +228,22 @@ export interface ToolboxSnapshot {
   path: string
   tools: ToolboxItem[]
   skills: ToolboxItem[]
+}
+
+export type RuleMode = "always" | "auto_attached" | "agent_requested" | "manual"
+
+export interface RuleSummary {
+  name: string
+  description?: string
+  globs: string[]
+  alwaysApply: boolean
+  mode: RuleMode
+  path: string
+}
+
+export interface LoadedRule extends RuleSummary {
+  markdown: string
+  content: string
 }
 
 export interface SubagentProviderConfig {

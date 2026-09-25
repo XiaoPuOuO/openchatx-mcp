@@ -10,8 +10,80 @@ import {
   buildStartHereInstructions,
   discoverPromptModes,
   readStartPrompt,
+  renderStartHereTemplate,
 } from "../../src/tools/start-here/start-here.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
+
+test("renders editable AGENTS.md placeholders into start_here output", () => {
+  const rendered = renderStartHereTemplate(
+    [
+      "mode={{MODE}}",
+      "task={{TASK_ID}}",
+      "{{MODE_INSTRUCTIONS}}",
+      "{{PROJECT_CONTEXT}}",
+      "{{CAPABILITY_CATALOG}}",
+      "{{ALWAYS_RULES}}",
+    ].join("\n"),
+    {
+      mode: "coding",
+      taskId: "editable-template",
+      modeInstructions: "MODE BODY",
+      projectContext: "PROJECT BODY",
+      capabilityCatalog: "CAPABILITY BODY",
+      alwaysRules: "RULE BODY",
+    }
+  )
+  assert.equal(
+    rendered,
+    [
+      "mode=coding",
+      "task=editable-template",
+      "MODE BODY",
+      "PROJECT BODY",
+      "CAPABILITY BODY",
+      "RULE BODY",
+    ].join("\n")
+  )
+})
+
+test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-rule-startup-"))
+  const previousRulesRoot = MCP_CONFIG.rules.root
+  MCP_CONFIG.rules.root = join(stateDir, "rules")
+  t.after(() => {
+    MCP_CONFIG.rules.root = previousRulesRoot
+    return rm(stateDir, { recursive: true, force: true })
+  })
+
+  await mkdir(MCP_CONFIG.rules.root, { recursive: true })
+  await writeFile(
+    join(MCP_CONFIG.rules.root, "always-rule.mdc"),
+    "---\ndescription: Global coding rule\nalwaysApply: true\n---\n\nAlways rule body marker.\n"
+  )
+  await writeFile(
+    join(MCP_CONFIG.rules.root, "manual-rule.mdc"),
+    "---\nalwaysApply: false\n---\n\nManual rule body marker.\n"
+  )
+
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(
+    running.url,
+    "always-rule-startup-client",
+    undefined,
+    false,
+    "always-rule-startup-session"
+  )
+  t.after(() => connected.client.close())
+
+  const started = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "always-rule-startup" },
+  })
+  const text = toolText(started)
+  assert.match(text, /Always rule body marker\./u)
+  assert.doesNotMatch(text, /Manual rule body marker\./u)
+})
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {
   const running = await startMcpHttpServer()
@@ -46,14 +118,10 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   })
   assert.equal(started.isError, undefined)
   const startInstructions = toolText(started)
-  const [sharedPrompt, codingPrompt] = await Promise.all([
-    readStartPrompt("shared"),
-    readStartPrompt("coding"),
-  ])
-  assert.ok(
-    startInstructions.indexOf(sharedPrompt.prompt.trim()) <
-      startInstructions.indexOf(codingPrompt.prompt.trim())
-  )
+  const codingPrompt = await readStartPrompt("coding")
+  assert.match(startInstructions, /# OpenChatX Agent Instructions/u)
+  assert.ok(startInstructions.includes(codingPrompt.prompt.trim()))
+  assert.doesNotMatch(startInstructions, /\{\{MODE_INSTRUCTIONS\}\}/u)
   assert.equal(startInstructions, await buildStartHereInstructions("coding"))
 
   const allowed = await first.client.callTool({
@@ -141,10 +209,10 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
   assert.equal(toolText(expired), codingInstructions)
 })
 
-test("suppresses rapid duplicate skill loads for the same agent", {
+test("searches skill metadata before loading full Markdown", {
   timeout: 10_000,
 }, async (t) => {
-  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-skill-cooldown-"))
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-skill-search-"))
   const previousSkillsRoot = MCP_CONFIG.skills.root
   MCP_CONFIG.skills.root = join(stateDir, "skills")
   t.after(() => {
@@ -156,52 +224,51 @@ test("suppresses rapid duplicate skill loads for the same agent", {
   await mkdir(skillDirectory, { recursive: true })
   await writeFile(
     join(skillDirectory, "SKILL.md"),
-    "---\nname: cooldown-skill\ndescription: Cooldown test skill.\n---\n\n# Cooldown Skill\n\nFull instructions.\n"
+    "---\nname: cooldown-skill\ndescription: Cooldown test skill for repeated work.\n---\n\n# Cooldown Skill\n\nFull instructions.\n"
   )
-
   const running = await startMcpHttpServer()
   t.after(() => running.close())
   const connected = await connectClient(
     running.url,
-    "skill-cooldown-client",
+    "skill-search-client",
     undefined,
     false,
-    "skill-cooldown-session"
+    "skill-search-session"
   )
   t.after(() => connected.client.close())
 
-  await connected.client.callTool({
+  const started = await connected.client.callTool({
     name: "start_here",
-    arguments: { mode: "general", task_id: "skill-cooldown" },
+    arguments: { mode: "general", task_id: "skill-search" },
   })
+  const startText = toolText(started)
+  assert.doesNotMatch(startText, /cooldown-skill/u)
 
-  const simultaneous = await Promise.all([
-    connected.client.callTool({ name: "skill_use", arguments: { name: "cooldown-skill" } }),
-    connected.client.callTool({ name: "skill_use", arguments: { name: "cooldown-skill" } }),
-  ])
-  const simultaneousText = simultaneous.map(toolText)
-  assert.equal(simultaneousText.filter((text) => /Full instructions\./u.test(text)).length, 1)
-  assert.equal(
-    simultaneousText.filter((text) => /loaded recently by this agent/u.test(text)).length,
-    1
-  )
+  const searched = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { query: "cooldown skill" },
+  })
+  const searchText = toolText(searched)
+  assert.match(searchText, /cooldown-skill/u)
+  assert.match(searchText, /Cooldown test skill for repeated work\./u)
+  assert.doesNotMatch(searchText, /Full instructions\./u)
 
-  const duplicate = await connected.client.callTool({
-    name: "skill_use",
+  const firstLoad = await connected.client.callTool({
+    name: "skill_load",
     arguments: { name: "cooldown-skill" },
   })
-  assert.match(toolText(duplicate), /loaded recently by this agent/u)
+  const secondLoad = await connected.client.callTool({
+    name: "skill_load",
+    arguments: { name: "cooldown-skill" },
+  })
+  assert.match(toolText(firstLoad), /Full instructions\./u)
+  assert.match(toolText(secondLoad), /Full instructions\./u)
 
-  const firstMissing = await connected.client.callTool({
-    name: "skill_use",
+  const missing = await connected.client.callTool({
+    name: "skill_load",
     arguments: { name: "missing-skill" },
   })
-  const retryMissing = await connected.client.callTool({
-    name: "skill_use",
-    arguments: { name: "missing-skill" },
-  })
-  assert.match(toolText(firstMissing), /unknown_skill/u)
-  assert.match(toolText(retryMissing), /unknown_skill/u)
+  assert.match(toolText(missing), /unknown_skill/u)
 })
 
 test("prefers repo-local .openchatx prompt overrides and falls back to bundled prompts", async (t) => {
@@ -235,7 +302,6 @@ test("derives start_here modes from bundled and local prompt filename slugs", as
   await Promise.all([
     writeFile(join(bundledDirectory, "coding.md"), "coding"),
     writeFile(join(bundledDirectory, "general.md"), "general"),
-    writeFile(join(bundledDirectory, "shared.md"), "shared"),
     writeFile(join(localDirectory, "coding.md"), "override"),
     writeFile(join(localDirectory, "deep-research.md"), "research"),
   ])

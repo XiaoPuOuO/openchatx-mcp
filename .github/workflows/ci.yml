@@ -5,12 +5,36 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
+env:
+  NODE_VERSION: 22.18.0
+
 jobs:
-  validate:
-    name: validate (${{ matrix.arch }})
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm --prefix ui run lint
+      - run: npm run build
+      - run: npm --prefix ui run build
+
+  macos:
+    name: macOS ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -22,38 +46,69 @@ jobs:
             runner: macos-15-intel
             uname: x86_64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - name: Verify runner architecture
         run: test "$(uname -m)" = "${{ matrix.uname }}"
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22.18.0
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install ripgrep
+      - name: Install native test dependencies
         run: brew install ripgrep
       - run: npm ci
       - run: npm run setup -- --config-only
-      - run: npm run lint
-      - run: npm run typecheck
       - run: npm test
-      - run: npm run build
+      - run: npm run desktop:build
+      - run: npm run desktop:smoke
+      - name: Rename desktop artifacts
+        run: |
+          mv dist-desktop/OpenChatX.dmg "dist-desktop/OpenChatX-macos-${{ matrix.arch }}.dmg"
+          ditto -c -k --keepParent dist-desktop/OpenChatX.app "dist-desktop/OpenChatX-macos-${{ matrix.arch }}.app.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            dist-desktop/OpenChatX-macos-${{ matrix.arch }}.dmg
+            dist-desktop/OpenChatX-macos-${{ matrix.arch }}.app.zip
+          if-no-files-found: error
+          retention-days: 7
 
   windows:
-    name: validate (windows-x64)
+    name: Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22.18.0
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
       - run: npm ci
       - run: npm run setup -- --config-only
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run build
       - name: Windows platform tests
-        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts
+        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts test/desktop-runtime.test.ts
+      - name: Build Windows desktop and installer
+        run: node --import tsx scripts/desktop-windows.ts installer ${{ matrix.arch }}
+      - name: Smoke test Windows x64 bundle
+        if: matrix.arch == 'x64'
+        run: npm run desktop:windows:smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: |
+            dist-desktop/OpenChatX-windows-${{ matrix.arch }}.zip
+            dist-desktop/windows-installer/OpenChatX-Setup-${{ matrix.arch }}.exe
+          if-no-files-found: error
+          retention-days: 7

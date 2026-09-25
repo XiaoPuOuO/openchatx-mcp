@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, symlink, writeFile } from "node:fs/promises"
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
@@ -38,6 +38,7 @@ test("lists workspace skills from frontmatter and loads the complete SKILL.md", 
     name: "create-wiki",
     path: join(skillDirectory, "SKILL.md"),
     content,
+    description: "Build and maintain a project wiki.",
   })
 })
 
@@ -58,7 +59,85 @@ test("lists and loads workspace-local skills with a leading underscore", async (
     name: "_web-search",
     path: join(skillDirectory, "SKILL.md"),
     content,
+    description: "Local web search workflow.",
   })
+})
+
+test("search returns at most five relevant skill summaries", async (t) => {
+  const workspace = await tempDir(t, "mcp-skills-search-")
+  const root = join(workspace, "skills")
+  for (let index = 0; index < 7; index += 1) {
+    const name = `game-debug-${index}`
+    const directory = join(root, name)
+    await mkdir(directory, { recursive: true })
+    await writeFile(
+      join(directory, "SKILL.md"),
+      [
+        "---",
+        `name: ${name}`,
+        `description: Debug game levels and gameplay issue ${index}.`,
+        "---",
+        "",
+        "# Debug",
+      ].join("\n")
+    )
+  }
+  const extraDirectory = join(root, "game-debug-extra")
+  await mkdir(extraDirectory, { recursive: true })
+  await writeFile(
+    join(extraDirectory, "SKILL.md"),
+    "---\nname: game-debug-extra\ndescription: Debug game levels.\n---\n"
+  )
+
+  const catalog = new SkillCatalog(root)
+  const matches = await catalog.search("game debug")
+  assert.equal(matches.length, 5)
+})
+
+test("creates edits and deletes standard SKILL.md skills", async (t) => {
+  const workspace = await tempDir(t, "mcp-skills-manage-")
+  const root = join(workspace, "skills")
+  const catalog = new SkillCatalog(root)
+
+  const created = await catalog.create({
+    name: "release-check",
+    description: "Check a release before publishing.",
+  })
+  assert.match(created.content, /name: "release-check"/u)
+
+  const edited = await catalog.edit("release-check", {
+    description: "Validate releases.",
+  })
+  assert.equal(edited.description, "Validate releases.")
+
+  await catalog.delete("release-check")
+  assert.deepEqual(await catalog.list(), [])
+})
+
+test("imports and exports portable skill folders with bundled resources", async (t) => {
+  const workspace = await tempDir(t, "mcp-skills-portable-")
+  const source = join(workspace, "incoming", "portable-skill")
+  await mkdir(join(source, "references"), { recursive: true })
+  await writeFile(
+    join(source, "SKILL.md"),
+    "---\nname: portable-skill\ndescription: Portable workflow for another agent.\n---\n\n# Portable Skill\n"
+  )
+  await writeFile(join(source, "references", "guide.md"), "# Guide\n")
+
+  const root = join(workspace, "skills")
+  const catalog = new SkillCatalog(root)
+  const imported = await catalog.importDirectory(source)
+  assert.equal(imported.name, "portable-skill")
+  assert.equal(
+    await readFile(join(root, "portable-skill", "references", "guide.md"), "utf8"),
+    "# Guide\n"
+  )
+
+  const exportRoot = join(workspace, "exports")
+  const exported = await catalog.exportDirectory("portable-skill", exportRoot)
+  assert.equal(exported, join(exportRoot, "portable-skill"))
+  assert.match(await readFile(join(exported, "SKILL.md"), "utf8"), /name: portable-skill/u)
+  assert.equal(await readFile(join(exported, "references", "guide.md"), "utf8"), "# Guide\n")
 })
 
 test("returns an empty catalog when the workspace has no skills directory", async (t) => {

@@ -1,81 +1,55 @@
 ---
 name: create-skill
-description: Create or revise reusable openchatx-mcp skills. Use when the user asks to create a skill, add a reusable agent workflow, improve an existing skill, or package repeatable instructions for skill_list and skill_use.
+description: Create or revise reusable SKILL.md workflows for OpenChatX using the common Markdown skill format.
 ---
 
 # Create Skill
 
-Create small reusable workflows that openchatx-mcp can discover from its persistent state directory or a toolbox.
+Create portable reusable workflows as Markdown skills.
 
-## OpenChatX state
+## Format
 
-- Treat the configured OpenChatX state directory as `<state_dir>` (default `~/.openchatx-mcp`).
-- Store MCP skills at `<state_dir>/skills/<name>/SKILL.md`.
-- Read `<state_dir>/AGENTS.md` and inspect existing skills before changing the catalog.
-- Use lowercase hyphenated skill names. Keep the directory name and frontmatter `name` identical.
-
-## Skill structure
-
-Minimum:
+A skill lives at:
 
 ```text
-skills/<name>/
-└── SKILL.md
+<state_dir>/skills/<name>/SKILL.md
 ```
 
-Optional resources when they materially improve repeated use:
-
-```text
-skills/<name>/
-├── SKILL.md
-├── scripts/
-├── references/
-└── assets/
-```
-
-- `scripts/`: deterministic or repeatedly reused operations.
-- `references/`: detailed material loaded only when needed.
-- `assets/`: templates or files consumed by the workflow.
-
-Keep the important workflow in `SKILL.md`. Avoid extra documentation unless the skill needs it as working material.
-
-## Frontmatter
-
-Use:
+Use YAML frontmatter followed by Markdown instructions:
 
 ```yaml
 ---
 name: example-skill
-description: What the skill does and concrete requests that should trigger it.
+description: What this skill does and the requests it is relevant to.
 ---
 ```
 
-`skill_list` exposes the directory name and frontmatter description, so make the description specific enough for an agent to know when to load it.
+Then place the reusable instructions in the Markdown body.
 
-## Workflow
+- `name` must match the skill directory name.
+- `description` should be concise, searchable, and describe when the skill applies.
+- Keep SKILL.md portable: its required frontmatter is only `name` and `description`.
+- Skills have no `alwaysApply` or startup-loading policy. Persistent activation belongs to the separate Rule system.
+- Full instructions are returned only by `skill_load`.
 
-1. Inspect existing skills for overlap and conventions.
-2. Define the requests that should trigger the skill.
-3. Capture only reusable instructions, constraints, domain knowledge, scripts, references, and assets needed for those requests.
-4. Create or update `<state_dir>/skills/<name>/SKILL.md`.
-5. Use `skill_list` to verify discovery.
-6. Use `skill_use` to verify the complete instructions load correctly.
-7. Exercise complex skills on a realistic request when useful.
+## Discovery model
+
+- Do not enumerate all skills to the agent.
+- If the user explicitly names or refers to a skill/workflow, use `skill_search` with those words.
+- `skill_search` returns only name and description and at most five relevant results.
+- No skill metadata or body is injected at startup.
+- Use `skill_load` only after selecting an exact skill.
+
+## Management
+
+Use `skill_manage` for user-owned skills:
+
+- `action="create"` creates a new skill.
+- `action="edit"` updates metadata or replaces the complete `SKILL.md`.
+- `action="delete"` removes the skill directory.
+
+When supplying complete Markdown to create/edit, preserve valid frontmatter and keep the frontmatter `name` identical to the requested skill name.
 
 ## Portability
 
-- Prefer paths relative to `<state_dir>` or the skill directory.
-- Do not assume Codex, Claude, a particular username, or another agent runtime is installed.
-- If the user explicitly wants one skill shared with another runtime, inspect that runtime's supported skill location and symlink or share a canonical directory only when both runtimes can consume the same files correctly.
-- Avoid runtime-specific tool names unless the skill is intentionally specific to that runtime.
-
-## Quality check
-
-Verify that:
-
-- the trigger description is concrete;
-- the instructions are concise and reusable;
-- referenced files exist;
-- scripts were tested when present;
-- `skill_list` shows the skill;
-- `skill_use` returns the expected instructions.
+Prefer generic Markdown instructions and relative paths. Avoid runtime-specific assumptions unless the skill is intentionally OpenChatX-specific. Optional sibling folders such as `scripts/`, `references/`, and `assets/` may be used when they materially improve reuse.

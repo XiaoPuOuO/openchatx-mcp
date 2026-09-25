@@ -1,10 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
+import { MCP_CONFIG } from "../../config.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import type { CapabilityStoreService } from "../../store/store-service.js"
+import { SkillCatalog } from "../skills/skill-catalog.js"
 
 export function registerStoreTools(server: McpServer, store: CapabilityStoreService): void {
+  const skills = new SkillCatalog(MCP_CONFIG.skills.root)
   server.registerTool(
     "store_list",
     {
@@ -205,6 +208,8 @@ export function registerStoreTools(server: McpServer, store: CapabilityStoreServ
     }
   )
 
+  registerPortableSkillStoreTools(server, skills)
+
   server.registerTool(
     "store_publish_check",
     {
@@ -223,6 +228,73 @@ export function registerStoreTools(server: McpServer, store: CapabilityStoreServ
         return { structuredContent: await store.preparePublish(directory), content: [] }
       } catch (error) {
         throw toToolError(error, "STORE_PUBLISH_CHECK_FAILED")
+      }
+    }
+  )
+}
+
+function registerPortableSkillStoreTools(server: McpServer, skills: SkillCatalog): void {
+  server.registerTool(
+    "store_skill_import",
+    {
+      description:
+        "Import a portable Agent Skills folder containing SKILL.md and optional scripts/references/assets into the OpenChatX user skill catalog.",
+      inputSchema: z.object({
+        directory: z.string().min(1).describe("Local skill directory containing SKILL.md."),
+        replace: z.boolean().default(false),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ directory, replace }) => {
+      try {
+        const skill = await skills.importDirectory(directory, { replace })
+        return {
+          structuredContent: {
+            skill: {
+              name: skill.name,
+              ...(skill.description ? { description: skill.description } : {}),
+            },
+            path: skill.path,
+          },
+          content: [],
+        }
+      } catch (error) {
+        throw toToolError(error, "STORE_SKILL_IMPORT_FAILED")
+      }
+    }
+  )
+
+  server.registerTool(
+    "store_skill_export",
+    {
+      description:
+        "Export one user skill as a portable Agent Skills folder for Claude, Codex, or another SKILL.md consumer.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        directory: z.string().min(1).describe("Destination parent directory."),
+        replace: z.boolean().default(false),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ name, directory, replace }) => {
+      try {
+        const path = await skills.exportDirectory(name, directory, { replace })
+        return {
+          structuredContent: { name, path },
+          content: [],
+        }
+      } catch (error) {
+        throw toToolError(error, "STORE_SKILL_EXPORT_FAILED")
       }
     }
   )

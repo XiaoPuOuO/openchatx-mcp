@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { copyFile, mkdir, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -24,6 +24,9 @@ export interface ConfigInitializationResult {
 const STARTER_SKILL_SOURCE = fileURLToPath(
   new URL("../skills/create-skill/SKILL.md", import.meta.url)
 )
+const AGENTS_TEMPLATE_SOURCE = fileURLToPath(
+  new URL("../src/tools/start-here/AGENTS.template.md", import.meta.url)
+)
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
 
 const CONFIG_HEADER = `# openchatx-mcp configuration.
@@ -31,7 +34,7 @@ const CONFIG_HEADER = `# openchatx-mcp configuration.
 
 `
 
-const STARTER_AGENTS_MD = `# OpenChatX Agent Instructions
+const LEGACY_STARTER_AGENTS_MD = `# OpenChatX Agent Instructions
 
 This file contains persistent instructions for OpenChatX. Customize it for your preferences.
 
@@ -48,13 +51,19 @@ export async function initializeOpenChatXState(
   const agentsPath = join(stateDir, "AGENTS.md")
   const starterSkillPath = join(stateDir, "skills", "create-skill", "SKILL.md")
   await mkdir(dirname(starterSkillPath), { recursive: true })
+  await mkdir(join(stateDir, "rules"), { recursive: true })
 
   let agentsCreated = false
+  const agentsTemplate = await readFile(AGENTS_TEMPLATE_SOURCE, "utf8")
   try {
-    await writeFile(agentsPath, STARTER_AGENTS_MD, { encoding: "utf8", flag: "wx" })
+    await writeFile(agentsPath, agentsTemplate, { encoding: "utf8", flag: "wx" })
     agentsCreated = true
   } catch (error) {
     if (!hasErrorCode(error, "EEXIST")) throw error
+    const existing = await readFile(agentsPath, "utf8")
+    if (existing === LEGACY_STARTER_AGENTS_MD) {
+      await writeFile(agentsPath, agentsTemplate, "utf8")
+    }
   }
 
   let starterSkillCreated = false
@@ -64,7 +73,6 @@ export async function initializeOpenChatXState(
   } catch (error) {
     if (!hasErrorCode(error, "EEXIST")) throw error
   }
-
   return { stateDir, agentsPath, starterSkillPath, agentsCreated, starterSkillCreated }
 }
 

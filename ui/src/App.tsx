@@ -2,13 +2,13 @@ import {
   Activity,
   Blocks,
   BrainCircuit,
+  FolderKanban,
+  Gauge,
   PackageOpen,
   RefreshCw,
-  Settings,
-  Wifi,
-  WifiOff,
+  ServerCog,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { Button } from "./components/ui/button"
@@ -23,56 +23,40 @@ import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
 
-export function App() {
-  const [view, setView] = useState<
-    "dashboard" | "mcp-servers" | "toolboxes" | "subagents" | "store" | "status" | "projects"
-  >("dashboard")
-  if (view === "mcp-servers") {
-    return <McpServerManager onBack={() => setView("dashboard")} />
-  }
-  if (view === "toolboxes") {
-    return <ToolboxManager onBack={() => setView("dashboard")} />
-  }
-  if (view === "subagents") {
-    return <SubagentManager onBack={() => setView("dashboard")} />
-  }
-  if (view === "store") {
-    return <CapabilityStoreManager onBack={() => setView("dashboard")} />
-  }
-  if (view === "status") {
-    return <StatusPage onBack={() => setView("dashboard")} />
-  }
-  if (view === "projects") {
-    return <ProjectManager onBack={() => setView("dashboard")} />
-  }
-  return (
-    <Dashboard
-      onOpenMcpServers={() => setView("mcp-servers")}
-      onOpenToolboxes={() => setView("toolboxes")}
-      onOpenSubagents={() => setView("subagents")}
-      onOpenStore={() => setView("store")}
-      onOpenStatus={() => setView("status")}
-      onOpenProjects={() => setView("projects")}
-    />
-  )
+type View =
+  | "dashboard"
+  | "projects"
+  | "store"
+  | "subagents"
+  | "toolboxes"
+  | "mcp-servers"
+  | "status"
+
+type NavItem = {
+  id: View
+  labelKey: string
+  icon: typeof Gauge
 }
 
-function Dashboard({
-  onOpenMcpServers,
-  onOpenToolboxes,
-  onOpenSubagents,
-  onOpenStore,
-  onOpenStatus,
-  onOpenProjects,
-}: {
-  onOpenMcpServers: () => void
-  onOpenToolboxes: () => void
-  onOpenSubagents: () => void
-  onOpenStore: () => void
-  onOpenStatus: () => void
-  onOpenProjects: () => void
-}) {
-  const { agents, connected, loading, error } = useAgents()
+const NAV_ITEMS: NavItem[] = [
+  { id: "dashboard", labelKey: "nav.overview", icon: Gauge },
+  { id: "projects", labelKey: "nav.projects", icon: FolderKanban },
+  { id: "store", labelKey: "nav.store", icon: PackageOpen },
+  { id: "subagents", labelKey: "nav.subagents", icon: BrainCircuit },
+  { id: "toolboxes", labelKey: "nav.toolboxes", icon: Blocks },
+  { id: "mcp-servers", labelKey: "nav.mcpServers", icon: ServerCog },
+  { id: "status", labelKey: "nav.systemStatus", icon: Activity },
+]
+
+const WORKSPACE_NAV = NAV_ITEMS.filter((item) => item.id === "dashboard" || item.id === "projects")
+const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
+  ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
+)
+const SYSTEM_NAV = NAV_ITEMS.filter((item) => item.id === "status")
+
+export function App() {
+  const [view, setView] = useState<View>("dashboard")
+  const { agents, connected, loading, error, removeAgent } = useAgents()
   const { t } = useI18n()
   const [now, setNow] = useState(Date.now())
 
@@ -82,88 +66,222 @@ function Dashboard({
   }, [])
 
   const activeCount = agents.filter((agent) => now - agent.lastSeenAt < 30_000).length
+  const titleKey = NAV_ITEMS.find((item) => item.id === view)?.labelKey
+  const title = titleKey ? t(titleKey) : "OpenChatX"
+
+  const page = useMemo(() => {
+    const back = () => setView("dashboard")
+    switch (view) {
+      case "projects":
+        return <ProjectManager onBack={back} />
+      case "store":
+        return <CapabilityStoreManager onBack={back} />
+      case "subagents":
+        return <SubagentManager onBack={back} />
+      case "toolboxes":
+        return <ToolboxManager onBack={back} />
+      case "mcp-servers":
+        return <McpServerManager onBack={back} />
+      case "status":
+        return <StatusPage onBack={back} />
+      default:
+        return (
+          <Dashboard
+            agents={agents}
+            activeCount={activeCount}
+            connected={connected}
+            loading={loading}
+            error={error}
+            now={now}
+            onRemoveAgent={removeAgent}
+            onOpenProjects={() => setView("projects")}
+            loadingLabel={t("dashboard.loading")}
+            noAgentsLabel={t("dashboard.noAgents")}
+            noAgentsHint={t("dashboard.noAgentsHint")}
+          />
+        )
+    }
+  }, [view, agents, activeCount, connected, loading, error, now, removeAgent, t])
 
   return (
-    <main className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-5 py-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <img
-              src="/ui/openchatx-mcp-icon.png"
-              alt="openchatx-mcp"
-              className="size-9 rounded-lg"
-            />
-            <div>
-              <h1 className="text-base font-semibold tracking-tight">openchatx-mcp</h1>
-              <p className="text-xs text-muted-foreground">
-                {t("dashboard.activeObserved", { active: activeCount, observed: agents.length })}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className={`hidden items-center gap-1.5 text-xs sm:flex ${connected ? "text-emerald-600" : "text-muted-foreground"}`}
-            >
-              {connected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
-              {connected ? t("dashboard.live") : t("dashboard.reconnecting")}
-            </div>
-            <LanguageSwitcher />
-            <Button variant="outline" size="sm" onClick={onOpenStatus}>
-              <Activity className="size-3.5" />
-              Status
-            </Button>
-            <Button variant="outline" size="sm" onClick={onOpenStore}>
-              <PackageOpen className="size-3.5" />
-              Store
-            </Button>
-            <Button variant="outline" size="sm" onClick={onOpenSubagents}>
-              <BrainCircuit className="size-3.5" />
-              {t("dashboard.subagents")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onOpenToolboxes}>
-              <Blocks className="size-3.5" />
-              {t("dashboard.toolboxes")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onOpenMcpServers}>
-              <Settings className="size-3.5" />
-              {t("dashboard.mcpServer")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-              <RefreshCw className="size-3.5" />
-              {t("common.refresh")}
-            </Button>
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <div className="sidebar-brand">
+          <img src="/ui/openchatx-mcp-icon.png" alt="" className="size-8 rounded-[9px]" />
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold">OpenChatX</div>
+            <div className="truncate text-[11px] text-muted-foreground">{t("app.subtitle")}</div>
           </div>
         </div>
-      </header>
 
-      <div className="mx-auto max-w-[1500px] px-5 py-6 lg:px-8">
-        <PlatformHomePanel onOpenProjects={onOpenProjects} />
-        {error ? (
-          <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
+        <nav className="sidebar-nav" aria-label="OpenChatX">
+          <NavSection
+            label={t("nav.workspace")}
+            items={WORKSPACE_NAV}
+            view={view}
+            onSelect={setView}
+            t={t}
+          />
+          <NavSection
+            label={t("nav.capabilities")}
+            items={CAPABILITY_NAV}
+            view={view}
+            onSelect={setView}
+            t={t}
+          />
+          <NavSection
+            label={t("nav.system")}
+            items={SYSTEM_NAV}
+            view={view}
+            onSelect={setView}
+            t={t}
+          />
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="runtime-summary">
+            <span className={connected ? "status-dot status-dot-online" : "status-dot"} />
+            <div className="min-w-0">
+              <div className="text-xs font-medium">
+                {connected ? t("sidebar.connected") : t("dashboard.reconnecting")}
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {t("sidebar.sessionsSummary", { active: activeCount, total: agents.length })}
+              </div>
+            </div>
           </div>
-        ) : null}
+        </div>
+      </aside>
 
-        <div className="mb-3 text-sm font-medium">ChatGPT sessions</div>
+      <section className="app-main">
+        <header className="app-toolbar">
+          <div className="min-w-0">
+            <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{title}</h1>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <LanguageSwitcher />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={() => window.location.reload()}
+              aria-label={t("common.refresh")}
+              title={t("common.refresh")}
+            >
+              <RefreshCw className="size-4" />
+            </Button>
+          </div>
+        </header>
+
+        <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>{page}</div>
+      </section>
+    </div>
+  )
+}
+
+function Dashboard({
+  agents,
+  activeCount,
+  connected,
+  loading,
+  error,
+  now,
+  onRemoveAgent,
+  onOpenProjects,
+  loadingLabel,
+  noAgentsLabel,
+  noAgentsHint,
+}: {
+  agents: ReturnType<typeof useAgents>["agents"]
+  activeCount: number
+  connected: boolean
+  loading: boolean
+  error?: string
+  now: number
+  onRemoveAgent: (agentId: string) => Promise<void>
+  onOpenProjects: () => void
+  loadingLabel: string
+  noAgentsLabel: string
+  noAgentsHint: string
+}) {
+  const { t } = useI18n()
+
+  return (
+    <main className="dashboard-page">
+      <div className="page-heading">
+        <div>
+          <h2>{t("dashboard.heading")}</h2>
+          <p>
+            {connected
+              ? activeCount > 0
+                ? t("dashboard.workingNow", { count: activeCount })
+                : t("dashboard.ready")
+              : t("dashboard.connecting")}
+          </p>
+        </div>
+      </div>
+
+      <PlatformHomePanel onOpenProjects={onOpenProjects} />
+
+      {error ? <div className="error-banner">{error}</div> : null}
+
+      <section className="session-section">
+        <div className="section-heading">
+          <h3>{t("dashboard.sessions")}</h3>
+          <span>{agents.length}</span>
+        </div>
+
         {loading ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            {t("dashboard.loading")}
-          </div>
+          <div className="empty-state">{loadingLabel}</div>
         ) : agents.length === 0 ? (
-          <div className="rounded-lg border px-4 py-8 text-center">
-            <h2 className="text-sm font-medium">{t("dashboard.noAgents")}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {t("dashboard.noAgentsHint")}
-            </p>
+          <div className="empty-state">
+            <strong>{noAgentsLabel}</strong>
+            <p>{noAgentsHint}</p>
           </div>
         ) : (
-          <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="session-grid">
             {agents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} now={now} />
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                now={now}
+                onDelete={() => onRemoveAgent(agent.id)}
+              />
             ))}
           </div>
         )}
-      </div>
+      </section>
     </main>
+  )
+}
+
+function NavSection({
+  label,
+  items,
+  view,
+  onSelect,
+  t,
+}: {
+  label: string
+  items: NavItem[]
+  view: View
+  onSelect: (view: View) => void
+  t: (key: string, values?: Record<string, string | number>) => string
+}) {
+  return (
+    <div className="sidebar-section">
+      <div className="sidebar-section-label">{label}</div>
+      {items.map(({ id, labelKey, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          className={view === id ? "sidebar-item sidebar-item-active" : "sidebar-item"}
+          onClick={() => onSelect(id)}
+        >
+          <Icon className="size-4" strokeWidth={1.8} />
+          <span>{t(labelKey)}</span>
+        </button>
+      ))}
+    </div>
   )
 }

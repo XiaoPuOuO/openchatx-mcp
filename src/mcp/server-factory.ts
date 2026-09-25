@@ -30,6 +30,8 @@ import { registerMcpServerManagementTools } from "../tools/mcp-server-management
 import { registerNodeTools } from "../tools/nodes/node-tools.js"
 import { registerProjectTools } from "../tools/projects/project-tools.js"
 import { registerProviderTools } from "../tools/providers/provider-tools.js"
+import { RuleCatalog } from "../tools/rules/rule-catalog.js"
+import { registerRuleTools } from "../tools/rules/rule-tools.js"
 import { registerSearchTools } from "../tools/search/search-tools.js"
 import type { BashProcessManager } from "../tools/shell/bash-process-manager.js"
 import { registerBashProcessTool } from "../tools/shell/bash-process-tool.js"
@@ -163,11 +165,13 @@ function registerToolboxRuntime(
   registry: ToolboxRegistry
 ): void {
   const capabilityRegistry = options.capabilityRegistry
+  const ruleCatalog = new RuleCatalog(MCP_CONFIG.rules.root)
   registerBuiltinToolbox(server, registry, "system", () => {
     registerStartHereTool(
       server,
       capabilityRegistry ? () => capabilityRegistry.list() : undefined,
-      options.projectScope
+      options.projectScope,
+      () => ruleCatalog.alwaysApplied()
     )
     if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
     if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
@@ -188,6 +192,7 @@ function registerToolboxRuntime(
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   )
   registerBuiltinToolbox(server, registry, "skills", () => registerSkillTools(server, registry))
+  registerBuiltinToolbox(server, registry, "rules", () => registerRuleTools(server))
   registerBuiltinToolbox(server, registry, "media", () =>
     registerImageTools(server, options.projectScope)
   )
@@ -247,10 +252,12 @@ function registerDirectRuntime(
   profile: McpRuntimeProfile
 ): void {
   const capabilityRegistry = options.capabilityRegistry
+  const ruleCatalog = new RuleCatalog(MCP_CONFIG.rules.root)
   registerStartHereTool(
     server,
     capabilityRegistry ? () => capabilityRegistry.list() : undefined,
-    options.projectScope
+    options.projectScope,
+    () => ruleCatalog.alwaysApplied()
   )
   if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
   if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
@@ -268,6 +275,7 @@ function registerDirectRuntime(
   if (profile.tools.web)
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (profile.tools.skills) registerSkillTools(server)
+  registerRuleTools(server)
   if (profile.tools.image) registerImageTools(server, options.projectScope)
   registerDirectPlatformTools(server, options)
 }

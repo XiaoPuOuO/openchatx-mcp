@@ -2,6 +2,8 @@ node_modules/
 *.tsbuildinfo
 dist/
 dist-desktop/
+desktop/windows/bin/
+desktop/windows/obj/
 mcp-servers.json
 subagents.json
 toolboxes/**/*.openchatx.mjs

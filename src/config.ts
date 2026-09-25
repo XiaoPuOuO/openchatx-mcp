@@ -56,6 +56,10 @@ export const MCP_CONFIG = {
   skills: {
     root: join(stateDir, "skills"),
   },
+  /** Persistent Cursor-style .mdc rules owned by this OpenChatX installation. */
+  rules: {
+    root: join(stateDir, "rules"),
+  },
   /** External local/remote MCP servers aggregated into the tool surface. */
   externalMcp: {
     configFile:
@@ -179,7 +183,10 @@ export function buildMcpInstructions(): string {
     "- Call start_here exactly once per conversation before using other openchatx-mcp tools.\n" +
     "- Custom toolbox and external MCP tools are lazy. Use tool_search to discover them, then tool_call with the returned id.\n" +
     "- Projects are named existing folders, not copied workspaces. Use project_list/project_use when a task belongs to a registered Project. Relative file/search/shell paths resolve from the active Project, and registered Project read/write/shell permissions are enforced.\n" +
-    "- When the user asks to create or modify a plugin/toolbox/custom tool, load skill `toolbox-manager.plugin-authoring` before authoring it.\n" +
+    "- Skills use portable SKILL.md Markdown with name/description frontmatter. Do not enumerate skill names proactively.\n" +
+    "- When the user explicitly mentions a skill/workflow by name or asks to use one, call skill_search with those words; then call skill_load only for the selected exact match.\n" +
+    "- Use skill_manage to create, edit, or delete user-owned skills. Use store_skill_import/store_skill_export when the user wants to move a portable SKILL.md folder between OpenChatX and other Agent Skills ecosystems.\n" +
+    "- Rules are persistent .mdc files with four derived modes: Always (alwaysApply), Auto Attached (globs), Agent Requested (description), and Manual (none). Always rules are injected by start_here. Before file-focused work or when a task may have description-based rules, call rule_resolve with the relevant task query and paths. Use rule_load for an exact manual reference, rule_manage for CRUD, and rule_import/rule_export for Cursor, Claude Rules, and AGENTS.md compatibility.\n" +
     "- Use mcp_server_list and mcp_server_manage when the user asks to create, edit, enable, disable, or delete external MCP server connections.\n" +
     "- Use subagent_list before delegating work so you choose among the user's curated model profiles by their descriptions; never assume a provider's unlisted models are available."
   )

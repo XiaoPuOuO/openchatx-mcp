@@ -35,6 +35,8 @@ I use AI agents heavily for real development work, and I once burned through 100
 - **Universal MCP gateway** — connect local stdio and remote HTTP MCP servers behind one ChatGPT connection.
 - **Unified capabilities** — MCP servers, Toolboxes, model profiles, and Providers are exposed through one capability catalog instead of four disconnected concepts.
 - **Custom Toolboxes** — add TypeScript tools and reusable skills as hot-reloadable folder-backed plugins.
+- **Standard Agent Skills** — portable `SKILL.md` workflows with lazy `skill_search` / `skill_load`, CRUD, and import/export for other Agent Skills consumers.
+- **Rules** — persistent `.mdc` rules with four activation modes: Always, Auto Attached, Agent Requested, and Manual; import/export bridges Cursor, Claude Rules, and `AGENTS.md`.
 - **Provider Hub + smart routing** — connect hosted APIs, Ollama, LM Studio, vLLM, or other OpenAI-compatible Providers and route work by tags, locality, context size, and cost tier.
 - **Durable Jobs** — keep long-running commands alive beyond one MCP request and inspect them later.
 - **Projects** — register existing project roots without moving files and give each root explicit read/write/shell permissions.
@@ -42,7 +44,7 @@ I use AI agents heavily for real development work, and I once burned through 100
 - **Capability Composer** — save reusable cross-capability workflows that chain MCP/custom tools, subagents, teams, and durable jobs.
 - **Capability Store** — install built-in bundles or discover unreviewed community capabilities directly from public GitHub repositories; inspect source and pin the exact reviewed commit before install.
 - **Multi-machine Nodes** — connect other OpenChatX machines and discover/call their tools from one primary ChatGPT connection.
-- **Platform Dashboard** — see projects, current work, capability health, Providers, Teams, Workflows, Nodes, and anything that needs attention.
+- **Platform Dashboard** — native macOS-style navigation for Projects, Capability Store, Subagents, Toolboxes, MCP servers, system health, and live ChatGPT sessions; sessions can be steered or removed from the dashboard.
 
 External MCP and custom Toolbox tools stay lazy. `start_here` exposes lightweight capability summaries; `capability_list` provides the unified catalog and `tool_search` loads underlying tool schemas only when needed.
 
@@ -326,8 +328,10 @@ OpenChatX adds platform-level primitives on top of ordinary tools:
 - **Capability Store** — built-ins stay local, while Community discovery searches public GitHub repositories tagged `openchatx-capability`; `store_source_tree`, `store_source_read`, and `store_review` expose the exact source revision before `store_install`. Community packages install from an immutable commit SHA and Store uninstall only removes Store-owned Toolbox directories.
 - **Nodes** — `node_manage`, `node_probe`, `node_tool_search`, and `node_tool_call` connect other OpenChatX machines.
 - **Capability health** — `capability_health` reports runtime, tunnel, MCP, Toolbox, and Provider status.
+- **Skills** — `skill_search` returns up to five matching names/descriptions, `skill_load` returns the full `SKILL.md`, and `skill_manage` creates/edits/deletes portable skills. Skills are never injected at startup.
+- **Rules** — `rule_resolve`, `rule_load`, and `rule_manage` implement Always / Auto Attached / Agent Requested / Manual activation. `rule_import` and `rule_export` bridge Cursor `.mdc`, Claude `.claude/rules/*.md`, and `AGENTS.md`.
 
-Persistent definitions live under `state_dir` (default `~/.openchatx-mcp`), including projects, jobs, teams, workflows, nodes, and Store ownership state.
+Persistent definitions live under `state_dir` (default `~/.openchatx-mcp`), including skills, rules, projects, jobs, teams, workflows, nodes, and Store ownership state.
 
 ### Publish a Community capability without an OpenChatX Store server
 
@@ -352,6 +356,50 @@ Example `capability.json`:
 ```
 
 Run `store_publish_check` on the local directory before publishing. Community capabilities are not reviewed or endorsed by OpenChatX. The Dashboard can show the repository source tree inline, run static analysis, copy an Agent review prompt, and install the exact commit SHA that was inspected. Set `GITHUB_TOKEN` optionally if you need a higher GitHub API rate limit.
+
+## Skills and Rules
+
+OpenChatX separates the editable session template, reusable workflows, and persistent behavioral rules.
+
+### AGENTS.md / start_here template
+
+`<state_dir>/AGENTS.md` is the editable template used by `start_here`. The Toolbox UI shows it beside the Toolbox folders so it can be edited without touching source files. Runtime-only context is injected through placeholders such as `{{MODE_INSTRUCTIONS}}`, `{{PROJECT_CONTEXT}}`, `{{CAPABILITY_CATALOG}}`, and `{{ALWAYS_RULES}}`; moving or deleting a placeholder changes what `start_here` returns and where it appears.
+
+### Skills
+
+Skills use the portable Agent Skills layout:
+
+```text
+<state_dir>/skills/<name>/SKILL.md
+```
+
+A skill contains standard `name` / `description` frontmatter and Markdown instructions. OpenChatX does not enumerate or inject skills at startup. When a user explicitly refers to a skill or workflow, the agent uses `skill_search` to retrieve up to five matching names/descriptions, then `skill_load` only for the selected skill. `skill_manage` handles CRUD, while `store_skill_import` / `store_skill_export` move portable skill folders between OpenChatX and other Agent Skills consumers.
+
+### Rules
+
+Rules live under `<state_dir>/rules/*.mdc` and use Cursor-style metadata plus Markdown:
+
+```md
+---
+description: "React component conventions"
+globs:
+  - "src/**/*.tsx"
+alwaysApply: false
+---
+
+# React
+
+Use accessible labels and named exports.
+```
+
+OpenChatX exposes four rule modes:
+
+- **Always** — `alwaysApply: true`; loaded by `start_here`.
+- **Auto Attached** — file `globs`; resolved from relevant paths.
+- **Agent Requested** — `description` with no globs; resolved from task relevance.
+- **Manual** — no description/globs; loaded only when explicitly referenced.
+
+`rule_import` / `rule_export` preserve Cursor `.mdc` directly, map Claude `.claude/rules/*.md` path scopes to Auto Attached rules, and map `AGENTS.md` to Always rules by default. Lossy exports are rejected unless explicitly allowed.
 
 ## Custom tools
 
@@ -391,13 +439,13 @@ toolboxes/              # built-in and custom toolboxes
 
 OpenChatX uses the `tunnel-client` profile configured under `[tunnel]`. The default profile is `openchatx`, and the default tunnel admin UI is `http://127.0.0.1:8080/ui`.
 
-Persistent OpenChatX state lives under `state_dir` (default `~/.openchatx-mcp`). Setup creates `~/.openchatx-mcp/AGENTS.md` and `~/.openchatx-mcp/skills/` there without overwriting existing user content. OpenChatX no longer creates a separate agent workspace; relative shell/file/search/image paths start from the current user's home directory unless an absolute path is supplied.
+Persistent OpenChatX state lives under `state_dir` (default `~/.openchatx-mcp`). Setup creates `~/.openchatx-mcp/AGENTS.md`, `~/.openchatx-mcp/skills/`, and `~/.openchatx-mcp/rules/` without overwriting existing user content. OpenChatX no longer creates a separate agent workspace; relative shell/file/search/image paths start from the current user's home directory unless an absolute path is supplied.
 
 The OpenChatX Dashboard is always available at `/ui`.
 
 ## macOS Desktop
 
-OpenChatX now has a native macOS app that runs the capability runtime directly, without npm or PM2 on the end-user machine. The app embeds the Dashboard in a WebView, bundles an official Node runtime plus `tunnel-client`, manages Runtime/Tunnel start-stop-restart itself, keeps logs under `~/Library/Application Support/OpenChatX/logs`, and stores the tunnel control-plane API key in macOS Keychain.
+OpenChatX has a native macOS app that runs the capability runtime directly, without npm or PM2 on the end-user machine. The app embeds the Dashboard in a WebView, bundles an official Node runtime plus `tunnel-client`, manages Runtime/Tunnel lifecycle itself, keeps low-frequency runtime actions in the native macOS toolbar, stores logs under `~/Library/Application Support/OpenChatX/logs`, and keeps the tunnel control-plane API key in macOS Keychain. The Dashboard uses a macOS-style sidebar and includes live ChatGPT session activity, session removal, Projects, Capability Store, MCP management, Toolboxes, Subagents, and system status.
 
 The distributable build creates both:
 
@@ -407,6 +455,19 @@ The distributable build creates both:
 The DMG contains the app plus an Applications shortcut. Community/Provider/MCP user configuration is created outside the app bundle under `~/Library/Application Support/OpenChatX/`, so replacing the app does not overwrite user configuration.
 
 If exactly one `Developer ID Application` identity is installed, `desktop:build` signs the app and DMG with that identity, hardened runtime, and Apple timestamping. Otherwise it falls back to ad-hoc signing for local development. For public distribution, store Notary Service credentials in Keychain with `xcrun notarytool store-credentials openchatx-notary ...`, then run `npm run desktop:notarize`; the workflow submits, waits, staples, and validates both the app and DMG. Override the certificate with `OPENCHATX_CODESIGN_IDENTITY` or the Keychain profile with `OPENCHATX_NOTARY_PROFILE`.
+
+## Windows Desktop
+
+OpenChatX also has a native Windows desktop shell built with WinForms + WebView2. It follows the same product model as the macOS app: end users do not need Node, npm, or PM2; the package bundles the official Windows Node runtime and OpenAI `tunnel-client`, owns Runtime/Tunnel lifecycle, embeds the Dashboard, opens external links in the default browser, and stores the tunnel control-plane API key in Windows Credential Manager.
+
+Windows application data lives under `%LOCALAPPDATA%\OpenChatX`: logs under `logs\`, app-managed config under `config\`, tunnel profiles under `tunnel-profiles\`, and Desktop-managed Toolboxes under `toolboxes\`. Persistent OpenChatX state such as `AGENTS.md`, Skills, and Rules continues to use the configured `state_dir` (default `~/.openchatx-mcp`).
+
+The Windows packager supports x64 and ARM64 and produces a self-contained portable bundle plus ZIP, for example:
+
+- `dist-desktop/windows-x64/OpenChatX/OpenChatX.exe`
+- `dist-desktop/OpenChatX-windows-x64.zip`
+
+The native shell requires Microsoft Edge WebView2 Runtime on the Windows machine. An Inno Setup definition is included for a per-user installer under `%LOCALAPPDATA%\Programs\OpenChatX`; build it on Windows with `npm run desktop:windows:installer`. Optional Authenticode signing uses `OPENCHATX_WINDOWS_CERT_SHA1` and `signtool.exe`.
 
 ## Operations
 
@@ -418,6 +479,10 @@ If exactly one `Developer ID Application` identity is installed, `desktop:build`
 | `npm run desktop:notarize` | Build, Developer ID sign, submit to Apple Notary Service, staple, and validate the macOS app + DMG |
 | `npm run desktop:smoke` | Launch the bundled backend on an isolated port and verify the packaged runtime/dashboard |
 | `npm run desktop:uninstall` | Remove `~/Applications/OpenChatX.app` while preserving Application Support user data |
+| `npm run desktop:windows:build` | Cross-build the self-contained Windows x64 portable bundle and ZIP |
+| `npm run desktop:windows:build:arm64` | Cross-build the Windows ARM64 portable bundle and ZIP |
+| `npm run desktop:windows:installer` | On Windows, build the x64 Inno Setup installer |
+| `npm run desktop:windows:install` | On Windows, build and install the x64 app under `%LOCALAPPDATA%\Programs\OpenChatX` |
 | `npm run update` | Fast-forward a clean checkout to `origin/main`, reinstall dependencies, and rebuild |
 | `npm run restart` | Rebuild and reload services |
 | `npm run restart -- --hard` | Rebuild and recreate the dedicated PM2 daemon from an external terminal |
