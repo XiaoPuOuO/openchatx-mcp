@@ -10,6 +10,7 @@ import { createExternalMcpRegistry } from "./external-mcp/registry.js"
 import { JobManager } from "./jobs/job-manager.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
 import { NodeRegistry } from "./nodes/node-registry.js"
+import { PlatformOverviewService } from "./platform/overview.js"
 import { ProjectRegistry } from "./projects/project-registry.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
@@ -63,6 +64,17 @@ const workflows = new WorkflowService({
   jobs: jobManager,
 })
 const nodes = new NodeRegistry()
+const platformOverview = new PlatformOverviewService({
+  capabilities: capabilityRegistry,
+  health: capabilityHealth,
+  jobs: jobManager,
+  projects: projectRegistry,
+  store: capabilityStore,
+  subagents: subagentRuntime,
+  teams: agentTeams,
+  workflows,
+  nodes,
+})
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -94,6 +106,7 @@ try {
     capabilityHealth,
     capabilityRegistry,
     capabilityStore,
+    platformOverview,
   })
 } catch (error) {
   await closeRuntimeServices()

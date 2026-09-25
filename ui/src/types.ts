@@ -63,6 +63,42 @@ export interface CapabilityStoreEntry {
   installedAt?: string
 }
 
+export interface PlatformOverview {
+  counts: {
+    capabilities: number
+    projects: number
+    providers: number
+    modelProfiles: number
+    teams: number
+    workflows: number
+    nodes: number
+    storeAvailable: number
+  }
+  projects: Array<{
+    id: string
+    name: string
+    path: string
+    permissions: {
+      read: boolean
+      write: boolean
+      shell: boolean
+    }
+  }>
+  currentWork: Array<{
+    id: string
+    label: string
+    status: string
+    cwd: string
+    updatedAt: string
+  }>
+  needsAttention: Array<{
+    id: string
+    source: "health" | "job"
+    label: string
+    detail: string
+  }>
+}
+
 interface McpServerBase {
   enabled: boolean
   description?: string

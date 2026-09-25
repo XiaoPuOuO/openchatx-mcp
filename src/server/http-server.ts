@@ -13,6 +13,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
+import type { PlatformOverviewService } from "../platform/overview.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
@@ -43,6 +44,7 @@ export interface McpHttpServices {
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
+  platformOverview?: PlatformOverviewService
 }
 
 export interface McpHttpProfileOverrides {
@@ -69,6 +71,7 @@ export async function startMcpHttpServer(
     capabilityHealth,
     capabilityRegistry,
     capabilityStore,
+    platformOverview,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -103,6 +106,7 @@ export async function startMcpHttpServer(
         capabilityHealth,
         capabilityRegistry,
         capabilityStore,
+        platformOverview,
       })
     )
 

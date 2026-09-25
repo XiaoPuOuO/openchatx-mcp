@@ -5,6 +5,7 @@ import type {
   CapabilityHealthSnapshot,
   CapabilityStoreEntry,
   McpServerMap,
+  PlatformOverview,
   SubagentConfig,
   ToolboxSnapshot,
 } from "../types"
@@ -51,6 +52,36 @@ export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot>
   const response = await fetch("/ui/api/health")
   if (!response.ok) throw new Error(`Failed to load capability health (${response.status})`)
   return (await response.json()) as CapabilityHealthSnapshot
+}
+
+export async function fetchPlatformOverview(): Promise<PlatformOverview> {
+  if (MOCK_DASHBOARD) {
+    return {
+      counts: {
+        capabilities: 8,
+        projects: 2,
+        providers: 2,
+        modelProfiles: 3,
+        teams: 1,
+        workflows: 2,
+        nodes: 1,
+        storeAvailable: 1,
+      },
+      projects: [
+        {
+          id: "openchatx",
+          name: "OpenChatX",
+          path: "/mock/openchatx-mcp",
+          permissions: { read: true, write: true, shell: true },
+        },
+      ],
+      currentWork: [],
+      needsAttention: [],
+    }
+  }
+  const response = await fetch("/ui/api/platform")
+  if (!response.ok) throw new Error(`Failed to load platform overview (${response.status})`)
+  return (await response.json()) as PlatformOverview
 }
 
 export async function fetchStoreEntries(): Promise<CapabilityStoreEntry[]> {

@@ -7,6 +7,7 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { PlatformOverviewService } from "../platform/overview.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import {
   loadSubagentConfig,
@@ -25,6 +26,7 @@ export interface DashboardServices {
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
   capabilityStore?: CapabilityStoreService
+  platformOverview?: PlatformOverviewService
 }
 
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
@@ -39,6 +41,7 @@ export function createDashboardRouter(
     capabilityHealth,
     capabilityRegistry,
     capabilityStore,
+    platformOverview,
   } = services
   const router = Router()
 
@@ -48,6 +51,14 @@ export function createDashboardRouter(
 
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
+
+  router.get("/api/platform", async (_req, res) => {
+    if (!platformOverview) {
+      res.status(503).json({ error: "Platform overview is unavailable." })
+      return
+    }
+    res.json(await platformOverview.snapshot())
+  })
 
   router.get("/api/events", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream")

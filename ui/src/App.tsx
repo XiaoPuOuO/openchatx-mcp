@@ -5,6 +5,7 @@ import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { CapabilityHealthPanel } from "./features/dashboard/CapabilityHealthPanel"
+import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
 import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
@@ -110,6 +111,7 @@ function Dashboard({
       </header>
 
       <div className="mx-auto max-w-[1500px] px-5 py-6 lg:px-8">
+        <PlatformHomePanel />
         <CapabilityHealthPanel />
         {error ? (
           <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -117,13 +119,14 @@ function Dashboard({
           </div>
         ) : null}
 
+        <div className="mb-3 text-sm font-medium">ChatGPT sessions</div>
         {loading ? (
-          <div className="py-24 text-center text-sm text-muted-foreground">
+          <div className="py-12 text-center text-sm text-muted-foreground">
             {t("dashboard.loading")}
           </div>
         ) : agents.length === 0 ? (
-          <div className="mx-auto max-w-lg py-24 text-center">
-            <h2 className="mt-4 text-lg font-semibold">{t("dashboard.noAgents")}</h2>
+          <div className="rounded-lg border px-4 py-8 text-center">
+            <h2 className="text-sm font-medium">{t("dashboard.noAgents")}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {t("dashboard.noAgentsHint")}
             </p>
