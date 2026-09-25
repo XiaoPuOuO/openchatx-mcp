@@ -427,7 +427,7 @@ Build 會產生：
 - `dist-desktop/OpenChatX.app`
 - `dist-desktop/OpenChatX.dmg`
 
-DMG 裡有 OpenChatX App 與 Applications 捷徑。目前本機 Build 使用 ad-hoc signing，適合自己測試；正式公開發佈前仍需 Apple Developer ID Signing + Notarization，避免其他 Mac 出現 Gatekeeper 警告。
+DMG 裡有 OpenChatX App 與 Applications 捷徑。如果 Keychain 裡剛好有一張有效的 `Developer ID Application` 憑證，`desktop:build` 會自動使用該憑證、Hardened Runtime 與 Apple Timestamp 簽署 App 和 DMG；沒有時才退回 ad-hoc signing。正式公開發佈時，先用 `xcrun notarytool store-credentials openchatx-notary ...` 把 Notary Service 認證存進 Keychain，再執行 `npm run desktop:notarize`，流程會送審、等待、Staple 並驗證 App 與 DMG。需要時可用 `OPENCHATX_CODESIGN_IDENTITY` 或 `OPENCHATX_NOTARY_PROFILE` 覆寫。
 
 ## 操作與維護
 
@@ -436,6 +436,7 @@ DMG 裡有 OpenChatX App 與 Applications 捷徑。目前本機 Build 使用 ad-
 | `npm start` | Build 並啟動 / reload OpenChatX 與 tunnel-client |
 | `npm run desktop:build` | Build 原生 macOS `.app` 與 `.dmg`，內建 Node + tunnel-client |
 | `npm run desktop:install` | Build 後安裝 `OpenChatX.app` 到 `~/Applications` 供本機測試 |
+| `npm run desktop:notarize` | Build、Developer ID 簽署、送 Apple Notary Service、Staple 並驗證 App + DMG |
 | `npm run desktop:smoke` | 用隔離 Port 啟動 Bundle 內的 Backend 並驗證 Dashboard |
 | `npm run desktop:uninstall` | 移除 `~/Applications/OpenChatX.app`，保留 Application Support 使用者資料 |
 | `npm run update` | 在 working tree 乾淨時 Fast-forward 到 `origin/main`、重裝 dependencies 並 rebuild |

@@ -15,7 +15,9 @@ const runtimePath = join(resourcesPath, "runtime")
 const runtimeBinPath = join(runtimePath, "bin")
 const cachePath = join(outputRoot, "cache")
 const dmgPath = join(outputRoot, "OpenChatX.dmg")
+const notarizationZipPath = join(outputRoot, "OpenChatX-notarization.zip")
 const nodeVersion = process.versions.node
+const notaryProfile = process.env.OPENCHATX_NOTARY_PROFILE?.trim() || "openchatx-notary"
 
 if (process.platform !== "darwin") {
   throw new Error("OpenChatX macOS Desktop packaging must run on macOS.")
@@ -32,9 +34,12 @@ if (desktopCommand === "build") {
   await installForCurrentUser()
 } else if (desktopCommand === "uninstall") {
   await uninstallForCurrentUser()
+} else if (desktopCommand === "notarize") {
+  await buildDesktop()
+  await notarizeDesktop()
 } else {
   throw new Error(
-    "Usage: npm run desktop:build | npm run desktop:install | npm run desktop:uninstall"
+    "Usage: npm run desktop:build | npm run desktop:install | npm run desktop:uninstall | npm run desktop:notarize"
   )
 }
 
@@ -81,10 +86,16 @@ async function buildDesktop(): Promise<void> {
   await compileSwiftApp()
 
   await chmod(join(runtimePath, "vendor/apply-patch/apply_patch"), 0o755)
-  run("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", appPath])
-  run("/usr/bin/codesign", ["--verify", "--deep", "--strict", appPath])
+  const signingIdentity = resolveCodesignIdentity()
+  signApp(signingIdentity)
 
   await createDmg()
+  signDmg(signingIdentity)
+  console.log(
+    signingIdentity === "-"
+      ? "Signing: ad-hoc (set OPENCHATX_CODESIGN_IDENTITY or install one Developer ID Application identity for release signing)"
+      : `Signing: ${signingIdentity}`
+  )
   console.log(`OpenChatX.app: ${appPath}`)
   console.log(`OpenChatX.dmg: ${dmgPath}`)
 }
@@ -240,6 +251,7 @@ async function writeDesktopConfig(destination: string): Promise<void> {
 async function createDmg(): Promise<void> {
   const staging = join(outputRoot, "dmg")
   await rm(staging, { recursive: true, force: true })
+  await rm(dmgPath, { force: true })
   await mkdir(staging, { recursive: true })
   await cp(appPath, join(staging, "OpenChatX.app"), { recursive: true })
   await symlink("/Applications", join(staging, "Applications"))
@@ -255,6 +267,75 @@ async function createDmg(): Promise<void> {
     dmgPath,
   ])
   await rm(staging, { recursive: true, force: true })
+}
+
+async function notarizeDesktop(): Promise<void> {
+  const signingIdentity = resolveCodesignIdentity()
+  if (signingIdentity === "-") {
+    throw new Error("Developer ID Application signing identity is required for notarization.")
+  }
+
+  await rm(notarizationZipPath, { force: true })
+  run("/usr/bin/ditto", ["-c", "-k", "--keepParent", appPath, notarizationZipPath])
+  run("/usr/bin/xcrun", [
+    "notarytool",
+    "submit",
+    notarizationZipPath,
+    "--keychain-profile",
+    notaryProfile,
+    "--wait",
+  ])
+  run("/usr/bin/xcrun", ["stapler", "staple", appPath])
+  run("/usr/bin/xcrun", ["stapler", "validate", appPath])
+
+  await createDmg()
+  signDmg(signingIdentity)
+  run("/usr/bin/xcrun", [
+    "notarytool",
+    "submit",
+    dmgPath,
+    "--keychain-profile",
+    notaryProfile,
+    "--wait",
+  ])
+  run("/usr/bin/xcrun", ["stapler", "staple", dmgPath])
+  run("/usr/bin/xcrun", ["stapler", "validate", dmgPath])
+  run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])
+
+  console.log(`Notarization complete using Keychain profile ${JSON.stringify(notaryProfile)}.`)
+}
+
+function resolveCodesignIdentity(): string {
+  const configured = process.env.OPENCHATX_CODESIGN_IDENTITY?.trim()
+  if (configured) return configured
+
+  const output = execFileSync("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"], {
+    encoding: "utf8",
+  })
+  const identities = [...output.matchAll(/"([^"]*Developer ID Application:[^"]+)"/gu)].map(
+    (match) => match[1]
+  )
+  if (identities.length === 1 && identities[0]) return identities[0]
+  if (identities.length > 1) {
+    throw new Error(
+      "Multiple Developer ID Application identities are installed. Set OPENCHATX_CODESIGN_IDENTITY explicitly."
+    )
+  }
+  return "-"
+}
+
+function signApp(identity: string): void {
+  const args = ["--force", "--deep"]
+  if (identity !== "-") args.push("--options", "runtime", "--timestamp")
+  args.push("--sign", identity, appPath)
+  run("/usr/bin/codesign", args)
+  run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath])
+}
+
+function signDmg(identity: string): void {
+  if (identity === "-") return
+  run("/usr/bin/codesign", ["--force", "--timestamp", "--sign", identity, dmgPath])
+  run("/usr/bin/codesign", ["--verify", "--verbose=2", dmgPath])
 }
 
 async function removePackageBinDirectories(directory: string): Promise<void> {

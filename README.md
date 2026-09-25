@@ -406,7 +406,7 @@ The distributable build creates both:
 
 The DMG contains the app plus an Applications shortcut. Community/Provider/MCP user configuration is created outside the app bundle under `~/Library/Application Support/OpenChatX/`, so replacing the app does not overwrite user configuration.
 
-The local developer build is ad-hoc signed for testing. A public release still needs Apple Developer ID signing/notarization before it can install without Gatekeeper warnings on other Macs.
+If exactly one `Developer ID Application` identity is installed, `desktop:build` signs the app and DMG with that identity, hardened runtime, and Apple timestamping. Otherwise it falls back to ad-hoc signing for local development. For public distribution, store Notary Service credentials in Keychain with `xcrun notarytool store-credentials openchatx-notary ...`, then run `npm run desktop:notarize`; the workflow submits, waits, staples, and validates both the app and DMG. Override the certificate with `OPENCHATX_CODESIGN_IDENTITY` or the Keychain profile with `OPENCHATX_NOTARY_PROFILE`.
 
 ## Operations
 
@@ -415,6 +415,7 @@ The local developer build is ad-hoc signed for testing. A public release still n
 | `npm start` | Build and start/reload OpenChatX and tunnel-client |
 | `npm run desktop:build` | Build the native macOS `.app` and `.dmg` with bundled Node + tunnel-client |
 | `npm run desktop:install` | Build and install `OpenChatX.app` into `~/Applications` for local testing |
+| `npm run desktop:notarize` | Build, Developer ID sign, submit to Apple Notary Service, staple, and validate the macOS app + DMG |
 | `npm run desktop:smoke` | Launch the bundled backend on an isolated port and verify the packaged runtime/dashboard |
 | `npm run desktop:uninstall` | Remove `~/Applications/OpenChatX.app` while preserving Application Support user data |
 | `npm run update` | Fast-forward a clean checkout to `origin/main`, reinstall dependencies, and rebuild |
