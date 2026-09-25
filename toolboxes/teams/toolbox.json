@@ -1,0 +1,12 @@
+{
+  "name": "Agent Teams",
+  "description": "Coordinate multiple configured subagent profiles as a team while ChatGPT remains the integrator.",
+  "enabled": true,
+  "builtin": "teams",
+  "tools": {
+    "agent_team_list": { "enabled": true, "description": "List configured agent teams." },
+    "agent_team_manage": { "enabled": true, "description": "Create or update agent teams." },
+    "agent_team_run": { "enabled": true, "description": "Run a task across an agent team." }
+  },
+  "skills": {}
+}

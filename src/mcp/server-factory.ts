@@ -11,6 +11,7 @@ import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SmartModelRouter } from "../subagents/router.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
+import type { AgentTeamService } from "../teams/team-service.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
 import { registerCapabilityTools } from "../tools/capabilities/capability-tools.js"
@@ -39,6 +40,7 @@ import { registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerStoreTools } from "../tools/store/store-tools.js"
 import { registerSmartRoutingTools } from "../tools/subagents/router-tools.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
+import { registerAgentTeamTools } from "../tools/teams/team-tools.js"
 import { registerToolboxManagementTools } from "../tools/toolbox-management/toolbox-management-tools.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
 import { registerWebTool } from "../tools/web/web-tool.js"
@@ -58,6 +60,7 @@ export interface CreateMcpServerOptions {
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
   projectRegistry?: ProjectRegistry
+  agentTeams?: AgentTeamService
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
 }
@@ -76,6 +79,7 @@ export interface McpCapabilityServices {
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
   projectRegistry?: ProjectRegistry
+  agentTeams?: AgentTeamService
 }
 
 export interface McpRuntimeProfile {
@@ -203,6 +207,11 @@ function registerToolboxRuntime(
     registerBuiltinToolbox(server, registry, "providers", () =>
       registerProviderTools(server, providerHub)
     )
+  const agentTeams = options.agentTeams
+  if (agentTeams)
+    registerBuiltinToolbox(server, registry, "teams", () =>
+      registerAgentTeamTools(server, agentTeams)
+    )
 }
 
 function registerDirectRuntime(
@@ -228,11 +237,16 @@ function registerDirectRuntime(
     registerWebTool(server, requireCapabilityService(options.webPageOpener, "web"))
   if (profile.tools.skills) registerSkillTools(server)
   if (profile.tools.image) registerImageTools(server)
+  registerDirectPlatformTools(server, options)
+}
+
+function registerDirectPlatformTools(server: McpServer, options: CreateMcpServerOptions): void {
   if (options.jobManager) registerJobTools(server, options.jobManager, options.projectRegistry)
   if (options.projectRegistry) registerProjectTools(server, options.projectRegistry)
   if (options.capabilityStore) registerStoreTools(server, options.capabilityStore)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
   if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
+  if (options.agentTeams) registerAgentTeamTools(server, options.agentTeams)
 }
 
 function registerBuiltinToolbox(

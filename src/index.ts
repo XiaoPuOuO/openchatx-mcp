@@ -17,6 +17,7 @@ import { CapabilityStoreService } from "./store/store-service.js"
 import { loadSubagentConfig } from "./subagents/config.js"
 import { SmartModelRouter } from "./subagents/router.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
+import { AgentTeamService } from "./teams/team-service.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
 import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
@@ -51,6 +52,7 @@ const capabilityStore = new CapabilityStoreService(
 )
 const providerHub = new ProviderHub(MCP_CONFIG.subagents.configFile, subagentRuntime)
 const smartRouter = new SmartModelRouter(MCP_CONFIG.subagents.configFile, subagentRuntime)
+const agentTeams = new AgentTeamService(subagentRuntime)
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
@@ -69,6 +71,7 @@ try {
       providerHub,
       smartRouter,
       projectRegistry,
+      agentTeams,
     }),
     auditLogger,
     authStore,
