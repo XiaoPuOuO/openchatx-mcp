@@ -426,13 +426,87 @@ extension DesktopError: LocalizedError {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+private extension NSToolbarItem.Identifier {
+    static let runtimeStatus = NSToolbarItem.Identifier("openchatx.runtime-status")
+    static let startRuntime = NSToolbarItem.Identifier("openchatx.start-runtime")
+    static let stopRuntime = NSToolbarItem.Identifier("openchatx.stop-runtime")
+    static let restartRuntime = NSToolbarItem.Identifier("openchatx.restart-runtime")
+    static let connectTunnel = NSToolbarItem.Identifier("openchatx.connect-tunnel")
+    static let openLogs = NSToolbarItem.Identifier("openchatx.open-logs")
+}
+
+final class RuntimeStatusView: NSView {
+    private let runtimeDot = NSImageView()
+    private let runtimeLabel = NSTextField(labelWithString: "Starting…")
+    private let tunnelDot = NSImageView()
+    private let tunnelLabel = NSTextField(labelWithString: "Checking…")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        runtimeDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
+        tunnelDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
+        runtimeDot.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 7, weight: .semibold)
+        tunnelDot.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 7, weight: .semibold)
+
+        runtimeLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        tunnelLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        runtimeLabel.textColor = .secondaryLabelColor
+        tunnelLabel.textColor = .secondaryLabelColor
+
+        let runtime = makeStatusStack(dot: runtimeDot, label: runtimeLabel)
+        let tunnel = makeStatusStack(dot: tunnelDot, label: tunnelLabel)
+        let stack = NSStackView(views: [runtime, tunnel])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 205),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(runtimeHealthy: Bool, tunnelHealthy: Bool, tunnelProfile: Bool) {
+        runtimeDot.contentTintColor = runtimeHealthy ? .systemGreen : .systemOrange
+        runtimeLabel.stringValue = runtimeHealthy ? "Runtime" : "Runtime offline"
+
+        tunnelDot.contentTintColor = tunnelHealthy
+            ? .systemGreen
+            : (tunnelProfile ? .systemOrange : .systemGray)
+        tunnelLabel.stringValue = tunnelHealthy
+            ? "Tunnel"
+            : (tunnelProfile ? "Tunnel offline" : "Tunnel setup")
+    }
+
+    private func makeStatusStack(dot: NSImageView, label: NSTextField) -> NSStackView {
+        let stack = NSStackView(views: [dot, label])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 5
+        return stack
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSToolbarDelegate {
     private let supervisor = RuntimeSupervisor()
     private var window: NSWindow!
     private var webView: WKWebView!
-    private var runtimeLabel: NSTextField!
-    private var tunnelLabel: NSTextField!
-    private var setupButton: NSButton!
+    private let runtimeStatusView = RuntimeStatusView()
+    private var startToolbarItem: NSToolbarItem?
+    private var stopToolbarItem: NSToolbarItem?
+    private var restartToolbarItem: NSToolbarItem?
+    private var connectToolbarItem: NSToolbarItem?
     private var timer: Timer?
     private var lastSnapshot: RuntimeSupervisor.Snapshot?
 
@@ -470,49 +544,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         window.title = "OpenChatX"
         window.center()
         window.minSize = NSSize(width: 900, height: 620)
+        window.tabbingMode = .disallowed
+        window.toolbarStyle = .unifiedCompact
+
+        let toolbar = NSToolbar(identifier: "openchatx.main-toolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        window.toolbar = toolbar
 
         let root = NSView()
         root.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = root
 
-        let controls = NSStackView()
-        controls.orientation = .horizontal
-        controls.alignment = .centerY
-        controls.spacing = 10
-        controls.translatesAutoresizingMaskIntoConstraints = false
-
-        let title = NSTextField(labelWithString: "OpenChatX")
-        title.font = .boldSystemFont(ofSize: 16)
-        controls.addArrangedSubview(title)
-
-        runtimeLabel = NSTextField(labelWithString: "Runtime: starting…")
-        tunnelLabel = NSTextField(labelWithString: "Tunnel: checking…")
-        controls.addArrangedSubview(runtimeLabel)
-        controls.addArrangedSubview(tunnelLabel)
-
-        controls.addArrangedSubview(makeButton("Start", #selector(startRuntime)))
-        controls.addArrangedSubview(makeButton("Stop", #selector(stopRuntime)))
-        controls.addArrangedSubview(makeButton("Restart", #selector(restartRuntime)))
-        setupButton = makeButton("Connect Tunnel", #selector(setupTunnel))
-        controls.addArrangedSubview(setupButton)
-        controls.addArrangedSubview(makeButton("Logs", #selector(openLogs)))
-
         webView = WKWebView()
         webView.navigationDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
-
-        root.addSubview(controls)
         root.addSubview(webView)
 
         NSLayoutConstraint.activate([
-            controls.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
-            controls.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor, constant: -16),
-            controls.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            controls.heightAnchor.constraint(equalToConstant: 32),
             webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: controls.bottomAnchor, constant: 10),
-            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor)
+            webView.topAnchor.constraint(equalTo: root.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
 
         showStartingPage()
@@ -520,21 +575,117 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func makeButton(_ title: String, _ action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        button.bezelStyle = .rounded
-        return button
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [
+            .runtimeStatus,
+            .flexibleSpace,
+            .startRuntime,
+            .stopRuntime,
+            .restartRuntime,
+            .connectTunnel,
+            .openLogs,
+        ]
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [
+            .runtimeStatus,
+            .flexibleSpace,
+            .startRuntime,
+            .stopRuntime,
+            .restartRuntime,
+            .connectTunnel,
+            .openLogs,
+        ]
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        switch itemIdentifier {
+        case .runtimeStatus:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.view = runtimeStatusView
+            item.label = "Status"
+            item.paletteLabel = "Status"
+            return item
+        case .startRuntime:
+            let item = toolbarButton(
+                identifier: itemIdentifier,
+                label: "Start",
+                symbol: "play.fill",
+                action: #selector(startRuntime)
+            )
+            startToolbarItem = item
+            return item
+        case .stopRuntime:
+            let item = toolbarButton(
+                identifier: itemIdentifier,
+                label: "Stop",
+                symbol: "stop.fill",
+                action: #selector(stopRuntime)
+            )
+            stopToolbarItem = item
+            return item
+        case .restartRuntime:
+            let item = toolbarButton(
+                identifier: itemIdentifier,
+                label: "Restart",
+                symbol: "arrow.clockwise",
+                action: #selector(restartRuntime)
+            )
+            restartToolbarItem = item
+            return item
+        case .connectTunnel:
+            let item = toolbarButton(
+                identifier: itemIdentifier,
+                label: "Connect Tunnel",
+                symbol: "link",
+                action: #selector(setupTunnel)
+            )
+            connectToolbarItem = item
+            return item
+        case .openLogs:
+            return toolbarButton(
+                identifier: itemIdentifier,
+                label: "Logs",
+                symbol: "doc.text.magnifyingglass",
+                action: #selector(openLogs)
+            )
+        default:
+            return nil
+        }
+    }
+
+    private func toolbarButton(
+        identifier: NSToolbarItem.Identifier,
+        label: String,
+        symbol: String,
+        action: Selector
+    ) -> NSToolbarItem {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = label
+        item.paletteLabel = label
+        item.toolTip = label
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        item.target = self
+        item.action = action
+        return item
     }
 
     private func render(_ snapshot: RuntimeSupervisor.Snapshot) {
         lastSnapshot = snapshot
-        runtimeLabel.stringValue = snapshot.backend ? "Runtime: Running" : "Runtime: Stopped"
-        runtimeLabel.textColor = snapshot.backend ? .systemGreen : .secondaryLabelColor
-        tunnelLabel.stringValue = snapshot.tunnel
-            ? "Tunnel: Connected"
-            : (snapshot.tunnelProfile ? "Tunnel: Offline" : "Tunnel: Setup required")
-        tunnelLabel.textColor = snapshot.tunnel ? .systemGreen : .secondaryLabelColor
-        setupButton.isHidden = snapshot.tunnel
+        runtimeStatusView.update(
+            runtimeHealthy: snapshot.backend,
+            tunnelHealthy: snapshot.tunnel,
+            tunnelProfile: snapshot.tunnelProfile
+        )
+        startToolbarItem?.isEnabled = !snapshot.backend
+        stopToolbarItem?.isEnabled = snapshot.backend
+        restartToolbarItem?.isEnabled = snapshot.backend
+        connectToolbarItem?.isEnabled = !snapshot.tunnel
 
         if snapshot.backend {
             if webView.url?.host != dashboardURL.host {
