@@ -18,6 +18,7 @@ test("macOS desktop app owns runtime lifecycle without npm or PM2", async () => 
   assert.match(source, /NSText\.paste/u)
   assert.match(source, /NSText\.cut/u)
   assert.match(source, /NSText\.selectAll/u)
+  assert.match(source, /runJavaScriptConfirmPanelWithMessage/u)
 })
 
 test("desktop packaging emits an app and DMG with bundled Node and tunnel-client", async () => {
@@ -28,6 +29,7 @@ test("desktop packaging emits an app and DMG with bundled Node and tunnel-client
   assert.match(source, /tunnel-client/u)
   assert.match(source, /codesign/u)
   assert.match(source, /hdiutil/u)
+  assert.match(source, /attempt <= 3/u)
 })
 
 test("Windows desktop app owns runtime lifecycle with WebView2 and Windows Credential Manager", async () => {

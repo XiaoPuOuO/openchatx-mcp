@@ -307,7 +307,7 @@ async function createDmg(): Promise<void> {
   await mkdir(staging, { recursive: true })
   await cp(appPath, join(staging, "OpenChatX.app"), { recursive: true })
   await symlink("/Applications", join(staging, "Applications"))
-  run("/usr/bin/hdiutil", [
+  const hdiutilArgs = [
     "create",
     "-volname",
     "OpenChatX",
@@ -317,8 +317,21 @@ async function createDmg(): Promise<void> {
     "-format",
     "UDZO",
     dmgPath,
-  ])
+  ]
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await rm(dmgPath, { force: true })
+      run("/usr/bin/hdiutil", hdiutilArgs)
+      lastError = undefined
+      break
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) await new Promise((resolvePromise) => setTimeout(resolvePromise, 2_000))
+    }
+  }
   await rm(staging, { recursive: true, force: true })
+  if (lastError) throw lastError
 }
 
 async function notarizeDesktop(): Promise<void> {
