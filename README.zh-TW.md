@@ -416,13 +416,28 @@ OpenChatX 的持久化狀態都放在 `state_dir`（預設 `~/.openchatx-mcp`）
 
 OpenChatX Dashboard 永遠可以從 `/ui` 使用。
 
+## macOS Desktop
+
+OpenChatX 現在有真正的 macOS 原生 App。一般使用者不需要安裝 npm、也不需要知道 PM2；App 會直接管理 OpenChatX Runtime 與 Secure MCP Tunnel 的啟動、停止與重新啟動，並把 Dashboard 直接嵌在 App 裡。
+
+Desktop Bundle 會內建官方 Node Runtime 與 `tunnel-client`。Logs 放在 `~/Library/Application Support/OpenChatX/logs`，MCP / Provider / Toolbox 等使用者設定放在 `~/Library/Application Support/OpenChatX/`，Tunnel Control-plane API Key 則只存進 macOS Keychain。
+
+Build 會產生：
+
+- `dist-desktop/OpenChatX.app`
+- `dist-desktop/OpenChatX.dmg`
+
+DMG 裡有 OpenChatX App 與 Applications 捷徑。目前本機 Build 使用 ad-hoc signing，適合自己測試；正式公開發佈前仍需 Apple Developer ID Signing + Notarization，避免其他 Mac 出現 Gatekeeper 警告。
+
 ## 操作與維護
 
 | 指令 | 用途 |
 | --- | --- |
 | `npm start` | Build 並啟動 / reload OpenChatX 與 tunnel-client |
-| `npm run desktop:install` | 安裝 macOS / Windows 的本機 OpenChatX Launcher |
-| `npm run desktop:uninstall` | 移除本機 OpenChatX Launcher |
+| `npm run desktop:build` | Build 原生 macOS `.app` 與 `.dmg`，內建 Node + tunnel-client |
+| `npm run desktop:install` | Build 後安裝 `OpenChatX.app` 到 `~/Applications` 供本機測試 |
+| `npm run desktop:smoke` | 用隔離 Port 啟動 Bundle 內的 Backend 並驗證 Dashboard |
+| `npm run desktop:uninstall` | 移除 `~/Applications/OpenChatX.app`，保留 Application Support 使用者資料 |
 | `npm run update` | 在 working tree 乾淨時 Fast-forward 到 `origin/main`、重裝 dependencies 並 rebuild |
 | `npm run restart` | Rebuild 並 reload services |
 | `npm run restart -- --hard` | 從外部 Terminal 重建專用 PM2 daemon |

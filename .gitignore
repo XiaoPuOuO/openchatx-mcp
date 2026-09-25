@@ -1,6 +1,7 @@
 node_modules/
 *.tsbuildinfo
 dist/
+dist-desktop/
 mcp-servers.json
 subagents.json
 toolboxes/**/*.openchatx.mjs

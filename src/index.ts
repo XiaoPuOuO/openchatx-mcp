@@ -28,7 +28,9 @@ import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
 import { WorkflowService } from "./workflows/workflow-service.js"
 
-const auditLogPath = fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
+const auditLogPath =
+  process.env.OPENCHATX_AUDIT_LOG?.trim() ||
+  fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
 const auditLogger = new McpAuditLogger(auditLogPath)
 const agentObserver = createAgentObserver()
 const authPath = join(MCP_CONFIG.stateDir, "auth.json")

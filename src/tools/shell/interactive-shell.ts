@@ -7,6 +7,7 @@ import type { IPty } from "node-pty"
 import * as pty from "node-pty"
 import { z } from "zod"
 
+import { childStringEnvironment } from "../../child-environment.js"
 import { MCP_CONFIG } from "../../config.js"
 import { interactiveReadyCommand, interactiveShellArgs } from "../../host-platform.js"
 import { toToolError } from "../../mcp/tool-error.js"
@@ -76,7 +77,7 @@ export class InteractiveShellManager {
 
     const terminal = pty.spawn(this.shellPath, interactiveShellArgs(), {
       cwd,
-      env: stringEnvironment(process.env),
+      env: childStringEnvironment(),
       name: process.env.TERM || "xterm-256color",
       cols: 120,
       rows: 30,
@@ -393,12 +394,6 @@ async function interactiveResult(operation: () => Promise<Record<string, unknown
 function resolveInteractiveCwd(defaultCwd: string, cwd?: string): string {
   if (!cwd) return defaultCwd
   return isAbsolute(cwd) ? cwd : resolve(defaultCwd, cwd)
-}
-
-function stringEnvironment(env: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string")
-  )
 }
 
 async function waitForExit(session: InteractiveSession, waitMs: number): Promise<void> {

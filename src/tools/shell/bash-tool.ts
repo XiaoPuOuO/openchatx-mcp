@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from "node:path"
 import process from "node:process"
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
+import { childProcessEnvironment } from "../../child-environment.js"
 import { signalProcessGroup } from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
 import { shellCommandArgs } from "../../host-platform.js"
@@ -69,7 +70,8 @@ export function registerBashTool(
     async ({ command, workdir, project_id, timeout_ms, keep, max_output_tokens }, context) => {
       try {
         const cwd = await resolveWorkdir(workdir, projectScope, project_id)
-        const executableCommand = prepareShellCommand(command, cwd, process.env)
+        const environment = childProcessEnvironment()
+        const executableCommand = prepareShellCommand(command, cwd, environment)
         if (keep) {
           if (!processManager) throw new Error("Managed bash processes are not available.")
           const kept = await processManager.start(executableCommand, cwd)
@@ -122,7 +124,7 @@ async function runCommand(
   return new Promise((resolvePromise, reject) => {
     const child = spawn(MCP_CONFIG.shell.path, shellCommandArgs(command), {
       cwd,
-      env: process.env,
+      env: childProcessEnvironment(),
       detached: process.platform !== "win32",
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],

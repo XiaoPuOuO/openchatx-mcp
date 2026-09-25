@@ -395,13 +395,28 @@ Persistent OpenChatX state lives under `state_dir` (default `~/.openchatx-mcp`).
 
 The OpenChatX Dashboard is always available at `/ui`.
 
+## macOS Desktop
+
+OpenChatX now has a native macOS app that runs the capability runtime directly, without npm or PM2 on the end-user machine. The app embeds the Dashboard in a WebView, bundles an official Node runtime plus `tunnel-client`, manages Runtime/Tunnel start-stop-restart itself, keeps logs under `~/Library/Application Support/OpenChatX/logs`, and stores the tunnel control-plane API key in macOS Keychain.
+
+The distributable build creates both:
+
+- `dist-desktop/OpenChatX.app`
+- `dist-desktop/OpenChatX.dmg`
+
+The DMG contains the app plus an Applications shortcut. Community/Provider/MCP user configuration is created outside the app bundle under `~/Library/Application Support/OpenChatX/`, so replacing the app does not overwrite user configuration.
+
+The local developer build is ad-hoc signed for testing. A public release still needs Apple Developer ID signing/notarization before it can install without Gatekeeper warnings on other Macs.
+
 ## Operations
 
 | Command | Purpose |
 | --- | --- |
 | `npm start` | Build and start/reload OpenChatX and tunnel-client |
-| `npm run desktop:install` | Install a local OpenChatX launcher for macOS or Windows |
-| `npm run desktop:uninstall` | Remove the local OpenChatX launcher |
+| `npm run desktop:build` | Build the native macOS `.app` and `.dmg` with bundled Node + tunnel-client |
+| `npm run desktop:install` | Build and install `OpenChatX.app` into `~/Applications` for local testing |
+| `npm run desktop:smoke` | Launch the bundled backend on an isolated port and verify the packaged runtime/dashboard |
+| `npm run desktop:uninstall` | Remove `~/Applications/OpenChatX.app` while preserving Application Support user data |
 | `npm run update` | Fast-forward a clean checkout to `origin/main`, reinstall dependencies, and rebuild |
 | `npm run restart` | Rebuild and reload services |
 | `npm run restart -- --hard` | Rebuild and recreate the dedicated PM2 daemon from an external terminal |

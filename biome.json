@@ -10,6 +10,7 @@
     "includes": [
       "**",
       "!!dist",
+      "!!dist-desktop",
       "!!coverage",
       "!!vendor",
       "!!ui",

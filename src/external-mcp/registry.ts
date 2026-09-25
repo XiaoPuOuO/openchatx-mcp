@@ -10,6 +10,7 @@ import {
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio"
 import type { McpServer } from "@modelcontextprotocol/server"
 
+import { childStringEnvironment } from "../child-environment.js"
 import { type ExternalMcpServerConfig, loadExternalMcpConfig } from "./config.js"
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
@@ -245,7 +246,10 @@ async function connectServer(
           command,
           args,
           cwd: config.cwd,
-          env: { ...getDefaultEnvironment(), ...config.environment },
+          env: {
+            ...childStringEnvironment(getDefaultEnvironment()),
+            ...config.environment,
+          },
           stderr: "inherit",
         }),
         { timeout: DEFAULT_CONNECT_TIMEOUT_MS }

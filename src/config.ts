@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
+import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 import { hostDisplayName, resolveConfiguredShell, resolvePathExecutable } from "./host-platform.js"
@@ -57,14 +58,20 @@ export const MCP_CONFIG = {
   },
   /** External local/remote MCP servers aggregated into the tool surface. */
   externalMcp: {
-    configFile: fileURLToPath(new URL("../mcp-servers.json", import.meta.url)),
+    configFile:
+      process.env.OPENCHATX_EXTERNAL_MCP_CONFIG?.trim() ||
+      fileURLToPath(new URL("../mcp-servers.json", import.meta.url)),
   },
   subagents: {
-    configFile: fileURLToPath(new URL("../subagents.json", import.meta.url)),
+    configFile:
+      process.env.OPENCHATX_SUBAGENT_CONFIG?.trim() ||
+      fileURLToPath(new URL("../subagents.json", import.meta.url)),
   },
   /** Toolbox/plugin folders and user-authored TypeScript tools. */
   toolboxes: {
-    root: fileURLToPath(new URL("../toolboxes/", import.meta.url)),
+    root:
+      process.env.OPENCHATX_TOOLBOX_ROOT?.trim() ||
+      fileURLToPath(new URL("../toolboxes/", import.meta.url)),
   },
   /** Bundled Capability Store catalog and installable bundles. */
   store: {

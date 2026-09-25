@@ -5,6 +5,7 @@ import process from "node:process"
 
 import { z } from "zod"
 
+import { childProcessEnvironment } from "../child-environment.js"
 import { MCP_CONFIG } from "../config.js"
 import { isProcessRunning, shellCommandArgs, signalProcessTree } from "../host-platform.js"
 
@@ -67,11 +68,16 @@ export class JobManager {
     try {
       const child = spawn(MCP_CONFIG.shell.path, shellCommandArgs(command), {
         cwd: resolvedCwd,
-        env: process.env,
+        env: childProcessEnvironment(),
         detached: process.platform !== "win32",
         windowsHide: true,
         stdio: ["ignore", handle.fd, handle.fd],
       })
+      const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+        (resolveExit) => {
+          child.once("exit", (code, signal) => resolveExit({ code, signal }))
+        }
+      )
       await new Promise<void>((resolvePromise, reject) => {
         child.once("error", reject)
         child.once("spawn", resolvePromise)
@@ -93,14 +99,14 @@ export class JobManager {
       this.jobs.set(id, job)
       this.ownedRunningPids.add(childPid)
       await this.persist()
-      child.once("exit", (code, signal) => {
+      void exit.then(async ({ code, signal }) => {
         this.ownedRunningPids.delete(childPid)
         const current = this.jobs.get(id)
         if (current?.status !== "running") return
         current.status = code === 0 ? "completed" : "failed"
         current.exitCode = code ?? (signal ? -1 : 1)
         current.updatedAt = new Date().toISOString()
-        void this.persist()
+        await this.persist()
       })
       child.unref()
       return { ...job }

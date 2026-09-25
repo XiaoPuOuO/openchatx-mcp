@@ -6,7 +6,8 @@ import { parse } from "smol-toml"
 import { z } from "zod"
 
 // CommonJS lets the built loader serve PM2's ecosystem file as well as the ESM runtime.
-const defaultConfigPath = resolve(__dirname, "../.openchatx/config.toml")
+const defaultConfigPath =
+  process.env.OPENCHATX_PUBLIC_CONFIG?.trim() || resolve(__dirname, "../.openchatx/config.toml")
 const publicConfigSchema = z.object({
   state_dir: z.string().trim().min(1).default("~/.openchatx-mcp"),
   port: z.number().int().min(1).max(65535).default(3333),

@@ -3,6 +3,7 @@ import { mkdir, open, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import process from "node:process"
 
+import { childProcessEnvironment } from "../../child-environment.js"
 import { MCP_CONFIG } from "../../config.js"
 import { isProcessRunning, shellCommandArgs, signalProcessTree } from "../../host-platform.js"
 
@@ -40,7 +41,7 @@ export class BashProcessManager {
     try {
       const child = spawn(MCP_CONFIG.shell.path, shellCommandArgs(command), {
         cwd,
-        env: process.env,
+        env: childProcessEnvironment(),
         detached: process.platform !== "win32",
         windowsHide: true,
         stdio: ["ignore", handle.fd, handle.fd],

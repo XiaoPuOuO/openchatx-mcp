@@ -85,6 +85,7 @@ if (args[0] === "profiles" && args[1] === "list") {
         encoding: "utf8",
         env: {
           ...process.env,
+          OPENCHATX_PUBLIC_CONFIG: configPath,
           PATH: join(root, "bin"),
           CONTROL_PLANE_API_KEY: "test-key",
         },
@@ -107,7 +108,12 @@ if (args[0] === "profiles" && args[1] === "list") {
     ["--import", "tsx", join(root, "scripts/preflight.ts")],
     {
       encoding: "utf8",
-      env: { ...process.env, PATH: "", CONTROL_PLANE_API_KEY: "test-key" },
+      env: {
+        ...process.env,
+        OPENCHATX_PUBLIC_CONFIG: configPath,
+        PATH: "",
+        CONTROL_PLANE_API_KEY: "test-key",
+      },
       timeout: 10_000,
     }
   )
