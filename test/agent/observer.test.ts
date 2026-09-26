@@ -110,6 +110,12 @@ test("completed file edits expose the resulting diff for the dashboard", () => {
     newString: "const after = true",
   })
   observer.finishTool(agent, callId, {
+    content: [
+      {
+        type: "text",
+        text: "Edit applied successfully.\n\n--- before\n+++ after\n@@\n-const before = true\n+const after = true",
+      },
+    ],
     structuredContent: {
       path: "/tmp/example.ts",
       replacements: 1,

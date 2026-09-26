@@ -24,17 +24,6 @@ export function presentToolResult(
   const record = asRecord(result)
   if (!record) return formatUnknownResult(result)
 
-  const text = extractTextContent(record.content)
-  if (text) {
-    const structured = asRecord(record.structuredContent)
-    const isDiff =
-      (tool === "file_edit" || tool === "file_write") &&
-      structured &&
-      typeof structured.diff === "string" &&
-      text.includes(structured.diff)
-    return { resultDetail: text, ...(isDiff ? { resultDetailLanguage: "diff" } : {}) }
-  }
-
   const structured = asRecord(record.structuredContent)
   if (
     (tool === "file_edit" || tool === "file_write") &&
@@ -43,6 +32,9 @@ export function presentToolResult(
   ) {
     return { resultDetail: structured.diff, resultDetailLanguage: "diff" }
   }
+
+  const text = extractTextContent(record.content)
+  if (text) return { resultDetail: text }
 
   if (record.structuredContent !== undefined) {
     return {

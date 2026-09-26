@@ -264,6 +264,7 @@ export const en: Messages = {
   "steer.dismissDelivered": "Dismiss delivered instruction",
   "toolCall.input": "Input",
   "toolCall.returnedToAgent": "Returned to Agent",
+  "toolCall.editContent": "Edit content",
   "toolCall.noInput": "No captured input for this tool call.",
   "toolCall.noResult": "No result content was returned.",
   "toolCall.waitingResult": "Waiting for tool result…",

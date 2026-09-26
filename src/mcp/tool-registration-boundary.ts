@@ -68,7 +68,12 @@ export function installToolRegistrationBoundary(
 
       if (isErrorResult(finalResult))
         options.agentObserver?.failTool(agent, observedCallId, finalResult)
-      else options.agentObserver?.finishTool(agent, observedCallId, finalResult)
+      else
+        options.agentObserver?.finishTool(
+          agent,
+          observedCallId,
+          isFileEditingTool(name) ? result : finalResult
+        )
 
       auditCall?.finish({ toolResult: result, modelResult: finalResult })
       return finalResult
@@ -123,6 +128,10 @@ function formatToolError(error: unknown, structuredOutput: boolean): CallToolRes
     ...(structuredOutput ? { structuredContent: { error_code: failure.code } } : {}),
     content: [{ type: "text" as const, text: `${failure.code}: ${failure.message}` }],
   }
+}
+
+function isFileEditingTool(name: string): boolean {
+  return name === "file_edit" || name === "file_write"
 }
 
 function isProjectRoutingTool(name: string, input: Record<string, unknown>): boolean {

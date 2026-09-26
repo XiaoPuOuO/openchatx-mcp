@@ -263,6 +263,7 @@ export const ja: Messages = {
   "steer.dismissDelivered": "配信済み指示を閉じる",
   "toolCall.input": "入力",
   "toolCall.returnedToAgent": "AI Agent への返却内容",
+  "toolCall.editContent": "編集内容",
   "toolCall.noInput": "このツール呼び出しでは入力内容を取得できませんでした。",
   "toolCall.noResult": "このツール呼び出しには返却内容がありません。",
   "toolCall.waitingResult": "ツールの結果を待機中…",

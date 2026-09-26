@@ -251,6 +251,7 @@ export const zhTW: Messages = {
   "steer.dismissDelivered": "關閉已送達指示",
   "toolCall.input": "輸入",
   "toolCall.returnedToAgent": "回傳給 AI Agent",
+  "toolCall.editContent": "編輯內容",
   "toolCall.noInput": "這次工具呼叫沒有擷取到輸入內容。",
   "toolCall.noResult": "這次工具呼叫沒有回傳內容。",
   "toolCall.waitingResult": "等待工具回傳中…",

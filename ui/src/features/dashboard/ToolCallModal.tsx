@@ -56,7 +56,11 @@ export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: ()
               language={call?.detailLanguage}
             />
             <ToolCallSection
-              label={t("toolCall.returnedToAgent")}
+              label={
+                call?.resultDetailLanguage === "diff"
+                  ? t("toolCall.editContent")
+                  : t("toolCall.returnedToAgent")
+              }
               detail={resultDetail}
               language={call?.resultDetailLanguage}
               failed={call?.status === "failed"}
