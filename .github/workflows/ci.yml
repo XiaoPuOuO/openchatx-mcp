@@ -62,7 +62,7 @@ jobs:
       - run: npm ci
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
-      - run: npm test
+      - run: npm test -- --test-concurrency=1
       - run: npm run desktop:build
       - run: npm run desktop:smoke
       - name: Rename desktop artifacts
