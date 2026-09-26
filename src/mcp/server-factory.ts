@@ -243,8 +243,8 @@ function registerPlatformTools(
     )
   const goalRegistry = options.goalRegistry
   if (goalRegistry)
-    registerConfiguredBuiltin(server, lazyServer, registry, "goals", (target) =>
-      registerGoalTools(target, goalRegistry, options.goalScope)
+    registerBuiltinToolbox(server, registry, "goals", () =>
+      registerGoalTools(server, goalRegistry, options.goalScope)
     )
   registerConfiguredBuiltin(server, lazyServer, registry, "toolbox-manager", (target) =>
     registerToolboxManagementTools(target, registry)

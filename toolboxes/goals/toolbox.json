@@ -2,7 +2,7 @@
   "name": "Goals",
   "description": "Workspace-scoped session tasks created and maintained by the Agent.",
   "enabled": true,
-  "dynamic": true,
+  "dynamic": false,
   "builtin": "goals",
   "tools": {
     "goal_list": {
