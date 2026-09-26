@@ -67,6 +67,10 @@ async function buildWindowsDesktop(): Promise<void> {
       "src/tools/start-here/AGENTS.template.md",
       join(runtimeRoot, "src/tools/start-here/AGENTS.template.md")
     ),
+    copyFile(
+      "src/tools/start-here/AGENTS.migration-baseline.md",
+      join(runtimeRoot, "src/tools/start-here/AGENTS.migration-baseline.md")
+    ),
     copyTree("toolboxes", join(runtimeRoot, "defaults/toolboxes")),
     copyFile(
       "desktop/runtime-defaults/mcp-servers.json",

@@ -63,6 +63,10 @@ async function buildDesktop(): Promise<void> {
       "src/tools/start-here/AGENTS.template.md",
       join(runtimePath, "src/tools/start-here/AGENTS.template.md")
     ),
+    copyFile(
+      "src/tools/start-here/AGENTS.migration-baseline.md",
+      join(runtimePath, "src/tools/start-here/AGENTS.migration-baseline.md")
+    ),
     copyTree("vendor/apply-patch", join(runtimePath, "vendor/apply-patch")),
     copyTree("toolboxes", join(runtimePath, "defaults/toolboxes")),
   ])

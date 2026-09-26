@@ -18,6 +18,7 @@ import { ProjectScope } from "./projects/project-scope.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
+import { synchronizeAgentInstructions } from "./state/agent-instructions.js"
 import { GithubCommunityStore } from "./store/github-community-store.js"
 import { CapabilityStoreService } from "./store/store-service.js"
 import { loadSubagentConfig } from "./subagents/config.js"
@@ -28,6 +29,10 @@ import { AgentTeamService } from "./teams/team-service.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
 import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
+import {
+  readBundledAgentTemplate,
+  readMigrationBundledAgentTemplate,
+} from "./tools/start-here/start-here.js"
 import { WebPageOpener } from "./tools/web/web-open.js"
 import { WorkflowService } from "./workflows/workflow-service.js"
 
@@ -36,6 +41,11 @@ const auditLogPath =
   fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
 const auditLogger = new McpAuditLogger(auditLogPath)
 const agentObserver = createAgentObserver()
+await synchronizeAgentInstructions(
+  MCP_CONFIG.stateDir,
+  await readBundledAgentTemplate(),
+  await readMigrationBundledAgentTemplate()
+)
 const authPath = join(MCP_CONFIG.stateDir, "auth.json")
 const authStore = new OpenChatXAuthStore(authPath)
 await authStore.ensureState()

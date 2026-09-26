@@ -6,6 +6,11 @@ import test from "node:test"
 import { initializeOpenChatXConfig, initializeOpenChatXState } from "../scripts/state-setup.js"
 import { defaultShellPath } from "../src/host-platform.js"
 import { loadPublicConfig } from "../src/public-config.cjs"
+import { mergeAgentInstructions } from "../src/state/agent-instructions.js"
+import {
+  readBundledAgentTemplate,
+  readMigrationBundledAgentTemplate,
+} from "../src/tools/start-here/start-here.js"
 import { tempDir } from "./helpers/temp.js"
 
 test("state setup creates AGENTS.md without creating a global skills catalog", async (t) => {
@@ -23,6 +28,44 @@ test("state setup creates AGENTS.md without creating a global skills catalog", a
   const repeated = await initializeOpenChatXState(stateDir)
   assert.equal(repeated.agentsCreated, false)
   assert.equal(await readFile(agentsPath, "utf8"), "# My Instructions\n")
+})
+
+test("state setup merges new default AGENTS sections without overwriting user customizations", async (t) => {
+  const stateDir = await tempDir(t, "mcp-setup-agents-migration-")
+  const previousTemplate = await readMigrationBundledAgentTemplate()
+  assert.ok(previousTemplate)
+
+  const customized = previousTemplate.replace(
+    "Communicate material findings, blockers, tradeoffs, and the completed result concisely.",
+    "Communicate material findings, blockers, tradeoffs, and the completed result concisely.\n\n- Always keep my custom instruction."
+  )
+  await writeFile(join(stateDir, "AGENTS.md"), customized, "utf8")
+
+  const migrated = await initializeOpenChatXState(stateDir)
+  assert.equal(migrated.agentsCreated, false)
+
+  const nextTemplate = await readBundledAgentTemplate()
+  const agents = await readFile(join(stateDir, "AGENTS.md"), "utf8")
+  const baseline = await readFile(join(stateDir, ".managed", "AGENTS.default.md"), "utf8")
+  assert.match(agents, /## Progress updates/u)
+  assert.match(agents, /Always keep my custom instruction\./u)
+  assert.equal(baseline, nextTemplate)
+
+  const repeated = await initializeOpenChatXState(stateDir)
+  assert.equal(repeated.agentsCreated, false)
+  assert.equal(await readFile(join(stateDir, "AGENTS.md"), "utf8"), agents)
+})
+
+test("AGENTS merge keeps user edits while accepting default changes in the same section", () => {
+  const previous = "# Agent\n\n## Work\n\n- Default A\n- Shared\n"
+  const customized = "# Agent\n\n## Work\n\n- Default A\n- User custom\n- Shared\n"
+  const next = "# Agent\n\n## Work\n\n- Default B\n- Shared\n- New default\n"
+
+  const merged = mergeAgentInstructions(previous, customized, next)
+  assert.match(merged, /- Default B/u)
+  assert.match(merged, /- User custom/u)
+  assert.match(merged, /- New default/u)
+  assert.doesNotMatch(merged, /- Default A/u)
 })
 
 test("setup creates tunnel-client defaults and preserves existing partial configs", async (t) => {

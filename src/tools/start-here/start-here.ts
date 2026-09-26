@@ -18,6 +18,7 @@ import type { ToolboxRule } from "../../toolbox/registry.js"
 
 export const START_HERE_TOOL_NAME = "start_here"
 const AGENT_TEMPLATE_NAME = "AGENTS.template.md"
+const MIGRATION_AGENT_TEMPLATE_NAME = "AGENTS.migration-baseline.md"
 const PROMPT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const START_HERE_COOLDOWN_MS = 5_000
 const loadStartInstructions = createAgentLoadDeduper<string>(START_HERE_COOLDOWN_MS)
@@ -274,8 +275,22 @@ export function renderStartHereTemplate(
   return output.trim()
 }
 
-async function readBundledAgentTemplate(root: string): Promise<string> {
+export async function readBundledAgentTemplate(root = repositoryRoot): Promise<string> {
   return readFile(join(root, "src", "tools", "start-here", AGENT_TEMPLATE_NAME), "utf8")
+}
+
+export async function readMigrationBundledAgentTemplate(
+  root = repositoryRoot
+): Promise<string | undefined> {
+  try {
+    return await readFile(
+      join(root, "src", "tools", "start-here", MIGRATION_AGENT_TEMPLATE_NAME),
+      "utf8"
+    )
+  } catch (error) {
+    if (isFsError(error, "ENOENT")) return undefined
+    throw error
+  }
 }
 
 export function discoverPromptModes(root = repositoryRoot): string[] {

@@ -1,10 +1,15 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { stringify } from "smol-toml"
 
 import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cjs"
+import { synchronizeAgentInstructions } from "../src/state/agent-instructions.js"
+import {
+  readBundledAgentTemplate,
+  readMigrationBundledAgentTemplate,
+} from "../src/tools/start-here/start-here.js"
 
 export interface StateInitializationResult {
   stateDir: string
@@ -18,9 +23,6 @@ export interface ConfigInitializationResult {
   updated: boolean
 }
 
-const AGENTS_TEMPLATE_SOURCE = fileURLToPath(
-  new URL("../src/tools/start-here/AGENTS.template.md", import.meta.url)
-)
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
 
 const CONFIG_HEADER = `# openchatx-mcp configuration.
@@ -28,37 +30,17 @@ const CONFIG_HEADER = `# openchatx-mcp configuration.
 
 `
 
-const LEGACY_STARTER_AGENTS_MD = `# OpenChatX Agent Instructions
-
-This file contains persistent instructions for OpenChatX. Customize it for your preferences.
-
-- Read and follow project-local \`AGENTS.md\` files and relevant project documentation before editing a repository.
-- Keep existing projects in their current locations.
-- Prefer more-specific project instructions when they conflict with this file.
-`
-
 export async function initializeOpenChatXState(
   stateDir: string
 ): Promise<StateInitializationResult> {
   await mkdir(stateDir, { recursive: true })
 
-  const agentsPath = join(stateDir, "AGENTS.md")
   await mkdir(join(stateDir, "rules"), { recursive: true })
+  const agentsTemplate = await readBundledAgentTemplate(REPOSITORY_ROOT)
+  const previousAgentsTemplate = await readMigrationBundledAgentTemplate(REPOSITORY_ROOT)
+  const sync = await synchronizeAgentInstructions(stateDir, agentsTemplate, previousAgentsTemplate)
 
-  let agentsCreated = false
-  const agentsTemplate = await readFile(AGENTS_TEMPLATE_SOURCE, "utf8")
-  try {
-    await writeFile(agentsPath, agentsTemplate, { encoding: "utf8", flag: "wx" })
-    agentsCreated = true
-  } catch (error) {
-    if (!hasErrorCode(error, "EEXIST")) throw error
-    const existing = await readFile(agentsPath, "utf8")
-    if (existing === LEGACY_STARTER_AGENTS_MD) {
-      await writeFile(agentsPath, agentsTemplate, "utf8")
-    }
-  }
-
-  return { stateDir, agentsPath, agentsCreated }
+  return { stateDir, agentsPath: sync.agentsPath, agentsCreated: sync.created }
 }
 
 export async function initializeOpenChatXConfig(
