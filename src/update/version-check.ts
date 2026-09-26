@@ -70,9 +70,8 @@ export function compareVersions(left: string, right: string): -1 | 0 | 1 {
 
 function parseVersion(value: string): [number, number, number] {
   const normalized = normalizeVersion(value)
-  const match = SEMVER_PATTERN.exec(normalized)
-  if (!match) return [0, 0, 0]
-  return [Number(match[1]), Number(match[2]), Number(match[3])]
+  const parts = SEMVER_PATTERN.exec(normalized)?.slice(1, 4) ?? []
+  return [Number(parts[0] ?? 0), Number(parts[1] ?? 0), Number(parts[2] ?? 0)]
 }
 
 function normalizeVersion(value: string): string {

@@ -8,8 +8,7 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
   server.registerTool(
     "skill_search",
     {
-      description:
-        "Search reusable skills, or load one exact skill with action=load and name.",
+      description: "Search reusable skills, or load one exact skill with action=load and name.",
       inputSchema: z.object({
         action: z.enum(["search", "load"]).default("search"),
         query: z.string().min(1).optional(),
@@ -43,8 +42,8 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
         const matches = searchCombinedSkills(available, query, limit)
         return {
           structuredContent: {
-            skills: matches.map(({ name, description }) => ({
-              name,
+            skills: matches.map(({ name: skillName, description }) => ({
+              name: skillName,
               ...(description ? { description } : {}),
             })),
           },

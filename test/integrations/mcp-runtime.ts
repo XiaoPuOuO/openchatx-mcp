@@ -147,13 +147,7 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
   const tools = await connected.client.listTools()
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
-    [
-      "start_here",
-      "skill_search",
-      "skill_manage",
-      "rule_resolve",
-      "rule_manage",
-    ]
+    ["start_here", "skill_search", "skill_manage", "rule_resolve", "rule_manage"]
   )
   assert.equal(tools.tools.find((tool) => tool.name === "skill_search")?.outputSchema, undefined)
 })

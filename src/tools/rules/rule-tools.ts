@@ -105,70 +105,125 @@ function registerManageTool(server: McpServer, toolboxes?: ToolboxRegistry): voi
     }) => {
       try {
         const rules = requireToolboxes(toolboxes).ruleCatalog(toolbox_id)
-        if (action === "delete") {
-          const ruleName = requiredString(name, "name", action)
-          await rules.delete(ruleName)
-          return {
-            structuredContent: { action, removed: ruleName },
-            content: [],
-          }
-        }
-
-        if (action === "import") {
-          if (!format) throw missingField("format", action)
-          const importSource = requiredString(source, "source", action)
-          const rule = await importRule(rules, {
-            format,
-            source: importSource,
-            replace,
-            ...(name ? { name } : {}),
-            ...(mode ? { mode } : {}),
-            ...(description !== undefined ? { description } : {}),
-            ...(globs !== undefined ? { globs } : {}),
-          })
-          return {
-            structuredContent: { action, rule: ruleResult({ ...rule, toolboxId: toolbox_id }) },
-            content: [],
-          }
-        }
-
-        if (action === "export") {
-          if (!format) throw missingField("format", action)
-          const ruleName = requiredString(name, "name", action)
-          const exportDestination = requiredString(destination, "destination", action)
-          const result = await exportRule(rules, {
-            format,
-            name: ruleName,
-            destination: exportDestination,
-            replace,
-            allowLossy: allow_lossy,
-          })
-          return { structuredContent: { action, ...result }, content: [] }
-        }
-
-        const ruleName = requiredString(name, "name", action)
-        const input = normalizeRuleInput({
+        return await executeRuleAction(rules, toolbox_id, {
+          action,
+          name,
           mode,
           description,
           globs,
           alwaysApply,
           markdown,
           content,
+          format,
+          source,
+          destination,
+          replace,
+          allow_lossy,
         })
-        const rule =
-          action === "create"
-            ? await rules.create({ name: ruleName, ...input })
-            : await rules.edit(ruleName, input)
-
-        return {
-          structuredContent: { action, rule: ruleResult({ ...rule, toolboxId: toolbox_id }) },
-          content: [],
-        }
       } catch (error) {
         throw ruleToolError(error)
       }
     }
   )
+}
+
+type RuleManageInput = {
+  action: "create" | "edit" | "delete" | "import" | "export"
+  name?: string
+  mode?: RuleMode
+  description?: string
+  globs?: string[]
+  alwaysApply?: boolean
+  markdown?: string
+  content?: string
+  format?: "cursor" | "claude" | "agents"
+  source?: string
+  destination?: string
+  replace: boolean
+  allow_lossy: boolean
+}
+
+async function executeRuleAction(
+  rules: ReturnType<ToolboxRegistry["ruleCatalog"]>,
+  toolboxId: string,
+  input: RuleManageInput
+) {
+  switch (input.action) {
+    case "delete":
+      return deleteRule(rules, input)
+    case "import":
+      return importManagedRule(rules, toolboxId, input)
+    case "export":
+      return exportManagedRule(rules, input)
+    case "create":
+    case "edit":
+      return writeRule(rules, toolboxId, input)
+  }
+}
+
+async function deleteRule(
+  rules: ReturnType<ToolboxRegistry["ruleCatalog"]>,
+  input: RuleManageInput
+) {
+  const ruleName = requiredString(input.name, "name", input.action)
+  await rules.delete(ruleName)
+  return { structuredContent: { action: input.action, removed: ruleName }, content: [] }
+}
+
+async function importManagedRule(
+  rules: ReturnType<ToolboxRegistry["ruleCatalog"]>,
+  toolboxId: string,
+  input: RuleManageInput
+) {
+  if (!input.format) throw missingField("format", input.action)
+  const source = requiredString(input.source, "source", input.action)
+  const rule = await importRule(rules, {
+    format: input.format,
+    source,
+    replace: input.replace,
+    ...(input.name ? { name: input.name } : {}),
+    ...(input.mode ? { mode: input.mode } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.globs !== undefined ? { globs: input.globs } : {}),
+  })
+  return {
+    structuredContent: { action: input.action, rule: ruleResult({ ...rule, toolboxId }) },
+    content: [],
+  }
+}
+
+async function exportManagedRule(
+  rules: ReturnType<ToolboxRegistry["ruleCatalog"]>,
+  input: RuleManageInput
+) {
+  if (!input.format) throw missingField("format", input.action)
+  const name = requiredString(input.name, "name", input.action)
+  const destination = requiredString(input.destination, "destination", input.action)
+  const result = await exportRule(rules, {
+    format: input.format,
+    name,
+    destination,
+    replace: input.replace,
+    allowLossy: input.allow_lossy,
+  })
+  return { structuredContent: { action: input.action, ...result }, content: [] }
+}
+
+async function writeRule(
+  rules: ReturnType<ToolboxRegistry["ruleCatalog"]>,
+  toolboxId: string,
+  input: RuleManageInput
+) {
+  const name = requiredString(input.name, "name", input.action)
+  const ruleInput = normalizeRuleInput(input)
+  const rule =
+    input.action === "create"
+      ? await rules.create({ name, ...ruleInput })
+      : await rules.edit(name, ruleInput)
+  return {
+    structuredContent: { action: input.action, rule: ruleResult({ ...rule, toolboxId }) },
+    content: [],
+  }
 }
 
 function normalizeRuleInput(input: {
@@ -208,17 +263,16 @@ function normalizeRuleInput(input: {
   return { ...normalized, description: "", globs: [], alwaysApply: false }
 }
 
-function requiredString(
-  value: string | undefined,
-  field: string,
-  action: string
-): string {
+function requiredString(value: string | undefined, field: string, action: string): string {
   if (!value?.trim()) throw missingField(field, action)
   return value
 }
 
 function missingField(field: string, action: string): RuleCatalogError {
-  return new RuleCatalogError("invalid_rule", `${field} is required for rule_manage action=${action}.`)
+  return new RuleCatalogError(
+    "invalid_rule",
+    `${field} is required for rule_manage action=${action}.`
+  )
 }
 
 function requireToolboxes(toolboxes?: ToolboxRegistry): ToolboxRegistry {

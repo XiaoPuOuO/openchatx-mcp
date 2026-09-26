@@ -66,10 +66,7 @@ export function registerNodeTools(server: McpServer, nodes: NodeRegistry): void 
           case "tool_search":
             return {
               structuredContent: {
-                tools: await nodes.tools(
-                  required(input.node, "node", input.action),
-                  input.query
-                ),
+                tools: await nodes.tools(required(input.node, "node", input.action), input.query),
               },
               content: [],
             }

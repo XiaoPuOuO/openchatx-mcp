@@ -58,12 +58,7 @@ test("aggregates a local stdio MCP and forwards tool calls", { timeout: 10_000 }
   const tools = await client.listTools()
   assert.deepEqual(
     tools.tools.map(({ name }) => name),
-    [
-      "start_here",
-      "rule_resolve",
-      "rule_manage",
-      "local_test__echo",
-    ]
+    ["start_here", "rule_resolve", "rule_manage", "local_test__echo"]
   )
   await client.callTool({
     name: "start_here",
