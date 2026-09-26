@@ -17,6 +17,7 @@ import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
+import type { SummaryRegistry } from "../summaries/summary-registry.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { asRecord } from "../utils.js"
 import type { McpAuditLogger, McpAuditRequest } from "./audit/audit-log.js"
@@ -47,6 +48,7 @@ export interface McpHttpServices {
   capabilityStore?: CapabilityStoreService
   platformOverview?: PlatformOverviewService
   projectRegistry?: ProjectRegistry
+  summaryRegistry?: SummaryRegistry
 }
 
 export interface McpHttpProfileOverrides {
@@ -75,10 +77,11 @@ export async function startMcpHttpServer(
     capabilityStore,
     platformOverview,
     projectRegistry,
+    summaryRegistry,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
-  const app = createMcpExpressApp({ host, jsonLimit: "1mb" })
+  const app = createMcpExpressApp({ host, jsonLimit: "10mb" })
   const mcpHandler = createMcpHandler(
     () => {
       const requestContext = requestRuntime.getStore()
@@ -111,6 +114,7 @@ export async function startMcpHttpServer(
         capabilityStore,
         platformOverview,
         projectRegistry,
+        summaryRegistry,
       })
     )
 

@@ -18,6 +18,7 @@ import { CapabilityStoreService } from "../src/store/store-service.js"
 import { loadSubagentConfig } from "../src/subagents/config.js"
 import { SmartModelRouter } from "../src/subagents/router.js"
 import { SubagentRuntime } from "../src/subagents/runtime.js"
+import { SummaryRegistry } from "../src/summaries/summary-registry.js"
 import { AgentTeamService } from "../src/teams/team-service.js"
 import { countTokens, OUTPUT_TOKEN_ENCODING } from "../src/tokenizer.js"
 import { ToolboxRegistry } from "../src/toolbox/registry.js"
@@ -42,6 +43,7 @@ const projectRegistry = new ProjectRegistry()
 const projectScope = new ProjectScope(projectRegistry)
 const goalRegistry = new GoalRegistry()
 const goalScope = new GoalScope(goalRegistry, projectScope)
+const summaryRegistry = new SummaryRegistry()
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 const communityStore = new GithubCommunityStore()
@@ -84,6 +86,7 @@ const running = await startMcpHttpServer(
       projectScope,
       goalRegistry,
       goalScope,
+      summaryRegistry,
       agentTeams,
       workflows,
       nodes,

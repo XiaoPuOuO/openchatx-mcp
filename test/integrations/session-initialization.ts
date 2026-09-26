@@ -8,6 +8,7 @@ import { getAgentIdentity, runWithAgent } from "../../src/agent/context.js"
 import { MCP_CONFIG } from "../../src/config.js"
 import { ProjectRegistry } from "../../src/projects/project-registry.js"
 import { ProjectScope } from "../../src/projects/project-scope.js"
+import { SummaryRegistry } from "../../src/summaries/summary-registry.js"
 import { ToolboxRegistry } from "../../src/toolbox/registry.js"
 import {
   buildStartHereInstructions,
@@ -170,6 +171,102 @@ test("requires Project routing before normal work in a new session", {
     arguments: { command: "pwd" },
   })
   assert.notEqual(allowed.isError, true)
+})
+
+test("summarize hands a temporary summary across ChatGPT sessions and consumes it once", {
+  timeout: 10_000,
+}, async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-summary-handoff-"))
+  t.after(() => rm(stateDir, { recursive: true, force: true }))
+  const summaryRegistry = new SummaryRegistry(join(stateDir, "summaries.json"))
+
+  const running = await startMcpHttpServer({ summaryRegistry })
+  t.after(() => running.close())
+
+  const first = await connectClient(
+    running.url,
+    "summary-first",
+    undefined,
+    false,
+    "summary-session-a"
+  )
+  const second = await connectClient(
+    running.url,
+    "summary-second",
+    undefined,
+    false,
+    "summary-session-b"
+  )
+  t.after(() => Promise.all([first.client.close(), second.client.close()]))
+
+  await first.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "summary-test" },
+  })
+  await second.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "summary-test-other" },
+  })
+
+  const summary = "## Objective\n\n- Continue OpenChatX work.\n\n## Next Move\n\n1. Resume."
+  const created = await first.client.callTool({
+    name: "summarize",
+    arguments: { summary },
+  })
+  assert.notEqual(created.isError, true)
+  const uuid = toolText(created).trim()
+  assert.match(uuid, /^[0-9a-f-]{36}$/u)
+
+  const consumed = await second.client.callTool({
+    name: "summarize",
+    arguments: { uuid },
+  })
+  assert.equal(toolText(consumed), summary)
+
+  const missing = await first.client.callTool({
+    name: "summarize",
+    arguments: { uuid },
+  })
+  assert.equal(missing.isError, true)
+  assert.match(toolText(missing), /Unknown summary UUID/u)
+})
+
+test("summarize can hand off summaries larger than the old 1 MB request limit", {
+  timeout: 15_000,
+}, async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-summary-large-"))
+  t.after(() => rm(stateDir, { recursive: true, force: true }))
+  const summaryRegistry = new SummaryRegistry(join(stateDir, "summaries.json"))
+  const running = await startMcpHttpServer({ summaryRegistry })
+  t.after(() => running.close())
+
+  const connected = await connectClient(
+    running.url,
+    "summary-large",
+    undefined,
+    false,
+    "summary-large-session"
+  )
+  t.after(() => connected.client.close())
+
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "summary-large" },
+  })
+
+  const summary = `## Objective\n\n${"x".repeat(1_100_000)}`
+  const created = await connected.client.callTool({
+    name: "summarize",
+    arguments: { summary },
+  })
+  assert.notEqual(created.isError, true)
+  const uuid = toolText(created).trim()
+
+  const consumed = await connected.client.callTool({
+    name: "summarize",
+    arguments: { uuid },
+  })
+  assert.equal(toolText(consumed), summary)
 })
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {

@@ -107,6 +107,35 @@ test("does not persist file_write content in the audit log", async (t) => {
   assert.match(log, /content_chars: 20/u)
 })
 
+test("does not persist summarize content in the audit log", async (t) => {
+  const file = await auditFile(t)
+  const logger = new McpAuditLogger(
+    file,
+    () => new Date(2026, 8, 22, 20, 5, 0),
+    () => 0
+  )
+
+  const [call] = claimAuditToolCalls(logger, {
+    method: "tools/call",
+    params: {
+      name: "summarize",
+      arguments: {
+        summary: "private handoff summary contents",
+      },
+    },
+  })
+  assert.ok(call)
+  call.finish({
+    modelResult: {
+      content: [{ type: "text", text: "123e4567-e89b-12d3-a456-426614174000" }],
+    },
+  })
+
+  const log = await readFile(file, "utf8")
+  assert.doesNotMatch(log, /private handoff summary contents/u)
+  assert.match(log, /summary_chars: 32/u)
+})
+
 test("puts audit heading before entry details with time last", async (t) => {
   const file = await auditFile(t)
   const logger = new McpAuditLogger(

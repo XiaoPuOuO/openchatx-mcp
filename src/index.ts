@@ -23,6 +23,7 @@ import { CapabilityStoreService } from "./store/store-service.js"
 import { loadSubagentConfig } from "./subagents/config.js"
 import { SmartModelRouter } from "./subagents/router.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
+import { SummaryRegistry } from "./summaries/summary-registry.js"
 import { AgentTeamService } from "./teams/team-service.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
 import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
@@ -54,6 +55,7 @@ const projectRegistry = new ProjectRegistry()
 const projectScope = new ProjectScope(projectRegistry)
 const goalRegistry = new GoalRegistry()
 const goalScope = new GoalScope(goalRegistry, projectScope)
+const summaryRegistry = new SummaryRegistry()
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 const communityStore = new GithubCommunityStore()
@@ -110,6 +112,7 @@ try {
       projectScope,
       goalRegistry,
       goalScope,
+      summaryRegistry,
       agentTeams,
       workflows,
       nodes,
@@ -125,6 +128,7 @@ try {
     capabilityStore,
     platformOverview,
     projectRegistry,
+    summaryRegistry,
   })
 } catch (error) {
   await closeRuntimeServices()

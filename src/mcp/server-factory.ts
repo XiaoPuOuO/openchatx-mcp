@@ -15,6 +15,7 @@ import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SmartModelRouter } from "../subagents/router.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
+import type { SummaryRegistry } from "../summaries/summary-registry.js"
 import type { AgentTeamService } from "../teams/team-service.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
@@ -48,6 +49,7 @@ import { registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerStoreTools } from "../tools/store/store-tools.js"
 import { registerSmartRoutingTools } from "../tools/subagents/router-tools.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
+import { registerSummarizeTool } from "../tools/summarize/summarize-tool.js"
 import { registerAgentTeamTools } from "../tools/teams/team-tools.js"
 import { registerToolboxManagementTools } from "../tools/toolbox-management/toolbox-management-tools.js"
 import type { WebPageOpener } from "../tools/web/web-open.js"
@@ -71,6 +73,7 @@ export interface CreateMcpServerOptions {
   capabilityStore?: CapabilityStoreService
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
+  summaryRegistry?: SummaryRegistry
   projectRegistry?: ProjectRegistry
   projectScope?: ProjectScope
   agentTeams?: AgentTeamService
@@ -95,6 +98,7 @@ export interface McpCapabilityServices {
   capabilityStore?: CapabilityStoreService
   providerHub?: ProviderHub
   smartRouter?: SmartModelRouter
+  summaryRegistry?: SummaryRegistry
   projectRegistry?: ProjectRegistry
   projectScope?: ProjectScope
   agentTeams?: AgentTeamService
@@ -186,6 +190,7 @@ function registerToolboxRuntime(
     )
     if (capabilityRegistry) registerCapabilityTools(target, capabilityRegistry)
     if (options.capabilityHealth) registerCapabilityHealthTool(target, options.capabilityHealth)
+    if (options.summaryRegistry) registerSummarizeTool(target, options.summaryRegistry)
   })
   registerConfiguredBuiltin(server, lazyServer, registry, "shell", (target) => {
     registerBashTool(target, options.bashProcessManager, options.projectScope)
@@ -295,6 +300,7 @@ function registerDirectRuntime(
   )
   if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
   if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
+  if (options.summaryRegistry) registerSummarizeTool(server, options.summaryRegistry)
   if (profile.tools.shell) {
     registerBashTool(server, options.bashProcessManager, options.projectScope)
     if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)

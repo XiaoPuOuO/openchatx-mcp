@@ -123,6 +123,8 @@ function formatArguments(
       return formatApplyPatchArguments(argumentsRecord, toolFailed, failureMessage)
     case "file_write":
       return formatFileWriteArguments(argumentsRecord, toolFailed, failureMessage)
+    case "summarize":
+      return formatSummarizeArguments(argumentsRecord, toolFailed, failureMessage)
     case "bash":
       return formatBashArguments(argumentsRecord, toolFailed, failureMessage)
     default:
@@ -141,6 +143,22 @@ function formatFileWriteArguments(
       : "",
     typeof argumentsRecord.content === "string"
       ? `content_chars: ${argumentsRecord.content.length}`
+      : "",
+  ].filter(Boolean)
+  if (toolFailed && failureMessage)
+    fields.push(`message: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`)
+  return fields.join("\n")
+}
+
+function formatSummarizeArguments(
+  argumentsRecord: Record<string, unknown>,
+  toolFailed: boolean,
+  failureMessage?: string
+): string {
+  const fields = [
+    typeof argumentsRecord.uuid === "string" ? `uuid: ${yamlString(argumentsRecord.uuid)}` : "",
+    typeof argumentsRecord.summary === "string"
+      ? `summary_chars: ${characterCount(argumentsRecord.summary)}`
       : "",
   ].filter(Boolean)
   if (toolFailed && failureMessage)

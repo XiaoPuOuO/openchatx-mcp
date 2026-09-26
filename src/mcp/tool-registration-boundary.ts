@@ -126,7 +126,13 @@ function formatToolError(error: unknown, structuredOutput: boolean): CallToolRes
 }
 
 function isProjectRoutingTool(name: string, input: Record<string, unknown>): boolean {
-  if (name === START_HERE_TOOL_NAME || name === "tool_search" || name === "glob") return true
+  if (
+    name === START_HERE_TOOL_NAME ||
+    name === "summarize" ||
+    name === "tool_search" ||
+    name === "glob"
+  )
+    return true
   if (name.startsWith("project_")) return true
   return (
     name === "tool_call" &&

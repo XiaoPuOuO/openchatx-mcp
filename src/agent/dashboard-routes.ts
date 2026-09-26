@@ -18,6 +18,7 @@ import {
   saveSubagentConfig,
 } from "../subagents/config.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
+import type { SummaryRegistry } from "../summaries/summary-registry.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { readAgentInstructionsTemplate } from "../tools/start-here/start-here.js"
 import { checkForOpenChatXUpdate } from "../update/version-check.js"
@@ -32,6 +33,7 @@ export interface DashboardServices {
   capabilityStore?: CapabilityStoreService
   platformOverview?: PlatformOverviewService
   projectRegistry?: ProjectRegistry
+  summaryRegistry?: SummaryRegistry
 }
 
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
@@ -48,6 +50,7 @@ export function createDashboardRouter(
     capabilityStore,
     platformOverview,
     projectRegistry,
+    summaryRegistry,
   } = services
   const router = Router()
 
@@ -55,6 +58,7 @@ export function createDashboardRouter(
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
   registerWorkspaceRoutes(router, projectRegistry)
+  registerSummaryRoutes(router, summaryRegistry)
   registerUpdateRoutes(router)
   registerAgentInstructionsRoutes(router)
   registerRuleRoutes(router, toolboxRegistry)
@@ -683,6 +687,62 @@ function registerWorkspaceRoutes(
   projects?: ProjectRegistry
 ): void {
   registerProjectRoutes(router, projects)
+}
+
+function registerSummaryRoutes(
+  router: ReturnType<typeof Router>,
+  summaries?: SummaryRegistry
+): void {
+  router.get("/api/summaries", async (_req, res) => {
+    if (!summaries) {
+      res.status(503).json({ error: "Summary registry is unavailable." })
+      return
+    }
+    try {
+      res.json({ summaries: await summaries.list() })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.post("/api/summaries", async (req, res) => {
+    if (!summaries) {
+      res.status(503).json({ error: "Summary registry is unavailable." })
+      return
+    }
+    try {
+      const summary = await summaries.create(String(req.body?.content ?? ""))
+      res.status(201).json({ summary })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.patch("/api/summaries/:uuid", async (req, res) => {
+    if (!summaries) {
+      res.status(503).json({ error: "Summary registry is unavailable." })
+      return
+    }
+    try {
+      const summary = await summaries.update(req.params.uuid, String(req.body?.content ?? ""))
+      res.json({ summary })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.delete("/api/summaries/:uuid", async (req, res) => {
+    if (!summaries) {
+      res.status(503).json({ error: "Summary registry is unavailable." })
+      return
+    }
+    try {
+      await summaries.remove(req.params.uuid)
+      res.status(204).end()
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
 }
 
 function preserveRedactedSecrets(existing: SubagentConfig, incoming: unknown): unknown {

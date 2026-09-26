@@ -16,6 +16,10 @@
     "capability_list": {
       "enabled": true,
       "description": "List or search the unified OpenChatX capability catalog."
+    },
+    "summarize": {
+      "enabled": true,
+      "description": "Create or consume a temporary cross-conversation continuation summary by UUID."
     }
   },
   "skills": {}

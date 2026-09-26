@@ -64,6 +64,7 @@ export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
         auditLogger,
         authStore,
         agentObserver,
+        summaryRegistry: services.summaryRegistry,
       },
       { ...http, port }
     )
