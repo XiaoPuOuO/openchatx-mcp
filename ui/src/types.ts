@@ -156,6 +156,13 @@ export interface ProjectRecord {
   updatedAt: string
 }
 
+export interface TemporarySummary {
+  uuid: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type GoalStatus = "pending" | "in_progress" | "blocked" | "completed" | "cancelled"
 
 export interface GoalRecord {

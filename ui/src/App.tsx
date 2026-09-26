@@ -3,6 +3,7 @@ import {
   Blocks,
   BrainCircuit,
   ExternalLink,
+  FileText,
   FolderKanban,
   Gauge,
   PackageOpen,
@@ -20,6 +21,7 @@ import { ProjectManager } from "./features/projects/ProjectManager"
 import { StatusPage } from "./features/status/StatusPage"
 import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
+import { SummaryManager } from "./features/summaries/SummaryManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
@@ -28,6 +30,7 @@ import { fetchUpdateCheck, type UpdateCheck } from "./lib/api"
 type View =
   | "dashboard"
   | "projects"
+  | "summaries"
   | "store"
   | "subagents"
   | "toolboxes"
@@ -43,6 +46,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", labelKey: "nav.overview", icon: Gauge },
   { id: "projects", labelKey: "nav.projects", icon: FolderKanban },
+  { id: "summaries", labelKey: "nav.summaries", icon: FileText },
   { id: "store", labelKey: "nav.store", icon: PackageOpen },
   { id: "subagents", labelKey: "nav.subagents", icon: BrainCircuit },
   { id: "toolboxes", labelKey: "nav.toolboxes", icon: Blocks },
@@ -50,7 +54,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "status", labelKey: "nav.systemStatus", icon: Activity },
 ]
 
-const WORKSPACE_NAV = NAV_ITEMS.filter((item) => ["dashboard", "projects"].includes(item.id))
+const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
+  ["dashboard", "projects", "summaries"].includes(item.id)
+)
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
 )
@@ -83,6 +89,8 @@ export function App() {
     switch (view) {
       case "projects":
         return <ProjectManager onBack={back} />
+      case "summaries":
+        return <SummaryManager onBack={back} />
       case "store":
         return <CapabilityStoreManager onBack={back} />
       case "subagents":

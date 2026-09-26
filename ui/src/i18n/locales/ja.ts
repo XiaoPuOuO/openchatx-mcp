@@ -39,6 +39,7 @@ export const ja: Messages = {
   "nav.system": "システム",
   "nav.overview": "概要",
   "nav.projects": "プロジェクト",
+  "nav.summaries": "一時要約",
   "nav.goals": "ゴール",
   "nav.store": "ストア",
   "nav.subagents": "Subagents",
@@ -65,6 +66,19 @@ export const ja: Messages = {
   "agent.deleteConfirm":
     "このダッシュボードから {id} を削除しますか？ChatGPT 自体は停止しません。アクティブなセッションは次にツールを使うと再表示されます。",
   "agent.moreActivity": "ほか {count} 件のアクティビティ",
+  "summaries.title": "一時要約",
+  "summaries.subtitle":
+    "ChatGPT セッション間の引き継ぎ用要約です。Agent が取得すると自動的に削除されます。",
+  "summaries.temporary": "一時要約",
+  "summaries.create": "要約を作成",
+  "summaries.newTitle": "新しい一時要約",
+  "summaries.empty": "一時要約はありません。",
+  "summaries.noSelection": "要約を選択",
+  "summaries.copyUuid": "UUID をコピー",
+  "summaries.createAndGetUuid": "作成して UUID を取得",
+  "summaries.updatedAt": "更新: {time}",
+  "summaries.placeholder":
+    "次の ChatGPT セッションへ引き継ぐ要約を入力または貼り付けます。作成すると UUID を取得できます。",
   "projects.title": "プロジェクト",
   "projects.subtitle":
     "1 つの主要ルートと追加フォルダーを持ち、セッションのアクセス範囲を制限する実際のワークスペースです。",

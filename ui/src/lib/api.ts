@@ -16,6 +16,7 @@ import type {
   RuleMode,
   RuleSummary,
   SubagentConfig,
+  TemporarySummary,
   ToolboxSnapshot,
 } from "../types"
 import {
@@ -204,6 +205,61 @@ export async function deleteProject(id: string): Promise<void> {
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
     throw new Error(body?.error ?? `Failed to delete project (${response.status})`)
+  }
+}
+
+export async function fetchSummaries(): Promise<TemporarySummary[]> {
+  if (MOCK_DASHBOARD) return []
+  const response = await fetch("/ui/api/summaries")
+  if (!response.ok) throw new Error(`Failed to load summaries (${response.status})`)
+  const body = (await response.json()) as { summaries?: TemporarySummary[] }
+  return body.summaries ?? []
+}
+
+export async function createSummary(content: string): Promise<TemporarySummary> {
+  if (MOCK_DASHBOARD) {
+    const now = new Date().toISOString()
+    return { uuid: crypto.randomUUID(), content, createdAt: now, updatedAt: now }
+  }
+  const response = await fetch("/ui/api/summaries", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { summary?: TemporarySummary; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to create summary (${response.status})`)
+  if (!body?.summary) throw new Error("Summary response was missing the created summary.")
+  return body.summary
+}
+
+export async function updateSummary(uuid: string, content: string): Promise<TemporarySummary> {
+  if (MOCK_DASHBOARD) {
+    const now = new Date().toISOString()
+    return { uuid, content, createdAt: now, updatedAt: now }
+  }
+  const response = await fetch(`/ui/api/summaries/${encodeURIComponent(uuid)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { summary?: TemporarySummary; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to update summary (${response.status})`)
+  if (!body?.summary) throw new Error("Summary response was missing the updated summary.")
+  return body.summary
+}
+
+export async function deleteSummary(uuid: string): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(`/ui/api/summaries/${encodeURIComponent(uuid)}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to delete summary (${response.status})`)
   }
 }
 

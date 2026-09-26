@@ -39,6 +39,7 @@ export const en: Messages = {
   "nav.system": "System",
   "nav.overview": "Overview",
   "nav.projects": "Projects",
+  "nav.summaries": "Summaries",
   "nav.goals": "Goals",
   "nav.store": "Store",
   "nav.subagents": "Subagents",
@@ -65,6 +66,19 @@ export const en: Messages = {
   "agent.deleteConfirm":
     "Remove {id} from this dashboard? This does not stop ChatGPT; an active session can appear again when it uses a tool.",
   "agent.moreActivity": "{count} more activities",
+  "summaries.title": "Temporary Summaries",
+  "summaries.subtitle":
+    "Cross-session handoff summaries. Agent retrieval consumes and deletes a summary automatically.",
+  "summaries.temporary": "Temporary summaries",
+  "summaries.create": "Create summary",
+  "summaries.newTitle": "New temporary summary",
+  "summaries.empty": "No temporary summaries.",
+  "summaries.noSelection": "Select a summary",
+  "summaries.copyUuid": "Copy UUID",
+  "summaries.createAndGetUuid": "Create & get UUID",
+  "summaries.updatedAt": "Updated {time}",
+  "summaries.placeholder":
+    "Paste or write the continuation summary here. Save it to receive a UUID for the next ChatGPT conversation.",
   "projects.title": "Projects",
   "projects.subtitle":
     "Real workspaces with one primary root, optional additional folders, and session-scoped access boundaries.",
