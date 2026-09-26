@@ -93,7 +93,7 @@ export function registerStartHereTool(
         ? renderAlwaysAppliedRules(await alwaysAppliedRules())
         : ""
       const template = await readAgentInstructionsTemplate()
-      const instructions = renderStartHereTemplate(template, {
+      const instructions = `${renderStartHereTemplate(template, {
         mode,
         taskId: task_id,
         modeInstructions,
@@ -101,7 +101,7 @@ export function registerStartHereTool(
         goalContext,
         capabilityCatalog: capabilities,
         alwaysRules: ruleContext,
-      })
+      })}\n\n${renderCurrentToolContracts()}`.trim()
       return {
         content: [
           {
