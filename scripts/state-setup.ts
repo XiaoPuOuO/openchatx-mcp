@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -6,10 +6,6 @@ import { stringify } from "smol-toml"
 
 import { DEFAULT_PUBLIC_CONFIG } from "../src/public-config.cjs"
 import { synchronizeAgentInstructions } from "../src/state/agent-instructions.js"
-import {
-  readBundledAgentTemplate,
-  readMigrationBundledAgentTemplate,
-} from "../src/tools/start-here/start-here.js"
 
 export interface StateInitializationResult {
   stateDir: string
@@ -24,6 +20,20 @@ export interface ConfigInitializationResult {
 }
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url))
+const AGENTS_TEMPLATE_SOURCE = join(
+  REPOSITORY_ROOT,
+  "src",
+  "tools",
+  "start-here",
+  "AGENTS.template.md"
+)
+const AGENTS_MIGRATION_SOURCE = join(
+  REPOSITORY_ROOT,
+  "src",
+  "tools",
+  "start-here",
+  "AGENTS.migration-baseline.md"
+)
 
 const CONFIG_HEADER = `# openchatx-mcp configuration.
 # All supported settings are shown below. Edit active values to customize this installation.
@@ -36,8 +46,10 @@ export async function initializeOpenChatXState(
   await mkdir(stateDir, { recursive: true })
 
   await mkdir(join(stateDir, "rules"), { recursive: true })
-  const agentsTemplate = await readBundledAgentTemplate(REPOSITORY_ROOT)
-  const previousAgentsTemplate = await readMigrationBundledAgentTemplate(REPOSITORY_ROOT)
+  const [agentsTemplate, previousAgentsTemplate] = await Promise.all([
+    readFile(AGENTS_TEMPLATE_SOURCE, "utf8"),
+    readFile(AGENTS_MIGRATION_SOURCE, "utf8"),
+  ])
   const sync = await synchronizeAgentInstructions(stateDir, agentsTemplate, previousAgentsTemplate)
 
   return { stateDir, agentsPath: sync.agentsPath, agentsCreated: sync.created }
