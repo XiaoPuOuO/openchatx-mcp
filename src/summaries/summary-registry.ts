@@ -9,6 +9,7 @@ import { MCP_CONFIG } from "../config.js"
 const summarySchema = z.object({
   uuid: z.uuid(),
   content: z.string().min(1),
+  recentContext: z.string().default(""),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -32,13 +33,14 @@ export class SummaryRegistry {
       .map(cloneSummary)
   }
 
-  async create(content: string): Promise<TemporarySummary> {
+  async create(content: string, recentContext = ""): Promise<TemporarySummary> {
     await this.ensureLoaded()
     const text = normalizeContent(content)
     const now = new Date().toISOString()
     const summary = summarySchema.parse({
       uuid: randomUUID(),
       content: text,
+      recentContext: recentContext.trim(),
       createdAt: now,
       updatedAt: now,
     })
@@ -54,7 +56,7 @@ export class SummaryRegistry {
     return cloneSummary(summary)
   }
 
-  async update(uuid: string, content: string): Promise<TemporarySummary> {
+  async update(uuid: string, content: string, recentContext = ""): Promise<TemporarySummary> {
     await this.ensureLoaded()
     const id = normalizeUuid(uuid)
     const existing = this.summaries.get(id)
@@ -62,6 +64,7 @@ export class SummaryRegistry {
     const summary = summarySchema.parse({
       ...existing,
       content: normalizeContent(content),
+      recentContext: recentContext.trim(),
       updatedAt: new Date().toISOString(),
     })
     this.summaries.set(id, summary)

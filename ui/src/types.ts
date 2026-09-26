@@ -159,6 +159,7 @@ export interface ProjectRecord {
 export interface TemporarySummary {
   uuid: string
   content: string
+  recentContext: string
   createdAt: string
   updatedAt: string
 }

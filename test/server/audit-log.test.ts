@@ -121,6 +121,7 @@ test("does not persist summarize content in the audit log", async (t) => {
       name: "summarize",
       arguments: {
         summary: "private handoff summary contents",
+        recent_context: "private recent conversation",
       },
     },
   })
@@ -133,7 +134,9 @@ test("does not persist summarize content in the audit log", async (t) => {
 
   const log = await readFile(file, "utf8")
   assert.doesNotMatch(log, /private handoff summary contents/u)
+  assert.doesNotMatch(log, /private recent conversation/u)
   assert.match(log, /summary_chars: 32/u)
+  assert.match(log, /recent_context_chars: 27/u)
 })
 
 test("puts audit heading before entry details with time last", async (t) => {

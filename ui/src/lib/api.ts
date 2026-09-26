@@ -216,15 +216,18 @@ export async function fetchSummaries(): Promise<TemporarySummary[]> {
   return body.summaries ?? []
 }
 
-export async function createSummary(content: string): Promise<TemporarySummary> {
+export async function createSummary(
+  content: string,
+  recentContext = ""
+): Promise<TemporarySummary> {
   if (MOCK_DASHBOARD) {
     const now = new Date().toISOString()
-    return { uuid: crypto.randomUUID(), content, createdAt: now, updatedAt: now }
+    return { uuid: crypto.randomUUID(), content, recentContext, createdAt: now, updatedAt: now }
   }
   const response = await fetch("/ui/api/summaries", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, recentContext }),
   })
   const body = (await response.json().catch(() => undefined)) as
     | { summary?: TemporarySummary; error?: string }
@@ -234,15 +237,19 @@ export async function createSummary(content: string): Promise<TemporarySummary> 
   return body.summary
 }
 
-export async function updateSummary(uuid: string, content: string): Promise<TemporarySummary> {
+export async function updateSummary(
+  uuid: string,
+  content: string,
+  recentContext = ""
+): Promise<TemporarySummary> {
   if (MOCK_DASHBOARD) {
     const now = new Date().toISOString()
-    return { uuid, content, createdAt: now, updatedAt: now }
+    return { uuid, content, recentContext, createdAt: now, updatedAt: now }
   }
   const response = await fetch(`/ui/api/summaries/${encodeURIComponent(uuid)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, recentContext }),
   })
   const body = (await response.json().catch(() => undefined)) as
     | { summary?: TemporarySummary; error?: string }

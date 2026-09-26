@@ -13,6 +13,7 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
   const [summaries, setSummaries] = useState<TemporarySummary[]>([])
   const [selectedUuid, setSelectedUuid] = useState<string>()
   const [content, setContent] = useState("")
+  const [recentContext, setRecentContext] = useState("")
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -40,13 +41,17 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
   }, [load])
 
   useEffect(() => {
-    if (!creating) setContent(selected?.content ?? "")
+    if (!creating) {
+      setContent(selected?.content ?? "")
+      setRecentContext(selected?.recentContext ?? "")
+    }
   }, [creating, selected])
 
   const startCreate = () => {
     setCreating(true)
     setSelectedUuid(undefined)
     setContent("")
+    setRecentContext("")
   }
 
   const save = async () => {
@@ -55,12 +60,12 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
     setBusy(true)
     try {
       if (creating) {
-        const created = await createSummary(text)
+        const created = await createSummary(text, recentContext)
         await load()
         setSelectedUuid(created.uuid)
         setCreating(false)
       } else if (selected) {
-        const updated = await updateSummary(selected.uuid, text)
+        const updated = await updateSummary(selected.uuid, text, recentContext)
         await load()
         setSelectedUuid(updated.uuid)
       }
@@ -206,12 +211,28 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
             <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-5">
               {creating || selected ? (
                 <>
-                  <textarea
-                    className="min-h-0 flex-1 resize-none rounded-lg border bg-background p-4 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
-                    value={content}
-                    placeholder={t("summaries.placeholder")}
-                    onChange={(event) => setContent(event.target.value)}
-                  />
+                  <div className="flex min-h-0 flex-[3] flex-col gap-2">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {t("summaries.summaryContent")}
+                    </div>
+                    <textarea
+                      className="min-h-0 flex-1 resize-none rounded-lg border bg-background p-4 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
+                      value={content}
+                      placeholder={t("summaries.placeholder")}
+                      onChange={(event) => setContent(event.target.value)}
+                    />
+                  </div>
+                  <div className="flex min-h-0 flex-[2] flex-col gap-2">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {t("summaries.recentContext")}
+                    </div>
+                    <textarea
+                      className="min-h-0 flex-1 resize-none rounded-lg border bg-background p-4 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
+                      value={recentContext}
+                      placeholder={t("summaries.recentContextPlaceholder")}
+                      onChange={(event) => setRecentContext(event.target.value)}
+                    />
+                  </div>
                   <div className="flex shrink-0 justify-end gap-2">
                     {creating ? (
                       <Button

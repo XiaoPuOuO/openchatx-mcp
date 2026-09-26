@@ -77,8 +77,12 @@ export const ja: Messages = {
   "summaries.copyUuid": "UUID をコピー",
   "summaries.createAndGetUuid": "作成して UUID を取得",
   "summaries.updatedAt": "更新: {time}",
+  "summaries.summaryContent": "圧縮要約",
+  "summaries.recentContext": "最近のコンテキスト",
   "summaries.placeholder":
-    "次の ChatGPT セッションへ引き継ぐ要約を入力または貼り付けます。作成すると UUID を取得できます。",
+    "次の ChatGPT セッションへ引き継ぐ圧縮要約を入力または貼り付けます。作成すると UUID を取得できます。",
+  "summaries.recentContextPlaceholder":
+    "手動作成では空欄でも構いません。直近の会話を残す場合は User / Assistant の役割ラベル付きで貼り付けてください。",
   "projects.title": "プロジェクト",
   "projects.subtitle":
     "1 つの主要ルートと追加フォルダーを持ち、セッションのアクセス範囲を制限する実際のワークスペースです。",

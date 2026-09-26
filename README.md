@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Build your own ChatGPT agent workflow — without building the agent runtime from scratch.</strong><br>
-  OpenChatX is a batteries-included, fully customizable local agent platform: coding-grade file and shell tools, computer control, MCP aggregation, Skills, Rules, Projects, Tasks, Subagents, and more — all exposed through one official ChatGPT MCP connection, with Toolboxes to customize how your agent works.
+  OpenChatX is a batteries-included, fully customizable local agent platform: coding-grade file and shell tools, computer control, MCP aggregation, Skills, Rules, Projects, Tasks, Subagents, cross-session Summaries, and more — all exposed through one official ChatGPT MCP connection, with Toolboxes to customize how your agent works.
 </p>
 
 <p align="center">
@@ -173,11 +173,25 @@ Useful links:
 | Rules | Persistent `.mdc` rules with Always / Auto Attached / Agent Requested / Manual modes |
 | AGENTS.md | Editable `start_here` template with runtime placeholders |
 | Projects | Bind ChatGPT work to existing folders without moving them |
+| Summaries | Continue long-running work across fresh ChatGPT conversations with UUID handoffs |
 | Subagents | Delegate work to explicitly configured model profiles |
 | Capability Store | Install built-ins or inspect/install GitHub-hosted community capabilities |
-| Dashboard | Manage sessions, tools, Skills, Rules, MCP servers, Projects, status, and more |
+| Dashboard | Manage sessions, temporary Summaries, tools, Skills, Rules, MCP servers, Projects, status, and more |
 
 External MCP and Toolbox schemas stay lazy so the normal ChatGPT tool context stays small.
+
+## Cross-session Summaries
+
+A key OpenChatX differentiator is that long-running Agent work can survive the ChatGPT conversation itself. When a chat eventually hits practical context limits, OpenChatX provides a handoff layer instead of forcing you to reconstruct the task manually.
+
+When the Agent calls `summarize`, it stores two parts locally:
+
+- a compacted summary of older context;
+- roughly the latest 8k tokens of useful recent conversation, kept separately when practical.
+
+OpenChatX returns a UUID. Start a fresh ChatGPT conversation, give the Agent that UUID, and `summarize` returns the stored summary plus recent context. The handoff is then deleted automatically.
+
+Temporary summaries can also be viewed, created, edited, copied, or deleted from the Dashboard.
 
 ## Skills, Rules, and AGENTS.md
 

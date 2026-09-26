@@ -76,7 +76,11 @@ export const zhTW: Messages = {
   "summaries.copyUuid": "複製 UUID",
   "summaries.createAndGetUuid": "建立並取得 UUID",
   "summaries.updatedAt": "更新於 {time}",
-  "summaries.placeholder": "貼上或輸入要交接到下一個 ChatGPT 對話的摘要內容，建立後會取得 UUID。",
+  "summaries.summaryContent": "壓縮摘要",
+  "summaries.recentContext": "最近上下文",
+  "summaries.placeholder": "貼上或輸入要交接到下一個 ChatGPT 對話的壓縮摘要，建立後會取得 UUID。",
+  "summaries.recentContextPlaceholder":
+    "手動建立時可留空；若要保留最近對話，建議以 User / Assistant 角色標記貼在這裡。",
   "projects.title": "專案",
   "projects.subtitle":
     "真正的工作區：一個主要根目錄，可搭配多個額外資料夾，並限制工作階段的存取範圍。",

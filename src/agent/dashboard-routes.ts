@@ -711,7 +711,10 @@ function registerSummaryRoutes(
       return
     }
     try {
-      const summary = await summaries.create(String(req.body?.content ?? ""))
+      const summary = await summaries.create(
+        String(req.body?.content ?? ""),
+        String(req.body?.recentContext ?? "")
+      )
       res.status(201).json({ summary })
     } catch (error) {
       toolboxError(res, error)
@@ -724,7 +727,11 @@ function registerSummaryRoutes(
       return
     }
     try {
-      const summary = await summaries.update(req.params.uuid, String(req.body?.content ?? ""))
+      const summary = await summaries.update(
+        req.params.uuid,
+        String(req.body?.content ?? ""),
+        String(req.body?.recentContext ?? "")
+      )
       res.json({ summary })
     } catch (error) {
       toolboxError(res, error)

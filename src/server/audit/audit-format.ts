@@ -160,6 +160,9 @@ function formatSummarizeArguments(
     typeof argumentsRecord.summary === "string"
       ? `summary_chars: ${characterCount(argumentsRecord.summary)}`
       : "",
+    typeof argumentsRecord.recent_context === "string"
+      ? `recent_context_chars: ${characterCount(argumentsRecord.recent_context)}`
+      : "",
   ].filter(Boolean)
   if (toolFailed && failureMessage)
     fields.push(`message: ${yamlString(truncate(failureMessage, MAX_FAILED_MESSAGE_CHARS))}`)

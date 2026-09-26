@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>打造你自己的 ChatGPT Agent Workflow，不需要從零開始重做一套 Agent Runtime。</strong><br>
-  OpenChatX 是一個 batteries-included、可高度自訂的本機 Agent 平台：內建 Coding Agent 所需的檔案、Shell、電腦控制、MCP 聚合、Skills、Rules、Projects、Tasks、Subagents 等能力，再透過 Toolboxes 讓你自由改造 Agent 的工具、規則與工作流程；全部只需要一條官方 ChatGPT MCP 連線。
+  OpenChatX 是一個 batteries-included、可高度自訂的本機 Agent 平台：內建 Coding Agent 所需的檔案、Shell、電腦控制、MCP 聚合、Skills、Rules、Projects、Tasks、Subagents、跨對話 Summaries 等能力，再透過 Toolboxes 讓你自由改造 Agent 的工具、規則與工作流程；全部只需要一條官方 ChatGPT MCP 連線。
 </p>
 
 <p align="center">
@@ -173,11 +173,25 @@ Desktop App 會把 API Key 存在系統安全儲存區：
 | Rules | `.mdc` 規則，支援 Always / Auto Attached / Agent Requested / Manual |
 | AGENTS.md | 可直接編輯的 `start_here` Prompt Template |
 | Projects | 綁定現有專案資料夾，不需要移動檔案 |
+| Summaries | 用 UUID 把長時間工作交接到新的 ChatGPT 對話繼續 |
 | Subagents | 把工作委派給你明確設定的模型 |
 | Capability Store | 安裝內建能力，或檢查後安裝 GitHub 社群能力 |
-| Dashboard | 管理 Sessions、Tools、Skills、Rules、MCP、Projects、Status 等 |
+| Dashboard | 管理 Sessions、暫存 Summaries、Tools、Skills、Rules、MCP、Projects、Status 等 |
 
 外部 MCP 與 Toolbox Tool Schema 採 lazy discovery，不會一開始全部塞進 ChatGPT Context。
+
+## 跨對話 Summaries
+
+這是 OpenChatX 的核心差異化之一：長時間執行的 Agent 任務不需要跟著目前這個 ChatGPT 對話一起結束。當對話最終遇到 Context 過長限制時，OpenChatX 會提供交接層，不需要使用者自己重新整理整個任務背景。
+
+Agent 呼叫 `summarize` 時，OpenChatX 會在本機暫存兩部分：
+
+- 較舊 Context 的壓縮摘要；
+- 最近約 8k tokens 的有用對話，能保留原文時就另外保留。
+
+OpenChatX 接著回傳一個 UUID。開啟新的 ChatGPT 對話後，把這個 UUID 交給 Agent，`summarize` 就會把壓縮摘要與最近上下文一起取回；成功取出後，這份暫存摘要會自動刪除。
+
+Dashboard 也可以直接查看、建立、編輯、複製 UUID 或刪除暫存摘要。
 
 ## Skills、Rules、AGENTS.md
 

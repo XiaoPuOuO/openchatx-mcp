@@ -77,8 +77,12 @@ export const en: Messages = {
   "summaries.copyUuid": "Copy UUID",
   "summaries.createAndGetUuid": "Create & get UUID",
   "summaries.updatedAt": "Updated {time}",
+  "summaries.summaryContent": "Compacted summary",
+  "summaries.recentContext": "Recent context",
   "summaries.placeholder":
-    "Paste or write the continuation summary here. Save it to receive a UUID for the next ChatGPT conversation.",
+    "Paste or write the compacted continuation summary here. Save it to receive a UUID for the next ChatGPT conversation.",
+  "summaries.recentContextPlaceholder":
+    "Optional for manual entries. Paste the most recent useful conversation turns here, preferably with User / Assistant role labels.",
   "projects.title": "Projects",
   "projects.subtitle":
     "Real workspaces with one primary root, optional additional folders, and session-scoped access boundaries.",
