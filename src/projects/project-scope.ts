@@ -61,7 +61,7 @@ export class ProjectScope {
     if (active && explicit && active.id !== explicit.id) {
       throw new ToolError(
         "PROJECT_SWITCH_REQUIRED",
-        `Project ${JSON.stringify(explicit.id)} is not the active Project. Call project_manage with action="use" to switch workspaces before accessing it.`
+        `Project ${JSON.stringify(explicit.id)} is not the active Project. Call project_manage with action="use" and project_id=${JSON.stringify(explicit.id)}.`
       )
     }
 

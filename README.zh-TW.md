@@ -205,8 +205,7 @@ toolboxes/<toolbox>/skills/<name>/SKILL.md
 
 Skill 只有 `name`、`description` 與 Markdown Instructions，不會在 Startup 預先注入。
 
-- `skill_search`：依名稱與說明搜尋，最多回傳 5 個。
-- `skill_load`：選定後才載入完整 Markdown。
+- `skill_search`：依名稱與說明搜尋，最多回傳 5 個；選定後用 `action=load` 搭配完整 Skill 名稱載入 Markdown。
 - `skill_manage`：新增、編輯、刪除 Skill。
 
 ### Rules

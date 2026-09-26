@@ -185,7 +185,7 @@ const toolFamilyCases: Array<{ tool: string; structuredContent: unknown; expecte
     expected: `skills:\n\n- name=create-skill\n\n  description:\n    ${longSkillDescription}`,
   },
   {
-    tool: "skill_load",
+    tool: "skill_search",
     structuredContent: {
       name: "create-skill",
       path: "/workspace/skills/create-skill/SKILL.md",

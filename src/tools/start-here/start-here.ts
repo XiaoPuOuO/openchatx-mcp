@@ -213,7 +213,7 @@ export async function buildStartHereInstructions(
     readStartPrompt(mode, root),
     template === undefined ? readBundledAgentTemplate(root) : Promise.resolve(template),
   ])
-  return renderStartHereTemplate(agentTemplate, {
+  const rendered = renderStartHereTemplate(agentTemplate, {
     mode,
     taskId: context.taskId ?? "",
     modeInstructions: selected.prompt.trim(),
@@ -222,6 +222,23 @@ export async function buildStartHereInstructions(
     capabilityCatalog: context.capabilityCatalog ?? "",
     alwaysRules: context.alwaysRules ?? "",
   })
+  return `${rendered}\n\n${renderCurrentToolContracts()}`.trim()
+}
+
+export function renderCurrentToolContracts(): string {
+  return [
+    "# Current OpenChatX Tool Contracts",
+    "These runtime-owned contracts are authoritative for the current tool surface.",
+    "- Projects: project_manage actions=list|upsert|remove|use|resolve|grant_once|grant_all_session|revoke_all_session. Activate/switch with action=use + project_id; clear for machine/global work with action=use + project_id=null.",
+    "- Skills: skill_search action=search (default) or action=load + name; skill_manage handles create|edit|delete.",
+    "- Capabilities: capability_list action=list (default) or action=health.",
+    "- Subagents: subagent_run runs an explicit model, auto-routes when model is omitted, or only selects with action=route.",
+    "- Rules: rule_resolve action=resolve (default) or action=load; rule_manage handles create|edit|delete|import|export.",
+    "- Durable jobs: job_manage action=start|list|read|cancel.",
+    "- Nodes: node_manage action=list|upsert|remove|probe|tool_search|tool_call.",
+    "- Providers: provider_manage action=presets|install|probe.",
+    "If PROJECT_ROUTING_REQUIRED is returned, satisfy it through project_manage. Never bypass Project routing by reaching for internal paths or removed tools.",
+  ].join("\n")
 }
 
 export async function readAgentInstructionsTemplate(): Promise<string> {

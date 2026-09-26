@@ -81,12 +81,12 @@ export default {
   const server = new McpServer({ name: "catalog-test", version: "1.0.0" })
   const builtins = new LazyBuiltinTools()
   builtins.server().registerTool(
-    "project_list",
+    "node_manage",
     {
-      description: "List registered Projects",
+      description: "Manage remote nodes",
       inputSchema: z.object({}),
     },
-    async () => ({ content: [{ type: "text" as const, text: "builtin-projects" }] })
+    async () => ({ content: [{ type: "text" as const, text: "builtin-nodes" }] })
   )
   registerCatalogTools(server, toolboxes, external, builtins)
   const client = new Client({ name: "catalog-client", version: "1.0.0" })
@@ -103,10 +103,10 @@ export default {
 
   const builtinSearch = await client.callTool({
     name: "tool_search",
-    arguments: { query: "project list", source: "builtin" },
+    arguments: { query: "node manage", source: "builtin" },
   })
   const builtinSearchText = builtinSearch.content.find((item) => item.type === "text")?.text ?? ""
-  assert.match(builtinSearchText, /builtin:project_list/u)
+  assert.match(builtinSearchText, /builtin:node_manage/u)
 
   const blenderSearch = await client.callTool({
     name: "tool_search",
@@ -124,9 +124,9 @@ export default {
 
   const builtin = await client.callTool({
     name: "tool_call",
-    arguments: { tool: "builtin:project_list", arguments_json: "{}" },
+    arguments: { tool: "builtin:node_manage", arguments_json: "{}" },
   })
-  assert.equal(builtin.content.find((item) => item.type === "text")?.text, "builtin-projects")
+  assert.equal(builtin.content.find((item) => item.type === "text")?.text, "builtin-nodes")
 
   const externalCall = await client.callTool({
     name: "tool_call",

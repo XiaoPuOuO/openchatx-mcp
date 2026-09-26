@@ -21,7 +21,7 @@ OpenChatX treats ChatGPT as the primary planner and the local runtime as a capab
 
 \`src/capabilities/catalog.ts\` is the model-facing catalog owner. It normalizes external MCP servers, custom Toolboxes, subagent profiles, and Providers into \`CapabilityDescriptor\` records. \`start_here\` renders lightweight summaries and \`capability_list\` returns exact invocation metadata. Large tool schemas remain behind \`tool_search\` / \`tool_call\`.
 
-\`src/capabilities/health.ts\` owns operational health for the local runtime, Secure MCP Tunnel, external MCPs, Toolboxes, and Providers. The same snapshot is exposed through \`capability_health\` and the Dashboard.
+\`src/capabilities/health.ts\` owns operational health for the local runtime, Secure MCP Tunnel, external MCPs, Toolboxes, and Providers. The same snapshot is exposed through \`capability_list action=health\` and the Dashboard.
 
 ## Durable Work and Projects
 

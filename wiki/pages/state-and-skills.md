@@ -19,7 +19,7 @@ The Toolbox Dashboard exposes this file at the same level as Toolbox folders. Us
 
 ## Persistent Skills
 
-Reusable agent workflows live only inside Toolbox folders at `toolboxes/<toolbox>/skills/<name>/SKILL.md`. `SKILL.md` stays portable and uses the standard `name` and `description` frontmatter plus Markdown instructions. `skill_search` returns at most five relevant qualified names/descriptions without loading instructions; `skill_load` accepts an exact `<toolbox>.<skill>` name; `skill_manage` creates, edits, or deletes a skill inside an explicit toolbox.
+Reusable agent workflows live only inside Toolbox folders at `toolboxes/<toolbox>/skills/<name>/SKILL.md`. `SKILL.md` stays portable and uses the standard `name` and `description` frontmatter plus Markdown instructions. `skill_search` returns at most five relevant qualified names/descriptions without loading instructions; `skill_search action=load` accepts an exact `<toolbox>.<skill>` name; `skill_manage` creates, edits, or deletes a skill inside an explicit toolbox.
 
 Skills are always on-demand. No skill name, description, or body is injected by `start_here`, and Skills do not have `alwaysApply` or an OpenChatX startup-loading flag. `store_skill` with `action=import` or `action=export` copies portable skill folders, including optional `scripts/`, `references/`, and `assets/`, between OpenChatX and other Agent Skills consumers.
 

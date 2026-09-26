@@ -205,8 +205,7 @@ toolboxes/<toolbox>/skills/<name>/SKILL.md
 
 A Skill contains `name`, `description`, and Markdown instructions. Skills are not injected at startup.
 
-- `skill_search` finds up to five relevant Skills by name/description.
-- `skill_load` loads the full Markdown only after a Skill is selected.
+- `skill_search` finds up to five relevant Skills by name/description; use `action=load` with an exact Skill name to load its full Markdown.
 - `skill_manage` creates, edits, or deletes user Skills.
 
 ### Rules

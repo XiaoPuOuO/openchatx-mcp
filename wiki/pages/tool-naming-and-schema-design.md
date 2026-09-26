@@ -26,9 +26,9 @@ Prefer:
 <domain>_<specific action>
 ```
 
-Examples: `skill_search`, `skill_load`, `skill_manage`, `shell_run`, `shell_poll`, `computer_click`.
+Examples: `skill_search`, `skill_manage`, `job_manage`, `node_manage`, `fetch_url`.
 
-Use concrete conventional verbs such as `list`, `load`, `read`, `fetch`, `run`, `poll`, `create`, `delete`, `reset`, and `close`. Avoid vague verbs such as `use`, `manage`, `handle`, or `process` when a precise action exists.
+Use concrete conventional verbs when one operation deserves its own tool. When several closely related operations share one compact schema, a grouped verb such as `manage` is acceptable to reduce model-facing schema cost.
 
 Sibling tools should form predictable families. The name alone should give ChatGPT a strong initial guess about the operation.
 

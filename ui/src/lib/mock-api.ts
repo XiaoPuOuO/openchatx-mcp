@@ -244,7 +244,7 @@ let toolboxes: ToolboxSnapshot[] = [
     dynamic: false,
     builtin: "skills",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/skills",
-    tools: ["skill_search", "skill_load", "skill_manage"].map((name) => ({
+    tools: ["skill_search", "skill_manage"].map((name) => ({
       name,
       enabled: true,
       required: false,

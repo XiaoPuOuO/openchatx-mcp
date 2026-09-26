@@ -28,7 +28,7 @@ export function registerProjectTools(
     "project_manage",
     {
       description:
-        "List, register, remove, activate, resolve, or grant session access for Projects.",
+        "List, register, remove, activate, resolve, or grant session access for Projects. Use action=use to activate, switch, or clear the active Project.",
       inputSchema: z.object({
         action: z.enum([
           "list",
