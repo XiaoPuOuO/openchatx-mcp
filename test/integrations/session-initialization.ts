@@ -161,8 +161,8 @@ test("requires Project routing before normal work in a new session", {
   assert.match(toolText(blocked), /PROJECT_ROUTING_REQUIRED/u)
 
   const unscoped = await connected.client.callTool({
-    name: "project_use",
-    arguments: { project_id: null },
+    name: "project_manage",
+    arguments: { action: "use", project_id: null },
   })
   assert.notEqual(unscoped.isError, true)
 
@@ -209,9 +209,16 @@ test("summarize hands a temporary summary across ChatGPT sessions and consumes i
   })
 
   const summary = "## Objective\n\n- Continue OpenChatX work.\n\n## Next Move\n\n1. Resume."
+  const recentContext = [
+    "### User",
+    "Please continue the OpenChatX work.",
+    "",
+    "### Assistant",
+    "The summarize handoff is ready.",
+  ].join("\n")
   const created = await first.client.callTool({
     name: "summarize",
-    arguments: { summary },
+    arguments: { summary, recent_context: recentContext },
   })
   assert.notEqual(created.isError, true)
   const uuid = toolText(created).trim()
@@ -221,7 +228,7 @@ test("summarize hands a temporary summary across ChatGPT sessions and consumes i
     name: "summarize",
     arguments: { uuid },
   })
-  assert.equal(toolText(consumed), summary)
+  assert.equal(toolText(consumed), `${summary}\n\n## Recent Context\n\n${recentContext}`)
 
   const missing = await first.client.callTool({
     name: "summarize",
@@ -255,9 +262,10 @@ test("summarize can hand off summaries larger than the old 1 MB request limit", 
   })
 
   const summary = `## Objective\n\n${"x".repeat(1_100_000)}`
+  const recentContext = "### User\nKeep the latest turn verbatim."
   const created = await connected.client.callTool({
     name: "summarize",
-    arguments: { summary },
+    arguments: { summary, recent_context: recentContext },
   })
   assert.notEqual(created.isError, true)
   const uuid = toolText(created).trim()
@@ -266,7 +274,7 @@ test("summarize can hand off summaries larger than the old 1 MB request limit", 
     name: "summarize",
     arguments: { uuid },
   })
-  assert.equal(toolText(consumed), summary)
+  assert.equal(toolText(consumed), `${summary}\n\n## Recent Context\n\n${recentContext}`)
 })
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {
@@ -427,7 +435,6 @@ test("searches skill metadata before loading full Markdown", {
       builtin: "skills",
       tools: {
         skill_search: { enabled: true },
-        skill_load: { enabled: true },
         skill_manage: { enabled: true },
       },
       skills: {},
@@ -472,19 +479,19 @@ test("searches skill metadata before loading full Markdown", {
   assert.doesNotMatch(searchText, /Full instructions\./u)
 
   const firstLoad = await connected.client.callTool({
-    name: "skill_load",
-    arguments: { name: "test-skills.cooldown-skill" },
+    name: "skill_search",
+    arguments: { action: "load", name: "test-skills.cooldown-skill" },
   })
   const secondLoad = await connected.client.callTool({
-    name: "skill_load",
-    arguments: { name: "test-skills.cooldown-skill" },
+    name: "skill_search",
+    arguments: { action: "load", name: "test-skills.cooldown-skill" },
   })
   assert.match(toolText(firstLoad), /Full instructions\./u)
   assert.match(toolText(secondLoad), /Full instructions\./u)
 
   const missing = await connected.client.callTool({
-    name: "skill_load",
-    arguments: { name: "test-skills.missing-skill" },
+    name: "skill_search",
+    arguments: { action: "load", name: "test-skills.missing-skill" },
   })
   assert.match(toolText(missing), /Unknown toolbox skill/u)
 })

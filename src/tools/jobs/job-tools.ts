@@ -11,19 +11,22 @@ export function registerJobTools(
   projectScope?: ProjectScope
 ): void {
   server.registerTool(
-    "job_start",
+    "job_manage",
     {
       description:
-        "Start a durable background command that continues after the current ChatGPT tool call disconnects. Defaults to the active Project root when one is selected.",
+        "Start, list, read, or cancel durable background jobs. Use action=start, list, read, or cancel.",
       inputSchema: z.object({
-        label: z.string().min(1).max(120),
-        command: z.string().min(1),
+        action: z.enum(["start", "list", "read", "cancel"]),
+        label: z.string().min(1).max(120).optional(),
+        command: z.string().min(1).optional(),
         cwd: z.string().min(1).optional(),
         project_id: z
           .string()
           .min(1)
           .optional()
           .describe("Optional Project id. Shell permission is enforced."),
+        id: z.string().min(1).optional(),
+        max_bytes: z.int().min(1).max(131072).default(16384),
       }),
       annotations: {
         readOnlyHint: false,
@@ -32,97 +35,49 @@ export function registerJobTools(
         openWorldHint: true,
       },
     },
-    async ({ label, command, cwd, project_id }) => {
+    async ({ action, label, command, cwd, project_id, id, max_bytes }) => {
       try {
-        const resolved = projectScope
-          ? await projectScope.resolvePath(cwd, "shell", project_id)
-          : { path: cwd, project: undefined }
-        const job = await jobs.start(label, command, resolved.path, resolved.project?.id)
-        return {
-          structuredContent: {
-            job,
-            ...(resolved.project
-              ? { project: { id: resolved.project.id, name: resolved.project.name } }
-              : {}),
-          },
-          content: [],
+        switch (action) {
+          case "start": {
+            if (!label) throw new Error("label is required for action=start.")
+            if (!command) throw new Error("command is required for action=start.")
+            const resolved = projectScope
+              ? await projectScope.resolvePath(cwd, "shell", project_id)
+              : { path: cwd, project: undefined }
+            const job = await jobs.start(label, command, resolved.path, resolved.project?.id)
+            return {
+              structuredContent: {
+                job,
+                ...(resolved.project
+                  ? { project: { id: resolved.project.id, name: resolved.project.name } }
+                  : {}),
+              },
+              content: [],
+            }
+          }
+          case "list": {
+            const jobsList = await jobs.list()
+            return {
+              structuredContent: {
+                jobs: project_id ? jobsList.filter((job) => job.projectId === project_id) : jobsList,
+              },
+              content: [],
+            }
+          }
+          case "read": {
+            if (!id) throw new Error("id is required for action=read.")
+            const result = await jobs.readLog(id, max_bytes)
+            return {
+              structuredContent: result,
+              content: result.output ? [{ type: "text" as const, text: result.output }] : [],
+            }
+          }
+          case "cancel":
+            if (!id) throw new Error("id is required for action=cancel.")
+            return { structuredContent: { job: await jobs.cancel(id) }, content: [] }
         }
       } catch (error) {
-        throw toToolError(error, "JOB_START_FAILED")
-      }
-    }
-  )
-
-  server.registerTool(
-    "job_list",
-    {
-      description: "List durable jobs and their persisted status, including Project association.",
-      inputSchema: z.object({
-        project_id: z.string().min(1).optional(),
-      }),
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async ({ project_id }) => {
-      const jobsList = await jobs.list()
-      return {
-        structuredContent: {
-          jobs: project_id ? jobsList.filter((job) => job.projectId === project_id) : jobsList,
-        },
-        content: [],
-      }
-    }
-  )
-
-  server.registerTool(
-    "job_read",
-    {
-      description: "Read one durable job and the tail of its persisted log.",
-      inputSchema: z.object({
-        id: z.string().min(1),
-        max_bytes: z.int().min(1).max(131072).default(16384),
-      }),
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async ({ id, max_bytes }) => {
-      try {
-        const result = await jobs.readLog(id, max_bytes)
-        return {
-          structuredContent: result,
-          content: result.output ? [{ type: "text" as const, text: result.output }] : [],
-        }
-      } catch (error) {
-        throw toToolError(error, "JOB_READ_FAILED")
-      }
-    }
-  )
-
-  server.registerTool(
-    "job_cancel",
-    {
-      description: "Cancel a running durable job.",
-      inputSchema: z.object({ id: z.string().min(1) }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async ({ id }) => {
-      try {
-        return { structuredContent: { job: await jobs.cancel(id) }, content: [] }
-      } catch (error) {
-        throw toToolError(error, "JOB_CANCEL_FAILED")
+        throw toToolError(error, "JOB_MANAGE_FAILED")
       }
     }
   )

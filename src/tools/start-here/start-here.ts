@@ -162,14 +162,14 @@ function renderProjectContext(
         ? activeProject.additionalPaths.map((path) => `- additional root: ${path}`)
         : []),
       `- permissions: read=${activeProject.permissions.read}, write=${activeProject.permissions.write}, shell=${activeProject.permissions.shell}`,
-      "Relative file/search/shell paths resolve from this Project until project_use changes or clears it.",
+      "Relative file/search/shell paths resolve from this Project until project_manage action=use changes or clears it.",
     ].join("\n")
   }
   if (registeredProjects.length === 0) {
     return [
       "# Projects",
       "No Projects are registered yet.",
-      "Project routing is required before normal work. First decide whether this task is project-scoped or machine/global. For a project-scoped task, inspect registered Projects first; if none matches, use glob only to locate the project root if needed, then create it with project_manage and activate it with project_use before file/content/shell work. For a machine/global task, explicitly call project_use with project_id=null before continuing.",
+      "Project routing is required before normal work. For project work, use project_manage action=list, upsert if needed, then action=use. For machine/global work, call project_manage action=use with project_id=null. Only glob is available before routing is resolved.",
     ].join("\n")
   }
   return [
@@ -180,7 +180,7 @@ function renderProjectContext(
         (project) =>
           `- ${project.id} (${project.name}) — primary: ${project.path}${project.additionalPaths.length > 0 ? `; additional: ${project.additionalPaths.join(", ")}` : ""}`
       ),
-    "No Project is active. Project routing is required before normal work. Decide whether the task is project-scoped or machine/global. If project-scoped, reuse and activate a matching Project; if none matches, use glob only to locate the root if needed, create it with project_manage, then activate it with project_use. If machine/global, explicitly call project_use with project_id=null. Until routing is resolved, file/content/shell and other work tools are blocked.",
+    "No Project is active. Resolve routing with project_manage: action=list, upsert if needed, then action=use; for machine/global work use action=use with project_id=null. Until then, file/content/shell and other work tools are blocked.",
   ].join("\n")
 }
 
@@ -199,7 +199,7 @@ export function renderCapabilityCatalog(catalog: CapabilityCatalog): string {
     "# Available OpenChatX capabilities",
     "Capabilities are presented as one platform catalog regardless of whether they come from MCP, custom tools, model profiles, or providers.",
     ...lines,
-    "Use capability_list when you need exact invocation details. Tool-backed capabilities are discovered with tool_search/tool_call; agent capabilities run through subagent_run.",
+    "Use capability_list for catalog details or action=health for platform health. Tool-backed capabilities use tool_search/tool_call; agent capabilities use subagent_run.",
   ].join("\n")
 }
 

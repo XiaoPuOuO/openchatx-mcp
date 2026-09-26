@@ -374,7 +374,7 @@ function parseFrontmatterValues(markdown: string): Map<string, string> {
 function unknownSkill(name: string, options?: ErrorOptions): SkillCatalogError {
   return new SkillCatalogError(
     "unknown_skill",
-    `Unknown skill ${JSON.stringify(name)}. Use skill_search to discover matching skills.`,
+    `Unknown skill ${JSON.stringify(name)}. Use skill_search action=search to discover matching skills.`,
     options
   )
 }

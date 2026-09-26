@@ -5,11 +5,10 @@
   "dynamic": true,
   "builtin": "nodes",
   "tools": {
-    "node_list": { "enabled": true, "description": "List configured OpenChatX nodes." },
-    "node_manage": { "enabled": true, "description": "Register or remove a node." },
-    "node_probe": { "enabled": true, "description": "Probe node health." },
-    "node_tool_search": { "enabled": true, "description": "Discover tools on a node." },
-    "node_tool_call": { "enabled": true, "description": "Call a tool on a node." }
+    "node_manage": {
+      "enabled": true,
+      "description": "List, register, remove, probe, discover, or call remote nodes."
+    }
   },
   "skills": {}
 }

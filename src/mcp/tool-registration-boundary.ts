@@ -53,7 +53,7 @@ export function installToolRegistrationBoundary(
       if (agent?.projectRouting === "pending" && !isProjectRoutingTool(name, input)) {
         throw new ToolError(
           "PROJECT_ROUTING_REQUIRED",
-          "Resolve Project routing before normal work. If this task belongs to a Project, inspect registered Projects, create one if needed, then activate it with project_use. If this is a machine/global task, explicitly call project_use with project_id=null. Only glob is available for locating a project root while routing is pending."
+          "Resolve Project routing before normal work. Use project_manage action=list/upsert/use for project work, or action=use with project_id=null for machine/global work. Only glob is available for locating a project root while routing is pending."
         )
       }
 

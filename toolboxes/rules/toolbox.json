@@ -6,23 +6,11 @@
   "tools": {
     "rule_resolve": {
       "enabled": true,
-      "description": "Resolve applicable rules from task context and file paths."
-    },
-    "rule_load": {
-      "enabled": true,
-      "description": "Load one exact .mdc rule."
+      "description": "Resolve applicable rules or load one exact .mdc rule."
     },
     "rule_manage": {
       "enabled": true,
-      "description": "Create, edit, or delete .mdc rules inside a toolbox."
-    },
-    "rule_import": {
-      "enabled": true,
-      "description": "Import Cursor .mdc, Claude rule Markdown, or AGENTS.md."
-    },
-    "rule_export": {
-      "enabled": true,
-      "description": "Export a rule to Cursor, Claude, or AGENTS.md format."
+      "description": "Create, edit, delete, import, or export .mdc rules."
     }
   },
   "skills": {}

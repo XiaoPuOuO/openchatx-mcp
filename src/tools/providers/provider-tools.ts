@@ -6,31 +6,16 @@ import type { ProviderHub } from "../../providers/provider-hub.js"
 
 export function registerProviderTools(server: McpServer, hub: ProviderHub): void {
   server.registerTool(
-    "provider_presets",
+    "provider_manage",
     {
-      description:
-        "List built-in Provider Hub presets for hosted and local OpenAI-compatible runtimes.",
-      inputSchema: z.object({}),
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    async () => ({ structuredContent: { providers: hub.presets() }, content: [] })
-  )
-
-  server.registerTool(
-    "provider_install",
-    {
-      description:
-        "Install a Provider Hub preset into the OpenChatX subagent provider configuration.",
+      description: "List presets, install a preset, or probe a configured provider.",
       inputSchema: z.object({
-        preset: z.string().min(1),
+        action: z.enum(["presets", "install", "probe"]),
+        preset: z.string().min(1).optional(),
         id: z.string().min(1).optional(),
         api_key: z.string().min(1).optional(),
         base_url: z.url().optional(),
+        provider: z.string().min(1).optional(),
       }),
       annotations: {
         readOnlyHint: false,
@@ -39,35 +24,37 @@ export function registerProviderTools(server: McpServer, hub: ProviderHub): void
         openWorldHint: false,
       },
     },
-    async ({ preset, id, api_key, base_url }) => {
+    async ({ action, preset, id, api_key, base_url, provider }) => {
       try {
-        const config = hub.installPreset(preset, id, api_key, base_url)
-        return {
-          structuredContent: {
-            provider: id ?? preset,
-            configured: true,
-            model_profiles: Object.keys(config.models).length,
-          },
-          content: [],
+        switch (action) {
+          case "presets":
+            return { structuredContent: { providers: hub.presets() }, content: [] }
+          case "install": {
+            const presetId = required(preset, "preset", action)
+            const config = hub.installPreset(presetId, id, api_key, base_url)
+            return {
+              structuredContent: {
+                provider: id ?? presetId,
+                configured: true,
+                model_profiles: Object.keys(config.models).length,
+              },
+              content: [],
+            }
+          }
+          case "probe":
+            return {
+              structuredContent: await hub.probe(required(provider, "provider", action)),
+              content: [],
+            }
         }
       } catch (error) {
-        throw toToolError(error, "PROVIDER_INSTALL_FAILED")
+        throw toToolError(error, "PROVIDER_MANAGE_FAILED")
       }
     }
   )
+}
 
-  server.registerTool(
-    "provider_probe",
-    {
-      description: "Probe a configured provider's OpenAI-compatible /models endpoint.",
-      inputSchema: z.object({ provider: z.string().min(1) }),
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
-    },
-    async ({ provider }) => ({ structuredContent: await hub.probe(provider), content: [] })
-  )
+function required<T>(value: T | undefined, field: string, action: string): T {
+  if (value === undefined) throw new Error(`${field} is required for action=${action}.`)
+  return value
 }

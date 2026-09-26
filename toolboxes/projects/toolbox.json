@@ -5,19 +5,9 @@
   "dynamic": false,
   "builtin": "projects",
   "tools": {
-    "project_list": { "enabled": true, "description": "List registered projects." },
-    "project_manage": { "enabled": true, "description": "Register or update project permissions." },
-    "project_access": {
+    "project_manage": {
       "enabled": true,
-      "description": "Grant session-scoped access outside the active Project after user approval."
-    },
-    "project_use": {
-      "enabled": true,
-      "description": "Set or clear the active Project for this ChatGPT session."
-    },
-    "project_resolve": {
-      "enabled": true,
-      "description": "Resolve a project root with a permission check."
+      "description": "List, register, remove, activate, resolve, or grant access for Projects."
     }
   },
   "skills": {}

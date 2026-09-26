@@ -8,22 +8,9 @@ import { exportRule, importRule } from "./rule-compat.js"
 
 const ruleModeSchema = z.enum(["always", "auto_attached", "agent_requested", "manual"])
 
-const ruleResultSchema = z.object({
-  toolboxId: z.string().optional(),
-  name: z.string(),
-  description: z.string().optional(),
-  globs: z.array(z.string()),
-  alwaysApply: z.boolean(),
-  mode: ruleModeSchema,
-  path: z.string(),
-  markdown: z.string(),
-})
-
 export function registerRuleTools(server: McpServer, toolboxes?: ToolboxRegistry): void {
   registerResolveTool(server, toolboxes)
-  registerLoadTool(server, toolboxes)
   registerManageTool(server, toolboxes)
-  registerCompatibilityTools(server, toolboxes)
 }
 
 function registerResolveTool(server: McpServer, toolboxes?: ToolboxRegistry): void {
@@ -31,19 +18,31 @@ function registerResolveTool(server: McpServer, toolboxes?: ToolboxRegistry): vo
     "rule_resolve",
     {
       description:
-        "Resolve applicable Auto Attached and Agent Requested rules. File globs select Auto Attached rules; task text selects Agent Requested rules. Always rules are already injected by start_here and Manual rules are never auto-selected.",
+        "Resolve applicable rules, or load one exact rule. Use action=resolve (default) with query/paths, or action=load with toolbox_id/name.",
       inputSchema: z.object({
+        action: z.enum(["resolve", "load"]).default("resolve"),
         query: z.string().optional(),
         paths: z.array(z.string()).max(100).optional(),
         limit: z.number().int().min(1).max(MAX_RULE_RESOLVE_RESULTS).default(10),
-      }),
-      outputSchema: z.object({
-        rules: z.array(ruleResultSchema).max(MAX_RULE_RESOLVE_RESULTS),
+        toolbox_id: z.string().min(1).optional(),
+        name: z.string().min(1).optional(),
       }),
       annotations: readOnlyAnnotations(),
     },
-    async ({ query, paths, limit }, ctx) => {
+    async ({ action, query, paths, limit, toolbox_id, name }, ctx) => {
       try {
+        if (action === "load") {
+          const toolboxId = requiredString(toolbox_id, "toolbox_id", action)
+          const ruleName = requiredString(name, "name", action)
+          const rule = await requireToolboxes(toolboxes)
+            .ruleCatalog(toolboxId)
+            .load(ruleName, ctx.mcpReq.signal)
+          return {
+            structuredContent: ruleResult({ ...rule, toolboxId }),
+            content: [],
+          }
+        }
+
         const matches = await requireToolboxes(toolboxes).resolveRules(
           { query, paths, limit },
           ctx.mcpReq.signal
@@ -59,58 +58,27 @@ function registerResolveTool(server: McpServer, toolboxes?: ToolboxRegistry): vo
   )
 }
 
-function registerLoadTool(server: McpServer, toolboxes?: ToolboxRegistry): void {
-  server.registerTool(
-    "rule_load",
-    {
-      description:
-        "Load one exact rule by name. Primarily use this for Manual rules or when the user explicitly references a rule.",
-      inputSchema: z.object({
-        toolbox_id: z.string().min(1),
-        name: z.string().min(1),
-      }),
-      outputSchema: ruleResultSchema,
-      annotations: readOnlyAnnotations(),
-    },
-    async ({ toolbox_id, name }, ctx) => {
-      try {
-        const rule = await requireToolboxes(toolboxes)
-          .ruleCatalog(toolbox_id)
-          .load(name, ctx.mcpReq.signal)
-        return { structuredContent: ruleResult({ ...rule, toolboxId: toolbox_id }), content: [] }
-      } catch (error) {
-        throw ruleToolError(error)
-      }
-    }
-  )
-}
-
 function registerManageTool(server: McpServer, toolboxes?: ToolboxRegistry): void {
   server.registerTool(
     "rule_manage",
     {
       description:
-        "Create, edit, or delete OpenChatX .mdc rules. The four activation modes are Always, Auto Attached, Agent Requested, and Manual.",
+        "Create, edit, delete, import, or export .mdc rules. import/export support Cursor, Claude, and AGENTS.md formats.",
       inputSchema: z.object({
         toolbox_id: z.string().min(1),
-        action: z.enum(["create", "edit", "delete"]),
-        name: z.string().min(1).max(128),
+        action: z.enum(["create", "edit", "delete", "import", "export"]),
+        name: z.string().min(1).max(128).optional(),
         mode: ruleModeSchema.optional(),
         description: z.string().max(1024).optional(),
         globs: z.array(z.string().min(1)).max(100).optional(),
         alwaysApply: z.boolean().optional(),
         markdown: z.string().optional(),
-        content: z
-          .string()
-          .optional()
-          .describe(
-            "Complete .mdc file. When supplied, metadata/body fields and mode are ignored."
-          ),
-      }),
-      outputSchema: z.object({
-        action: z.enum(["create", "edit", "delete"]),
-        rule: ruleResultSchema.optional(),
-        removed: z.string().optional(),
+        content: z.string().optional(),
+        format: z.enum(["cursor", "claude", "agents"]).optional(),
+        source: z.string().min(1).optional(),
+        destination: z.string().min(1).optional(),
+        replace: z.boolean().default(false),
+        allow_lossy: z.boolean().default(false),
       }),
       annotations: {
         readOnlyHint: false,
@@ -129,17 +97,56 @@ function registerManageTool(server: McpServer, toolboxes?: ToolboxRegistry): voi
       alwaysApply,
       markdown,
       content,
+      format,
+      source,
+      destination,
+      replace,
+      allow_lossy,
     }) => {
       try {
         const rules = requireToolboxes(toolboxes).ruleCatalog(toolbox_id)
         if (action === "delete") {
-          await rules.delete(name)
+          const ruleName = requiredString(name, "name", action)
+          await rules.delete(ruleName)
           return {
-            structuredContent: { action, removed: name },
+            structuredContent: { action, removed: ruleName },
             content: [],
           }
         }
 
+        if (action === "import") {
+          if (!format) throw missingField("format", action)
+          const importSource = requiredString(source, "source", action)
+          const rule = await importRule(rules, {
+            format,
+            source: importSource,
+            replace,
+            ...(name ? { name } : {}),
+            ...(mode ? { mode } : {}),
+            ...(description !== undefined ? { description } : {}),
+            ...(globs !== undefined ? { globs } : {}),
+          })
+          return {
+            structuredContent: { action, rule: ruleResult({ ...rule, toolboxId: toolbox_id }) },
+            content: [],
+          }
+        }
+
+        if (action === "export") {
+          if (!format) throw missingField("format", action)
+          const ruleName = requiredString(name, "name", action)
+          const exportDestination = requiredString(destination, "destination", action)
+          const result = await exportRule(rules, {
+            format,
+            name: ruleName,
+            destination: exportDestination,
+            replace,
+            allowLossy: allow_lossy,
+          })
+          return { structuredContent: { action, ...result }, content: [] }
+        }
+
+        const ruleName = requiredString(name, "name", action)
         const input = normalizeRuleInput({
           mode,
           description,
@@ -150,103 +157,13 @@ function registerManageTool(server: McpServer, toolboxes?: ToolboxRegistry): voi
         })
         const rule =
           action === "create"
-            ? await rules.create({ name, ...input })
-            : await rules.edit(name, input)
+            ? await rules.create({ name: ruleName, ...input })
+            : await rules.edit(ruleName, input)
 
         return {
           structuredContent: { action, rule: ruleResult({ ...rule, toolboxId: toolbox_id }) },
           content: [],
         }
-      } catch (error) {
-        throw ruleToolError(error)
-      }
-    }
-  )
-}
-
-function registerCompatibilityTools(server: McpServer, toolboxes?: ToolboxRegistry): void {
-  server.registerTool(
-    "rule_import",
-    {
-      description:
-        "Import one external rule file into OpenChatX. Supports Cursor .mdc, Claude .claude/rules/*.md, and AGENTS.md.",
-      inputSchema: z.object({
-        toolbox_id: z.string().min(1),
-        format: z.enum(["cursor", "claude", "agents"]),
-        source: z.string().min(1),
-        name: z.string().min(1).optional(),
-        replace: z.boolean().default(false),
-        mode: ruleModeSchema.optional(),
-        description: z.string().max(1024).optional(),
-        globs: z.array(z.string().min(1)).max(100).optional(),
-      }),
-      outputSchema: ruleResultSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async ({ toolbox_id, format, source, name, replace, mode, description, globs }) => {
-      try {
-        const rules = requireToolboxes(toolboxes).ruleCatalog(toolbox_id)
-        const rule = await importRule(rules, {
-          format,
-          source,
-          replace,
-          ...(name ? { name } : {}),
-          ...(mode ? { mode } : {}),
-          ...(description !== undefined ? { description } : {}),
-          ...(globs !== undefined ? { globs } : {}),
-        })
-        return {
-          structuredContent: ruleResult({ ...rule, toolboxId: toolbox_id }),
-          content: [],
-        }
-      } catch (error) {
-        throw ruleToolError(error)
-      }
-    }
-  )
-
-  server.registerTool(
-    "rule_export",
-    {
-      description:
-        "Export one OpenChatX rule to Cursor .mdc, Claude .claude/rules Markdown, or AGENTS.md. Lossy exports are rejected unless allow_lossy is true.",
-      inputSchema: z.object({
-        toolbox_id: z.string().min(1),
-        format: z.enum(["cursor", "claude", "agents"]),
-        name: z.string().min(1),
-        destination: z.string().min(1),
-        replace: z.boolean().default(false),
-        allow_lossy: z.boolean().default(false),
-      }),
-      outputSchema: z.object({
-        path: z.string(),
-        format: z.enum(["cursor", "claude", "agents"]),
-        mode: ruleModeSchema,
-        warnings: z.array(z.string()),
-      }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async ({ toolbox_id, format, name, destination, replace, allow_lossy }) => {
-      try {
-        const rules = requireToolboxes(toolboxes).ruleCatalog(toolbox_id)
-        const result = await exportRule(rules, {
-          format,
-          name,
-          destination,
-          replace,
-          allowLossy: allow_lossy,
-        })
-        return { structuredContent: result, content: [] }
       } catch (error) {
         throw ruleToolError(error)
       }
@@ -289,6 +206,19 @@ function normalizeRuleInput(input: {
     return { ...normalized, description: input.description, globs: [], alwaysApply: false }
   }
   return { ...normalized, description: "", globs: [], alwaysApply: false }
+}
+
+function requiredString(
+  value: string | undefined,
+  field: string,
+  action: string
+): string {
+  if (!value?.trim()) throw missingField(field, action)
+  return value
+}
+
+function missingField(field: string, action: string): RuleCatalogError {
+  return new RuleCatalogError("invalid_rule", `${field} is required for rule_manage action=${action}.`)
 }
 
 function requireToolboxes(toolboxes?: ToolboxRegistry): ToolboxRegistry {

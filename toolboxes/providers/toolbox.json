@@ -5,9 +5,10 @@
   "dynamic": true,
   "builtin": "providers",
   "tools": {
-    "provider_presets": { "enabled": true, "description": "List Provider Hub presets." },
-    "provider_install": { "enabled": true, "description": "Install a provider preset." },
-    "provider_probe": { "enabled": true, "description": "Probe a configured provider." }
+    "provider_manage": {
+      "enabled": true,
+      "description": "List presets, install a preset, or probe a configured provider."
+    }
   },
   "skills": {}
 }

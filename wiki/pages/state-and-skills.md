@@ -47,19 +47,19 @@ Rule activation modes are first-class in the API and derived from metadata:
 - **Always** (`mode=always`): `alwaysApply: true`; the full Markdown body is injected by `start_here`.
 - **Auto Attached** (`mode=auto_attached`): `alwaysApply: false` with `globs`; `rule_resolve` selects the rule when a relevant file path matches.
 - **Agent Requested** (`mode=agent_requested`): `alwaysApply: false`, no globs, and a `description`; `rule_resolve` selects it by task-query relevance.
-- **Manual** (`mode=manual`): no description, no globs, and `alwaysApply: false`; it is loaded only through `rule_load` when explicitly referenced.
+- **Manual** (`mode=manual`): no description, no globs, and `alwaysApply: false`; load it with `rule_resolve action=load` when explicitly referenced.
 
-`rule_manage` creates, edits, or deletes `.mdc` files and accepts the four mode names directly. The mode itself is not duplicated into the file; `description`, `globs`, and `alwaysApply` remain the canonical persisted metadata.
+`rule_manage` creates, edits, deletes, imports, or exports `.mdc` files and accepts the four mode names directly. The mode itself is not duplicated into the file; `description`, `globs`, and `alwaysApply` remain the canonical persisted metadata.
 
 ## Compatibility
 
-`rule_import` and `rule_export` bridge three external formats:
+`rule_manage action=import|export` bridges three external formats:
 
 - **Cursor**: native `.mdc`; all four OpenChatX modes can round-trip without losing activation metadata.
 - **Claude Code**: `.claude/rules/*.md`; no `paths` maps to Always, while `paths` maps to Auto Attached.
 - **AGENTS.md / OpenCode-style instructions**: imports as Always by default because directory scope is carried by the file location rather than rule metadata.
 
-Claude and AGENTS.md cannot losslessly represent OpenChatX Agent Requested or Manual activation. `rule_export` rejects those conversions unless `allow_lossy=true`, and returns a warning when the exported rule's activation semantics change. Import callers can override `mode`, `description`, and `globs` to choose an exact OpenChatX mode.
+Claude and AGENTS.md cannot losslessly represent OpenChatX Agent Requested or Manual activation. Export rejects those conversions unless `allow_lossy=true`, and returns a warning when the exported rule's activation semantics change. Import callers can override `mode`, `description`, and `globs` to choose an exact OpenChatX mode.
 
 ## Skill Bootstrap Boundary
 

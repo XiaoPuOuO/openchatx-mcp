@@ -6,11 +6,7 @@
   "tools": {
     "skill_search": {
       "enabled": true,
-      "description": "Search reusable skills by keyword without loading their Markdown."
-    },
-    "skill_load": {
-      "enabled": true,
-      "description": "Load the complete Markdown for one skill."
+      "description": "Search reusable skills or load one exact skill."
     },
     "skill_manage": {
       "enabled": true,

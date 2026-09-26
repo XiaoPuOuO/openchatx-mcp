@@ -34,13 +34,9 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
       "file_edit",
       "fetch_url",
       "skill_search",
-      "skill_load",
       "skill_manage",
       "rule_resolve",
-      "rule_load",
       "rule_manage",
-      "rule_import",
-      "rule_export",
       "image_view",
     ]
   )
@@ -57,13 +53,20 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     "project_id",
   ])
   const bash = tools.tools.find((tool) => tool.name === "bash")
-  const skillLoad = tools.tools.find((tool) => tool.name === "skill_load")
+  const skillSearch = tools.tools.find((tool) => tool.name === "skill_search")
   const ruleManage = tools.tools.find((tool) => tool.name === "rule_manage")
-  assert.ok(bash && skillLoad && ruleManage)
-  assert.deepEqual(Object.keys(skillLoad.inputSchema.properties ?? {}), ["name"])
+  assert.ok(bash && skillSearch && ruleManage)
+  assert.deepEqual(
+    (skillSearch.inputSchema.properties as Record<string, Record<string, unknown>>).action?.enum,
+    ["search", "load"]
+  )
   assert.deepEqual(
     (ruleManage.inputSchema.properties as Record<string, Record<string, unknown>>).mode?.enum,
     ["always", "auto_attached", "agent_requested", "manual"]
+  )
+  assert.deepEqual(
+    (ruleManage.inputSchema.properties as Record<string, Record<string, unknown>>).action?.enum,
+    ["create", "edit", "delete", "import", "export"]
   )
 
   const fetchUrl = tools.tools.find((tool) => tool.name === "fetch_url")
@@ -147,13 +150,9 @@ test("bound MCP factories snapshot identity, tool groups, and output mode", {
     [
       "start_here",
       "skill_search",
-      "skill_load",
       "skill_manage",
       "rule_resolve",
-      "rule_load",
       "rule_manage",
-      "rule_import",
-      "rule_export",
     ]
   )
   assert.equal(tools.tools.find((tool) => tool.name === "skill_search")?.outputSchema, undefined)
@@ -214,7 +213,7 @@ test("publishes start_here and core rule tools when optional groups are disabled
   const tools = await connected.client.listTools()
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
-    ["start_here", "rule_resolve", "rule_load", "rule_manage", "rule_import", "rule_export"]
+    ["start_here", "rule_resolve", "rule_manage"]
   )
 })
 

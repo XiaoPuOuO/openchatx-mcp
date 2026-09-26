@@ -61,7 +61,7 @@ export class ProjectScope {
     if (active && explicit && active.id !== explicit.id) {
       throw new ToolError(
         "PROJECT_SWITCH_REQUIRED",
-        `Project ${JSON.stringify(explicit.id)} is not the active Project for this session. Call project_use to switch workspaces before accessing it.`
+        `Project ${JSON.stringify(explicit.id)} is not the active Project. Call project_manage with action="use" to switch workspaces before accessing it.`
       )
     }
 
@@ -118,7 +118,7 @@ function ensureInsideProjectOrAuthorized(path: string, project: RegisteredProjec
   if (consumeAgentProjectExternalAccess(path)) return
   throw new ToolError(
     "PROJECT_EXTERNAL_ACCESS_REQUIRED",
-    `Path ${JSON.stringify(path)} is outside active Project ${JSON.stringify(project.id)}. Ask the user for permission before accessing it. If the user approves this access once, call project_access with action="grant_once" and this path, then retry. Only if the user explicitly says not to ask again or grants unrestricted access for this session, call project_access with action="grant_all_session".`
+    `Path ${JSON.stringify(path)} is outside active Project ${JSON.stringify(project.id)}. Ask the user for permission before accessing it. If approved once, call project_manage with action="grant_once" and this path. Only if the user explicitly grants unrestricted access for this session, use action="grant_all_session".`
   )
 }
 

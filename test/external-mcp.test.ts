@@ -61,10 +61,7 @@ test("aggregates a local stdio MCP and forwards tool calls", { timeout: 10_000 }
     [
       "start_here",
       "rule_resolve",
-      "rule_load",
       "rule_manage",
-      "rule_import",
-      "rule_export",
       "local_test__echo",
     ]
   )

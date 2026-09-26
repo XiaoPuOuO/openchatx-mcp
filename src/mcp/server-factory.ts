@@ -20,7 +20,6 @@ import type { AgentTeamService } from "../teams/team-service.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { isApplyPatchSupported, registerApplyPatchTool } from "../tools/apply-patch/apply-patch.js"
 import { registerCapabilityTools } from "../tools/capabilities/capability-tools.js"
-import { registerCapabilityHealthTool } from "../tools/capabilities/health-tool.js"
 import { registerCatalogTools } from "../tools/catalog/catalog-tools.js"
 import { LazyBuiltinTools } from "../tools/catalog/lazy-builtin-tools.js"
 import {
@@ -47,7 +46,6 @@ import {
 import { registerSkillTools } from "../tools/skills/skill-tools.js"
 import { registerStartHereTool } from "../tools/start-here/start-here.js"
 import { registerStoreTools } from "../tools/store/store-tools.js"
-import { registerSmartRoutingTools } from "../tools/subagents/router-tools.js"
 import { registerSubagentTools } from "../tools/subagents/subagent-tools.js"
 import { registerSummarizeTool } from "../tools/summarize/summarize-tool.js"
 import { registerAgentTeamTools } from "../tools/teams/team-tools.js"
@@ -188,8 +186,8 @@ function registerToolboxRuntime(
       options.goalScope,
       () => registry.alwaysAppliedRules()
     )
-    if (capabilityRegistry) registerCapabilityTools(target, capabilityRegistry)
-    if (options.capabilityHealth) registerCapabilityHealthTool(target, options.capabilityHealth)
+    if (capabilityRegistry)
+      registerCapabilityTools(target, capabilityRegistry, options.capabilityHealth)
     if (options.summaryRegistry) registerSummarizeTool(target, options.summaryRegistry)
   })
   registerConfiguredBuiltin(server, lazyServer, registry, "shell", (target) => {
@@ -224,8 +222,7 @@ function registerToolboxRuntime(
   const subagentRuntime = options.subagentRuntime
   if (subagentRuntime)
     registerConfiguredBuiltin(server, lazyServer, registry, "subagents", (target) => {
-      registerSubagentTools(target, subagentRuntime)
-      if (options.smartRouter) registerSmartRoutingTools(target, options.smartRouter)
+      registerSubagentTools(target, subagentRuntime, options.smartRouter)
     })
   registry.registerCustomTools(server)
 }
@@ -298,8 +295,8 @@ function registerDirectRuntime(
     options.goalScope,
     toolboxRegistry ? () => toolboxRegistry.alwaysAppliedRules() : undefined
   )
-  if (capabilityRegistry) registerCapabilityTools(server, capabilityRegistry)
-  if (options.capabilityHealth) registerCapabilityHealthTool(server, options.capabilityHealth)
+  if (capabilityRegistry)
+    registerCapabilityTools(server, capabilityRegistry, options.capabilityHealth)
   if (options.summaryRegistry) registerSummarizeTool(server, options.summaryRegistry)
   if (profile.tools.shell) {
     registerBashTool(server, options.bashProcessManager, options.projectScope)
@@ -328,7 +325,8 @@ function registerDirectPlatformTools(server: McpServer, options: CreateMcpServer
   if (options.capabilityStore)
     registerStoreTools(server, options.capabilityStore, options.toolboxRegistry)
   if (options.providerHub) registerProviderTools(server, options.providerHub)
-  if (options.smartRouter) registerSmartRoutingTools(server, options.smartRouter)
+  if (options.subagentRuntime)
+    registerSubagentTools(server, options.subagentRuntime, options.smartRouter)
   if (options.agentTeams) registerAgentTeamTools(server, options.agentTeams)
   if (options.workflows) registerWorkflowTools(server, options.workflows)
   if (options.nodes) registerNodeTools(server, options.nodes)

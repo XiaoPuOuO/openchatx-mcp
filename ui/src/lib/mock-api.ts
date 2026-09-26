@@ -259,13 +259,11 @@ let toolboxes: ToolboxSnapshot[] = [
     dynamic: false,
     builtin: "rules",
     path: "/Users/xiaopu/MyProject/openchatx-mcp/toolboxes/rules",
-    tools: ["rule_resolve", "rule_load", "rule_manage", "rule_import", "rule_export"].map(
-      (name) => ({
-        name,
-        enabled: true,
-        required: false,
-      })
-    ),
+    tools: ["rule_resolve", "rule_manage"].map((name) => ({
+      name,
+      enabled: true,
+      required: false,
+    })),
     skills: [],
   },
   {
