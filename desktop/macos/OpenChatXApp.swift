@@ -5,7 +5,7 @@ import WebKit
 
 private let dashboardURL = URL(string: "http://127.0.0.1:3333/ui/")!
 private let backendHealthURL = URL(string: "http://127.0.0.1:3333/healthz")!
-private let tunnelHealthURL = URL(string: "http://127.0.0.1:8080/readyz")!
+private let tunnelHealthURL = URL(string: "http://127.0.0.1:8080/health?details=true")!
 
 final class RuntimeSupervisor: NSObject {
     struct Snapshot {
@@ -84,7 +84,7 @@ final class RuntimeSupervisor: NSObject {
                 try startBackend()
                 _ = waitUntilHealthy(backendHealthURL, attempts: 50)
             }
-            if hasTunnelProfile(), !isHealthy(tunnelHealthURL), tunnelProcess?.isRunning != true {
+            if hasTunnelProfile(), !isTunnelHealthy(), tunnelProcess?.isRunning != true {
                 try startTunnel()
             }
         } catch {
@@ -136,7 +136,7 @@ final class RuntimeSupervisor: NSObject {
                         throw DesktopError.message("tunnel-client init exited with code \(result)")
                     }
                 }
-                if !self.isHealthy(tunnelHealthURL) {
+                if !self.isTunnelHealthy() {
                     try self.startTunnel()
                 }
             } catch {
@@ -150,7 +150,7 @@ final class RuntimeSupervisor: NSObject {
         DispatchQueue.global(qos: .utility).async {
             let snapshot = Snapshot(
                 backend: self.isHealthy(backendHealthURL),
-                tunnel: self.isHealthy(tunnelHealthURL),
+                tunnel: self.isTunnelHealthy(),
                 tunnelProfile: self.hasTunnelProfile()
             )
             DispatchQueue.main.async {
@@ -305,6 +305,31 @@ final class RuntimeSupervisor: NSObject {
         return healthy
     }
 
+    private func isTunnelHealthy() -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        var healthy = false
+        var request = URLRequest(url: tunnelHealthURL)
+        request.timeoutInterval = 0.7
+        let task = URLSession.shared.dataTask(with: request) { data, response, _ in
+            defer { semaphore.signal() }
+            guard
+                let http = response as? HTTPURLResponse,
+                (200..<300).contains(http.statusCode),
+                let data,
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                json["live"] as? Bool == true,
+                let components = json["components"] as? [String: Any],
+                let controlPlane = components["control-plane"] as? [String: Any],
+                controlPlane["status"] as? String == "ok"
+            else { return }
+            healthy = true
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .now() + 1.0)
+        task.cancel()
+        return healthy
+    }
+
     private func waitUntilHealthy(_ url: URL, attempts: Int) -> Bool {
         for _ in 0..<attempts {
             if isHealthy(url) { return true }
@@ -377,6 +402,8 @@ final class RuntimeSupervisor: NSObject {
                 continue
             }
 
+            try syncBuiltinToolboxManifest(from: sourceToolbox, to: destinationToolbox)
+
             let sourceSkills = sourceToolbox.appendingPathComponent("skills", isDirectory: true)
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: sourceSkills.path, isDirectory: &isDirectory),
@@ -399,6 +426,48 @@ final class RuntimeSupervisor: NSObject {
                 }
             }
         }
+    }
+
+    private func syncBuiltinToolboxManifest(from sourceToolbox: URL, to destinationToolbox: URL) throws {
+        let sourceManifestURL = sourceToolbox.appendingPathComponent("toolbox.json")
+        let destinationManifestURL = destinationToolbox.appendingPathComponent("toolbox.json")
+        guard
+            fileManager.fileExists(atPath: sourceManifestURL.path),
+            fileManager.fileExists(atPath: destinationManifestURL.path)
+        else { return }
+
+        let sourceData = try Data(contentsOf: sourceManifestURL)
+        let destinationData = try Data(contentsOf: destinationManifestURL)
+        guard
+            var source = try JSONSerialization.jsonObject(with: sourceData) as? [String: Any],
+            let destination = try JSONSerialization.jsonObject(with: destinationData) as? [String: Any],
+            source["builtin"] as? String != nil
+        else { return }
+
+        if let enabled = destination["enabled"] {
+            source["enabled"] = enabled
+        }
+
+        if var sourceTools = source["tools"] as? [String: Any],
+           let destinationTools = destination["tools"] as? [String: Any] {
+            for (name, rawSourceTool) in sourceTools {
+                guard
+                    var sourceTool = rawSourceTool as? [String: Any],
+                    let destinationTool = destinationTools[name] as? [String: Any],
+                    let enabled = destinationTool["enabled"]
+                else { continue }
+                sourceTool["enabled"] = enabled
+                sourceTools[name] = sourceTool
+            }
+            source["tools"] = sourceTools
+        }
+
+        var output = try JSONSerialization.data(
+            withJSONObject: source,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        output.append(0x0A)
+        try output.write(to: destinationManifestURL, options: .atomic)
     }
 
     private func runAndWait(

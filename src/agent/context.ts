@@ -1,11 +1,14 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 import { isAbsolute, relative, resolve, sep } from "node:path"
 
+export type AgentProjectRouting = "pending" | "project" | "unscoped"
+
 export interface AgentIdentity {
   readonly sessionId: string
   readonly agent: string
   readonly taskSlug?: string
   readonly projectId?: string
+  readonly projectRouting?: AgentProjectRouting
   readonly goalId?: string
   readonly projectExternalAccessAll?: boolean
 }
@@ -15,6 +18,7 @@ interface StoredAgentIdentity {
   agent: string
   taskSlug?: string
   projectId?: string
+  projectRouting?: AgentProjectRouting
   goalId?: string
   projectExternalAccessAll?: boolean
   projectExternalAccessOnce?: string[]
@@ -44,6 +48,22 @@ export function setAgentProjectId(projectId: string | undefined): void {
     identity.goalId = undefined
   }
   identity.projectId = projectId
+  identity.projectRouting = projectId ? "project" : "unscoped"
+}
+
+export function initializeAgentProjectRouting(hasActiveProject: boolean): void {
+  const identity = currentAgent.getStore()
+  if (!identity || identity.projectRouting !== undefined) return
+  identity.projectRouting = hasActiveProject ? "project" : "pending"
+}
+
+export function setAgentProjectRoutingPending(): void {
+  const identity = currentAgent.getStore()
+  if (!identity) return
+  identity.projectId = undefined
+  identity.projectRouting = "pending"
+  identity.projectExternalAccessOnce = []
+  identity.goalId = undefined
 }
 
 export function setAgentGoalId(goalId: string | undefined): void {

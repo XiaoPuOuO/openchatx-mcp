@@ -17,12 +17,11 @@ hljs.registerLanguage("json", json)
 
 export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: () => void }) {
   const { t } = useI18n()
-  const detail = call?.resultDetail || call?.detail || call?.summary || t("toolCall.noInput")
-  const detailLanguage = call?.resultDetail ? call.resultDetailLanguage : call?.detailLanguage
-  const highlighted =
-    detailLanguage && hljs.getLanguage(detailLanguage)
-      ? hljs.highlight(detail, { language: detailLanguage }).value
-      : hljs.highlightAuto(detail).value
+  const inputDetail = call?.detail || call?.summary || t("toolCall.noInput")
+  const resultDetail =
+    call?.resultDetail ||
+    (call?.status === "failed" ? call.error : undefined) ||
+    (call?.status === "running" ? t("toolCall.waitingResult") : t("toolCall.noResult"))
 
   return (
     <Dialog.Root open={Boolean(call)} onOpenChange={(open) => !open && onClose()}>
@@ -50,26 +49,58 @@ export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: ()
               </Button>
             </Dialog.Close>
           </div>
-          <div className="min-h-0 space-y-4 overflow-auto p-5">
-            <pre className="overflow-x-auto rounded-lg border bg-muted/30 p-4 text-xs leading-5">
-              <code
-                className="hljs bg-transparent p-0"
-                dangerouslySetInnerHTML={{ __html: highlighted }}
-              />
-            </pre>
-            {call?.status === "failed" && call.error ? (
-              <div>
-                <div className="mb-2 text-xs font-semibold text-red-700">
-                  {t("toolCall.errorReason")}
-                </div>
-                <pre className="whitespace-pre-wrap break-words rounded-lg border border-red-200 bg-red-50 p-4 text-xs leading-5 text-red-800">
-                  {call.error}
-                </pre>
-              </div>
-            ) : null}
+          <div className="min-h-0 space-y-5 overflow-auto p-5">
+            <ToolCallSection
+              label={t("toolCall.input")}
+              detail={inputDetail}
+              language={call?.detailLanguage}
+            />
+            <ToolCallSection
+              label={t("toolCall.returnedToAgent")}
+              detail={resultDetail}
+              language={call?.resultDetailLanguage}
+              failed={call?.status === "failed"}
+            />
           </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+function ToolCallSection({
+  label,
+  detail,
+  language,
+  failed = false,
+}: {
+  label: string
+  detail: string
+  language?: string
+  failed?: boolean
+}) {
+  const highlighted =
+    language && hljs.getLanguage(language) ? hljs.highlight(detail, { language }).value : undefined
+
+  return (
+    <section>
+      <div className={`mb-2 text-xs font-semibold ${failed ? "text-red-700" : "text-foreground"}`}>
+        {label}
+      </div>
+      <pre
+        className={`overflow-x-auto rounded-lg border p-4 text-xs leading-5 ${
+          failed ? "border-red-200 bg-red-50 text-red-800" : "bg-muted/30"
+        }`}
+      >
+        {highlighted ? (
+          <code
+            className="hljs bg-transparent p-0"
+            dangerouslySetInnerHTML={{ __html: highlighted }}
+          />
+        ) : (
+          <code className="bg-transparent p-0">{detail}</code>
+        )}
+      </pre>
+    </section>
   )
 }

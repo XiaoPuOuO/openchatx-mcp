@@ -22,7 +22,20 @@ export function presentToolResult(
   result: unknown
 ): Pick<ToolCallPresentation, "resultDetail" | "resultDetailLanguage"> {
   const record = asRecord(result)
-  const structured = record ? asRecord(record.structuredContent) : undefined
+  if (!record) return formatUnknownResult(result)
+
+  const text = extractTextContent(record.content)
+  if (text) {
+    const structured = asRecord(record.structuredContent)
+    const isDiff =
+      (tool === "file_edit" || tool === "file_write") &&
+      structured &&
+      typeof structured.diff === "string" &&
+      text.includes(structured.diff)
+    return { resultDetail: text, ...(isDiff ? { resultDetailLanguage: "diff" } : {}) }
+  }
+
+  const structured = asRecord(record.structuredContent)
   if (
     (tool === "file_edit" || tool === "file_write") &&
     structured &&
@@ -30,7 +43,15 @@ export function presentToolResult(
   ) {
     return { resultDetail: structured.diff, resultDetailLanguage: "diff" }
   }
-  return {}
+
+  if (record.structuredContent !== undefined) {
+    return {
+      resultDetail: JSON.stringify(record.structuredContent, null, 2),
+      resultDetailLanguage: "json",
+    }
+  }
+
+  return formatUnknownResult(result)
 }
 
 export function presentToolFailure(error: unknown): Pick<ToolCallPresentation, "error"> {
@@ -38,23 +59,15 @@ export function presentToolFailure(error: unknown): Pick<ToolCallPresentation, "
 
   const record = asRecord(error)
   if (record) {
+    const message = extractTextContent(record.content)
+    if (message) return { error: message }
+
     const structured = asRecord(record.structuredContent)
     if (structured && typeof structured.output === "string") {
       return { error: structured.output }
     }
     if (structured && typeof structured.message === "string") {
       return { error: structured.message }
-    }
-
-    if (Array.isArray(record.content)) {
-      const message = record.content
-        .map((item) => asRecord(item))
-        .filter((item): item is Record<string, unknown> => item !== undefined)
-        .flatMap((item) =>
-          item.type === "text" && typeof item.text === "string" ? [item.text] : []
-        )
-        .join("\n")
-      if (message) return { error: message }
     }
 
     if (typeof record.message === "string") return { error: record.message }
@@ -112,6 +125,27 @@ function formatToolDetail(
     return { detail: JSON.stringify(input, null, 2), detailLanguage: "json" }
   } catch {
     return { detail: String(input) }
+  }
+}
+
+function extractTextContent(content: unknown): string {
+  if (!Array.isArray(content)) return ""
+  return content
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== undefined)
+    .flatMap((item) => (item.type === "text" && typeof item.text === "string" ? [item.text] : []))
+    .join("\n")
+}
+
+function formatUnknownResult(
+  result: unknown
+): Pick<ToolCallPresentation, "resultDetail" | "resultDetailLanguage"> {
+  if (result === undefined) return {}
+  if (typeof result === "string") return { resultDetail: result }
+  try {
+    return { resultDetail: JSON.stringify(result, null, 2), resultDetailLanguage: "json" }
+  } catch {
+    return { resultDetail: String(result) }
   }
 }
 

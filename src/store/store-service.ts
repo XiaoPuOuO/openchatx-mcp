@@ -315,7 +315,7 @@ export class CapabilityStoreService {
       findings: uniqueFindings,
       reviewedFiles: scan.reviewedFiles,
       reviewedBytes: scan.reviewedBytes,
-      note: "This is static analysis, not a safety verdict. Ask ChatGPT to inspect the cited source files with store_source_read before deciding whether to install.",
+      note: "This is static analysis, not a safety verdict. Ask ChatGPT to inspect cited files with store_browse action=source_read before deciding whether to install.",
     }
   }
 

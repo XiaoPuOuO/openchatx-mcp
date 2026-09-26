@@ -3,7 +3,12 @@ import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 
-export type CapabilityHealthStatus = "healthy" | "degraded" | "unavailable" | "disabled"
+export type CapabilityHealthStatus =
+  | "healthy"
+  | "starting"
+  | "degraded"
+  | "unavailable"
+  | "disabled"
 
 export interface CapabilityHealthComponent {
   id: string
@@ -19,7 +24,11 @@ export interface CapabilityHealthSnapshot {
   components: CapabilityHealthComponent[]
 }
 
+const TUNNEL_STARTUP_GRACE_MS = 15_000
+
 export class CapabilityHealthService {
+  private readonly startedAt = Date.now()
+
   constructor(
     private readonly externalMcp?: ExternalMcpRegistry,
     private readonly toolboxes?: ToolboxRegistry,
@@ -34,7 +43,7 @@ export class CapabilityHealthService {
         name: "OpenChatX Runtime",
         status: "healthy",
       },
-      await tunnelHealth(),
+      await tunnelHealth(Date.now() - this.startedAt < TUNNEL_STARTUP_GRACE_MS),
       ...this.mcpComponents(),
       ...this.toolboxComponents(),
       ...this.providerComponents(),
@@ -98,29 +107,69 @@ export class CapabilityHealthService {
   }
 }
 
-async function tunnelHealth(): Promise<CapabilityHealthComponent> {
+async function tunnelHealth(starting: boolean): Promise<CapabilityHealthComponent> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 1500)
   try {
-    const response = await fetch(`http://127.0.0.1:${MCP_CONFIG.tunnel.healthPort}/readyz`, {
-      signal: controller.signal,
-    })
+    const response = await fetch(
+      `http://127.0.0.1:${MCP_CONFIG.tunnel.healthPort}/health?details=true`,
+      { signal: controller.signal }
+    )
+    const payload = response.ok ? await response.json().catch(() => undefined) : undefined
+    const operational = isTunnelOperational(payload)
     return {
       id: "tunnel",
       kind: "tunnel",
       name: "OpenAI Secure MCP Tunnel",
-      status: response.ok ? "healthy" : "unavailable",
-      detail: response.ok ? `profile ${MCP_CONFIG.tunnel.profile}` : `HTTP ${response.status}`,
+      status: tunnelHealthStatus(operational, starting),
+      ...tunnelHealthDetail(operational, starting, response.status, response.ok),
     }
   } catch (error) {
     return {
       id: "tunnel",
       kind: "tunnel",
       name: "OpenAI Secure MCP Tunnel",
-      status: "unavailable",
-      detail: error instanceof Error ? error.message : "Tunnel health check failed",
+      status: starting ? "starting" : "unavailable",
+      ...(starting
+        ? {}
+        : { detail: error instanceof Error ? error.message : "Tunnel health check failed" }),
     }
   } finally {
     clearTimeout(timeout)
   }
+}
+
+export function tunnelHealthStatus(
+  operational: boolean,
+  starting: boolean
+): "healthy" | "starting" | "unavailable" {
+  if (operational) return "healthy"
+  if (starting) return "starting"
+  return "unavailable"
+}
+
+function tunnelHealthDetail(
+  operational: boolean,
+  starting: boolean,
+  status: number,
+  responseOk: boolean
+): Pick<CapabilityHealthComponent, "detail"> {
+  if (operational) {
+    return { detail: `profile ${MCP_CONFIG.tunnel.profile} · control plane connected` }
+  }
+  if (starting) return {}
+  return { detail: responseOk ? "Tunnel control plane is not connected" : `HTTP ${status}` }
+}
+
+export function isTunnelOperational(value: unknown): boolean {
+  const health = asRecord(value)
+  if (health?.live !== true) return false
+  const components = asRecord(health.components)
+  const controlPlane = components ? asRecord(components["control-plane"]) : undefined
+  return controlPlane?.status === "ok"
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
+  return Object.fromEntries(Object.entries(value))
 }

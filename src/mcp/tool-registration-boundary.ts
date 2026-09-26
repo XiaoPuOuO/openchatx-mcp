@@ -50,24 +50,32 @@ export function installToolRegistrationBoundary(
           "openchatx-mcp has not been initialized for this conversation. Call `start_here` first, and follow the instructions."
         )
       }
+      if (agent?.projectRouting === "pending" && !isProjectRoutingTool(name, input)) {
+        throw new ToolError(
+          "PROJECT_ROUTING_REQUIRED",
+          "Resolve Project routing before normal work. If this task belongs to a Project, inspect registered Projects, create one if needed, then activate it with project_use. If this is a machine/global task, explicitly call project_use with project_id=null. Only glob is available for locating a project root while routing is pending."
+        )
+      }
 
       observedCallId = options.agentObserver?.startTool(agent, name, input)
       const result = await (tool.acceptsInput
         ? tool.callback(inputValue, context)
         : tool.callback(context))
-      if (isErrorResult(result)) options.agentObserver?.failTool(agent, observedCallId, result)
-      else options.agentObserver?.finishTool(agent, observedCallId, result)
-
       const projected =
         !tool.nativeContent && !structuredOutput ? compactToolResult(name, result) : result
       const events = collectToolEvents(name, input, agent, options)
       const finalResult = appendToolEvents(projected, events)
+
+      if (isErrorResult(finalResult))
+        options.agentObserver?.failTool(agent, observedCallId, finalResult)
+      else options.agentObserver?.finishTool(agent, observedCallId, finalResult)
+
       auditCall?.finish({ toolResult: result, modelResult: finalResult })
       return finalResult
     } catch (error) {
       const agent = getAgentIdentity()
-      options.agentObserver?.failTool(agent, observedCallId, error)
       const result = formatToolError(error, structuredOutput)
+      options.agentObserver?.failTool(agent, observedCallId, result)
       auditCall?.finish({ error, modelResult: result })
       return result
     }
@@ -115,6 +123,16 @@ function formatToolError(error: unknown, structuredOutput: boolean): CallToolRes
     ...(structuredOutput ? { structuredContent: { error_code: failure.code } } : {}),
     content: [{ type: "text" as const, text: `${failure.code}: ${failure.message}` }],
   }
+}
+
+function isProjectRoutingTool(name: string, input: Record<string, unknown>): boolean {
+  if (name === START_HERE_TOOL_NAME || name === "tool_search" || name === "glob") return true
+  if (name.startsWith("project_")) return true
+  return (
+    name === "tool_call" &&
+    typeof input.tool === "string" &&
+    input.tool.startsWith("builtin:project_")
+  )
 }
 
 function isErrorResult(value: unknown): boolean {

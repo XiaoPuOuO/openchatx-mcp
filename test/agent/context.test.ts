@@ -3,8 +3,10 @@ import test from "node:test"
 
 import {
   getAgentIdentity,
+  initializeAgentProjectRouting,
   runWithAgent,
   setAgentProjectId,
+  setAgentProjectRoutingPending,
   setAgentTaskSlug,
 } from "../../src/agent/context.js"
 
@@ -33,4 +35,22 @@ test("keeps one process-wide identity per OpenAI session and adds task context",
     undefined
   )
   assert.equal(getAgentIdentity(), undefined)
+})
+
+test("tracks whether Project routing is pending, project-scoped, or explicitly unscoped", () => {
+  runWithAgent("agent-project-routing", () => {
+    initializeAgentProjectRouting(false)
+    assert.equal(getAgentIdentity()?.projectRouting, "pending")
+
+    setAgentProjectId("openchatx")
+    assert.equal(getAgentIdentity()?.projectRouting, "project")
+    assert.equal(getAgentIdentity()?.projectId, "openchatx")
+
+    setAgentProjectRoutingPending()
+    assert.equal(getAgentIdentity()?.projectRouting, "pending")
+    assert.equal(getAgentIdentity()?.projectId, undefined)
+
+    setAgentProjectId(undefined)
+    assert.equal(getAgentIdentity()?.projectRouting, "unscoped")
+  })
 })

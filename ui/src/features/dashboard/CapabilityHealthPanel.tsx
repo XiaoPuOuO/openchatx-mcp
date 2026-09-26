@@ -1,4 +1,4 @@
-import { Activity, CircleAlert, CircleCheck, CircleOff } from "lucide-react"
+import { Activity, CircleAlert, CircleCheck, CircleOff, LoaderCircle } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
@@ -124,6 +124,8 @@ const COMPONENT_NAME_KEYS: Record<string, string> = {
 
 function HealthIcon({ status }: { status: CapabilityHealthStatus }) {
   if (status === "healthy") return <CircleCheck className="size-4 text-emerald-600" />
+  if (status === "starting")
+    return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
   if (status === "disabled") return <CircleOff className="size-4 text-muted-foreground" />
   return <CircleAlert className="size-4 text-amber-600" />
 }

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { setAgentTaskSlug } from "../../agent/context.js"
+import { initializeAgentProjectRouting, setAgentTaskSlug } from "../../agent/context.js"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import type { CapabilityDescriptor } from "../../capabilities/catalog.js"
 import { MCP_CONFIG } from "../../config.js"
@@ -82,6 +82,7 @@ export function registerStartHereTool(
       const activeProject = project_id
         ? await projectScope?.use(project_id)
         : await projectScope?.current()
+      if (projectScope) initializeAgentProjectRouting(Boolean(activeProject))
       const registeredProjects = !activeProject && projectScope ? await projectScope.list() : []
       const capabilities = capabilityCatalog ? renderCapabilityCatalog(capabilityCatalog()) : ""
       const projectContext = projectScope
@@ -168,7 +169,7 @@ function renderProjectContext(
     return [
       "# Projects",
       "No Projects are registered yet.",
-      "For each new user task, decide whether it belongs to a durable Project. If it does, locate the relevant project folders, choose exactly one primary root, include any additional roots that belong to the same workspace, create the Project with project_manage, then activate it with project_use before project-focused work. Leave machine/global tasks unscoped.",
+      "Project routing is required before normal work. First decide whether this task is project-scoped or machine/global. For a project-scoped task, inspect registered Projects first; if none matches, use glob only to locate the project root if needed, then create it with project_manage and activate it with project_use before file/content/shell work. For a machine/global task, explicitly call project_use with project_id=null before continuing.",
     ].join("\n")
   }
   return [
@@ -179,7 +180,7 @@ function renderProjectContext(
         (project) =>
           `- ${project.id} (${project.name}) — primary: ${project.path}${project.additionalPaths.length > 0 ? `; additional: ${project.additionalPaths.join(", ")}` : ""}`
       ),
-    "No Project is active. For each new user task, decide whether it is project-scoped. Reuse and activate a matching Project before project-focused work. If no registered Project matches, locate the relevant folders, choose one primary root plus any additional roots, create it with project_manage, then activate it with project_use. Leave machine/global tasks unscoped.",
+    "No Project is active. Project routing is required before normal work. Decide whether the task is project-scoped or machine/global. If project-scoped, reuse and activate a matching Project; if none matches, use glob only to locate the root if needed, create it with project_manage, then activate it with project_use. If machine/global, explicitly call project_use with project_id=null. Until routing is resolved, file/content/shell and other work tools are blocked.",
   ].join("\n")
 }
 

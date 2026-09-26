@@ -2,7 +2,7 @@
   "name": "Projects",
   "description": "Register project roots and enforce project-scoped read, write, and shell permissions.",
   "enabled": true,
-  "dynamic": true,
+  "dynamic": false,
   "builtin": "projects",
   "tools": {
     "project_list": { "enabled": true, "description": "List registered projects." },

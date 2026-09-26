@@ -45,7 +45,12 @@ export interface AgentRemovedEvent {
 
 export type AgentEvent = AgentChangedEvent | AgentRemovedEvent
 
-export type CapabilityHealthStatus = "healthy" | "degraded" | "unavailable" | "disabled"
+export type CapabilityHealthStatus =
+  | "healthy"
+  | "starting"
+  | "degraded"
+  | "unavailable"
+  | "disabled"
 
 export interface CapabilityHealthComponent {
   id: string

@@ -5,43 +5,17 @@
   "dynamic": true,
   "builtin": "store",
   "tools": {
-    "store_list": {
+    "store_browse": {
       "enabled": true,
-      "description": "Browse built-in and GitHub community capabilities."
+      "description": "Browse, inspect, and review Store capabilities."
     },
-    "store_recommended_mcps": {
+    "store_manage": {
       "enabled": true,
-      "description": "List MCP servers curated and recommended by OpenChatX."
+      "description": "Install, uninstall, or validate capabilities for publishing."
     },
-    "store_get": {
+    "store_skill": {
       "enabled": true,
-      "description": "Resolve one capability to an exact source revision."
-    },
-    "store_source_tree": {
-      "enabled": true,
-      "description": "List capability source files before installation."
-    },
-    "store_source_read": {
-      "enabled": true,
-      "description": "Read one capability source file for inspection."
-    },
-    "store_review": { "enabled": true, "description": "Run static pre-install source analysis." },
-    "store_install": {
-      "enabled": true,
-      "description": "Install a capability, optionally pinned to an exact revision."
-    },
-    "store_uninstall": { "enabled": true, "description": "Remove a Store-installed capability." },
-    "store_skill_import": {
-      "enabled": true,
-      "description": "Import a portable SKILL.md folder into the user skill catalog."
-    },
-    "store_skill_export": {
-      "enabled": true,
-      "description": "Export a user skill as a portable SKILL.md folder."
-    },
-    "store_publish_check": {
-      "enabled": true,
-      "description": "Validate a local capability for serverless GitHub community publishing."
+      "description": "Import or export portable SKILL.md folders."
     }
   },
   "skills": {}

@@ -3,6 +3,8 @@ using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -277,7 +279,7 @@ internal readonly record struct RuntimeSnapshot(bool Backend, bool Tunnel, bool 
 internal sealed class RuntimeSupervisor
 {
     private static readonly Uri BackendHealth = new("http://127.0.0.1:3333/healthz");
-    private static readonly Uri TunnelHealth = new("http://127.0.0.1:8080/readyz");
+    private static readonly Uri TunnelHealth = new("http://127.0.0.1:8080/health?details=true");
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMilliseconds(700) };
     private readonly string _runtimeRoot;
     private readonly string _nodeExecutable;
@@ -327,8 +329,7 @@ internal sealed class RuntimeSupervisor
             Path.Combine(_runtimeRoot, "defaults", "subagents.json"),
             Path.Combine(configDirectory, "subagents.json")
         );
-        if (!Directory.Exists(toolboxDirectory))
-            CopyDirectory(Path.Combine(_runtimeRoot, "defaults", "toolboxes"), toolboxDirectory);
+        SyncDefaultToolboxes(Path.Combine(_runtimeRoot, "defaults", "toolboxes"), toolboxDirectory);
 
         await Task.CompletedTask;
     }
@@ -350,7 +351,7 @@ internal sealed class RuntimeSupervisor
                 await WaitUntilHealthyAsync(BackendHealth, 50);
             }
 
-            if (HasTunnelProfile() && !await IsHealthyAsync(TunnelHealth) && (_tunnelProcess?.HasExited ?? true))
+            if (HasTunnelProfile() && !await IsTunnelHealthyAsync() && (_tunnelProcess?.HasExited ?? true))
                 StartTunnel();
         }
         catch (Exception error)
@@ -367,7 +368,7 @@ internal sealed class RuntimeSupervisor
     {
         return new RuntimeSnapshot(
             await IsHealthyAsync(BackendHealth),
-            await IsHealthyAsync(TunnelHealth),
+            await IsTunnelHealthyAsync(),
             HasTunnelProfile()
         );
     }
@@ -415,7 +416,7 @@ internal sealed class RuntimeSupervisor
             if (exitCode != 0) throw new InvalidOperationException($"tunnel-client init exited with code {exitCode}.");
         }
 
-        if (!await IsHealthyAsync(TunnelHealth)) StartTunnel();
+        if (!await IsTunnelHealthyAsync()) StartTunnel();
     }
 
     private void StartBackend()
@@ -537,6 +538,29 @@ internal sealed class RuntimeSupervisor
         }
     }
 
+    private async Task<bool> IsTunnelHealthyAsync()
+    {
+        try
+        {
+            using var response = await _http.GetAsync(TunnelHealth);
+            if (!response.IsSuccessStatusCode) return false;
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var document = await JsonDocument.ParseAsync(stream);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("live", out var live) || live.ValueKind != JsonValueKind.True)
+                return false;
+            if (!root.TryGetProperty("components", out var components) ||
+                !components.TryGetProperty("control-plane", out var controlPlane) ||
+                !controlPlane.TryGetProperty("status", out var status))
+                return false;
+            return status.GetString() == "ok";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task<bool> WaitUntilHealthyAsync(Uri uri, int attempts)
     {
         for (var attempt = 0; attempt < attempts; attempt++)
@@ -637,6 +661,65 @@ internal sealed class RuntimeSupervisor
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: false);
         }
+    }
+
+    private static void SyncDefaultToolboxes(string sourceRoot, string destinationRoot)
+    {
+        Directory.CreateDirectory(destinationRoot);
+        foreach (var sourceToolbox in Directory.EnumerateDirectories(sourceRoot))
+        {
+            var destinationToolbox = Path.Combine(destinationRoot, Path.GetFileName(sourceToolbox));
+            if (!Directory.Exists(destinationToolbox))
+            {
+                CopyDirectory(sourceToolbox, destinationToolbox);
+                continue;
+            }
+
+            SyncBuiltinToolboxManifest(sourceToolbox, destinationToolbox);
+
+            var sourceSkills = Path.Combine(sourceToolbox, "skills");
+            if (!Directory.Exists(sourceSkills)) continue;
+            var destinationSkills = Path.Combine(destinationToolbox, "skills");
+            Directory.CreateDirectory(destinationSkills);
+            foreach (var sourceSkill in Directory.EnumerateDirectories(sourceSkills))
+            {
+                var destinationSkill = Path.Combine(destinationSkills, Path.GetFileName(sourceSkill));
+                if (!Directory.Exists(destinationSkill))
+                    CopyDirectory(sourceSkill, destinationSkill);
+            }
+        }
+    }
+
+    private static void SyncBuiltinToolboxManifest(string sourceToolbox, string destinationToolbox)
+    {
+        var sourcePath = Path.Combine(sourceToolbox, "toolbox.json");
+        var destinationPath = Path.Combine(destinationToolbox, "toolbox.json");
+        if (!File.Exists(sourcePath) || !File.Exists(destinationPath)) return;
+
+        var source = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject();
+        var destination = JsonNode.Parse(File.ReadAllText(destinationPath))?.AsObject();
+        if (source is null || destination is null || source["builtin"] is null) return;
+
+        if (destination["enabled"] is JsonNode enabled)
+            source["enabled"] = enabled.DeepClone();
+
+        if (source["tools"] is JsonObject sourceTools &&
+            destination["tools"] is JsonObject destinationTools)
+        {
+            foreach (var entry in sourceTools.ToList())
+            {
+                if (entry.Value is not JsonObject sourceTool ||
+                    destinationTools[entry.Key] is not JsonObject destinationTool ||
+                    destinationTool["enabled"] is not JsonNode toolEnabled)
+                    continue;
+                sourceTool["enabled"] = toolEnabled.DeepClone();
+            }
+        }
+
+        File.WriteAllText(
+            destinationPath,
+            source.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine
+        );
     }
 }
 

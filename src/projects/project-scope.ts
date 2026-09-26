@@ -4,6 +4,7 @@ import {
   consumeAgentProjectExternalAccess,
   getAgentIdentity,
   setAgentProjectId,
+  setAgentProjectRoutingPending,
 } from "../agent/context.js"
 import { MCP_CONFIG } from "../config.js"
 import { ToolError } from "../mcp/tool-error.js"
@@ -32,7 +33,7 @@ export class ProjectScope {
     try {
       return await this.projects.get(projectId)
     } catch {
-      setAgentProjectId(undefined)
+      setAgentProjectRoutingPending()
       return undefined
     }
   }

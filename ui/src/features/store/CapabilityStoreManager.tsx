@@ -129,7 +129,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
     const revision = tree.revision ? ` at revision ${tree.revision}` : ""
     const prompt =
       `Review OpenChatX capability ${tree.capability.id}${revision} before I install it. ` +
-      "Use store_review, store_source_tree, and store_source_read. Inspect the cited files and explain concrete risks; do not treat static analysis as a safety guarantee."
+      "Use store_browse with actions review, source_tree, and source_read. Inspect the cited files and explain concrete risks; do not treat static analysis as a safety guarantee."
     await navigator.clipboard.writeText(prompt)
     pushToast(t("store.reviewPromptCopied"))
   }
@@ -482,7 +482,7 @@ function localizeReviewNote(
 ): string {
   if (
     note ===
-    "This is static analysis, not a safety verdict. Ask ChatGPT to inspect the cited source files with store_source_read before deciding whether to install."
+    "This is static analysis, not a safety verdict. Ask ChatGPT to inspect cited files with store_browse action=source_read before deciding whether to install."
   ) {
     return t("store.reviewNote")
   }

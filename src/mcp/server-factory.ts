@@ -238,8 +238,8 @@ function registerPlatformTools(
     )
   const projectRegistry = options.projectRegistry
   if (projectRegistry)
-    registerConfiguredBuiltin(server, lazyServer, registry, "projects", (target) =>
-      registerProjectTools(target, projectRegistry, options.projectScope)
+    registerBuiltinToolbox(server, registry, "projects", () =>
+      registerProjectTools(server, projectRegistry, options.projectScope)
     )
   const goalRegistry = options.goalRegistry
   if (goalRegistry)

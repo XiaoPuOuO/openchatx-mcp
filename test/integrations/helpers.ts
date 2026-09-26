@@ -43,9 +43,8 @@ export async function startMcpHttpServer(options: TestMcpServerOptions = {}) {
     ? (services.interactiveShellManager ??
       new InteractiveShellManager(MCP_CONFIG.defaultCwd, MCP_CONFIG.shell.path))
     : undefined
-  const capabilityServices = {
-    externalMcp: services.externalMcp,
-    toolboxRegistry: services.toolboxRegistry,
+  const capabilityServices: McpCapabilityServices = {
+    ...services,
     interactiveShellManager,
     webPageOpener: tools.web ? (services.webPageOpener ?? new WebPageOpener()) : undefined,
   }

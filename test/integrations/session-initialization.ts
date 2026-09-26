@@ -6,6 +6,8 @@ import test from "node:test"
 
 import { getAgentIdentity, runWithAgent } from "../../src/agent/context.js"
 import { MCP_CONFIG } from "../../src/config.js"
+import { ProjectRegistry } from "../../src/projects/project-registry.js"
+import { ProjectScope } from "../../src/projects/project-scope.js"
 import { ToolboxRegistry } from "../../src/toolbox/registry.js"
 import {
   buildStartHereInstructions,
@@ -122,6 +124,52 @@ test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async 
   const text = toolText(started)
   assert.match(text, /Always rule body marker\./u)
   assert.doesNotMatch(text, /Manual rule body marker\./u)
+})
+
+test("requires Project routing before normal work in a new session", {
+  timeout: 10_000,
+}, async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-project-routing-"))
+  t.after(() => rm(stateDir, { recursive: true, force: true }))
+
+  const projectRegistry = new ProjectRegistry(join(stateDir, "projects.json"))
+  const projectScope = new ProjectScope(projectRegistry)
+  const running = await startMcpHttpServer({ projectRegistry, projectScope })
+  t.after(() => running.close())
+
+  const connected = await connectClient(
+    running.url,
+    "project-routing-client",
+    undefined,
+    false,
+    "project-routing-session"
+  )
+  t.after(() => connected.client.close())
+
+  const started = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "route-project" },
+  })
+  assert.notEqual(started.isError, true)
+
+  const blocked = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "pwd" },
+  })
+  assert.equal(blocked.isError, true)
+  assert.match(toolText(blocked), /PROJECT_ROUTING_REQUIRED/u)
+
+  const unscoped = await connected.client.callTool({
+    name: "project_use",
+    arguments: { project_id: null },
+  })
+  assert.notEqual(unscoped.isError, true)
+
+  const allowed = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "pwd" },
+  })
+  assert.notEqual(allowed.isError, true)
 })
 
 test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async (t) => {

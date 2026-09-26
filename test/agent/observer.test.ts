@@ -69,6 +69,37 @@ test("failed MCP results preserve their text error for the dashboard", () => {
   assert.equal(observer.listAgents()[0]?.recent[0]?.error, "PATCH_FAILED: invalid patch")
 })
 
+test("completed tool calls expose the text returned to the agent", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "shell" }
+
+  const callId = observer.startTool(agent, "bash", { command: "printf hello" })
+  observer.finishTool(agent, callId, {
+    content: [{ type: "text", text: "cwd=/tmp exit_code=0 output=hello" }],
+  })
+
+  assert.equal(
+    observer.listAgents()[0]?.recent[0]?.resultDetail,
+    "cwd=/tmp exit_code=0 output=hello"
+  )
+})
+
+test("completed tool calls join all text content returned to the agent", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "search" }
+
+  const callId = observer.startTool(agent, "tool_call", { id: "example" })
+  observer.finishTool(agent, callId, {
+    content: [
+      { type: "text", text: "first block" },
+      { type: "image", data: "ignored" },
+      { type: "text", text: "second block" },
+    ],
+  })
+
+  assert.equal(observer.listAgents()[0]?.recent[0]?.resultDetail, "first block\nsecond block")
+})
+
 test("completed file edits expose the resulting diff for the dashboard", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "edit" }
