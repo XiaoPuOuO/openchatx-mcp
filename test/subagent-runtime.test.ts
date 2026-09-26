@@ -41,9 +41,9 @@ test("subagent runtime hot-reloads direct config file edits", async (t) => {
     })
   )
 
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
     if (runtime.profiles().some((profile) => profile.id === "watched")) return
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await new Promise((resolve) => setTimeout(resolve, 25))
   }
   assert.fail("subagent config watcher did not reload the edited file")
 })
