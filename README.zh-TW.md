@@ -17,6 +17,9 @@
   <a href="https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest"><strong>下載最新版</strong></a>
 </p>
 
+> [!IMPORTANT]
+> OpenChatX 使用的是一般 **ChatGPT Chat** 的用量，**不會消耗 ChatGPT Work / Codex 的 Agent 額度**。就算 Work 或 Codex 額度已經用完，只要一般 Chat 還有可用額度，就可以繼續使用 OpenChatX。
+
 > [!CAUTION]
 > OpenChatX 會以你目前作業系統使用者的權限執行。已授權的 ChatGPT 可以執行指令、編輯檔案、使用已連接的 MCP Servers，並控制支援的應用程式。
 

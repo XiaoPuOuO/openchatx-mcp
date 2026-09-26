@@ -17,6 +17,9 @@
   <a href="https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest"><strong>Download latest release</strong></a>
 </p>
 
+> [!IMPORTANT]
+> OpenChatX runs through regular **ChatGPT Chat**. It does **not** consume your ChatGPT Work / Codex agentic allowance. If your Work or Codex allowance is exhausted, you can still use OpenChatX as long as your normal Chat usage is available.
+
 > [!CAUTION]
 > OpenChatX runs with your local user permissions. A trusted ChatGPT caller can run commands, edit files, use connected MCP servers, and control supported applications.
 
