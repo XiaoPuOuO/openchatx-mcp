@@ -407,10 +407,6 @@ test("searches skill metadata before loading full Markdown", {
   const toolboxRoot = await mkdtemp(join(tmpdir(), "openchatx-skill-search-"))
   const previousToolboxRoot = MCP_CONFIG.toolboxes.root
   MCP_CONFIG.toolboxes.root = toolboxRoot
-  t.after(() => {
-    MCP_CONFIG.toolboxes.root = previousToolboxRoot
-    return rm(toolboxRoot, { recursive: true, force: true })
-  })
 
   const toolboxDirectory = join(toolboxRoot, "test-skills")
   const skillDirectory = join(toolboxDirectory, "skills", "cooldown-skill")
@@ -450,9 +446,7 @@ test("searches skill metadata before loading full Markdown", {
   )
   const toolboxRegistry = new ToolboxRegistry(toolboxRoot)
   await toolboxRegistry.start()
-  t.after(() => toolboxRegistry.close())
   const running = await startMcpHttpServer({ toolboxRegistry })
-  t.after(() => running.close())
   const connected = await connectClient(
     running.url,
     "skill-search-client",
@@ -460,7 +454,13 @@ test("searches skill metadata before loading full Markdown", {
     false,
     "skill-search-session"
   )
-  t.after(() => connected.client.close())
+  t.after(async () => {
+    await connected.client.close()
+    await running.close()
+    await toolboxRegistry.close()
+    MCP_CONFIG.toolboxes.root = previousToolboxRoot
+    await rm(toolboxRoot, { recursive: true, force: true })
+  })
 
   const started = await connected.client.callTool({
     name: "start_here",

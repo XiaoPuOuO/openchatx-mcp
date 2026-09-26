@@ -103,23 +103,40 @@ export class ToolboxRegistry {
   private toolboxes = new Map<string, LoadedToolbox>()
   private watcher?: FSWatcher
   private reloadTimer?: NodeJS.Timeout
+  private reloadPromise?: Promise<void>
+  private closed = false
 
   constructor(readonly root: string) {}
 
   async start(): Promise<void> {
+    this.closed = false
     await mkdir(this.root, { recursive: true })
     await this.reload()
     this.watcher = watch(this.root, { recursive: true }, (_event, filename) => {
+      if (this.closed) return
       if (typeof filename === "string" && filename.endsWith(".openchatx.mjs")) return
       if (this.reloadTimer) clearTimeout(this.reloadTimer)
-      this.reloadTimer = setTimeout(() => void this.reload(), 150)
+      this.reloadTimer = setTimeout(() => {
+        this.reloadTimer = undefined
+        if (this.closed) return
+        const pending = this.reload()
+        this.reloadPromise = pending
+        void pending.finally(() => {
+          if (this.reloadPromise === pending) this.reloadPromise = undefined
+        })
+      }, 150)
       this.reloadTimer.unref()
     })
   }
 
   async close(): Promise<void> {
+    this.closed = true
     if (this.reloadTimer) clearTimeout(this.reloadTimer)
+    this.reloadTimer = undefined
     this.watcher?.close()
+    this.watcher = undefined
+    await this.reloadPromise
+    this.reloadPromise = undefined
   }
 
   async reload(): Promise<void> {
