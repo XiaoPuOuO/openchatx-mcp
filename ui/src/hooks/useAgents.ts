@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { deleteAgent, fetchAgents, subscribeToAgents } from "../lib/api"
 import type { Agent } from "../types"
+import { upsertAgentByActivity } from "./agent-order.js"
 
 export function useAgents() {
   const [agents, setAgents] = useState<Agent[]>([])
@@ -24,11 +25,7 @@ export function useAgents() {
         if (event.type === "agent_removed") {
           return current.filter((item) => item.id !== event.agentId)
         }
-        const index = current.findIndex((item) => item.id === event.agent.id)
-        if (index === -1) return [...current, event.agent]
-        const next = [...current]
-        next[index] = event.agent
-        return next
+        return upsertAgentByActivity(current, event.agent)
       })
     }, setConnected)
   }, [])
