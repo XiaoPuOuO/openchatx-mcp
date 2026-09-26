@@ -103,7 +103,7 @@ export class ToolboxRegistry {
   private toolboxes = new Map<string, LoadedToolbox>()
   private watcher?: FSWatcher
   private reloadTimer?: NodeJS.Timeout
-  private reloadPromise?: Promise<void>
+  private reloadPromises = new Set<Promise<void>>()
   private closed = false
 
   constructor(readonly root: string) {}
@@ -120,10 +120,8 @@ export class ToolboxRegistry {
         this.reloadTimer = undefined
         if (this.closed) return
         const pending = this.reload()
-        this.reloadPromise = pending
-        void pending.finally(() => {
-          if (this.reloadPromise === pending) this.reloadPromise = undefined
-        })
+        this.reloadPromises.add(pending)
+        void pending.finally(() => this.reloadPromises.delete(pending))
       }, 150)
       this.reloadTimer.unref()
     })
@@ -135,8 +133,8 @@ export class ToolboxRegistry {
     this.reloadTimer = undefined
     this.watcher?.close()
     this.watcher = undefined
-    await this.reloadPromise
-    this.reloadPromise = undefined
+    await Promise.allSettled([...this.reloadPromises])
+    this.reloadPromises.clear()
   }
 
   async reload(): Promise<void> {
