@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <strong>把 ChatGPT 變成你的本機 Agent Runtime。</strong><br>
-  一條 MCP 連線，就能使用你的電腦、MCP Servers、自訂工具、Skills、Rules、Projects、Subagents 等能力。
+  <strong>打造你自己的 ChatGPT Agent Workflow，不需要從零開始重做一套 Agent Runtime。</strong><br>
+  OpenChatX 是一個 batteries-included、可高度自訂的本機 Agent 平台：內建 Coding Agent 所需的檔案、Shell、電腦控制、MCP 聚合、Skills、Rules、Projects、Tasks、Subagents 等能力，再透過 Toolboxes 讓你自由改造 Agent 的工具、規則與工作流程；全部只需要一條官方 ChatGPT MCP 連線。
 </p>
 
 <p align="center">
@@ -19,6 +19,27 @@
 
 > [!CAUTION]
 > OpenChatX 會以你目前作業系統使用者的權限執行。已授權的 ChatGPT 可以執行指令、編輯檔案、使用已連接的 MCP Servers，並控制支援的應用程式。
+
+## 運作方式：官方 MCP，不是逆向工程
+
+OpenChatX 使用 OpenAI **官方、文件化的 MCP 整合方式**。它不會逆向 ChatGPT、不會呼叫未公開的 ChatGPT 後端 API、不會重用瀏覽器 Session Cookie，也不會攔截 ChatGPT 的網路流量。
+
+實際連線流程如下：
+
+1. **OpenChatX 在你的電腦上執行標準 MCP Server**。
+2. **OpenAI 官方 `tunnel-client` 主動建立對外 HTTPS 連線**到 OpenAI Secure MCP Tunnel，因此不需要替本機 MCP Server 開放公開的 inbound port。
+3. **ChatGPT 透過官方 Developer Mode / MCP App 流程連上這條 Tunnel**。
+4. ChatGPT 呼叫工具時，Secure MCP Tunnel 會把 MCP Request 轉送到本機 OpenChatX，再透過同一條官方通道把 MCP Response 回傳。
+5. OpenChatX 再把請求路由到本機工具、電腦、已連接的 MCP Servers、Skills、Rules、Projects，或你明確設定的 Subagents。
+
+ChatGPT 本身仍然是模型與 Planner；OpenChatX 是本機的工具與 Runtime Layer。OpenChatX 不會假冒 ChatGPT，也不會偷偷替 ChatGPT 呼叫隱藏的模型 API。
+
+OpenChatX Desktop 內設定的 Runtime API Key 只用於官方 Secure MCP Tunnel 的 Control Plane，並儲存在作業系統的 Credential Store。它不是從 ChatGPT 擷取出來的憑證，也不是繞過 ChatGPT 官方介面的手段。
+
+官方文件：
+
+- OpenAI Secure MCP Tunnel：https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
+- ChatGPT Developer Mode and MCP apps：https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt
 
 ## 優先：安裝 Desktop App
 
@@ -159,10 +180,10 @@ Desktop App 會把 API Key 存在系統安全儲存區：
 
 ### Skills
 
-Skill 使用標準 Agent Skills 格式：
+Skill 使用標準 Agent Skills 格式，並由 Toolbox 擁有：
 
 ```text
-~/.openchatx-mcp/skills/<name>/SKILL.md
+toolboxes/<toolbox>/skills/<name>/SKILL.md
 ```
 
 Skill 只有 `name`、`description` 與 Markdown Instructions，不會在 Startup 預先注入。
@@ -173,10 +194,10 @@ Skill 只有 `name`、`description` 與 Markdown Instructions，不會在 Startu
 
 ### Rules
 
-Rule 放在：
+Rule 由 Toolbox 擁有，和該 Toolbox 的其他能力放在一起：
 
 ```text
-~/.openchatx-mcp/rules/*.mdc
+toolboxes/<toolbox>/rules/<name>.mdc
 ```
 
 例如：

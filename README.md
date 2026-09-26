@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <strong>Turn ChatGPT into a local agent runtime.</strong><br>
-  One MCP connection for your computer, MCP servers, custom tools, Skills, Rules, Projects, Subagents, and more.
+  <strong>Build your own ChatGPT agent workflow — without building the agent runtime from scratch.</strong><br>
+  OpenChatX is a batteries-included, fully customizable local agent platform: coding-grade file and shell tools, computer control, MCP aggregation, Skills, Rules, Projects, Tasks, Subagents, and more — all exposed through one official ChatGPT MCP connection, with Toolboxes to customize how your agent works.
 </p>
 
 <p align="center">
@@ -19,6 +19,27 @@
 
 > [!CAUTION]
 > OpenChatX runs with your local user permissions. A trusted ChatGPT caller can run commands, edit files, use connected MCP servers, and control supported applications.
+
+## How it works — official MCP, no reverse engineering
+
+OpenChatX uses OpenAI's **documented MCP integration path**. It does not reverse-engineer ChatGPT, call undocumented ChatGPT backend endpoints, reuse browser session cookies, or intercept ChatGPT traffic.
+
+The connection works like this:
+
+1. **OpenChatX runs a normal MCP server locally** on your machine.
+2. **OpenAI's official `tunnel-client` creates an outbound HTTPS connection** to an OpenAI Secure MCP Tunnel. Your local MCP server does not need a public inbound port.
+3. **ChatGPT connects to that tunnel as a custom MCP app** using the supported ChatGPT Developer Mode / MCP app flow.
+4. When ChatGPT invokes a tool, the Secure MCP Tunnel forwards the MCP request to OpenChatX locally and returns the MCP response through the same official channel.
+5. OpenChatX then routes that request to local tools, your computer, connected MCP servers, Skills, Rules, Projects, or explicitly configured Subagents.
+
+ChatGPT remains the model and planner. OpenChatX is the local tool/runtime layer; it does not impersonate ChatGPT or make hidden model calls on ChatGPT's behalf.
+
+The Runtime API key configured in OpenChatX is used for the official Secure MCP Tunnel control plane and is stored in the operating-system credential store. It is not a scraped ChatGPT credential or a workaround around ChatGPT's supported interfaces.
+
+Official references:
+
+- OpenAI Secure MCP Tunnel: https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
+- ChatGPT Developer Mode and MCP apps: https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt
 
 ## Install the Desktop App
 
@@ -159,10 +180,10 @@ External MCP and Toolbox schemas stay lazy so the normal ChatGPT tool context st
 
 ### Skills
 
-Skills are portable Agent Skills:
+Skills are portable Agent Skills owned by a Toolbox:
 
 ```text
-~/.openchatx-mcp/skills/<name>/SKILL.md
+toolboxes/<toolbox>/skills/<name>/SKILL.md
 ```
 
 A Skill contains `name`, `description`, and Markdown instructions. Skills are not injected at startup.
@@ -173,10 +194,10 @@ A Skill contains `name`, `description`, and Markdown instructions. Skills are no
 
 ### Rules
 
-Rules live in:
+Rules are owned by a Toolbox and live beside that Toolbox's other capabilities:
 
 ```text
-~/.openchatx-mcp/rules/*.mdc
+toolboxes/<toolbox>/rules/<name>.mdc
 ```
 
 Example:
