@@ -31,3 +31,30 @@ test("durable jobs persist status and logs across manager instances", {
   assert.equal(restored.label, "smoke")
   assert.equal(restored.projectId, "openchatx")
 })
+
+test("durable jobs enforce an explicit hard deadline", { timeout: 10000 }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-job-timeout-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const manager = new JobManager(root, join(root, "jobs.json"))
+  const started = await manager.start("timeout", "sleep 5", undefined, undefined, 100)
+  const result = await manager.wait(started.id, 2_000)
+  assert.equal(result.job.status, "failed")
+  assert.equal(result.job.timedOut, true)
+  assert.equal(result.job.exitCode, -1)
+})
+
+test("aborting a wait does not terminate the durable process", { timeout: 10000 }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-job-abort-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const manager = new JobManager(root, join(root, "jobs.json"))
+  const started = await manager.start("abort-safe", "sleep 0.3; printf survived")
+
+  await assert.rejects(
+    manager.wait(started.id, 2_000, 0, 16_384, AbortSignal.timeout(50)),
+    /aborted|timeout/iu
+  )
+
+  const finished = await manager.wait(started.id, 2_000)
+  assert.equal(finished.job.status, "completed")
+  assert.match(finished.output, /survived/u)
+})

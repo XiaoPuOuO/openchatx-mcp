@@ -191,7 +191,7 @@ function registerToolboxRuntime(
     if (options.summaryRegistry) registerSummarizeTool(target, options.summaryRegistry)
   })
   registerConfiguredBuiltin(server, lazyServer, registry, "shell", (target) => {
-    registerBashTool(target, options.bashProcessManager, options.projectScope)
+    registerBashTool(target, options.bashProcessManager, options.projectScope, options.jobManager)
     if (options.bashProcessManager) registerBashProcessTool(target, options.bashProcessManager)
     if (options.interactiveShellManager)
       registerTerminalTool(target, options.interactiveShellManager, options.projectScope)
@@ -299,7 +299,7 @@ function registerDirectRuntime(
     registerCapabilityTools(server, capabilityRegistry, options.capabilityHealth)
   if (options.summaryRegistry) registerSummarizeTool(server, options.summaryRegistry)
   if (profile.tools.shell) {
-    registerBashTool(server, options.bashProcessManager, options.projectScope)
+    registerBashTool(server, options.bashProcessManager, options.projectScope, options.jobManager)
     if (options.bashProcessManager) registerBashProcessTool(server, options.bashProcessManager)
     if (options.interactiveShellManager)
       registerTerminalTool(server, options.interactiveShellManager, options.projectScope)

@@ -6,6 +6,8 @@ import test from "node:test"
 import { Client } from "@modelcontextprotocol/client"
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 
+import { JobManager } from "../src/jobs/job-manager.js"
+import { registerJobTools } from "../src/tools/jobs/job-tools.js"
 import { BashProcessManager } from "../src/tools/shell/bash-process-manager.js"
 import { registerBashProcessTool } from "../src/tools/shell/bash-process-tool.js"
 import { registerBashTool } from "../src/tools/shell/bash-tool.js"
@@ -14,13 +16,16 @@ import { tempDir } from "./helpers/temp.js"
 async function connectedBash(t: test.TestContext) {
   const state = await tempDir(t, "openchatx-bash-manager-")
   const manager = new BashProcessManager(join(state, "logs"))
+  const jobs = new JobManager(join(state, "jobs"), join(state, "jobs", "jobs.json"))
+  await jobs.initialize()
   const server = new McpServer({ name: "bash-test", version: "1.0.0" })
   const client = new Client({ name: "bash-client", version: "1.0.0" })
-  registerBashTool(server, manager)
+  registerBashTool(server, manager, undefined, jobs)
   registerBashProcessTool(server, manager)
+  registerJobTools(server, jobs)
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
-  t.after(() => Promise.all([client.close(), server.close()]))
+  t.after(() => Promise.all([client.close(), server.close(), jobs.close()]))
   return client
 }
 
@@ -120,4 +125,50 @@ test("bash does not persist cwd or environment between calls", async (t) => {
   const output = (result.structuredContent as { output: string }).output
   assert.match(output, new RegExp(cwd.replaceAll("/", "\\/"), "u"))
   assert.match(output, /missing/u)
+})
+
+test("bash wait expiry promotes a live command to a durable job", async (t) => {
+  const cwd = await tempDir(t, "openchatx-bash-promote-")
+  const client = await connectedBash(t)
+
+  const result = await client.callTool({
+    name: "bash",
+    arguments: {
+      command: "printf 'phase-one\\n'; sleep 0.3; printf 'phase-two\\n'",
+      workdir: cwd,
+      timeout_ms: 50,
+    },
+  })
+  assert.equal(result.isError, undefined)
+  const promoted = result.structuredContent as {
+    running: boolean
+    promoted_to_job: boolean
+    job_id: string
+    next_cursor: number
+    output: string
+  }
+  assert.equal(promoted.running, true)
+  assert.equal(promoted.promoted_to_job, true)
+  assert.match(promoted.job_id, /^job-/u)
+  assert.match(promoted.output, /phase-one/u)
+
+  const waited = await client.callTool({
+    name: "job_manage",
+    arguments: {
+      action: "wait",
+      id: promoted.job_id,
+      cursor: promoted.next_cursor,
+      wait_ms: 2_000,
+    },
+  })
+  assert.equal(waited.isError, undefined)
+  const final = waited.structuredContent as {
+    job: { status: string }
+    output: string
+    next_cursor: number
+  }
+  assert.equal(final.job.status, "completed")
+  assert.match(final.output, /phase-two/u)
+  assert.doesNotMatch(final.output, /phase-one/u)
+  assert.ok(final.next_cursor > promoted.next_cursor)
 })

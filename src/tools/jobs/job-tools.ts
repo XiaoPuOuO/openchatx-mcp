@@ -13,10 +13,9 @@ export function registerJobTools(
   server.registerTool(
     "job_manage",
     {
-      description:
-        "Start, list, read, or cancel durable background jobs. Use action=start, list, read, or cancel.",
+      description: "Start, list, read, wait for, or cancel durable background jobs.",
       inputSchema: z.object({
-        action: z.enum(["start", "list", "read", "cancel"]),
+        action: z.enum(["start", "list", "read", "wait", "cancel"]),
         label: z.string().min(1).max(120).optional(),
         command: z.string().min(1).optional(),
         cwd: z.string().min(1).optional(),
@@ -26,6 +25,20 @@ export function registerJobTools(
           .optional()
           .describe("Optional Project id. Shell permission is enforced."),
         id: z.string().min(1).optional(),
+        cursor: z.int().min(0).default(0),
+        wait_ms: z
+          .int()
+          .min(0)
+          .max(5 * 60_000)
+          .default(30_000)
+          .describe(
+            "How long to wait before returning current status and incremental logs. Defaults to 30 seconds so the agent can emit progress heartbeats."
+          ),
+        kill_after_ms: z
+          .int()
+          .min(1)
+          .max(60 * 60_000)
+          .optional(),
         max_bytes: z.int().min(1).max(131072).default(16384),
       }),
       annotations: {
@@ -35,17 +48,28 @@ export function registerJobTools(
         openWorldHint: true,
       },
     },
-    async ({ action, label, command, cwd, project_id, id, max_bytes }) => {
+    async (
+      { action, label, command, cwd, project_id, id, cursor, wait_ms, kill_after_ms, max_bytes },
+      context
+    ) => {
       try {
-        return await executeJobAction(jobs, projectScope, {
-          action,
-          label,
-          command,
-          cwd,
-          project_id,
-          id,
-          max_bytes,
-        })
+        return await executeJobAction(
+          jobs,
+          projectScope,
+          {
+            action,
+            label,
+            command,
+            cwd,
+            project_id,
+            id,
+            cursor,
+            wait_ms,
+            kill_after_ms,
+            max_bytes,
+          },
+          context.mcpReq.signal
+        )
       } catch (error) {
         throw toToolError(error, "JOB_MANAGE_FAILED")
       }
@@ -57,14 +81,18 @@ async function executeJobAction(
   jobs: JobManager,
   projectScope: ProjectScope | undefined,
   input: {
-    action: "start" | "list" | "read" | "cancel"
+    action: "start" | "list" | "read" | "wait" | "cancel"
     label?: string
     command?: string
     cwd?: string
     project_id?: string
     id?: string
+    cursor: number
+    wait_ms: number
+    kill_after_ms?: number
     max_bytes: number
-  }
+  },
+  signal?: AbortSignal
 ) {
   switch (input.action) {
     case "start":
@@ -73,6 +101,8 @@ async function executeJobAction(
       return listJobs(jobs, input.project_id)
     case "read":
       return readJob(jobs, input.id, input.max_bytes)
+    case "wait":
+      return waitJob(jobs, input.id, input.cursor, input.wait_ms, input.max_bytes, signal)
     case "cancel":
       return cancelJob(jobs, input.id)
   }
@@ -81,14 +111,26 @@ async function executeJobAction(
 async function startJob(
   jobs: JobManager,
   projectScope: ProjectScope | undefined,
-  input: { label?: string; command?: string; cwd?: string; project_id?: string }
+  input: {
+    label?: string
+    command?: string
+    cwd?: string
+    project_id?: string
+    kill_after_ms?: number
+  }
 ) {
   if (!input.label) throw new Error("label is required for action=start.")
   if (!input.command) throw new Error("command is required for action=start.")
   const resolved = projectScope
     ? await projectScope.resolvePath(input.cwd, "shell", input.project_id)
     : { path: input.cwd, project: undefined }
-  const job = await jobs.start(input.label, input.command, resolved.path, resolved.project?.id)
+  const job = await jobs.start(
+    input.label,
+    input.command,
+    resolved.path,
+    resolved.project?.id,
+    input.kill_after_ms
+  )
   return {
     structuredContent: {
       job,
@@ -97,6 +139,25 @@ async function startJob(
         : {}),
     },
     content: [],
+  }
+}
+
+async function waitJob(
+  jobs: JobManager,
+  id: string | undefined,
+  cursor: number,
+  waitMs: number,
+  maxBytes: number,
+  signal?: AbortSignal
+) {
+  if (!id) throw new Error("id is required for action=wait.")
+  const result = await jobs.wait(id, waitMs, cursor, maxBytes, signal)
+  return {
+    structuredContent: {
+      ...result,
+      next_cursor: result.nextCursor,
+    },
+    content: result.output ? [{ type: "text" as const, text: result.output }] : [],
   }
 }
 

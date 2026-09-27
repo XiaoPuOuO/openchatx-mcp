@@ -235,7 +235,7 @@ export function renderCurrentToolContracts(): string {
     "- Capabilities: capability_list action=list (default) or action=health.",
     "- Subagents: subagent_run runs an explicit model, auto-routes when model is omitted, or only selects with action=route.",
     "- Rules: rule_resolve action=resolve (default) or action=load; rule_manage handles create|edit|delete|import|export.",
-    "- Durable jobs: job_manage action=start|list|read|cancel.",
+    "- Durable jobs: job_manage action=start|list|read|wait|cancel. bash foreground wait expiry may return running=true + job_id; emit a short progress heartbeat, then continue with job_manage action=wait using roughly 30-second waits instead of ending the task.",
     "- Nodes: node_manage action=list|upsert|remove|probe|tool_search|tool_call.",
     "- Providers: provider_manage action=presets|install|probe.",
     "If PROJECT_ROUTING_REQUIRED is returned, satisfy it through project_manage. Never bypass Project routing by reaching for internal paths or removed tools.",

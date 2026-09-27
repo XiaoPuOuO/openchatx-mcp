@@ -74,8 +74,9 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.ok(bash && fetchUrl && fileWrite)
 
   const bashProperties = bash.inputSchema.properties as Record<string, Record<string, unknown>>
-  assert.equal(bashProperties.timeout_ms?.default, 120_000)
-  assert.equal(bashProperties.timeout_ms?.maximum, 15 * 60_000)
+  assert.equal(bashProperties.timeout_ms?.default, 30_000)
+  assert.equal(bashProperties.timeout_ms?.maximum, 60 * 60_000)
+  assert.equal(bashProperties.kill_after_ms?.maximum, 60 * 60_000)
   assert.equal(bashProperties.max_output_tokens?.default, MCP_CONFIG.shell.defaultOutputTokens)
   assert.equal(bashProperties.max_output_tokens?.maximum, MCP_CONFIG.shell.maxOutputTokens)
   const webProperties = fetchUrl.inputSchema.properties as Record<string, Record<string, unknown>>

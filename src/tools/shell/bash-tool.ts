@@ -7,6 +7,7 @@ import { childProcessEnvironment } from "../../child-environment.js"
 import { signalProcessGroup } from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
 import { shellCommandArgs } from "../../host-platform.js"
+import type { JobManager } from "../../jobs/job-manager.js"
 import { toToolError } from "../../mcp/tool-error.js"
 import type { ProjectScope } from "../../projects/project-scope.js"
 import { tokenPrefix } from "../../tokenizer.js"
@@ -19,13 +20,14 @@ const MAX_CAPTURE_BYTES = 1024 * 1024
 export function registerBashTool(
   server: McpServer,
   processManager?: BashProcessManager,
-  projectScope?: ProjectScope
+  projectScope?: ProjectScope,
+  jobManager?: JobManager
 ): void {
   server.registerTool(
     "bash",
     {
       description:
-        "Run a genuine non-interactive shell operation in a fresh host shell process (zsh on macOS, PowerShell on Windows). Use this for builds, tests, git, package managers, processes, networking, permissions, system commands, pipelines, or shell features that dedicated tools do not provide. Set keep=true for long-running non-interactive servers, watchers, or daemons that must remain alive after the tool call returns. OpenChatX captures kept-process stdout/stderr; use bash_process to list processes, read logs for debugging, or stop one. Do NOT use bash for ordinary file reading, editing, writing, filename discovery, or content search: use file_read, file_edit, file_write, glob, or grep instead. Shell rg is appropriate only when you need capabilities grep does not expose, such as match counts or specialized ripgrep flags. Use workdir explicitly when needed. For prompts, REPLs, menus, or TTY-only programs, use terminal instead.",
+        "Run a genuine non-interactive shell operation. timeout_ms is the foreground wait budget, not a kill deadline: if the command is still running when it expires, OpenChatX promotes it to a durable job and returns job_id plus current logs. Continue with job_manage action=wait or cancel. Set kill_after_ms only for a real hard runtime limit. keep=true is only for persistent servers/watchers/daemons and remains managed by bash_process.",
       inputSchema: z.object({
         command: z.string().min(1),
         workdir: z
@@ -45,9 +47,17 @@ export function registerBashTool(
         timeout_ms: z
           .int()
           .min(1)
-          .max(15 * 60_000)
-          .default(120_000)
-          .describe("Maximum runtime for normal commands. Ignored when keep=true."),
+          .max(60 * 60_000)
+          .default(30_000)
+          .describe(
+            "Foreground wait budget before returning a still-running command as a durable job. Defaults to 30 seconds so the agent can emit a progress heartbeat. Does not kill the command. Ignored when keep=true."
+          ),
+        kill_after_ms: z
+          .int()
+          .min(1)
+          .max(60 * 60_000)
+          .optional()
+          .describe("Optional hard runtime limit. The durable process is terminated after this."),
         keep: z
           .boolean()
           .default(false)
@@ -67,37 +77,24 @@ export function registerBashTool(
         openWorldHint: true,
       },
     },
-    async ({ command, workdir, project_id, timeout_ms, keep, max_output_tokens }, context) => {
+    async (
+      { command, workdir, project_id, timeout_ms, kill_after_ms, keep, max_output_tokens },
+      context
+    ) => {
       try {
-        const cwd = await resolveWorkdir(workdir, projectScope, project_id)
-        const environment = childProcessEnvironment()
-        const executableCommand = prepareShellCommand(command, cwd, environment)
-        if (keep) {
-          if (!processManager) throw new Error("Managed bash processes are not available.")
-          const kept = await processManager.start(executableCommand, cwd)
-          return {
-            structuredContent: {
-              cwd,
-              kept: true,
-              process_id: kept.id,
-              pid: kept.pid,
-              log_path: kept.logPath,
-            },
-            content: [],
-          }
-        }
-        const result = await runCommand(executableCommand, cwd, timeout_ms, context.mcpReq.signal)
-        const bounded = tokenPrefix(withApplyPatchToolHint(result.output), max_output_tokens)
-        return {
-          structuredContent: {
-            cwd,
-            exit_code: result.exitCode,
-            output: bounded.value,
-            ...(result.timedOut ? { timed_out: true } : {}),
-            ...(bounded.truncated ? { output_truncated: true } : {}),
-          },
-          content: [],
-        }
+        return await executeBash({
+          command,
+          workdir,
+          projectId: project_id,
+          waitMs: timeout_ms,
+          killAfterMs: kill_after_ms,
+          keep,
+          maxOutputTokens: max_output_tokens,
+          signal: context.mcpReq.signal,
+          processManager,
+          projectScope,
+          jobManager,
+        })
       } catch (error) {
         throw toToolError(error, "BASH_FAILED")
       }
@@ -105,14 +102,136 @@ export function registerBashTool(
   )
 }
 
-async function resolveWorkdir(
+interface BashExecutionInput {
+  command: string
+  workdir?: string
+  projectId?: string
+  waitMs: number
+  killAfterMs?: number
+  keep: boolean
+  maxOutputTokens: number
+  signal: AbortSignal
+  processManager?: BashProcessManager
+  projectScope?: ProjectScope
+  jobManager?: JobManager
+}
+
+async function executeBash(input: BashExecutionInput) {
+  const scope = await resolveExecutionScope(input.workdir, input.projectScope, input.projectId)
+  const cwd = scope.path
+  const environment = childProcessEnvironment()
+  const executableCommand = prepareShellCommand(input.command, cwd, environment)
+  if (input.keep) return runKeptCommand(executableCommand, cwd, input.processManager)
+  if (input.jobManager) return runDurableCommand(executableCommand, cwd, scope.projectId, input)
+  return runLegacyForegroundCommand(executableCommand, cwd, input)
+}
+
+async function runKeptCommand(command: string, cwd: string, processManager?: BashProcessManager) {
+  if (!processManager) throw new Error("Managed bash processes are not available.")
+  const kept = await processManager.start(command, cwd)
+  return {
+    structuredContent: {
+      cwd,
+      kept: true,
+      process_id: kept.id,
+      pid: kept.pid,
+      log_path: kept.logPath,
+    },
+    content: [],
+  }
+}
+
+async function runDurableCommand(
+  command: string,
+  cwd: string,
+  projectId: string | undefined,
+  input: BashExecutionInput
+) {
+  const jobs = input.jobManager
+  if (!jobs) throw new Error("Durable jobs are unavailable.")
+  const job = await jobs.start(
+    bashJobLabel(input.command),
+    command,
+    cwd,
+    projectId,
+    input.killAfterMs
+  )
+  const waited = await jobs.wait(job.id, input.waitMs, 0, MAX_CAPTURE_BYTES, input.signal)
+  const bounded = tokenPrefix(withApplyPatchToolHint(waited.output), input.maxOutputTokens)
+  if (waited.job.status === "running")
+    return durableRunningResult(cwd, waited, bounded.value, bounded.truncated)
+
+  const result = {
+    structuredContent: {
+      cwd,
+      exit_code: waited.job.exitCode ?? (waited.job.status === "completed" ? 0 : 1),
+      output: bounded.value,
+      ...(waited.job.timedOut ? { timed_out: true } : {}),
+      ...(bounded.truncated || waited.truncated ? { output_truncated: true } : {}),
+    },
+    content: [],
+  }
+  await jobs.forget(job.id)
+  return result
+}
+
+function durableRunningResult(
+  cwd: string,
+  waited: Awaited<ReturnType<JobManager["wait"]>>,
+  output: string,
+  outputTruncated: boolean
+) {
+  return {
+    structuredContent: {
+      cwd,
+      running: true,
+      promoted_to_job: true,
+      job_id: waited.job.id,
+      pid: waited.job.pid,
+      output,
+      next_cursor: waited.nextCursor,
+      wait_expired: true,
+      ...(waited.job.killAfterAt ? { kill_after_at: waited.job.killAfterAt } : {}),
+      ...(outputTruncated || waited.truncated ? { output_truncated: true } : {}),
+    },
+    content: [],
+  }
+}
+
+async function runLegacyForegroundCommand(command: string, cwd: string, input: BashExecutionInput) {
+  const result = await runCommand(command, cwd, input.waitMs, input.signal)
+  const bounded = tokenPrefix(withApplyPatchToolHint(result.output), input.maxOutputTokens)
+  return {
+    structuredContent: {
+      cwd,
+      exit_code: result.exitCode,
+      output: bounded.value,
+      ...(result.timedOut ? { timed_out: true } : {}),
+      ...(bounded.truncated ? { output_truncated: true } : {}),
+    },
+    content: [],
+  }
+}
+
+async function resolveExecutionScope(
   workdir: string | undefined,
   projectScope?: ProjectScope,
   projectId?: string
-): Promise<string> {
-  if (projectScope) return (await projectScope.resolvePath(workdir, "shell", projectId)).path
-  if (!workdir) return MCP_CONFIG.defaultCwd
-  return isAbsolute(workdir) ? workdir : resolve(MCP_CONFIG.defaultCwd, workdir)
+): Promise<{ path: string; projectId?: string }> {
+  if (projectScope) {
+    const resolved = await projectScope.resolvePath(workdir, "shell", projectId)
+    return {
+      path: resolved.path,
+      ...(resolved.project ? { projectId: resolved.project.id } : {}),
+    }
+  }
+  if (!workdir) return { path: MCP_CONFIG.defaultCwd }
+  return { path: isAbsolute(workdir) ? workdir : resolve(MCP_CONFIG.defaultCwd, workdir) }
+}
+
+function bashJobLabel(command: string): string {
+  const compact = command.replace(/\s+/gu, " ").trim()
+  return `bash: ${compact.slice(0, 114)}`
 }
 
 async function runCommand(

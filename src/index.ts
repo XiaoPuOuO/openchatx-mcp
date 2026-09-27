@@ -61,6 +61,7 @@ const interactiveShellManager = new InteractiveShellManager(
 )
 const bashProcessManager = new BashProcessManager()
 const jobManager = new JobManager()
+await jobManager.initialize()
 const projectRegistry = new ProjectRegistry()
 const projectScope = new ProjectScope(projectRegistry)
 const goalRegistry = new GoalRegistry()
