@@ -1,4 +1,4 @@
-import { Check, LoaderCircle, Trash2, TriangleAlert } from "lucide-react"
+import { Check, CircleGauge, LoaderCircle, Trash2, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
@@ -25,7 +25,6 @@ export function AgentCard({
   const active = now - agent.lastSeenAt < 30_000
   const recent = [agent.current, ...agent.recent].filter((call): call is AgentCall => Boolean(call))
   const selectedCall = recent.find((call) => call.id === selectedCallId)
-  const visibleRecent = recent.slice(0, 4)
 
   async function remove() {
     if (!window.confirm(t("agent.deleteConfirm", { id: agent.id }))) return
@@ -62,6 +61,22 @@ export function AgentCard({
                 {agent.goalId ? <Badge>{t("agent.goal", { id: agent.goalId })}</Badge> : null}
               </div>
             ) : null}
+            {agent.contextBudget ? (
+              <div
+                className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                title="OpenChatX context budget"
+              >
+                <CircleGauge className="size-3.5" />
+                <span>
+                  {formatContextTokens(agent.contextBudget.tokens)} /{" "}
+                  {formatContextTokens(agent.contextBudget.threshold)}
+                </span>
+                <span className="text-muted-foreground/80">
+                  input={formatContextTokens(agent.contextBudget.inputTokens)} output=
+                  {formatContextTokens(agent.contextBudget.outputTokens)}
+                </span>
+              </div>
+            ) : null}
           </div>
           <Button
             type="button"
@@ -87,8 +102,8 @@ export function AgentCard({
           <h3 className="mb-1.5 text-[11px] font-medium text-muted-foreground">
             {t("agent.recent")}
           </h3>
-          <div className="space-y-0.5">
-            {visibleRecent.map((call) => (
+          <div className="activity-list-scroll space-y-0.5">
+            {recent.map((call) => (
               <ActivityRow
                 key={call.id}
                 call={call}
@@ -97,11 +112,6 @@ export function AgentCard({
               />
             ))}
           </div>
-          {recent.length > visibleRecent.length ? (
-            <div className="mt-1 px-2 text-[11px] text-muted-foreground">
-              {t("agent.moreActivity", { count: recent.length - visibleRecent.length })}
-            </div>
-          ) : null}
         </div>
 
         {deleteError ? <div className="text-xs text-destructive">{deleteError}</div> : null}
@@ -161,6 +171,16 @@ function ActivityRow({
 
 function StatusDot({ active }: { active: boolean }) {
   return <span className={active ? "status-dot status-dot-online" : "status-dot"} />
+}
+
+function formatContextTokens(tokens: number): string {
+  if (tokens < 1_000) return String(tokens)
+  if (tokens >= 1_000_000) {
+    const millions = tokens / 1_000_000
+    return `${millions.toFixed(1).replace(/\.0$/u, "")}M`
+  }
+  const thousands = tokens / 1_000
+  return `${thousands >= 100 ? Math.round(thousands) : thousands.toFixed(1).replace(/\.0$/u, "")}k`
 }
 
 function formatClock(timestamp: number, locale: string): string {

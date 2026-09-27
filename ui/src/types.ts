@@ -31,6 +31,12 @@ export interface Agent {
   current?: AgentCall
   recent: AgentCall[]
   instructions: AgentInstruction[]
+  contextBudget?: {
+    tokens: number
+    inputTokens: number
+    outputTokens: number
+    threshold: number
+  }
 }
 
 export interface AgentChangedEvent {

@@ -4,7 +4,6 @@ import hljs from "highlight.js/lib/core"
 import bash from "highlight.js/lib/languages/bash"
 import diff from "highlight.js/lib/languages/diff"
 import json from "highlight.js/lib/languages/json"
-import "highlight.js/styles/github.css"
 import { X } from "lucide-react"
 
 import { Button } from "../../components/ui/button"
@@ -32,7 +31,11 @@ export function ToolCallModal({ call, onClose }: { call?: AgentCall; onClose: ()
             <div className="min-w-0">
               <Dialog.Title className="truncate text-base font-semibold">{call?.tool}</Dialog.Title>
               {call?.summary ? (
-                <Dialog.Description className="mt-1 truncate text-xs text-muted-foreground">
+                <Dialog.Description
+                  className={`mt-1 truncate text-xs ${
+                    call.status === "failed" ? "text-destructive" : "text-muted-foreground"
+                  }`}
+                >
                   {call.summary}
                 </Dialog.Description>
               ) : null}
@@ -96,7 +99,7 @@ function ToolCallSection({
       <pre
         className={`overflow-x-auto rounded-lg border p-4 text-xs leading-5 ${
           failed
-            ? "tool-code-surface border-destructive/30 bg-destructive/10 text-destructive"
+            ? "tool-code-surface tool-code-error border-destructive/30 bg-destructive/10 text-destructive"
             : "tool-code-surface"
         }`}
       >

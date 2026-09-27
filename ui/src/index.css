@@ -53,6 +53,15 @@
   --warning-soft: rgb(255 159 10 / 0.12);
   --danger-soft: rgb(215 0 21 / 0.05);
   --shadow-color: rgb(0 0 0 / 0.04);
+  --syntax-comment: rgb(106 115 125);
+  --syntax-keyword: rgb(215 58 73);
+  --syntax-string: rgb(3 47 98);
+  --syntax-number: rgb(0 92 197);
+  --syntax-title: rgb(111 66 193);
+  --syntax-built-in: rgb(227 98 9);
+  --syntax-meta: rgb(115 92 15);
+  --syntax-addition: rgb(34 134 58);
+  --syntax-deletion: rgb(179 29 40);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,6 +99,15 @@
     --warning-soft: rgb(255 159 10 / 0.14);
     --danger-soft: rgb(255 69 58 / 0.11);
     --shadow-color: rgb(0 0 0 / 0.28);
+    --syntax-comment: rgb(139 148 158);
+    --syntax-keyword: rgb(255 123 114);
+    --syntax-string: rgb(165 214 255);
+    --syntax-number: rgb(121 192 255);
+    --syntax-title: rgb(210 168 255);
+    --syntax-built-in: rgb(255 166 87);
+    --syntax-meta: rgb(210 153 34);
+    --syntax-addition: rgb(86 211 100);
+    --syntax-deletion: rgb(255 123 114);
   }
 }
 
@@ -521,6 +539,17 @@ button {
   color: var(--destructive);
 }
 
+.activity-list-scroll {
+  max-height: 108px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.activity-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .activity-row {
   display: flex;
   width: 100%;
@@ -617,6 +646,66 @@ button {
 
 .tool-code-surface .hljs {
   background: transparent;
+  color: var(--foreground);
+}
+
+.tool-code-surface .hljs-comment,
+.tool-code-surface .hljs-quote {
+  color: var(--syntax-comment);
+}
+
+.tool-code-surface .hljs-keyword,
+.tool-code-surface .hljs-selector-tag,
+.tool-code-surface .hljs-subst {
+  color: var(--syntax-keyword);
+}
+
+.tool-code-surface .hljs-string,
+.tool-code-surface .hljs-doctag,
+.tool-code-surface .hljs-regexp,
+.tool-code-surface .hljs-link {
+  color: var(--syntax-string);
+}
+
+.tool-code-surface .hljs-number,
+.tool-code-surface .hljs-literal,
+.tool-code-surface .hljs-variable,
+.tool-code-surface .hljs-template-variable,
+.tool-code-surface .hljs-attr {
+  color: var(--syntax-number);
+}
+
+.tool-code-surface .hljs-title,
+.tool-code-surface .hljs-section,
+.tool-code-surface .hljs-selector-id,
+.tool-code-surface .hljs-selector-class {
+  color: var(--syntax-title);
+}
+
+.tool-code-surface .hljs-built_in,
+.tool-code-surface .hljs-type,
+.tool-code-surface .hljs-class .hljs-title {
+  color: var(--syntax-built-in);
+}
+
+.tool-code-surface .hljs-meta,
+.tool-code-surface .hljs-symbol,
+.tool-code-surface .hljs-bullet {
+  color: var(--syntax-meta);
+}
+
+.tool-code-surface .hljs-addition {
+  color: var(--syntax-addition);
+}
+
+.tool-code-surface .hljs-deletion {
+  color: var(--syntax-deletion);
+}
+
+.tool-code-surface.tool-code-error,
+.tool-code-surface.tool-code-error .hljs,
+.tool-code-surface.tool-code-error .hljs * {
+  color: var(--destructive);
 }
 
 .mcp-tool-description {
