@@ -1,10 +1,9 @@
 import { CirclePlus, FolderOpen, RefreshCw, Save, ServerCog, Trash2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
-
+import { PageHeader } from "../../components/PageHeader"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
-import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import {
   fetchCapabilityHealth,
@@ -263,174 +262,168 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
               </div>
 
               {tab === "settings" ? (
-              <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto pt-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t("mcp.serverId")}>
-                    <input
-                      className={INPUT_CLASS}
-                      value={selectedId}
-                      onChange={(event) => {
-                        const nextId = event.target.value.trim()
-                        if (!nextId || nextId === selectedId || servers[nextId]) return
-                        setServers((current) => {
-                          const next = { ...current, [nextId]: current[selectedId] }
-                          delete next[selectedId]
-                          return next
-                        })
-                        setSelectedId(nextId)
-                      }}
-                    />
-                  </Field>
-                  <Field label={t("mcp.type")}>
-                    <select
-                      className={INPUT_CLASS}
-                      value={selected.type}
-                      onChange={(event) => {
-                        if (event.target.value === "local") {
-                          updateSelected({
-                            type: "local",
-                            command: [""],
-                            enabled: selected.enabled,
-                          })
-                        } else {
-                          updateSelected({
-                            type: "remote",
-                            url: "http://127.0.0.1:8000/mcp",
-                            enabled: selected.enabled,
-                          })
-                        }
-                      }}
-                    >
-                      <option value="local">{t("mcp.localOption")}</option>
-                      <option value="remote">{t("mcp.remoteOption")}</option>
-                    </select>
-                  </Field>
-                </div>
-
-                <label className="flex items-center justify-between rounded-lg border px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium">{t("common.enabled")}</p>
-                    <p className="text-xs text-muted-foreground">{t("mcp.expose")}</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={selected.enabled}
-                    onChange={(event) =>
-                      updateSelected({ ...selected, enabled: event.target.checked })
-                    }
-                    className="size-4"
-                  />
-                </label>
-
-                {selected.type === "remote" ? (
-                  <>
-                    <Field label={t("mcp.url")}>
+                <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto pt-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t("mcp.serverId")}>
                       <input
                         className={INPUT_CLASS}
-                        value={selected.url}
-                        onChange={(event) =>
-                          updateSelected({ ...selected, url: event.target.value })
-                        }
+                        value={selectedId}
+                        onChange={(event) => {
+                          const nextId = event.target.value.trim()
+                          if (!nextId || nextId === selectedId || servers[nextId]) return
+                          setServers((current) => {
+                            const next = { ...current, [nextId]: current[selectedId] }
+                            delete next[selectedId]
+                            return next
+                          })
+                          setSelectedId(nextId)
+                        }}
                       />
                     </Field>
-                    <Field label={t("mcp.headers")} hint={t("mcp.headersHint")}>
-                      <textarea
-                        className={TEXTAREA_CLASS}
-                        value={recordToLines(selected.headers)}
+                    <Field label={t("mcp.type")}>
+                      <select
+                        className={INPUT_CLASS}
+                        value={selected.type}
+                        onChange={(event) => {
+                          if (event.target.value === "local") {
+                            updateSelected({
+                              type: "local",
+                              command: [""],
+                              enabled: selected.enabled,
+                            })
+                          } else {
+                            updateSelected({
+                              type: "remote",
+                              url: "http://127.0.0.1:8000/mcp",
+                              enabled: selected.enabled,
+                            })
+                          }
+                        }}
+                      >
+                        <option value="local">{t("mcp.localOption")}</option>
+                        <option value="remote">{t("mcp.remoteOption")}</option>
+                      </select>
+                    </Field>
+                  </div>
+
+                  <label className="flex items-center justify-between rounded-lg border px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium">{t("common.enabled")}</p>
+                      <p className="text-xs text-muted-foreground">{t("mcp.expose")}</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={selected.enabled}
+                      onChange={(event) =>
+                        updateSelected({ ...selected, enabled: event.target.checked })
+                      }
+                      className="size-4"
+                    />
+                  </label>
+
+                  {selected.type === "remote" ? (
+                    <>
+                      <Field label={t("mcp.url")}>
+                        <input
+                          className={INPUT_CLASS}
+                          value={selected.url}
+                          onChange={(event) =>
+                            updateSelected({ ...selected, url: event.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field label={t("mcp.headers")} hint={t("mcp.headersHint")}>
+                        <textarea
+                          className={TEXTAREA_CLASS}
+                          value={recordToLines(selected.headers)}
+                          onChange={(event) =>
+                            updateSelected({
+                              ...selected,
+                              headers: linesToRecord(event.target.value),
+                            })
+                          }
+                          placeholder="Authorization: Bearer ..."
+                        />
+                      </Field>
+                    </>
+                  ) : (
+                    <>
+                      <Field label={t("mcp.command")} hint={t("mcp.commandHint")}>
+                        <textarea
+                          className={TEXTAREA_CLASS}
+                          value={selected.command.join("\n")}
+                          onChange={(event) =>
+                            updateSelected({
+                              ...selected,
+                              command: event.target.value
+                                .split("\n")
+                                .filter((line) => line.length > 0),
+                            })
+                          }
+                          placeholder="/opt/homebrew/bin/uvx\nblender-mcp"
+                        />
+                      </Field>
+                      <Field label={t("mcp.cwd")}>
+                        <input
+                          className={INPUT_CLASS}
+                          value={selected.cwd ?? ""}
+                          onChange={(event) =>
+                            updateSelected({ ...selected, cwd: event.target.value || undefined })
+                          }
+                          placeholder="/Users/xiaopu/Projects/..."
+                        />
+                      </Field>
+                      <Field label={t("mcp.environment")} hint={t("mcp.environmentHint")}>
+                        <textarea
+                          className={TEXTAREA_CLASS}
+                          value={recordToEnv(selected.environment)}
+                          onChange={(event) =>
+                            updateSelected({
+                              ...selected,
+                              environment: envToRecord(event.target.value),
+                            })
+                          }
+                          placeholder="PYTHONPATH=/path\nDEBUG=0"
+                        />
+                      </Field>
+                    </>
+                  )}
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t("mcp.timeout")}>
+                      <input
+                        type="number"
+                        min={1}
+                        className={INPUT_CLASS}
+                        value={selected.timeout ?? ""}
                         onChange={(event) =>
                           updateSelected({
                             ...selected,
-                            headers: linesToRecord(event.target.value),
+                            timeout: event.target.value ? Number(event.target.value) : undefined,
                           })
                         }
-                        placeholder="Authorization: Bearer ..."
+                        placeholder="120000"
                       />
                     </Field>
-                  </>
-                ) : (
-                  <>
-                    <Field label={t("mcp.command")} hint={t("mcp.commandHint")}>
-                      <textarea
-                        className={TEXTAREA_CLASS}
-                        value={selected.command.join("\n")}
-                        onChange={(event) =>
-                          updateSelected({
-                            ...selected,
-                            command: event.target.value
-                              .split("\n")
-                              .filter((line) => line.length > 0),
-                          })
-                        }
-                        placeholder="/opt/homebrew/bin/uvx\nblender-mcp"
-                      />
-                    </Field>
-                    <Field label={t("mcp.cwd")}>
+                    <Field label={t("mcp.description")}>
                       <input
                         className={INPUT_CLASS}
-                        value={selected.cwd ?? ""}
-                        onChange={(event) =>
-                          updateSelected({ ...selected, cwd: event.target.value || undefined })
-                        }
-                        placeholder="/Users/xiaopu/Projects/..."
-                      />
-                    </Field>
-                    <Field label={t("mcp.environment")} hint={t("mcp.environmentHint")}>
-                      <textarea
-                        className={TEXTAREA_CLASS}
-                        value={recordToEnv(selected.environment)}
+                        value={selected.description ?? ""}
                         onChange={(event) =>
                           updateSelected({
                             ...selected,
-                            environment: envToRecord(event.target.value),
+                            description: event.target.value || undefined,
                           })
                         }
-                        placeholder="PYTHONPATH=/path\nDEBUG=0"
                       />
                     </Field>
-                  </>
-                )}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t("mcp.timeout")}>
-                    <input
-                      type="number"
-                      min={1}
-                      className={INPUT_CLASS}
-                      value={selected.timeout ?? ""}
-                      onChange={(event) =>
-                        updateSelected({
-                          ...selected,
-                          timeout: event.target.value ? Number(event.target.value) : undefined,
-                        })
-                      }
-                      placeholder="120000"
-                    />
-                  </Field>
-                  <Field label={t("mcp.description")}>
-                    <input
-                      className={INPUT_CLASS}
-                      value={selected.description ?? ""}
-                      onChange={(event) =>
-                        updateSelected({
-                          ...selected,
-                          description: event.target.value || undefined,
-                        })
-                      }
-                    />
-                  </Field>
-                </div>
-
-                {error ? (
-                  <div className="status-banner status-banner-error">
-                    {error}
                   </div>
-                ) : null}
-                {message ? (
-                  <div className="status-banner status-banner-success">
-                    {message}
-                  </div>
-                ) : null}
-              </CardContent>
+
+                  {error ? <div className="status-banner status-banner-error">{error}</div> : null}
+                  {message ? (
+                    <div className="status-banner status-banner-success">{message}</div>
+                  ) : null}
+                </CardContent>
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   <div className="flex items-center justify-between px-5 py-3">

@@ -88,7 +88,9 @@ function ToolCallSection({
 
   return (
     <section>
-      <div className={`mb-2 text-xs font-semibold ${failed ? "text-destructive" : "text-foreground"}`}>
+      <div
+        className={`mb-2 text-xs font-semibold ${failed ? "text-destructive" : "text-foreground"}`}
+      >
         {label}
       </div>
       <pre

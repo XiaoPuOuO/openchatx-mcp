@@ -15,6 +15,16 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          highlight: ["highlight.js"],
+          markdown: ["react-markdown"],
+        },
+      },
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,

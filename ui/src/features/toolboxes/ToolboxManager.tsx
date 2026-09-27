@@ -9,11 +9,10 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react"
-import { useEffect, useState } from "react"
-
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react"
+import { PageHeader } from "../../components/PageHeader"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
-import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import {
   createTool,
@@ -40,6 +39,7 @@ import {
 import type { LoadedRule, RuleMode, RuleSummary, ToolboxSnapshot } from "../../types"
 
 type Tab = "tools" | "skills" | "rules"
+type Translate = (key: string, values?: Record<string, string | number>) => string
 const AGENTS_ITEM_ID = "__agents_md__"
 
 interface RuleDraft {
@@ -430,16 +430,8 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
             </Card>
           ) : null}
 
-          {error ? (
-            <div className="status-banner status-banner-error">
-              {error}
-            </div>
-          ) : null}
-          {message ? (
-            <div className="status-banner status-banner-success">
-              {message}
-            </div>
-          ) : null}
+          {error ? <div className="status-banner status-banner-error">{error}</div> : null}
+          {message ? <div className="status-banner status-banner-success">{message}</div> : null}
         </div>
       </div>
     </main>
@@ -518,7 +510,21 @@ function AgentsEditor({
   )
 }
 
-function ToolContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
+function ToolContent({
+  selected,
+  onAdd,
+  onOpen,
+  onDelete,
+  onToggle,
+  t,
+}: {
+  selected: ToolboxSnapshot
+  onAdd: () => void
+  onOpen: (name: string) => void
+  onDelete: (name: string) => void
+  onToggle: (name: string, enabled: boolean) => void
+  t: Translate
+}) {
   return (
     <div>
       <div className="flex items-center justify-between px-5 py-3">
@@ -533,7 +539,7 @@ function ToolContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
         ) : null}
       </div>
       <div className="divide-y border-t">
-        {selected.tools.map((tool: any) => (
+        {selected.tools.map((tool) => (
           <div key={tool.name} className="flex items-center justify-between gap-4 px-5 py-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -541,7 +547,7 @@ function ToolContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
                 <span className="font-mono text-sm font-medium">{tool.name}</span>
               </div>
               <p
-                className={`mt-1 text-xs ${tool.error ? "text-red-600" : "text-muted-foreground"}`}
+                className={`mt-1 text-xs ${tool.error ? "text-destructive" : "text-muted-foreground"}`}
               >
                 {tool.error ?? tool.description ?? tool.path ?? t("toolboxes.tools")}
               </p>
@@ -571,7 +577,21 @@ function ToolContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
   )
 }
 
-function SkillContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
+function SkillContent({
+  selected,
+  onAdd,
+  onOpen,
+  onDelete,
+  onToggle,
+  t,
+}: {
+  selected: ToolboxSnapshot
+  onAdd: () => void
+  onOpen: (name: string) => void
+  onDelete: (name: string) => void
+  onToggle: (name: string, enabled: boolean) => void
+  t: Translate
+}) {
   return (
     <div>
       <div className="flex items-center justify-between px-5 py-3">
@@ -587,7 +607,7 @@ function SkillContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
         {selected.skills.length === 0 ? (
           <div className="px-5 py-8 text-sm text-muted-foreground">{t("toolboxes.noSkills")}</div>
         ) : (
-          selected.skills.map((skill: any) => (
+          selected.skills.map((skill) => (
             <div key={skill.name} className="flex items-center justify-between gap-4 px-5 py-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -619,7 +639,25 @@ function SkillContent({ selected, onAdd, onOpen, onDelete, onToggle, t }: any) {
   )
 }
 
-function RulesContent({ rules, draft, setDraft, onAdd, onEdit, onDelete, onSave, t }: any) {
+function RulesContent({
+  rules,
+  draft,
+  setDraft,
+  onAdd,
+  onEdit,
+  onDelete,
+  onSave,
+  t,
+}: {
+  rules: RuleSummary[]
+  draft: RuleDraft | undefined
+  setDraft: Dispatch<SetStateAction<RuleDraft | undefined>>
+  onAdd: () => void
+  onEdit: (rule: RuleSummary) => void
+  onDelete: (name: string) => void
+  onSave: () => void
+  t: Translate
+}) {
   return (
     <div>
       <div className="flex items-center justify-between px-5 py-3">

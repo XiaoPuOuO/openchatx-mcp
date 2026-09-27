@@ -350,7 +350,8 @@ export const ja: Messages = {
   "mcp.toolsTab": "ツール",
   "mcp.detectedTools": "検出されたツール",
   "mcp.detectedToolsCount": "{count} 個のツール",
-  "mcp.noDetectedTools": "まだ利用可能なツールが検出されていません。再確認するとここに表示されます。",
+  "mcp.noDetectedTools":
+    "まだ利用可能なツールが検出されていません。再確認するとここに表示されます。",
   "mcp.noToolDescription": "このツールには説明がありません。",
   "mcp.saved": "保存しました。MCP 接続の変更はすぐに利用できます。",
   "mcp.savedRestart": "保存しました。接続変更を適用するには openchatx-mcp を再起動してください。",

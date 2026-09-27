@@ -339,7 +339,12 @@ button {
   min-height: 0;
   overflow: auto;
   background:
-    radial-gradient(circle at 48% -12%, var(--content-glow) 0, var(--content-background) 42%, transparent 67%),
+    radial-gradient(
+      circle at 48% -12%,
+      var(--content-glow) 0,
+      var(--content-background) 42%,
+      transparent 67%
+    ),
     var(--content-background);
 }
 
@@ -611,7 +616,7 @@ button {
 }
 
 .tool-code-surface .hljs {
-  background: transparent !important;
+  background: transparent;
 }
 
 .mcp-tool-description {
@@ -675,10 +680,10 @@ button {
 .embedded-page > main {
   display: flex;
   height: 100%;
-  min-height: 0 !important;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  background: transparent !important;
+  background: transparent;
 }
 
 .embedded-page > main > div,
@@ -687,14 +692,14 @@ button {
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
-  max-width: 1180px !important;
-  margin-inline: auto !important;
-  padding-left: 24px !important;
-  padding-right: 24px !important;
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
 .embedded-page [class*="bg-muted/20"] {
-  background: transparent !important;
+  background: transparent;
 }
 
 .embedded-page [class*="shadow-sm"] {

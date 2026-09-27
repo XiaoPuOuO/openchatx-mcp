@@ -1,9 +1,8 @@
 import { Activity, AlertTriangle, X } from "lucide-react"
 import { useEffect, useState } from "react"
-
+import { PageHeader } from "../../components/PageHeader"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
-import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import { fetchPlatformOverview } from "../../lib/api"
 import { dismissAttentionItem, visibleAttentionItems } from "../../lib/attention-dismissals"

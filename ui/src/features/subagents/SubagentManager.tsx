@@ -1,9 +1,8 @@
 import { BrainCircuit, CirclePlus, FolderOpen, Save, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
-
+import { PageHeader } from "../../components/PageHeader"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
-import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import { fetchSubagentConfig, openSubagentConfigInFinder, saveSubagentConfig } from "../../lib/api"
 import type {
@@ -267,15 +266,9 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
                 onDelete={removeSelection}
               />
             ) : null}
-            {error ? (
-              <div className="status-banner status-banner-error m-5">
-                {error}
-              </div>
-            ) : null}
+            {error ? <div className="status-banner status-banner-error m-5">{error}</div> : null}
             {message ? (
-              <div className="status-banner status-banner-success m-5">
-                {message}
-              </div>
+              <div className="status-banner status-banner-success m-5">{message}</div>
             ) : null}
           </div>
         </Card>

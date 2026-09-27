@@ -9,8 +9,8 @@ import type {
   GoalRecord,
   GoalStatus,
   LoadedRule,
-  McpServerSnapshot,
   McpServerMap,
+  McpServerSnapshot,
   PlatformOverview,
   ProjectRecord,
   RecommendedMcp,
@@ -81,7 +81,7 @@ export async function refreshMcpServers(): Promise<McpServerSnapshot> {
   if (MOCK_DASHBOARD) return { servers: await fetchMockMcpServers(), tools: [] }
   const response = await fetch("/ui/api/mcp-servers/refresh", { method: "POST" })
   const body = (await response.json().catch(() => undefined)) as
-    | McpServerSnapshot & { error?: string }
+    | (McpServerSnapshot & { error?: string })
     | undefined
   if (!response.ok) {
     throw new Error(body?.error ?? `Failed to refresh MCP servers (${response.status})`)
