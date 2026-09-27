@@ -126,7 +126,8 @@ const COMPONENT_NAME_KEYS: Record<string, string> = {
 }
 
 function HealthIcon({ status }: { status: CapabilityHealthStatus }) {
-  if (status === "healthy") return <CircleCheck className="size-4 text-emerald-600" />
+  if (status === "healthy")
+    return <CircleCheck className="size-4 text-[var(--success-foreground)]" />
   if (status === "starting")
     return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
   if (status === "disabled") return <CircleOff className="size-4 text-muted-foreground" />

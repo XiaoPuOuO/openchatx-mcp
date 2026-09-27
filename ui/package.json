@@ -21,6 +21,7 @@
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {

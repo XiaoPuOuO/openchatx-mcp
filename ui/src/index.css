@@ -605,6 +605,73 @@ button {
   color: var(--success-foreground);
 }
 
+.tool-code-surface {
+  background: color-mix(in srgb, var(--card) 72%, var(--muted));
+  color: var(--foreground);
+}
+
+.tool-code-surface .hljs {
+  background: transparent !important;
+}
+
+.mcp-tool-description {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 76%, var(--muted));
+  padding: 10px 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mcp-tool-description > :first-child {
+  margin-top: 0;
+}
+
+.mcp-tool-description > :last-child {
+  margin-bottom: 0;
+}
+
+.mcp-tool-description p {
+  margin: 0.45em 0;
+}
+
+.mcp-tool-description ul,
+.mcp-tool-description ol {
+  margin: 0.45em 0;
+  padding-left: 1.35em;
+}
+
+.mcp-tool-description li + li {
+  margin-top: 0.2em;
+}
+
+.mcp-tool-description code {
+  border-radius: 5px;
+  background: var(--muted);
+  padding: 0.08em 0.35em;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95em;
+}
+
+.mcp-tool-description pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background) 78%, var(--muted));
+  padding: 10px;
+}
+
+.mcp-tool-description pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.mcp-tool-description strong {
+  color: var(--foreground);
+}
+
 .embedded-page > main {
   display: flex;
   height: 100%;
@@ -616,6 +683,7 @@ button {
 
 .embedded-page > main > div,
 .embedded-page > main > section {
+  width: 100%;
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;

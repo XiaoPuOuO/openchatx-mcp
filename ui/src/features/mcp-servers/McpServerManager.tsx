@@ -1,5 +1,6 @@
 import { CirclePlus, FolderOpen, RefreshCw, Save, ServerCog, Trash2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import ReactMarkdown from "react-markdown"
 
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
@@ -446,9 +447,11 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                       {selectedTools.map((tool) => (
                         <div key={`${tool.server}:${tool.name}`} className="px-5 py-4">
                           <div className="break-all font-mono text-sm font-medium">{tool.name}</div>
-                          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
-                            {tool.description || t("mcp.noToolDescription")}
-                          </p>
+                          <div className="mcp-tool-description mt-2">
+                            <ReactMarkdown>
+                              {tool.description || t("mcp.noToolDescription")}
+                            </ReactMarkdown>
+                          </div>
                         </div>
                       ))}
                     </div>

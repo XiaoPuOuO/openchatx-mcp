@@ -816,9 +816,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func showStartingPage() {
         webView.loadHTMLString(
             """
-            <html><body style="font-family:-apple-system;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f7f7f7;color:#333">
-            <div style="text-align:center"><h2>OpenChatX</h2><p>Starting local capability runtime…</p></div>
-            </body></html>
+            <html>
+            <head>
+              <meta name="color-scheme" content="light dark">
+              <style>
+                :root {
+                  color-scheme: light dark;
+                  --bg: #f7f7f7;
+                  --fg: #222225;
+                  --muted: #6e6e73;
+                }
+                @media (prefers-color-scheme: dark) {
+                  :root {
+                    --bg: #1c1c1e;
+                    --fg: #f2f2f7;
+                    --muted: #aeaeb2;
+                  }
+                }
+                body {
+                  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background: var(--bg);
+                  color: var(--fg);
+                }
+                .startup { text-align: center; }
+                .startup h2 { margin: 0; font-size: 28px; }
+                .startup p { margin: 18px 0 0; color: var(--muted); font-size: 16px; }
+              </style>
+            </head>
+            <body>
+              <div class="startup"><h2>OpenChatX</h2><p>Starting local capability runtime…</p></div>
+            </body>
+            </html>
             """,
             baseURL: nil
         )

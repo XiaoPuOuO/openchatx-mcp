@@ -132,24 +132,24 @@ function ActivityRow({
       className={`activity-row ${failed ? "activity-row-failed" : running ? "activity-row-running" : ""}`}
     >
       {failed ? (
-        <TriangleAlert className="size-3.5 shrink-0 text-red-600" />
+        <TriangleAlert className="size-3.5 shrink-0 text-destructive" />
       ) : running ? (
-        <LoaderCircle className="size-3.5 shrink-0 animate-spin text-emerald-600" />
+        <LoaderCircle className="size-3.5 shrink-0 animate-spin text-[var(--success-foreground)]" />
       ) : (
         <Check className="size-3.5 shrink-0 text-muted-foreground" />
       )}
       <span className="w-24 shrink-0 truncate font-medium">{call.tool}</span>
       <span
-        className={`min-w-0 flex-1 truncate ${failed ? "text-red-700" : "text-muted-foreground"}`}
+        className={`min-w-0 flex-1 truncate ${failed ? "text-destructive" : "text-muted-foreground"}`}
       >
         {call.summary || (running ? t("agent.working") : t("agent.completed"))}
       </span>
       <span
         className={
           failed
-            ? "shrink-0 text-red-600"
+            ? "shrink-0 text-destructive"
             : running
-              ? "shrink-0 text-emerald-600"
+              ? "shrink-0 text-[var(--success-foreground)]"
               : "shrink-0 text-muted-foreground"
         }
       >

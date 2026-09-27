@@ -88,12 +88,14 @@ function ToolCallSection({
 
   return (
     <section>
-      <div className={`mb-2 text-xs font-semibold ${failed ? "text-red-700" : "text-foreground"}`}>
+      <div className={`mb-2 text-xs font-semibold ${failed ? "text-destructive" : "text-foreground"}`}>
         {label}
       </div>
       <pre
         className={`overflow-x-auto rounded-lg border p-4 text-xs leading-5 ${
-          failed ? "border-destructive/30 bg-destructive/10 text-destructive" : "bg-muted/30"
+          failed
+            ? "tool-code-surface border-destructive/30 bg-destructive/10 text-destructive"
+            : "tool-code-surface"
         }`}
       >
         {highlighted ? (
