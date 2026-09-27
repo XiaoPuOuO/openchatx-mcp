@@ -63,7 +63,9 @@ jobs:
       - run: npm ci
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
-      - run: npm test -- --test-concurrency=1
+      - name: Isolated test files
+        timeout-minutes: 10
+        run: npm run test:ci
       - run: npm run desktop:build
       - run: npm run desktop:smoke
       - name: Rename desktop artifacts

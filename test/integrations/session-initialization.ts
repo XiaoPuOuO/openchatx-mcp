@@ -70,7 +70,6 @@ test("appends Goal context for older editable templates without the new placehol
 
 test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async (t) => {
   const stateDir = await mkdtemp(join(tmpdir(), "openchatx-rule-startup-"))
-  t.after(() => rm(stateDir, { recursive: true, force: true }))
 
   const toolboxRoot = join(stateDir, "toolboxes")
   const rulesToolbox = join(toolboxRoot, "test-rules")
@@ -105,10 +104,8 @@ test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async 
 
   const toolboxRegistry = new ToolboxRegistry(toolboxRoot)
   await toolboxRegistry.start()
-  t.after(() => toolboxRegistry.close())
 
   const running = await startMcpHttpServer({ toolboxRegistry })
-  t.after(() => running.close())
   const connected = await connectClient(
     running.url,
     "always-rule-startup-client",
@@ -116,7 +113,21 @@ test("start_here injects alwaysApply rule Markdown", { timeout: 10_000 }, async 
     false,
     "always-rule-startup-session"
   )
-  t.after(() => connected.client.close())
+  t.after(async () => {
+    try {
+      await connected.client.close()
+    } finally {
+      try {
+        await running.close()
+      } finally {
+        try {
+          await toolboxRegistry.close()
+        } finally {
+          await rm(stateDir, { recursive: true, force: true })
+        }
+      }
+    }
+  })
 
   const started = await connected.client.callTool({
     name: "start_here",
