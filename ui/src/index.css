@@ -19,6 +19,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.75rem;
   --background: rgb(246 246 246);
   --foreground: rgb(28 28 30);
@@ -31,6 +32,65 @@
   --primary: rgb(0 122 255);
   --primary-foreground: white;
   --destructive: rgb(215 0 21);
+  --shell-background: rgb(248 248 248);
+  --sidebar-background: rgb(238 238 238 / 0.86);
+  --sidebar-border: rgb(60 60 67 / 0.12);
+  --sidebar-label: rgb(99 99 102 / 0.72);
+  --sidebar-foreground: rgb(58 58 60);
+  --sidebar-hover: rgb(60 60 67 / 0.08);
+  --sidebar-active: rgb(60 60 67 / 0.12);
+  --header-background: rgb(252 252 252 / 0.92);
+  --content-background: rgb(248 248 248);
+  --content-glow: rgb(255 255 255);
+  --surface-card: rgb(255 255 255 / 0.88);
+  --surface-card-muted: rgb(255 255 255 / 0.48);
+  --surface-hover: rgb(118 118 128 / 0.055);
+  --status-idle: rgb(142 142 147);
+  --success: rgb(52 199 89);
+  --success-foreground: rgb(40 137 69);
+  --success-soft: rgb(52 199 89 / 0.1);
+  --warning-foreground: rgb(184 106 0);
+  --warning-soft: rgb(255 159 10 / 0.12);
+  --danger-soft: rgb(215 0 21 / 0.05);
+  --shadow-color: rgb(0 0 0 / 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: rgb(28 28 30);
+    --foreground: rgb(242 242 247);
+    --card: rgb(44 44 46 / 0.94);
+    --card-foreground: rgb(242 242 247);
+    --muted: rgb(235 235 245 / 0.08);
+    --muted-foreground: rgb(174 174 178);
+    --border: rgb(84 84 88 / 0.68);
+    --input: rgb(99 99 102 / 0.78);
+    --primary: rgb(10 132 255);
+    --primary-foreground: white;
+    --destructive: rgb(255 69 58);
+    --shell-background: rgb(28 28 30);
+    --sidebar-background: rgb(36 36 38 / 0.94);
+    --sidebar-border: rgb(84 84 88 / 0.62);
+    --sidebar-label: rgb(174 174 178 / 0.82);
+    --sidebar-foreground: rgb(229 229 234);
+    --sidebar-hover: rgb(235 235 245 / 0.07);
+    --sidebar-active: rgb(235 235 245 / 0.12);
+    --header-background: rgb(36 36 38 / 0.94);
+    --content-background: rgb(28 28 30);
+    --content-glow: rgb(44 44 46);
+    --surface-card: rgb(44 44 46 / 0.9);
+    --surface-card-muted: rgb(58 58 60 / 0.55);
+    --surface-hover: rgb(235 235 245 / 0.06);
+    --status-idle: rgb(142 142 147);
+    --success: rgb(48 209 88);
+    --success-foreground: rgb(88 210 104);
+    --success-soft: rgb(48 209 88 / 0.12);
+    --warning-foreground: rgb(255 179 64);
+    --warning-soft: rgb(255 159 10 / 0.14);
+    --danger-soft: rgb(255 69 58 / 0.11);
+    --shadow-color: rgb(0 0 0 / 0.28);
+  }
 }
 
 * {
@@ -72,15 +132,15 @@ button {
   grid-template-columns: 228px minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
-  background: rgb(248 248 248);
+  background: var(--shell-background);
 }
 
 .app-sidebar {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  border-right: 1px solid rgb(60 60 67 / 0.12);
-  background: rgb(238 238 238 / 0.86);
+  border-right: 1px solid var(--sidebar-border);
+  background: var(--sidebar-background);
   backdrop-filter: blur(30px) saturate(1.35);
 }
 
@@ -108,7 +168,7 @@ button {
 
 .sidebar-section-label {
   padding: 5px 9px 3px;
-  color: rgb(99 99 102 / 0.72);
+  color: var(--sidebar-label);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.045em;
@@ -125,7 +185,7 @@ button {
   border-radius: 7px;
   background: transparent;
   padding: 0 9px;
-  color: rgb(58 58 60);
+  color: var(--sidebar-foreground);
   text-align: left;
   font-size: 13px;
   font-weight: 500;
@@ -135,17 +195,17 @@ button {
 }
 
 .sidebar-item:hover {
-  background: rgb(60 60 67 / 0.08);
+  background: var(--sidebar-hover);
 }
 
 .sidebar-item-active {
-  background: rgb(60 60 67 / 0.12);
-  color: rgb(28 28 30);
+  background: var(--sidebar-active);
+  color: var(--foreground);
   font-weight: 600;
 }
 
 .sidebar-footer {
-  border-top: 1px solid rgb(60 60 67 / 0.1);
+  border-top: 1px solid var(--sidebar-border);
   padding: 10px 12px 12px;
 }
 
@@ -161,30 +221,100 @@ button {
   height: 8px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: rgb(142 142 147);
+  background: var(--status-idle);
 }
 
 .status-dot-online {
-  background: rgb(52 199 89);
-  box-shadow: 0 0 0 3px rgb(52 199 89 / 0.12);
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
 }
 
 .app-main {
-  display: grid;
+  display: flex;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 52px minmax(0, 1fr);
-  background: rgb(250 250 250);
+  height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background);
 }
 
-.app-toolbar {
+.page-header {
   display: flex;
+  min-height: 68px;
+  flex: 0 0 68px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--header-background);
+  backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.page-header-inner {
+  display: flex;
+  width: min(1180px, calc(100% - 48px));
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgb(60 60 67 / 0.12);
-  background: rgb(252 252 252 / 0.92);
-  padding: 0 14px 0 20px;
-  backdrop-filter: blur(22px) saturate(1.25);
+  gap: 12px;
+  margin: 0 auto;
+}
+
+.page-header-leading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-header-back {
+  flex: 0 0 auto;
+}
+
+.page-header-separator {
+  width: 1px;
+  height: 24px;
+  flex: 0 0 auto;
+  background: var(--border);
+}
+
+.page-header-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.page-header-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-header-subtitle {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .toolbar-state {
@@ -200,16 +330,17 @@ button {
 }
 
 .toolbar-state-online {
-  color: rgb(40 137 69);
+  color: var(--success-foreground);
 }
 
 .app-content {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: auto;
   background:
-    radial-gradient(circle at 48% -12%, rgb(255 255 255) 0, rgb(250 250 250) 42%, transparent 67%),
-    rgb(248 248 248);
+    radial-gradient(circle at 48% -12%, var(--content-glow) 0, var(--content-background) 42%, transparent 67%),
+    var(--content-background);
 }
 
 .dashboard-page {
@@ -258,7 +389,7 @@ button {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgb(118 118 128 / 0.1);
+  background: var(--muted);
   color: var(--muted-foreground);
   font-size: 11px;
 }
@@ -297,7 +428,7 @@ button {
 }
 
 .overview-strip-button:hover {
-  background: rgb(118 118 128 / 0.045);
+  background: var(--surface-hover);
 }
 
 .overview-icon {
@@ -308,8 +439,8 @@ button {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: rgb(118 118 128 / 0.08);
-  color: rgb(58 58 60);
+  background: var(--muted);
+  color: var(--foreground);
 }
 
 .overview-label {
@@ -337,16 +468,16 @@ button {
 }
 
 .attention-card .overview-icon {
-  background: rgb(255 159 10 / 0.12);
-  color: rgb(184 106 0);
+  background: var(--warning-soft);
+  color: var(--warning-foreground);
 }
 
 .session-card {
-  background: rgb(255 255 255 / 0.88);
+  background: var(--surface-card);
 }
 
 .session-card-header {
-  background: rgb(255 255 255 / 0.48);
+  background: var(--surface-card-muted);
   padding: 13px 15px;
 }
 
@@ -354,7 +485,7 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  background: rgb(118 118 128 / 0.08);
+  background: var(--muted);
   padding: 2px 6px;
   color: var(--muted-foreground);
   font-size: 9px;
@@ -363,8 +494,8 @@ button {
 }
 
 .session-state-active {
-  background: rgb(52 199 89 / 0.1);
-  color: rgb(40 137 69);
+  background: var(--success-soft);
+  color: var(--success-foreground);
 }
 
 .session-delete-button {
@@ -401,15 +532,15 @@ button {
 }
 
 .activity-row:hover {
-  background: rgb(118 118 128 / 0.055);
+  background: var(--surface-hover);
 }
 
 .activity-row-running {
-  background: rgb(52 199 89 / 0.05);
+  background: var(--success-soft);
 }
 
 .activity-row-failed {
-  background: rgb(215 0 21 / 0.045);
+  background: var(--danger-soft);
 }
 
 .session-section {
@@ -425,11 +556,11 @@ button {
 .empty-state {
   border: 1px solid var(--border);
   border-radius: 13px;
-  background: rgb(255 255 255 / 0.78);
+  background: var(--surface-card);
   padding: 30px;
   color: var(--muted-foreground);
   text-align: center;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.02);
+  box-shadow: 0 1px 2px var(--shadow-color);
 }
 
 .empty-state strong {
@@ -447,34 +578,47 @@ button {
 
 .error-banner {
   margin: 16px 0;
-  border: 1px solid rgb(215 0 21 / 0.2);
+  border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
   border-radius: 10px;
-  background: rgb(215 0 21 / 0.05);
+  background: var(--danger-soft);
   padding: 10px 12px;
   color: var(--destructive);
   font-size: 12px;
 }
 
+.status-banner {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.status-banner-error {
+  border-color: color-mix(in srgb, var(--destructive) 28%, transparent);
+  background: var(--danger-soft);
+  color: var(--destructive);
+}
+
+.status-banner-success {
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  background: var(--success-soft);
+  color: var(--success-foreground);
+}
+
 .embedded-page > main {
-  min-height: 100%;
+  display: flex;
+  height: 100%;
+  min-height: 0 !important;
+  flex-direction: column;
+  overflow: hidden;
   background: transparent !important;
-}
-
-.embedded-page > main > header {
-  position: static !important;
-  border-bottom: 1px solid rgb(60 60 67 / 0.1) !important;
-  background: rgb(255 255 255 / 0.66) !important;
-  backdrop-filter: blur(18px) saturate(1.2);
-}
-
-.embedded-page > main > header > div {
-  max-width: 1180px !important;
-  margin-inline: auto !important;
-  padding: 14px 24px !important;
 }
 
 .embedded-page > main > div,
 .embedded-page > main > section {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
   max-width: 1180px !important;
   margin-inline: auto !important;
   padding-left: 24px !important;
@@ -486,7 +630,7 @@ button {
 }
 
 .embedded-page [class*="shadow-sm"] {
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.035);
+  box-shadow: 0 1px 2px var(--shadow-color);
 }
 
 @media (max-width: 980px) {

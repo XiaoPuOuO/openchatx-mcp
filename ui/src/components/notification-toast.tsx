@@ -163,7 +163,7 @@ function NotificationToast({
       onPointerCancel={(event) => finishPointerGesture(event, true)}
       role="status"
     >
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--success-soft)] text-[var(--success-foreground)]">
         <CheckCircle2 className="size-4" />
       </div>
       <div className="min-w-0">

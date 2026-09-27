@@ -1,9 +1,10 @@
-import { ArrowLeft, Plus, Target, Trash2 } from "lucide-react"
+import { Plus, Target, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import { createGoal, deleteGoal, fetchGoals, fetchProjects, updateGoal } from "../../lib/api"
 import type { GoalRecord, GoalStatus, ProjectRecord } from "../../types"
@@ -87,19 +88,12 @@ export function GoalManager({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b bg-background/95">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-4">
-          <Button variant="outline" size="sm" onClick={onBack}>
-            <ArrowLeft className="size-4" />
-            {t("common.back")}
-          </Button>
-          <Target className="size-5" />
-          <div>
-            <h1 className="font-semibold">{t("goals.title")}</h1>
-            <p className="text-xs text-muted-foreground">{t("goals.subtitle")}</p>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        icon={Target}
+        title={t("goals.title")}
+        subtitle={t("goals.subtitle")}
+        onBack={onBack}
+      />
 
       <div className="mx-auto max-w-6xl space-y-5 px-5 py-6">
         {error ? (

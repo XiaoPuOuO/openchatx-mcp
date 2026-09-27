@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Bot,
   Code2,
   Copy,
@@ -13,6 +12,7 @@ import {
 import { useCallback, useEffect, useState } from "react"
 
 import { NotificationToastStack, useNotificationToasts } from "../../components/notification-toast"
+import { PageHeader } from "../../components/PageHeader"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
@@ -155,19 +155,12 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b bg-background/95">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-4">
-          <Button variant="outline" size="sm" onClick={onBack}>
-            <ArrowLeft className="size-4" />
-            {t("common.back")}
-          </Button>
-          <PackageOpen className="size-5" />
-          <div>
-            <h1 className="font-semibold">{t("store.title")}</h1>
-            <p className="text-xs text-muted-foreground">{t("store.subtitle")}</p>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        icon={PackageOpen}
+        title={t("store.title")}
+        subtitle={t("store.subtitle")}
+        onBack={onBack}
+      />
 
       <NotificationToastStack
         toasts={toasts}

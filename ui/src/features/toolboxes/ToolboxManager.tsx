@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Blocks,
   CirclePlus,
   FileCode2,
@@ -12,9 +11,9 @@ import {
 } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { LanguageSwitcher } from "../../components/LanguageSwitcher"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import {
   createTool,
@@ -219,22 +218,13 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="min-h-screen bg-muted/20">
-      <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between px-5 py-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={onBack} aria-label={t("common.back")}>
-              <ArrowLeft className="size-4" />
-            </Button>
-            <div className="flex size-9 items-center justify-center rounded-lg bg-foreground text-background">
-              <Blocks className="size-5" />
-            </div>
-            <div>
-              <h1 className="text-base font-semibold">{t("toolboxes.title")}</h1>
-              <p className="text-xs text-muted-foreground">{t("toolboxes.subtitle")}</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <LanguageSwitcher />
+      <PageHeader
+        icon={Blocks}
+        title={t("toolboxes.title")}
+        subtitle={t("toolboxes.subtitle")}
+        onBack={onBack}
+        actions={
+          <>
             <Button
               variant="outline"
               onClick={() => void run(reloadToolboxes, t("toolboxes.reloaded"))}
@@ -246,9 +236,9 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
               <CirclePlus className="size-4" />
               {t("toolboxes.new")}
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:h-[calc(100dvh-178px)] lg:min-h-[560px] lg:grid-cols-[300px_1fr] lg:px-8">
         <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
@@ -291,7 +281,7 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`size-2 rounded-full ${box.enabled ? "bg-emerald-500" : "bg-neutral-300"}`}
+                      className={`size-2 rounded-full ${box.enabled ? "bg-[var(--success)]" : "bg-[var(--status-idle)]"}`}
                     />
                     <span className="truncate text-sm font-medium">{box.name}</span>
                   </div>
@@ -441,12 +431,12 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
           ) : null}
 
           {error ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="status-banner status-banner-error">
               {error}
             </div>
           ) : null}
           {message ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="status-banner status-banner-success">
               {message}
             </div>
           ) : null}
@@ -518,7 +508,7 @@ function AgentsEditor({
           ))}
         </div>
         <textarea
-          className="min-h-[560px] w-full resize-y rounded-lg border bg-background px-4 py-3 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-[rgb(0_122_255/0.22)]"
+          className="min-h-[560px] w-full resize-y rounded-lg border bg-background px-4 py-3 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-primary/25"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           spellCheck={false}

@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   ChevronRight,
   Folder,
   FolderKanban,
@@ -16,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import { createProject, deleteProject, fetchProjects, updateProject } from "../../lib/api"
 import type { ProjectRecord } from "../../types"
@@ -173,28 +173,18 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="min-h-screen bg-muted/20">
-      <header className="border-b bg-background/95">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeft className="size-4" />
-              {t("common.back")}
-            </Button>
-            <div className="h-6 w-px bg-border" />
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-              <FolderKanban className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-semibold">{t("projects.title")}</h1>
-              <p className="truncate text-xs text-muted-foreground">{t("projects.subtitle")}</p>
-            </div>
-          </div>
+      <PageHeader
+        icon={FolderKanban}
+        title={t("projects.title")}
+        subtitle={t("projects.subtitle")}
+        onBack={onBack}
+        actions={
           <Button size="sm" onClick={beginCreate}>
             <Plus className="size-4" />
             {t("projects.registerTitle")}
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <div className="mx-auto max-w-6xl px-5 py-6">
         {error ? (

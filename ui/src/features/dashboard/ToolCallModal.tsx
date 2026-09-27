@@ -93,7 +93,7 @@ function ToolCallSection({
       </div>
       <pre
         className={`overflow-x-auto rounded-lg border p-4 text-xs leading-5 ${
-          failed ? "border-red-200 bg-red-50 text-red-800" : "bg-muted/30"
+          failed ? "border-destructive/30 bg-destructive/10 text-destructive" : "bg-muted/30"
         }`}
       >
         {highlighted ? (

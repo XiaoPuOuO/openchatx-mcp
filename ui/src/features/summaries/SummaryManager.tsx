@@ -1,9 +1,10 @@
-import { ArrowLeft, Clipboard, FileText, Plus, Save, Trash2 } from "lucide-react"
+import { Clipboard, FileText, Plus, Save, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { PageHeader } from "../../components/PageHeader"
 import { useI18n } from "../../i18n"
 import { createSummary, deleteSummary, fetchSummaries, updateSummary } from "../../lib/api"
 import type { TemporarySummary } from "../../types"
@@ -98,28 +99,18 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="min-h-screen bg-muted/20">
-      <header className="border-b bg-background/95">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeft className="size-4" />
-              {t("common.back")}
-            </Button>
-            <div className="h-6 w-px bg-border" />
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-              <FileText className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-semibold">{t("summaries.title")}</h1>
-              <p className="truncate text-xs text-muted-foreground">{t("summaries.subtitle")}</p>
-            </div>
-          </div>
+      <PageHeader
+        icon={FileText}
+        title={t("summaries.title")}
+        subtitle={t("summaries.subtitle")}
+        onBack={onBack}
+        actions={
           <Button size="sm" onClick={startCreate}>
             <Plus className="size-4" />
             {t("summaries.create")}
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       <div className="mx-auto max-w-6xl px-5 py-6">
         {error ? (

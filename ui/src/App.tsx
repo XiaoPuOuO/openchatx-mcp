@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState } from "react"
 
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
+import { PageHeader } from "./components/PageHeader"
 import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
@@ -168,20 +169,12 @@ export function App() {
               </div>
             </div>
           </div>
-        </div>
-      </aside>
-
-      <section className="app-main">
-        <header className="app-toolbar">
-          <div className="min-w-0">
-            <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{title}</h1>
-          </div>
-          <div className="flex items-center gap-1.5">
+          <div className="mt-2 flex items-center gap-1.5">
             <LanguageSwitcher />
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="size-8 shrink-0"
               onClick={() => window.location.reload()}
               aria-label={t("common.refresh")}
               title={t("common.refresh")}
@@ -189,7 +182,13 @@ export function App() {
               <RefreshCw className="size-4" />
             </Button>
           </div>
-        </header>
+        </div>
+      </aside>
+
+      <section className="app-main">
+        {view === "dashboard" ? (
+          <PageHeader icon={Gauge} title={title} subtitle={t("app.subtitle")} />
+        ) : null}
 
         <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>
           {update?.updateAvailable ? (
