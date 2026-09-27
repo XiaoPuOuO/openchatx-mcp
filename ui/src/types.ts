@@ -49,6 +49,21 @@ export interface AgentRemovedEvent {
   agentId: string
 }
 
+export interface RuntimeSettings {
+  port: number
+  shell: {
+    path: string
+    rtk: boolean
+  }
+  tunnel: {
+    profile: string
+    health_port: number
+  }
+  context: {
+    warning_threshold: number
+  }
+}
+
 export type AgentEvent = AgentChangedEvent | AgentRemovedEvent
 
 export type CapabilityHealthStatus =

@@ -16,6 +16,7 @@ import type {
   RecommendedMcp,
   RuleMode,
   RuleSummary,
+  RuntimeSettings,
   SubagentConfig,
   TemporarySummary,
   ToolboxSnapshot,
@@ -35,6 +36,41 @@ import {
 } from "./mock-api"
 
 const MOCK_DASHBOARD = import.meta.env.VITE_MOCK_DASHBOARD === "1"
+
+export async function fetchRuntimeSettings(): Promise<RuntimeSettings> {
+  if (MOCK_DASHBOARD) {
+    return {
+      port: 3333,
+      shell: { path: "/bin/zsh", rtk: false },
+      tunnel: { profile: "openchatx", health_port: 8080 },
+      context: { warning_threshold: 400_000 },
+    }
+  }
+  const response = await fetch("/ui/api/settings")
+  const body = (await response.json().catch(() => undefined)) as
+    | { settings?: RuntimeSettings; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to load settings (${response.status})`)
+  if (!body?.settings) throw new Error("Settings response was missing settings.")
+  return body.settings
+}
+
+export async function saveRuntimeSettings(
+  settings: RuntimeSettings
+): Promise<{ settings: RuntimeSettings; restartRequired: boolean }> {
+  if (MOCK_DASHBOARD) return { settings, restartRequired: true }
+  const response = await fetch("/ui/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { settings?: RuntimeSettings; restartRequired?: boolean; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to save settings (${response.status})`)
+  if (!body?.settings) throw new Error("Settings response was missing saved settings.")
+  return { settings: body.settings, restartRequired: body.restartRequired === true }
+}
 
 export async function fetchAgents(): Promise<Agent[]> {
   if (MOCK_DASHBOARD) return fetchMockAgents()

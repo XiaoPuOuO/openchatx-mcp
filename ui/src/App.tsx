@@ -9,6 +9,7 @@ import {
   PackageOpen,
   RefreshCw,
   ServerCog,
+  Settings,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
@@ -19,6 +20,7 @@ import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
 import { ProjectManager } from "./features/projects/ProjectManager"
+import { SettingsPage } from "./features/settings/SettingsPage"
 import { StatusPage } from "./features/status/StatusPage"
 import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
 import { SubagentManager } from "./features/subagents/SubagentManager"
@@ -37,6 +39,7 @@ type View =
   | "toolboxes"
   | "mcp-servers"
   | "status"
+  | "settings"
 
 type NavItem = {
   id: View
@@ -53,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "toolboxes", labelKey: "nav.toolboxes", icon: Blocks },
   { id: "mcp-servers", labelKey: "nav.mcpServers", icon: ServerCog },
   { id: "status", labelKey: "nav.systemStatus", icon: Activity },
+  { id: "settings", labelKey: "nav.settings", icon: Settings },
 ]
 
 const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
@@ -61,7 +65,7 @@ const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
 )
-const SYSTEM_NAV = NAV_ITEMS.filter((item) => item.id === "status")
+const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "settings"].includes(item.id))
 
 export function App() {
   const [view, setView] = useState<View>("dashboard")
@@ -102,6 +106,8 @@ export function App() {
         return <McpServerManager onBack={back} />
       case "status":
         return <StatusPage onBack={back} />
+      case "settings":
+        return <SettingsPage onBack={back} />
       default:
         return (
           <Dashboard
