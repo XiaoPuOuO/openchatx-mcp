@@ -147,7 +147,7 @@ export function registerSearchTools(server: McpServer, projectScope?: ProjectSco
         const target = requestedInfo?.isFile() ? basename(requested) : "."
         const args = ["--json", "--hidden", "--max-columns", "2000"]
         if (include) args.push("-g", include)
-        args.push(pattern, target)
+        args.push("-e", pattern, target)
 
         const result = await runRg(args, cwd, context.mcpReq.signal)
         if (result.code !== 0 && result.code !== 1)

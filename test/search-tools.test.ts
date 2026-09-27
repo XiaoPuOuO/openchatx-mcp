@@ -73,3 +73,21 @@ test("grep targeting one file does not search sibling files", async (t) => {
   assert.equal(matches[0]?.path, target)
   assert.match(matches[0]?.text ?? "", /target/u)
 })
+
+test("grep treats patterns beginning with a dash as regex, not ripgrep options", async (t) => {
+  const root = await tempDir(t, "openchatx-grep-dash-pattern-")
+  const target = join(root, "target.txt")
+  await writeFile(target, "--pre=not-a-command\nplain text\n")
+
+  const client = await connectedSearchServer(t)
+  const result = await client.callTool({
+    name: "grep",
+    arguments: { pattern: "--pre=not-a-command", path: target },
+  })
+  assert.equal(result.isError, undefined)
+  const matches = (result.structuredContent as { matches: Array<{ path: string; line: number }> })
+    .matches
+  assert.equal(matches.length, 1)
+  assert.equal(matches[0]?.path, target)
+  assert.equal(matches[0]?.line, 1)
+})
