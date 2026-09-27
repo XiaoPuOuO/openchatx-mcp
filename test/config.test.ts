@@ -6,7 +6,7 @@ import { join } from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
 import { initializeOpenChatXConfig } from "../scripts/state-setup.js"
-import { DEFAULT_PUBLIC_CONFIG, loadPublicConfig } from "../src/public-config.cjs"
+import { DEFAULT_PUBLIC_CONFIG, loadPublicConfig, savePublicConfig } from "../src/public-config.cjs"
 import { tempDir } from "./helpers/temp.js"
 
 test("loads and validates OpenChatX TOML config", async (t) => {
@@ -45,6 +45,7 @@ test("loads and validates OpenChatX TOML config", async (t) => {
     port: 8001,
     shell: { path: "/bin/zsh", rtk: false },
     tunnel: { profile: "personal", health_port: 8181 },
+    context: { warning_threshold: 400_000 },
     mcp: { tool_output: "structured" },
     tools: {
       shell: true,
@@ -68,6 +69,7 @@ test("loads older partial configs with defaults and preserves valid overrides", 
   await writeFile(path, source)
   const loaded = loadPublicConfig(path)
   assert.deepEqual(loaded.tunnel, DEFAULT_PUBLIC_CONFIG.tunnel)
+  assert.deepEqual(loaded.context, { warning_threshold: 400_000 })
   assert.deepEqual(loaded.tools, { ...DEFAULT_PUBLIC_CONFIG.tools, web: false })
   assert.equal(warning.mock.callCount(), 0)
   assert.equal(await readFile(path, "utf8"), source)
@@ -85,6 +87,8 @@ test("warns for invalid or unknown settings without discarding valid siblings", 
     "[tunnel]",
     'profile = "   "',
     "health_port = 70000",
+    "[context]",
+    "warning_threshold = 0",
     "[mcp]",
     'tool_output = "verbose"',
     "[tools]",
@@ -102,6 +106,7 @@ test("warns for invalid or unknown settings without discarding valid siblings", 
     "shell.rtk",
     "tunnel.profile",
     "tunnel.health_port",
+    "context.warning_threshold",
     "mcp.tool_output",
     "tools.clones",
   ]) {
@@ -134,6 +139,7 @@ test("MCP and tunnel health ports accept overrides and default invalid values in
   const scaffold = await readFile(configPath, "utf8")
   assert.match(scaffold, /^port = 8001$/mu)
   assert.match(scaffold, /^health_port = 8080$/mu)
+  assert.match(scaffold, /^warning_threshold = 400000$/mu)
 
   await writeFile(configPath, 'port = 3334\n[tunnel]\nprofile = "custom"\nhealth_port = 8181\n')
   assert.equal(loadPublicConfig(configPath).port, 3334)
@@ -147,6 +153,48 @@ test("MCP and tunnel health ports accept overrides and default invalid values in
     assert.equal(config.tunnel.health_port, 8080)
   }
   assert.equal(warning.mock.callCount(), 8)
+})
+
+test("saves validated runtime settings without dropping unrelated config", async (t) => {
+  const root = await tempDir(t, "openchatx-config-save-")
+  const path = join(root, "config.toml")
+  await writeFile(
+    path,
+    [
+      'state_dir = "~/.openchatx-test"',
+      "port = 3333",
+      "[shell]",
+      'path = "/bin/zsh"',
+      "rtk = false",
+      "[tunnel]",
+      'profile = "openchatx"',
+      "health_port = 8080",
+      "[context]",
+      "warning_threshold = 400000",
+      "[mcp]",
+      'tool_output = "structured"',
+      "[tools]",
+      "web = false",
+    ].join("\n")
+  )
+
+  const current = loadPublicConfig(path)
+  const saved = savePublicConfig(
+    {
+      ...current,
+      port: 4444,
+      context: { warning_threshold: 321_987 },
+      shell: { path: "/bin/bash", rtk: true },
+      tunnel: { profile: "custom", health_port: 9191 },
+    },
+    path
+  )
+
+  assert.equal(saved.port, 4444)
+  assert.deepEqual(saved.context, { warning_threshold: 321_987 })
+  assert.equal(saved.mcp.tool_output, "structured")
+  assert.equal(saved.tools.web, false)
+  assert.deepEqual(loadPublicConfig(path), saved)
 })
 
 test("reports broken TOML syntax without rewriting the file", async (t) => {

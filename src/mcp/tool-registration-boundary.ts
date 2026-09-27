@@ -5,8 +5,10 @@ import type { AgentObserver } from "../agent/observer.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
+import type { ContextBudgetGuard } from "./context-budget.js"
+import type { ProgressHeartbeatGuard } from "./progress-heartbeat.js"
 import { ToolError, toToolError } from "./tool-error.js"
-import { appendToolEvents, compactToolResult } from "./tool-output.js"
+import { appendToolEvents, compactToolResult, normalizeToolResultImages } from "./tool-output.js"
 import {
   type PreparedToolRegistration,
   prepareToolRegistration,
@@ -17,6 +19,8 @@ export interface ToolRegistrationBoundaryOptions {
   structuredOutput: boolean
   agentObserver?: AgentObserver
   auditRequest?: McpAuditRequest
+  contextBudget?: ContextBudgetGuard
+  progressHeartbeat?: ProgressHeartbeatGuard
 }
 
 interface RegisteredTool extends PreparedToolRegistration {
@@ -61,10 +65,24 @@ export function installToolRegistrationBoundary(
       const result = await (tool.acceptsInput
         ? tool.callback(inputValue, context)
         : tool.callback(context))
+      const normalizedResult = normalizeToolResultImages(result)
       const projected =
-        !tool.nativeContent && !structuredOutput ? compactToolResult(name, result) : result
-      const events = collectToolEvents(name, input, agent, options)
-      const finalResult = appendToolEvents(projected, events)
+        !tool.nativeContent && !structuredOutput
+          ? compactToolResult(name, normalizedResult)
+          : normalizedResult
+      const resultWithEvents = appendProgressHeartbeat(
+        appendToolEvents(projected, collectToolEvents(name, input, agent, options)),
+        options.progressHeartbeat,
+        agent
+      )
+      const finalResult = await applyContextBudgetNotice(
+        options.contextBudget,
+        options.agentObserver,
+        agent,
+        name,
+        input,
+        resultWithEvents
+      )
 
       if (isErrorResult(finalResult))
         options.agentObserver?.failTool(agent, observedCallId, finalResult)
@@ -80,9 +98,18 @@ export function installToolRegistrationBoundary(
     } catch (error) {
       const agent = getAgentIdentity()
       const result = formatToolError(error, structuredOutput)
-      options.agentObserver?.failTool(agent, observedCallId, result)
-      auditCall?.finish({ error, modelResult: result })
-      return result
+      const resultWithProgress = appendProgressHeartbeat(result, options.progressHeartbeat, agent)
+      const finalResult = await applyContextBudgetNotice(
+        options.contextBudget,
+        options.agentObserver,
+        agent,
+        name,
+        input,
+        resultWithProgress
+      )
+      options.agentObserver?.failTool(agent, observedCallId, finalResult)
+      auditCall?.finish({ error, modelResult: finalResult })
+      return finalResult
     }
   }
 
@@ -107,6 +134,28 @@ export function installToolRegistrationBoundary(
   if (!Reflect.set(server, "registerTool", boundaryRegisterTool)) {
     throw new TypeError("Could not install the MCP tool registration boundary.")
   }
+}
+
+function appendProgressHeartbeat(
+  result: unknown,
+  progressHeartbeat: ProgressHeartbeatGuard | undefined,
+  agent: ReturnType<typeof getAgentIdentity>
+): unknown {
+  const instruction = progressHeartbeat?.record(agent)
+  return appendToolEvents(result, instruction ? [instruction] : [])
+}
+
+async function applyContextBudgetNotice(
+  contextBudget: ContextBudgetGuard | undefined,
+  observer: AgentObserver | undefined,
+  agent: ReturnType<typeof getAgentIdentity>,
+  name: string,
+  input: Record<string, unknown>,
+  result: unknown
+): Promise<unknown> {
+  const notice = await contextBudget?.record(agent, name, input, result)
+  observer?.updateContextBudget(agent, contextBudget?.usage(agent))
+  return appendToolEvents(result, notice ? [notice] : [])
 }
 
 function collectToolEvents(

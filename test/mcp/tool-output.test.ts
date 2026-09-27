@@ -4,6 +4,7 @@ import {
   appendToolEvents,
   compactToolResult,
   formatOutputBlock,
+  normalizeToolResultImages,
   renderStructuredContent,
 } from "../../src/mcp/tool-output.js"
 import { countTokens } from "../../src/tokenizer.js"
@@ -114,6 +115,91 @@ test("compact result preserves existing content and removes structuredContent", 
   assert.deepEqual(compact.content, [
     { type: "text", text: "Command finished.\n\nstatus=completed output=hello" },
   ])
+})
+
+test("normalizes Unreal-style JSON text image payloads into native MCP image content", () => {
+  const base64 = "A".repeat(128)
+  const result = normalizeToolResultImages({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          returnValue: { mimeType: "image/png", data: base64 },
+          status: "ok",
+        }),
+      },
+    ],
+  }) as {
+    content?: Array<{ type: string; text?: string; mimeType?: string; data?: string }>
+  }
+
+  const text = result.content?.find((item) => item.type === "text")?.text ?? ""
+  const image = result.content?.find((item) => item.type === "image")
+
+  assert.doesNotMatch(text, new RegExp(base64, "u"))
+  assert.match(text, /image moved to native MCP content/u)
+  assert.match(text, /"status":"ok"/u)
+  assert.deepEqual(image, { type: "image", mimeType: "image/png", data: base64 })
+})
+
+test("normalizes nested structured image payloads and preserves metadata", () => {
+  const base64 = "B".repeat(128)
+  const result = normalizeToolResultImages({
+    structuredContent: {
+      returnValue: { mimeType: "image/png", data: base64 },
+      width: 1920,
+      height: 1080,
+    },
+  }) as {
+    structuredContent?: { returnValue?: { data?: string }; width?: number }
+    content?: Array<{ type: string; mimeType?: string; data?: string }>
+  }
+
+  assert.equal(result.structuredContent?.returnValue?.data, "[image moved to native MCP content]")
+  assert.equal(result.structuredContent?.width, 1920)
+  assert.deepEqual(
+    result.content?.find((item) => item.type === "image"),
+    {
+      type: "image",
+      mimeType: "image/png",
+      data: base64,
+    }
+  )
+})
+
+test("normalizes image data URLs in text into native MCP image content", () => {
+  const base64 = "C".repeat(128)
+  const result = normalizeToolResultImages({
+    content: [
+      {
+        type: "text",
+        text: `Screenshot: data:image/png;base64,${base64} done`,
+      },
+    ],
+  }) as {
+    content?: Array<{ type: string; text?: string; mimeType?: string; data?: string }>
+  }
+
+  assert.equal(
+    result.content?.find((item) => item.type === "text")?.text,
+    "Screenshot: [image moved to native MCP content] done"
+  )
+  assert.deepEqual(
+    result.content?.find((item) => item.type === "image"),
+    {
+      type: "image",
+      mimeType: "image/png",
+      data: base64,
+    }
+  )
+})
+
+test("does not rewrite ordinary non-image base64-looking text", () => {
+  const base64 = "D".repeat(128)
+  const original = {
+    content: [{ type: "text", text: `encoded=${base64}` }],
+  }
+  assert.deepEqual(normalizeToolResultImages(original), original)
 })
 
 test("compact fetch_url image results preserve native image content while rendering metadata", () => {

@@ -1,8 +1,8 @@
-import { existsSync, readFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
 import process from "node:process"
 
-import { parse } from "smol-toml"
+import { parse, stringify } from "smol-toml"
 import { z } from "zod"
 
 // CommonJS lets the built loader serve PM2's ecosystem file as well as the ESM runtime.
@@ -22,6 +22,9 @@ const publicConfigSchema = z.object({
   tunnel: z.object({
     profile: z.string().trim().min(1).default("openchatx"),
     health_port: z.number().int().min(1).max(65535).default(8080),
+  }),
+  context: z.object({
+    warning_threshold: z.number().int().positive().default(400_000),
   }),
   mcp: z.object({ tool_output: z.enum(["compact", "structured"]).default("compact") }),
   tools: z.object({
@@ -59,6 +62,25 @@ export function loadPublicConfig(path = defaultConfigPath): OpenChatXPublicConfi
   const warn = (message: string) =>
     console.warn(`openchatx-mcp config warning (${path}): ${message}`)
   return publicConfigSchema.parse(resolveConfigObject(publicConfigSchema, value, "", warn))
+}
+
+export function getPublicConfigPath(): string {
+  return defaultConfigPath
+}
+
+export function savePublicConfig(value: unknown, path = defaultConfigPath): OpenChatXPublicConfig {
+  const parsed = publicConfigSchema.parse(
+    resolveConfigObject(publicConfigSchema, value, "", () => undefined)
+  )
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  const tempPath = `${path}.${process.pid}.tmp`
+  writeFileSync(
+    tempPath,
+    `# openchatx-mcp configuration.\n# All supported settings are shown below. Edit active values to customize this installation.\n\n${stringify(parsed)}\n`,
+    { encoding: "utf8", mode: 0o600 }
+  )
+  renameSync(tempPath, path)
+  return parsed
 }
 
 function resolveConfigObject(

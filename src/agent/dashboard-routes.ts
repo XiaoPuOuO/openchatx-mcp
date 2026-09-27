@@ -8,8 +8,10 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { ContextBudgetGuard } from "../mcp/context-budget.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
+import { loadPublicConfig, savePublicConfig } from "../public-config.cjs"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import {
   loadSubagentConfig,
@@ -34,6 +36,7 @@ export interface DashboardServices {
   platformOverview?: PlatformOverviewService
   projectRegistry?: ProjectRegistry
   summaryRegistry?: SummaryRegistry
+  contextBudget?: ContextBudgetGuard
 }
 
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
@@ -51,10 +54,11 @@ export function createDashboardRouter(
     platformOverview,
     projectRegistry,
     summaryRegistry,
+    contextBudget,
   } = services
   const router = Router()
 
-  registerAgentRoutes(router, agentObserver)
+  registerAgentRoutes(router, agentObserver, contextBudget)
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
   registerWorkspaceRoutes(router, projectRegistry)
@@ -64,6 +68,7 @@ export function createDashboardRouter(
   registerRuleRoutes(router, toolboxRegistry)
   registerToolboxRoutes(router, toolboxRegistry)
   registerPlatformRoute(router, platformOverview)
+  registerSettingsRoutes(router, contextBudget)
 
   router.get("/api/events", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream")
@@ -484,20 +489,85 @@ function registerRuleRoutes(
   })
 }
 
+function registerSettingsRoutes(
+  router: ReturnType<typeof Router>,
+  contextBudget?: ContextBudgetGuard
+): void {
+  router.get("/api/settings", (_req, res) => {
+    try {
+      const config = loadPublicConfig(MCP_CONFIG.publicConfigFile)
+      res.json({ settings: editableSettings(config) })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+    }
+  })
+
+  router.put("/api/settings", (req, res) => {
+    try {
+      const current = loadPublicConfig(MCP_CONFIG.publicConfigFile)
+      const body = isRecord(req.body) ? req.body : {}
+      const next = {
+        ...current,
+        ...(body.port !== undefined ? { port: body.port } : {}),
+        shell: {
+          ...current.shell,
+          ...(isRecord(body.shell) ? body.shell : {}),
+        },
+        tunnel: {
+          ...current.tunnel,
+          ...(isRecord(body.tunnel) ? body.tunnel : {}),
+        },
+        context: {
+          ...current.context,
+          ...(isRecord(body.context) ? body.context : {}),
+        },
+      }
+      const saved = savePublicConfig(next, MCP_CONFIG.publicConfigFile)
+      contextBudget?.setWarningThreshold(saved.context.warning_threshold)
+      const restartRequired =
+        saved.port !== current.port ||
+        saved.shell.path !== current.shell.path ||
+        saved.shell.rtk !== current.shell.rtk ||
+        saved.tunnel.profile !== current.tunnel.profile ||
+        saved.tunnel.health_port !== current.tunnel.health_port
+      res.json({ settings: editableSettings(saved), restartRequired })
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
+    }
+  })
+}
+
+function editableSettings(config: ReturnType<typeof loadPublicConfig>) {
+  return {
+    port: config.port,
+    shell: config.shell,
+    tunnel: config.tunnel,
+    context: config.context,
+  }
+}
+
 function registerAgentRoutes(
   router: ReturnType<typeof Router>,
-  agentObserver: AgentObserver
+  agentObserver: AgentObserver,
+  contextBudget?: ContextBudgetGuard
 ): void {
   router.get("/api/agents", (_req, res) => {
     res.json({ agents: agentObserver.listAgents() })
   })
 
-  router.delete("/api/agents/:agentId", (req, res) => {
-    if (!agentObserver.deleteAgent(req.params.agentId)) {
+  router.delete("/api/agents/:agentId", async (req, res) => {
+    const sessionId = agentObserver.sessionIdForAgent(req.params.agentId)
+    if (!sessionId) {
       res.status(404).json({ error: "agent not found" })
       return
     }
-    res.status(204).end()
+    try {
+      await contextBudget?.removeSession(sessionId)
+      agentObserver.deleteAgent(req.params.agentId)
+      res.status(204).end()
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+    }
   })
 }
 

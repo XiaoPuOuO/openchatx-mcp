@@ -239,7 +239,9 @@ test("deletes an observed agent and emits a removal event", () => {
   })
 
   observer.startTool(agent, "bash", { command: "pwd" })
+  assert.equal(observer.sessionIdForAgent("agent-1"), "session-a")
   assert.equal(observer.deleteAgent("agent-1"), true)
+  assert.equal(observer.sessionIdForAgent("agent-1"), undefined)
   assert.equal(observer.deleteAgent("agent-1"), false)
   assert.deepEqual(observer.listAgents(), [])
   unsubscribe()

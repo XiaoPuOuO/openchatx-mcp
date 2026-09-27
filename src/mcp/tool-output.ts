@@ -1,6 +1,30 @@
 const SHORT_STRING_MAX = 120
 const MAX_INLINE_LINE = 240
 const BARE_STRING_PATTERN = /^[A-Za-z0-9_./:@%+,-]+$/u
+const IMAGE_MIME_PATTERN = /^image\//iu
+const BASE64_DATA_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/u
+const IMAGE_DATA_URL_PATTERN = /data:(image\/[^;,\s]+);base64,([A-Za-z0-9+/=]+)/giu
+const IMAGE_MOVED_MARKER = "[image moved to native MCP content]"
+
+export function normalizeToolResultImages(result: unknown): unknown {
+  if (!isRecord(result)) return result
+
+  const images: Array<{ type: "image"; mimeType: string; data: string }> = []
+  const normalized = { ...result }
+
+  if (Array.isArray(result.content)) {
+    normalized.content = result.content.flatMap((item) => normalizeContentItem(item, images))
+  }
+  if (result.structuredContent !== undefined) {
+    normalized.structuredContent = extractImagePayloads(result.structuredContent, images)
+  }
+
+  if (images.length === 0) return result
+  const content = Array.isArray(normalized.content) ? [...normalized.content] : []
+  content.push(...images)
+  normalized.content = content
+  return normalized
+}
 
 export function compactToolResult(toolName: string, result: unknown): unknown {
   if (!isRecord(result) || result.structuredContent === undefined) return result
@@ -32,6 +56,19 @@ export function appendToolEvents(result: unknown, events: readonly string[]): un
       events.map((event) => `**Notice:** ${event}`).join("\n")
     ),
   }
+}
+
+export function modelFacingToolResultText(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined
+  const parts: string[] = []
+  if (Array.isArray(value.content)) {
+    for (const item of value.content) {
+      const serialized = serializeModelFacingContentItem(item)
+      if (serialized !== undefined) parts.push(serialized)
+    }
+  }
+  if (value.structuredContent !== undefined) parts.push(JSON.stringify(value.structuredContent))
+  return parts.length > 0 ? parts.join("\n") : undefined
 }
 
 export function renderStructuredContent(value: unknown): string {
@@ -206,6 +243,98 @@ function minifiedJson(value: unknown): string {
   } catch {
     return String(value)
   }
+}
+
+function normalizeContentItem(
+  value: unknown,
+  images: Array<{ type: "image"; mimeType: string; data: string }>
+): unknown[] {
+  const record = isRecord(value) ? value : undefined
+  if (!record) return [value]
+  if (record.type !== "text" || typeof record.text !== "string") return [value]
+
+  const parsed = tryParseJson(record.text)
+  if (parsed !== undefined) {
+    const imageCountBefore = images.length
+    const normalized = extractImagePayloads(parsed, images)
+    if (images.length > imageCountBefore) {
+      return [{ ...record, text: JSON.stringify(normalized) }]
+    }
+  }
+
+  let changed = false
+  const text = record.text.replace(
+    IMAGE_DATA_URL_PATTERN,
+    (_match, mimeType: string, data: string) => {
+      pushImage(images, mimeType, data)
+      changed = true
+      return IMAGE_MOVED_MARKER
+    }
+  )
+  return changed ? [{ ...record, text }] : [value]
+}
+
+function extractImagePayloads(
+  value: unknown,
+  images: Array<{ type: "image"; mimeType: string; data: string }>
+): unknown {
+  if (Array.isArray(value)) return value.map((item) => extractImagePayloads(item, images))
+  if (!isRecord(value)) return value
+
+  if (isImagePayload(value)) {
+    pushImage(images, value.mimeType, value.data)
+    return {
+      ...value,
+      data: IMAGE_MOVED_MARKER,
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nested]) => [key, extractImagePayloads(nested, images)])
+  )
+}
+
+function pushImage(
+  images: Array<{ type: "image"; mimeType: string; data: string }>,
+  mimeType: string,
+  data: string
+): void {
+  if (images.some((image) => image.mimeType === mimeType && image.data === data)) return
+  images.push({ type: "image", mimeType, data })
+}
+
+function isImagePayload(
+  value: Record<string, unknown>
+): value is Record<string, unknown> & { mimeType: string; data: string } {
+  return (
+    typeof value.mimeType === "string" &&
+    IMAGE_MIME_PATTERN.test(value.mimeType) &&
+    typeof value.data === "string" &&
+    value.data.length >= 32 &&
+    BASE64_DATA_PATTERN.test(value.data)
+  )
+}
+
+function tryParseJson(value: string): unknown | undefined {
+  const trimmed = value.trim()
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return undefined
+  }
+}
+
+function serializeModelFacingContentItem(value: unknown): string | undefined {
+  const record = isRecord(value) ? value : undefined
+  if (!record) return undefined
+  if (record.type === "text" && typeof record.text === "string") return record.text
+  if (record.type === "image" || record.type === "audio") return undefined
+  if (record.type === "resource") {
+    const resource = isRecord(record.resource) ? record.resource : undefined
+    if (resource && typeof resource.blob === "string") return undefined
+  }
+  return JSON.stringify(record)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

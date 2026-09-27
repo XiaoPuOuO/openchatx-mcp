@@ -10,6 +10,7 @@ import { createExternalMcpRegistry } from "./external-mcp/registry.js"
 import { GoalRegistry } from "./goals/goal-registry.js"
 import { GoalScope } from "./goals/goal-scope.js"
 import { JobManager } from "./jobs/job-manager.js"
+import { ContextBudgetGuard } from "./mcp/context-budget.js"
 import { createMcpServerFactory } from "./mcp/server-factory.js"
 import { NodeRegistry } from "./nodes/node-registry.js"
 import { PlatformOverviewService } from "./platform/overview.js"
@@ -40,6 +41,12 @@ const auditLogPath =
   process.env.OPENCHATX_AUDIT_LOG?.trim() ||
   fileURLToPath(new URL("../agent-commands.yaml", import.meta.url))
 const auditLogger = new McpAuditLogger(auditLogPath)
+const contextBudget = new ContextBudgetGuard(
+  MCP_CONFIG.context.warningThreshold,
+  undefined,
+  join(MCP_CONFIG.stateDir, "context-budget.json")
+)
+await contextBudget.initialize()
 const agentObserver = createAgentObserver()
 await synchronizeAgentInstructions(
   MCP_CONFIG.stateDir,
@@ -127,6 +134,7 @@ try {
       agentTeams,
       workflows,
       nodes,
+      contextBudget,
     }),
     auditLogger,
     authStore,
@@ -140,6 +148,7 @@ try {
     platformOverview,
     projectRegistry,
     summaryRegistry,
+    contextBudget,
   })
 } catch (error) {
   await closeRuntimeServices()
@@ -177,6 +186,7 @@ async function closeRuntimeServices(): Promise<void> {
     toolboxRegistry.close(),
     subagentRuntime.close(),
     jobManager.close(),
+    contextBudget.close(),
   ])
 }
 

@@ -36,6 +36,12 @@ export interface AgentSnapshot {
   current?: AgentCallSnapshot
   recent: AgentCallSnapshot[]
   instructions: AgentInstructionSnapshot[]
+  contextBudget?: {
+    tokens: number
+    inputTokens: number
+    outputTokens: number
+    threshold: number
+  }
 }
 
 interface AgentState extends AgentSnapshot {
@@ -58,9 +64,16 @@ type AgentObserverEvent = AgentChangedEvent | AgentRemovedEvent
 export interface AgentObserver {
   listAgents(): AgentSnapshot[]
   deleteAgent(agentId: string): boolean
+  sessionIdForAgent(agentId: string): string | undefined
   startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
   finishTool(agent: AgentIdentity | undefined, callId: string | undefined, result?: unknown): void
   failTool(agent: AgentIdentity | undefined, callId: string | undefined, error?: unknown): void
+  updateContextBudget(
+    agent: AgentIdentity | undefined,
+    usage:
+      | { tokens: number; inputTokens: number; outputTokens: number; threshold: number }
+      | undefined
+  ): void
   queueInstruction(agentId: string, message: string): AgentInstructionSnapshot | undefined
   cancelInstruction(agentId: string, instructionId: string): boolean
   drainInstructions(agent: AgentIdentity | undefined): string[]
@@ -129,6 +142,10 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
       agentId,
     } satisfies AgentRemovedEvent)
     return true
+  }
+
+  function sessionIdForAgent(agentId: string): string | undefined {
+    return sessionsByAgentId.get(agentId)
   }
 
   function startTool(
@@ -201,6 +218,18 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     return { ...instruction }
   }
 
+  function updateContextBudget(
+    identity: AgentIdentity | undefined,
+    usage:
+      | { tokens: number; inputTokens: number; outputTokens: number; threshold: number }
+      | undefined
+  ): void {
+    if (!identity || !usage) return
+    const agent = ensureAgent(identity)
+    if (!agent) return
+    agent.contextBudget = { ...usage }
+  }
+
   function cancelInstruction(agentId: string, instructionId: string): boolean {
     const sessionId = sessionsByAgentId.get(agentId)
     const agent = sessionId ? agentsBySession.get(sessionId) : undefined
@@ -238,9 +267,11 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   return {
     listAgents,
     deleteAgent,
+    sessionIdForAgent,
     startTool,
     finishTool: (agent, callId, result) => settleTool(agent, callId, "completed", result),
     failTool: (agent, callId, error) => settleTool(agent, callId, "failed", error),
+    updateContextBudget,
     queueInstruction,
     cancelInstruction,
     drainInstructions,
@@ -267,5 +298,6 @@ function toSnapshot(agent: AgentState): AgentSnapshot {
     current: agent.current ? { ...agent.current } : undefined,
     recent: agent.recent.map((call) => ({ ...call })),
     instructions: agent.instructions.map((instruction) => ({ ...instruction })),
+    contextBudget: agent.contextBudget ? { ...agent.contextBudget } : undefined,
   }
 }

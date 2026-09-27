@@ -1,3 +1,4 @@
+import { modelFacingToolResultText } from "../../mcp/tool-output.js"
 import { asRecord } from "../../utils.js"
 
 const MAX_INLINE_ARGUMENT_CHARS = 600
@@ -54,7 +55,7 @@ export function summarizeToolResult(
 
   const toolRecord = asRecord(toolResult)
   const modelRecord = asRecord(modelResult)
-  const modelOutput = modelRecord ? serializeModelFacingToolResult(modelRecord) : undefined
+  const modelOutput = modelRecord ? modelFacingToolResultText(modelRecord) : undefined
   if (!toolRecord) return { failed: false, modelOutput }
 
   const structuredContent = asRecord(toolRecord.structuredContent)
@@ -255,30 +256,6 @@ function formatComputerResponseSummary(value: Record<string, unknown>): string {
     typeof value.interactable_count === "number" ? `interactable=${value.interactable_count}` : "",
   ].filter(Boolean)
   return parts.length ? `result: ${parts.join(" ")}` : ""
-}
-
-function serializeModelFacingToolResult(value: Record<string, unknown>): string | undefined {
-  const parts: string[] = []
-  if (Array.isArray(value.content)) {
-    for (const item of value.content) {
-      const serialized = serializeModelFacingContentItem(item)
-      if (serialized !== undefined) parts.push(serialized)
-    }
-  }
-  if (value.structuredContent !== undefined) parts.push(JSON.stringify(value.structuredContent))
-  return parts.length > 0 ? parts.join("\n") : undefined
-}
-
-function serializeModelFacingContentItem(value: unknown): string | undefined {
-  const record = asRecord(value)
-  if (!record) return undefined
-  if (record.type === "text" && typeof record.text === "string") return record.text
-  if (record.type === "image" || record.type === "audio") return undefined
-  if (record.type === "resource") {
-    const resource = asRecord(record.resource)
-    if (resource && typeof resource.blob === "string") return undefined
-  }
-  return JSON.stringify(record)
 }
 
 function indentBlock(content: string): string {

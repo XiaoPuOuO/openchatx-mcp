@@ -6,7 +6,7 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 import { hostDisplayName, resolveConfiguredShell, resolvePathExecutable } from "./host-platform.js"
-import { loadPublicConfig } from "./public-config.cjs"
+import { getPublicConfigPath, loadPublicConfig } from "./public-config.cjs"
 
 const packageMetadata = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
@@ -48,6 +48,8 @@ export const MCP_CONFIG = {
   instanceId: createHash("sha256").update(`${repositoryRoot}\0${stateDir}`).digest("hex"),
   /** Directory for persistent runtime state. */
   stateDir,
+  /** Public TOML configuration file used by this runtime. */
+  publicConfigFile: getPublicConfigPath(),
   /** Default cwd/root for relative shell and filesystem tool paths. */
   defaultCwd: homedir(),
   /** Persistent user-authored agent instructions. */
@@ -80,6 +82,9 @@ export const MCP_CONFIG = {
     profile: publicConfig.tunnel.profile,
     /** Local tunnel-client health/admin UI port. */
     healthPort: publicConfig.tunnel.health_port,
+  },
+  context: {
+    warningThreshold: publicConfig.context.warning_threshold,
   },
   /** MCP protocol presentation settings. */
   mcp: {

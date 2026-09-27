@@ -12,6 +12,7 @@ import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { ContextBudgetGuard } from "../mcp/context-budget.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
@@ -49,6 +50,7 @@ export interface McpHttpServices {
   platformOverview?: PlatformOverviewService
   projectRegistry?: ProjectRegistry
   summaryRegistry?: SummaryRegistry
+  contextBudget?: ContextBudgetGuard
 }
 
 export interface McpHttpProfileOverrides {
@@ -78,6 +80,7 @@ export async function startMcpHttpServer(
     platformOverview,
     projectRegistry,
     summaryRegistry,
+    contextBudget,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -115,6 +118,7 @@ export async function startMcpHttpServer(
         platformOverview,
         projectRegistry,
         summaryRegistry,
+        contextBudget,
       })
     )
 

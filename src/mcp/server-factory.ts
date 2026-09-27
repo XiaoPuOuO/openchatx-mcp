@@ -54,6 +54,8 @@ import type { WebPageOpener } from "../tools/web/web-open.js"
 import { registerWebTool } from "../tools/web/web-tool.js"
 import { registerWorkflowTools } from "../tools/workflows/workflow-tools.js"
 import type { WorkflowService } from "../workflows/workflow-service.js"
+import { ContextBudgetGuard } from "./context-budget.js"
+import { ProgressHeartbeatGuard } from "./progress-heartbeat.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
 export interface CreateMcpServerOptions {
@@ -79,6 +81,8 @@ export interface CreateMcpServerOptions {
   nodes?: NodeRegistry
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
+  contextBudget?: ContextBudgetGuard
+  progressHeartbeat?: ProgressHeartbeatGuard
 }
 
 export interface McpCapabilityServices {
@@ -102,6 +106,7 @@ export interface McpCapabilityServices {
   agentTeams?: AgentTeamService
   workflows?: WorkflowService
   nodes?: NodeRegistry
+  contextBudget?: ContextBudgetGuard
 }
 
 export interface McpRuntimeProfile {
@@ -133,12 +138,16 @@ export function createMcpServerFactory(
   profileOverrides: McpRuntimeProfileOverrides = {}
 ): McpServerFactory {
   const profile = snapshotMcpRuntimeProfile(profileOverrides)
+  const contextBudget = services.contextBudget ?? new ContextBudgetGuard()
+  const progressHeartbeat = new ProgressHeartbeatGuard()
   return (context = {}) =>
     createMcpServer(
       {
         ...services,
         auditRequest: context.auditRequest,
         agentObserver: context.agentObserver,
+        contextBudget,
+        progressHeartbeat,
       },
       profile
     )
@@ -152,6 +161,8 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
     structuredOutput: profile.toolOutput === "structured",
     agentObserver: options.agentObserver,
     auditRequest: options.auditRequest,
+    contextBudget: options.contextBudget,
+    progressHeartbeat: options.progressHeartbeat,
   })
 
   let lazyBuiltins: LazyBuiltinTools | undefined
