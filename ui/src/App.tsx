@@ -112,6 +112,7 @@ export function App() {
             now={now}
             onRemoveAgent={removeAgent}
             onOpenProjects={() => setView("projects")}
+            onOpenStatus={() => setView("status")}
             loadingLabel={t("dashboard.loading")}
             noAgentsLabel={t("dashboard.noAgents")}
             noAgentsHint={t("dashboard.noAgentsHint")}
@@ -230,6 +231,7 @@ function Dashboard({
   now,
   onRemoveAgent,
   onOpenProjects,
+  onOpenStatus,
   loadingLabel,
   noAgentsLabel,
   noAgentsHint,
@@ -242,6 +244,7 @@ function Dashboard({
   now: number
   onRemoveAgent: (agentId: string) => Promise<void>
   onOpenProjects: () => void
+  onOpenStatus: () => void
   loadingLabel: string
   noAgentsLabel: string
   noAgentsHint: string
@@ -263,7 +266,7 @@ function Dashboard({
         </div>
       </div>
 
-      <PlatformHomePanel onOpenProjects={onOpenProjects} />
+      <PlatformHomePanel onOpenProjects={onOpenProjects} onOpenStatus={onOpenStatus} />
 
       {error ? <div className="error-banner">{error}</div> : null}
 

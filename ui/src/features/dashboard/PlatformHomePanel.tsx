@@ -1,13 +1,19 @@
 import { AlertTriangle, ChevronRight, CircleCheck, FolderKanban, PlayCircle } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
 import { fetchPlatformOverview } from "../../lib/api"
+import { visibleAttentionItems } from "../../lib/attention-dismissals"
 import type { PlatformOverview } from "../../types"
 
-export function PlatformHomePanel({ onOpenProjects }: { onOpenProjects: () => void }) {
+export function PlatformHomePanel({
+  onOpenProjects,
+  onOpenStatus,
+}: {
+  onOpenProjects: () => void
+  onOpenStatus: () => void
+}) {
   const { t } = useI18n()
   const [overview, setOverview] = useState<PlatformOverview>()
   const [error, setError] = useState<string>()
@@ -35,6 +41,7 @@ export function PlatformHomePanel({ onOpenProjects }: { onOpenProjects: () => vo
 
   if (error) return <div className="error-banner">{error}</div>
   if (!overview) return null
+  const visibleAttention = visibleAttentionItems(overview.needsAttention)
 
   return (
     <Card className="overview-strip">
@@ -76,15 +83,17 @@ export function PlatformHomePanel({ onOpenProjects }: { onOpenProjects: () => vo
           </div>
         </div>
 
-        <div
+        <button
+          type="button"
+          onClick={onOpenStatus}
           className={
-            overview.needsAttention.length > 0
-              ? "overview-strip-item attention-card"
-              : "overview-strip-item"
+            visibleAttention.length > 0
+              ? "overview-strip-item overview-strip-button attention-card"
+              : "overview-strip-item overview-strip-button"
           }
         >
           <div className="overview-icon">
-            {overview.needsAttention.length > 0 ? (
+            {visibleAttention.length > 0 ? (
               <AlertTriangle className="size-4" />
             ) : (
               <CircleCheck className="size-4" />
@@ -92,19 +101,23 @@ export function PlatformHomePanel({ onOpenProjects }: { onOpenProjects: () => vo
           </div>
           <div className="min-w-0 flex-1">
             <div className="overview-label">{t("overview.needsAttention")}</div>
-            <div className="overview-value">{overview.needsAttention.length}</div>
+            <div className="overview-value">{visibleAttention.length}</div>
             <div className="overview-detail">
-              {overview.needsAttention.length === 0
+              {visibleAttention.length === 0
                 ? t("overview.allGood")
-                : overview.needsAttention[0]?.label}
+                : visibleAttention
+                    .slice(0, 3)
+                    .map((item) => item.label)
+                    .join(" · ")}
             </div>
           </div>
-          {overview.needsAttention.length > 1 ? (
-            <Button variant="ghost" size="sm" className="pointer-events-none h-7 px-2">
-              +{overview.needsAttention.length - 1}
-            </Button>
+          {visibleAttention.length > 1 ? (
+            <span className="rounded-md px-2 py-1 text-xs text-muted-foreground">
+              +{visibleAttention.length - 1}
+            </span>
           ) : null}
-        </div>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </button>
       </CardContent>
     </Card>
   )

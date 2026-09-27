@@ -42,17 +42,19 @@ export function CapabilityHealthPanel() {
   }
   if (!snapshot) return null
 
-  const unavailable = snapshot.components.filter((component) => component.status === "unavailable")
+  const issues = snapshot.components.filter(
+    (component) => component.status === "unavailable" || component.status === "degraded"
+  )
   return (
     <Card className="mb-5">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Activity className="size-4" />
           {t("status.capabilityHealth")}
-          <Badge className={unavailable.length > 0 ? "text-destructive" : undefined}>
-            {unavailable.length === 0
+          <Badge className={issues.length > 0 ? "text-destructive" : undefined}>
+            {issues.length === 0
               ? t("status.healthy")
-              : t("status.unavailableCount", { count: unavailable.length })}
+              : t("status.issueCount", { count: issues.length })}
           </Badge>
         </div>
       </CardHeader>
@@ -96,6 +98,7 @@ function localizeHealthDetail(
   const model = detail.match(/^(\d+) enabled model profile$/)
   if (model) return t("status.modelProfiles", { count: Number(model[1]) })
   if (detail === "profile openchatx") return t("status.profileOpenchatx")
+  if (detail === "Configured but unavailable") return t("status.configuredUnavailable")
   return detail
 }
 
