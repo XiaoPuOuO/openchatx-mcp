@@ -47,6 +47,9 @@ test("Windows desktop app owns runtime lifecycle with WebView2 and Windows Crede
   assert.match(source, /openchatx\.toml/u)
   assert.match(source, /--mcp\.server-url/u)
   assert.match(source, /port != 3333/u)
+  assert.match(source, /StringComparer\.OrdinalIgnoreCase/u)
+  assert.match(source, /GetValueOrDefault\("Path"\)/u)
+  assert.doesNotMatch(source, /GetValueOrDefault\("PATH"\)/u)
   assert.doesNotMatch(source, /\bpm2\b/iu)
 })
 

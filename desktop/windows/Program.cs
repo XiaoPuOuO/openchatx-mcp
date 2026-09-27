@@ -656,13 +656,13 @@ internal sealed class RuntimeSupervisor
 
     private Dictionary<string, string?> RuntimeEnvironment(string? apiKey = null)
     {
-        var environment = Environment.GetEnvironmentVariables()
-            .Cast<System.Collections.DictionaryEntry>()
-            .ToDictionary(entry => (string)entry.Key, entry => entry.Value?.ToString());
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            environment[(string)entry.Key] = entry.Value?.ToString();
 
         var bundledBin = Path.Combine(_runtimeRoot, "bin");
-        var inherited = environment.GetValueOrDefault("PATH") ?? "";
-        environment["PATH"] = bundledBin + Path.PathSeparator + inherited;
+        var inherited = environment.GetValueOrDefault("Path") ?? "";
+        environment["Path"] = bundledBin + Path.PathSeparator + inherited;
         environment["OPENCHATX_DESKTOP"] = "1";
         if (!string.IsNullOrWhiteSpace(apiKey))
             environment["CONTROL_PLANE_API_KEY"] = apiKey;
