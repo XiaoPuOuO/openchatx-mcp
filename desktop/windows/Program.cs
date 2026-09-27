@@ -69,15 +69,24 @@ internal sealed class MainForm : Form
             _webReady = true;
             _webView.CoreWebView2.NewWindowRequested += (_, args) =>
             {
-                if (!ShouldOpenExternally(args.Uri)) return;
                 args.Handled = true;
-                OpenExternal(args.Uri);
+                if (GetNavigationDisposition(args.Uri) == NavigationDisposition.External)
+                    OpenExternal(args.Uri);
             };
             _webView.CoreWebView2.NavigationStarting += (_, args) =>
             {
-                if (!ShouldOpenExternally(args.Uri)) return;
-                args.Cancel = true;
-                OpenExternal(args.Uri);
+                switch (GetNavigationDisposition(args.Uri))
+                {
+                    case NavigationDisposition.Internal:
+                        return;
+                    case NavigationDisposition.External:
+                        args.Cancel = true;
+                        OpenExternal(args.Uri);
+                        return;
+                    default:
+                        args.Cancel = true;
+                        return;
+                }
             };
         }
         catch (Exception error)
@@ -109,12 +118,13 @@ internal sealed class MainForm : Form
         }
     }
 
-    internal static bool ShouldOpenExternally(string value)
+    internal static NavigationDisposition GetNavigationDisposition(string value)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
-        if (uri.IsLoopback) return false;
-
-        return uri.Scheme is "http" or "https" or "mailto";
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return NavigationDisposition.Blocked;
+        if (uri.IsLoopback && uri.Scheme is "http" or "https") return NavigationDisposition.Internal;
+        if (uri.Scheme is "data" or "about" or "blob") return NavigationDisposition.Internal;
+        if (uri.Scheme is "http" or "https" or "mailto") return NavigationDisposition.External;
+        return NavigationDisposition.Blocked;
     }
 
     private async Task ToggleRuntimeAsync()
@@ -213,6 +223,13 @@ internal sealed class MainForm : Form
             MessageBox.Show(this, error.Message, "Tunnel setup failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
+}
+
+internal enum NavigationDisposition
+{
+    Internal,
+    External,
+    Blocked
 }
 
 internal sealed class TunnelSetupForm : Form
