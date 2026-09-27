@@ -4,9 +4,20 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and publish
+        required: true
+        type: string
+      skip_validation:
+        description: Skip the release tag/package validation step
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -14,6 +25,8 @@ permissions:
 
 env:
   NODE_VERSION: 22.18.0
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.ref_name }}
 
 jobs:
   validate:
@@ -21,16 +34,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-node@v4
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci --force
+      - if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
+        run: npm ci --force
       - name: Verify tag matches package version
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
         shell: bash
         run: |
           VERSION="v$(node -p "require('./package.json').version")"
-          test "$VERSION" = "$GITHUB_REF_NAME"
+          test "$VERSION" = "$RELEASE_TAG"
 
   macos:
     name: macOS ${{ matrix.arch }}
@@ -53,6 +71,8 @@ jobs:
       APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -117,6 +137,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -149,6 +171,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -164,8 +188,10 @@ jobs:
             echo "No release assets were downloaded." >&2
             exit 1
           fi
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            gh release create "$RELEASE_TAG" "${assets[@]}" --target "$GITHUB_SHA" --generate-notes --title "OpenChatX $RELEASE_TAG"
           else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --verify-tag --generate-notes --title "OpenChatX $GITHUB_REF_NAME"
+            gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --generate-notes --title "OpenChatX $RELEASE_TAG"
           fi
