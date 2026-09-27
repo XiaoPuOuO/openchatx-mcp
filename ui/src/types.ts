@@ -238,6 +238,17 @@ export interface RemoteMcpServer extends McpServerBase {
 export type McpServerConfig = LocalMcpServer | RemoteMcpServer
 export type McpServerMap = Record<string, McpServerConfig>
 
+export interface McpDetectedTool {
+  server: string
+  name: string
+  description?: string
+}
+
+export interface McpServerSnapshot {
+  servers: McpServerMap
+  tools: McpDetectedTool[]
+}
+
 export interface ToolboxItem {
   name: string
   enabled: boolean

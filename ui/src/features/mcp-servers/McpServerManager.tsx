@@ -1,12 +1,24 @@
-import { ArrowLeft, CirclePlus, FolderOpen, Save, ServerCog, Trash2 } from "lucide-react"
+import { ArrowLeft, CirclePlus, FolderOpen, RefreshCw, Save, ServerCog, Trash2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 import { LanguageSwitcher } from "../../components/LanguageSwitcher"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
-import { fetchMcpServers, openMcpConfigInFinder, saveMcpServers } from "../../lib/api"
-import type { McpServerConfig, McpServerMap } from "../../types"
+import {
+  fetchCapabilityHealth,
+  fetchMcpServers,
+  openMcpConfigInFinder,
+  refreshMcpServers,
+  saveMcpServers,
+} from "../../lib/api"
+import type {
+  CapabilityHealthComponent,
+  CapabilityHealthStatus,
+  McpDetectedTool,
+  McpServerConfig,
+  McpServerMap,
+} from "../../types"
 
 const INPUT_CLASS =
   "h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-neutral-400"
@@ -19,14 +31,22 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
   const [selectedId, setSelectedId] = useState<string>()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [tab, setTab] = useState<"settings" | "tools">("settings")
+  const [health, setHealth] = useState<Record<string, CapabilityHealthComponent>>({})
+  const [detectedTools, setDetectedTools] = useState<McpDetectedTool[]>([])
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
 
   useEffect(() => {
     void fetchMcpServers()
-      .then((next) => {
-        setServers(next)
-        setSelectedId(Object.keys(next)[0])
+      .then((snapshot) => {
+        setServers(snapshot.servers)
+        setDetectedTools(snapshot.tools)
+        setSelectedId(Object.keys(snapshot.servers)[0])
+        void fetchCapabilityHealth()
+          .then((healthSnapshot) => setHealth(indexMcpHealth(healthSnapshot.components)))
+          .catch(() => undefined)
       })
       .catch((loadError) =>
         setError(loadError instanceof Error ? loadError.message : String(loadError))
@@ -36,6 +56,10 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
 
   const selected = selectedId ? servers[selectedId] : undefined
   const serverIds = useMemo(() => Object.keys(servers), [servers])
+  const selectedTools = useMemo(
+    () => detectedTools.filter((tool) => tool.server === selectedId),
+    [detectedTools, selectedId]
+  )
 
   function updateSelected(next: McpServerConfig) {
     if (!selectedId) return
@@ -76,11 +100,34 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
     try {
       const result = await saveMcpServers(servers)
       setServers(result.servers)
+      await refreshHealth().catch(() => undefined)
       setMessage(result.restartRequired ? t("mcp.savedRestart") : t("mcp.saved"))
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function refreshHealth() {
+    const healthSnapshot = await fetchCapabilityHealth()
+    setHealth(indexMcpHealth(healthSnapshot.components))
+  }
+
+  async function refresh() {
+    setRefreshing(true)
+    setError(undefined)
+    setMessage(undefined)
+    try {
+      const snapshot = await refreshMcpServers()
+      setServers(snapshot.servers)
+      setDetectedTools(snapshot.tools)
+      await refreshHealth()
+      setMessage(t("mcp.refreshed"))
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : String(refreshError))
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -112,6 +159,14 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
+            <Button
+              variant="outline"
+              onClick={() => void refresh()}
+              disabled={loading || refreshing}
+            >
+              <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? t("mcp.refreshing") : t("common.refresh")}
+            </Button>
             <Button variant="outline" onClick={() => void openInFinder()} disabled={loading}>
               <FolderOpen className="size-4" />
               {t("common.openInFinder")}
@@ -147,6 +202,7 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
               <div className="space-y-1">
                 {serverIds.map((id) => {
                   const server = servers[id]
+                  const status = serverStatus(server, health[`mcp:${id}`])
                   return (
                     <button
                       type="button"
@@ -156,13 +212,12 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`size-2 rounded-full ${server.enabled ? "bg-emerald-500" : "bg-neutral-300"}`}
-                          />
+                          <span className={`size-2 rounded-full ${serverStatusDot(status)}`} />
                           <span className="truncate text-sm font-medium">{id}</span>
                         </div>
                         <p className="mt-1 truncate text-xs text-muted-foreground">
-                          {server.type === "local" ? t("mcp.local") : t("mcp.remote")}
+                          {server.type === "local" ? t("mcp.local") : t("mcp.remote")} ·{" "}
+                          {t(`status.health.${status}`)}
                         </p>
                       </div>
                       <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
@@ -186,13 +241,36 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
               <CardHeader className="flex-row items-start justify-between border-b">
                 <div className="min-w-0">
                   <h2 className="truncate text-base font-semibold">{selectedId}</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">{t("mcp.validated")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(`status.health.${serverStatus(selected, health[`mcp:${selectedId}`])}`)}
+                    {health[`mcp:${selectedId}`]?.detail
+                      ? ` · ${healthDetail(health[`mcp:${selectedId}`]?.detail, t)}`
+                      : ""}
+                  </p>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => deleteServer(selectedId)}>
                   <Trash2 className="size-3.5" />
                   {t("common.delete")}
                 </Button>
               </CardHeader>
+              <div className="flex border-b bg-muted/20 px-3 pt-2">
+                {(["settings", "tools"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setTab(item)}
+                    className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+                      tab === item
+                        ? "border border-b-background bg-background text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {item === "settings" ? t("mcp.settingsTab") : t("mcp.toolsTab")}
+                  </button>
+                ))}
+              </div>
+
+              {tab === "settings" ? (
               <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto pt-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t("mcp.serverId")}>
@@ -361,12 +439,70 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                   </div>
                 ) : null}
               </CardContent>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <div className="flex items-center justify-between px-5 py-3">
+                    <span className="text-xs text-muted-foreground">
+                      {t("mcp.detectedToolsCount", { count: selectedTools.length })}
+                    </span>
+                  </div>
+                  {selectedTools.length === 0 ? (
+                    <div className="border-t px-5 py-8 text-sm text-muted-foreground">
+                      {t("mcp.noDetectedTools")}
+                    </div>
+                  ) : (
+                    <div className="divide-y border-t">
+                      {selectedTools.map((tool) => (
+                        <div key={`${tool.server}:${tool.name}`} className="px-5 py-4">
+                          <div className="break-all font-mono text-sm font-medium">{tool.name}</div>
+                          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                            {tool.description || t("mcp.noToolDescription")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </Card>
       </div>
     </main>
   )
+}
+
+function indexMcpHealth(
+  components: CapabilityHealthComponent[]
+): Record<string, CapabilityHealthComponent> {
+  return Object.fromEntries(
+    components
+      .filter((component) => component.kind === "mcp")
+      .map((component) => [component.id, component])
+  )
+}
+
+function serverStatus(
+  server: McpServerConfig,
+  component: CapabilityHealthComponent | undefined
+): CapabilityHealthStatus {
+  if (!server.enabled) return "disabled"
+  return component?.status ?? "starting"
+}
+
+function serverStatusDot(status: CapabilityHealthStatus): string {
+  if (status === "healthy") return "bg-emerald-500"
+  if (status === "unavailable" || status === "degraded") return "bg-amber-500"
+  if (status === "starting") return "bg-blue-400"
+  return "bg-neutral-300"
+}
+
+function healthDetail(
+  detail: string | undefined,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (detail === "Configured but unavailable") return t("status.configuredUnavailable")
+  return detail ?? ""
 }
 
 function Field({

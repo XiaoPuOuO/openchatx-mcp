@@ -9,6 +9,7 @@ import type {
   GoalRecord,
   GoalStatus,
   LoadedRule,
+  McpServerSnapshot,
   McpServerMap,
   PlatformOverview,
   ProjectRecord,
@@ -74,6 +75,18 @@ export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot>
   const response = await fetch("/ui/api/health")
   if (!response.ok) throw new Error(`Failed to load capability health (${response.status})`)
   return (await response.json()) as CapabilityHealthSnapshot
+}
+
+export async function refreshMcpServers(): Promise<McpServerSnapshot> {
+  if (MOCK_DASHBOARD) return { servers: await fetchMockMcpServers(), tools: [] }
+  const response = await fetch("/ui/api/mcp-servers/refresh", { method: "POST" })
+  const body = (await response.json().catch(() => undefined)) as
+    | McpServerSnapshot & { error?: string }
+    | undefined
+  if (!response.ok) {
+    throw new Error(body?.error ?? `Failed to refresh MCP servers (${response.status})`)
+  }
+  return { servers: body?.servers ?? {}, tools: body?.tools ?? [] }
 }
 
 export async function fetchPlatformOverview(): Promise<PlatformOverview> {
@@ -562,12 +575,12 @@ export async function cancelSteer(agentId: string, instructionId: string): Promi
   }
 }
 
-export async function fetchMcpServers(): Promise<McpServerMap> {
-  if (MOCK_DASHBOARD) return fetchMockMcpServers()
+export async function fetchMcpServers(): Promise<McpServerSnapshot> {
+  if (MOCK_DASHBOARD) return { servers: await fetchMockMcpServers(), tools: [] }
   const response = await fetch("/ui/api/mcp-servers")
   if (!response.ok) throw new Error(`Failed to load MCP servers (${response.status})`)
-  const body = (await response.json()) as { servers?: McpServerMap }
-  return body.servers ?? {}
+  const body = (await response.json()) as Partial<McpServerSnapshot>
+  return { servers: body.servers ?? {}, tools: body.tools ?? [] }
 }
 
 export async function saveMcpServers(
