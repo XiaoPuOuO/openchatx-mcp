@@ -244,8 +244,10 @@ internal sealed class TunnelSetupForm : Form
     public TunnelSetupForm(bool hasProfile)
     {
         Text = "Connect OpenAI Secure MCP Tunnel";
-        Width = 480;
-        Height = hasProfile ? 220 : 280;
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        MinimumSize = new Size(480, 0);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
@@ -253,11 +255,12 @@ internal sealed class TunnelSetupForm : Form
 
         var table = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             Padding = new Padding(20),
             ColumnCount = 1,
             RowCount = hasProfile ? 5 : 7,
-            AutoSize = true
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
 
         table.Controls.Add(new Label

@@ -50,6 +50,9 @@ test("Windows desktop app owns runtime lifecycle with WebView2 and Windows Crede
   assert.match(source, /StringComparer\.OrdinalIgnoreCase/u)
   assert.match(source, /GetValueOrDefault\("Path"\)/u)
   assert.doesNotMatch(source, /GetValueOrDefault\("PATH"\)/u)
+  assert.match(source, /AutoScaleMode = AutoScaleMode\.Dpi/u)
+  assert.match(source, /AutoSizeMode = AutoSizeMode\.GrowAndShrink/u)
+  assert.doesNotMatch(source, /Height = hasProfile \? 220 : 280/u)
   assert.doesNotMatch(source, /\bpm2\b/iu)
 })
 
