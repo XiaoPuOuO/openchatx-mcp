@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
-import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises"
-import { join, resolve } from "node:path"
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { basename, dirname, join, resolve } from "node:path"
 import process from "node:process"
 import { setTimeout as delay } from "node:timers/promises"
 
@@ -262,10 +262,29 @@ export class JobManager {
       const parsed = jobStateSchema.parse(JSON.parse(await readFile(this.statePath, "utf8")))
       for (const job of parsed.jobs) this.jobs.set(job.id, job)
     } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error
+      if (!isNodeErrorCode(error, "ENOENT")) await this.quarantineCorruptState(error)
     }
     await this.reconcile()
     for (const job of this.jobs.values()) this.scheduleKill(job)
+  }
+
+  private async quarantineCorruptState(error: unknown): Promise<void> {
+    const quarantinePath = `${this.statePath}.corrupt-${Date.now()}`
+    const reason = describeError(error)
+    try {
+      await rename(this.statePath, quarantinePath)
+      console.warn(
+        `OpenChatX durable job state was invalid (${reason}) and has been quarantined to ${JSON.stringify(quarantinePath)}. Starting with an empty job state.`
+      )
+    } catch (quarantineError) {
+      if (!isNodeErrorCode(quarantineError, "ENOENT")) {
+        const quarantineReason = describeError(quarantineError)
+        console.warn(
+          `OpenChatX durable job state was invalid (${reason}) and could not be quarantined (${quarantineReason}). Starting with an empty job state.`
+        )
+      }
+    }
+    this.jobs.clear()
   }
 
   private async reconcile(): Promise<void> {
@@ -340,13 +359,40 @@ export class JobManager {
     const serialized = `${JSON.stringify(payload, null, 2)}\n`
     const pending = this.persistChain
       .catch(() => undefined)
-      .then(() =>
-        writeFile(this.statePath, serialized, {
-          encoding: "utf8",
-          mode: 0o600,
-        })
-      )
+      .then(() => this.writeStateAtomically(serialized))
     this.persistChain = pending
     await pending
+  }
+
+  private async writeStateAtomically(serialized: string): Promise<void> {
+    const directory = dirname(this.statePath)
+    const tempPath = join(
+      directory,
+      `.${basename(this.statePath)}.${process.pid}.${Date.now()}.tmp`
+    )
+    try {
+      await writeFile(tempPath, serialized, {
+        encoding: "utf8",
+        mode: 0o600,
+      })
+      await rename(tempPath, this.statePath)
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => undefined)
+      throw error
+    }
+  }
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && error.code === code
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  try {
+    return JSON.stringify(error) ?? "Unknown error"
+  } catch {
+    return "Unknown error"
   }
 }

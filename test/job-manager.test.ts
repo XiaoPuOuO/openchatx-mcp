@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -57,4 +57,46 @@ test("aborting a wait does not terminate the durable process", { timeout: 10000 
   const finished = await manager.wait(started.id, 2_000)
   assert.equal(finished.job.status, "completed")
   assert.match(finished.output, /survived/u)
+})
+
+for (const [label, contents] of [
+  ["empty", ""],
+  ["truncated", '{"jobs":['],
+  ["schema-invalid", '{"jobs":[{"id":42}]}'],
+] as const) {
+  test(`durable jobs quarantine ${label} persisted state and continue empty`, async (t) => {
+    const root = await mkdtemp(join(tmpdir(), `openchatx-job-corrupt-${label}-`))
+    t.after(() => rm(root, { recursive: true, force: true }))
+    const statePath = join(root, "jobs.json")
+    await writeFile(statePath, contents, "utf8")
+
+    const manager = new JobManager(root, statePath)
+    await manager.initialize()
+    assert.deepEqual(await manager.list(), [])
+
+    const quarantined = (await readdir(root)).filter((name) =>
+      name.startsWith("jobs.json.corrupt-")
+    )
+    assert.equal(quarantined.length, 1)
+    assert.equal(await readFile(join(root, quarantined[0] ?? ""), "utf8"), contents)
+
+    await manager.close()
+    assert.deepEqual(JSON.parse(await readFile(statePath, "utf8")), { jobs: [] })
+  })
+}
+
+test("durable job persistence atomically replaces state without leaving temp files", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-job-atomic-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const statePath = join(root, "jobs.json")
+  const manager = new JobManager(root, statePath)
+
+  await manager.initialize()
+  await manager.close()
+
+  assert.deepEqual(JSON.parse(await readFile(statePath, "utf8")), { jobs: [] })
+  assert.equal(
+    (await readdir(root)).some((name) => name.startsWith(".jobs.json.") && name.endsWith(".tmp")),
+    false
+  )
 })
