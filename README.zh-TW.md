@@ -83,11 +83,7 @@ OpenChatX 使用 OpenAI Secure MCP Tunnel。Desktop App 已經內建本機 Runti
 
 ### 1. 在 ChatGPT 建立 MCP App
 
-先打開 ChatGPT **Settings**，開啟 **Developer Mode**。
-
-![打開 ChatGPT Settings](docs/assets/enable-developer-mode-step-1.png)
-
-![開啟 Developer Mode](docs/assets/enable-developer-mode-step-2.png)
+> **目前 ChatGPT 裡的 Developer Mode 開關似乎已經不見了。** 有使用者回報，即使沒有開啟 Developer Mode 也可以直接建立 MCP App，所以目前請先跳過開啟 Developer Mode 這個階段，直接從下面的 Plugins 建立 MCP App 流程開始。
 
 接著打開 **Plugins**，按 **+**，選 **Create app**，再選 **Create MCP app**。
 
