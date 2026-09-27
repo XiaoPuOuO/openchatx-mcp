@@ -40,6 +40,7 @@ test("Windows desktop app owns runtime lifecycle with WebView2 and Windows Crede
   assert.match(source, /LocalApplicationData/u)
   assert.match(source, /CredWrite/u)
   assert.match(source, /Kill\(entireProcessTree: true\)/u)
+  assert.match(source, /uri\.Scheme is "http" or "https" or "mailto"/u)
   assert.doesNotMatch(source, /\bpm2\b/iu)
 })
 

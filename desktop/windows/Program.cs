@@ -69,13 +69,13 @@ internal sealed class MainForm : Form
             _webReady = true;
             _webView.CoreWebView2.NewWindowRequested += (_, args) =>
             {
+                if (!ShouldOpenExternally(args.Uri)) return;
                 args.Handled = true;
                 OpenExternal(args.Uri);
             };
             _webView.CoreWebView2.NavigationStarting += (_, args) =>
             {
-                if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri)) return;
-                if (uri.IsLoopback) return;
+                if (!ShouldOpenExternally(args.Uri)) return;
                 args.Cancel = true;
                 OpenExternal(args.Uri);
             };
@@ -107,6 +107,14 @@ internal sealed class MainForm : Form
         {
             // Ignore shell-open failures; navigation stays inside the app.
         }
+    }
+
+    internal static bool ShouldOpenExternally(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
+        if (uri.IsLoopback) return false;
+
+        return uri.Scheme is "http" or "https" or "mailto";
     }
 
     private async Task ToggleRuntimeAsync()
