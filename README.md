@@ -17,6 +17,11 @@
   <a href="https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest"><strong>Download latest release</strong></a>
 </p>
 
+<p align="center">
+  <a href="https://m8ven.ai/mcp/xiaopuouo/openchatx-mcp"><img src="https://m8ven.ai/badge/mcp/xiaopuouo/openchatx-mcp?variant=verified" alt="M8ven Verified"></a>
+  <a href="https://aiagentslisting.com/mcp/openchatx-mcp"><img src="https://aiagentslisting.com/openchatx-mcp/badge.svg?claim=53baf1ea1426fc1bdb3d1ead9e5a9ebc" alt="OpenChatX MCP on AI Agents Listing"></a>
+</p>
+
 > [!IMPORTANT]
 > OpenChatX runs through regular **ChatGPT Chat**. It does **not** consume your ChatGPT Work / Codex agentic allowance. If your Work or Codex allowance is exhausted, you can still use OpenChatX as long as your normal Chat usage is available.
 
