@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { writeFile } from "node:fs/promises"
+import { createServer } from "node:net"
 import { join } from "node:path"
 import process from "node:process"
 import test from "node:test"
@@ -158,3 +159,56 @@ test("aggregates a remote HTTP MCP and tolerates unavailable peers", {
   const result = await client.callTool({ name: "remote__ping", arguments: { value: "ok" } })
   assert.equal(result.content.find((item) => item.type === "text")?.text, "http:ok")
 })
+
+test("forced external MCP reload reconnects unchanged config", { timeout: 10_000 }, async (t) => {
+  const port = await reservePort()
+  const root = await tempDir(t, "openchatx-external-force-reload-")
+  const configPath = join(root, "mcp-servers.json")
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      remote: {
+        type: "remote",
+        url: `http://127.0.0.1:${port}/mcp`,
+        enabled: true,
+        timeout: 2_000,
+      },
+    })
+  )
+
+  const registry = await createExternalMcpRegistry(configPath)
+  t.after(() => registry.close())
+  assert.equal(registry.capabilities()[0]?.available, false)
+
+  const upstream = await startMcpHttpServer(
+    {
+      createMcpServer: () => {
+        const server = new McpServer({ name: "force-reload-fixture", version: "1.0.0" })
+        server.registerTool("ping", { inputSchema: z.object({}) }, async () => ({
+          content: [{ type: "text", text: "pong" }],
+        }))
+        return server
+      },
+    },
+    { port }
+  )
+  t.after(() => upstream.close())
+
+  await registry.reload(true)
+  assert.equal(registry.capabilities()[0]?.available, true)
+  assert.deepEqual(registry.connectedServers, ["remote"])
+})
+
+async function reservePort(): Promise<number> {
+  const server = createServer()
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", () => resolve())
+  })
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("Failed to reserve a TCP port")
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve()))
+  )
+  return address.port
+}

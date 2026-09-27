@@ -28,6 +28,7 @@ export interface ExternalMcpCatalogTool {
   id: string
   server: string
   name: string
+  originalName: string
   description?: string
   inputSchema: unknown
 }
@@ -47,7 +48,7 @@ export interface ExternalMcpRegistry {
   registerTools(server: McpServer): void
   catalog(): ExternalMcpCatalogTool[]
   call(id: string, args: Record<string, unknown>): Promise<unknown>
-  reload(): Promise<void>
+  reload(force?: boolean): Promise<void>
   close(): Promise<void>
 }
 
@@ -66,10 +67,10 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
   let reloadTimer: NodeJS.Timeout | undefined
   let reloadQueue: Promise<void> = Promise.resolve()
 
-  const reloadRegistry = (): Promise<void> => {
+  const reloadRegistry = (force = false): Promise<void> => {
     const reload = reloadQueue.then(async () => {
       const nextConfig = loadExternalMcpConfig(configPath)
-      if (JSON.stringify(nextConfig) === JSON.stringify(config)) return
+      if (!force && JSON.stringify(nextConfig) === JSON.stringify(config)) return
       const nextConnections = (
         await Promise.all(
           Object.entries(nextConfig)
@@ -182,6 +183,7 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
         id: `mcp:${connection.id}:${tool.name}`,
         server: connection.id,
         name: publicName,
+        originalName: tool.name,
         ...(tool.description ? { description: tool.description } : {}),
         inputSchema: tool.inputSchema,
       }))

@@ -106,7 +106,14 @@ export function createDashboardRouter(
   })
 
   router.get("/api/mcp-servers", (_req, res) => {
-    res.json({ servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile) })
+    res.json({
+      servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
+      tools: externalMcp?.catalog().map(({ server, originalName, description }) => ({
+        server,
+        name: originalName,
+        ...(description ? { description } : {}),
+      })) ?? [],
+    })
   })
 
   router.put("/api/mcp-servers", async (req, res) => {
@@ -117,6 +124,23 @@ export function createDashboardRouter(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       res.status(400).json({ error: message })
+    }
+  })
+
+  router.post("/api/mcp-servers/refresh", async (_req, res) => {
+    try {
+      await externalMcp?.reload(true)
+      res.json({
+        servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
+        tools: externalMcp?.catalog().map(({ server, originalName, description }) => ({
+          server,
+          name: originalName,
+          ...(description ? { description } : {}),
+        })) ?? [],
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ error: message })
     }
   })
 
