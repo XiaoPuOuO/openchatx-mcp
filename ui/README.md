@@ -13,7 +13,7 @@ npm run ui:install
 npm run ui:dev
 ```
 
-The Vite dev server proxies `/ui/api` to openchatx-mcp at `http://127.0.0.1:3333`.
+The Vite dev server proxies `/ui/api` to openchatx-mcp at `http://127.0.0.1:8001` by default.
 
 ## Production
 

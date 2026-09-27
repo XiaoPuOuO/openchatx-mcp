@@ -35,7 +35,7 @@ profile = "openchatx"
 health_port = 8080
 ```
 
-Production HTTP binds to loopback `127.0.0.1` at the configured root `port` (default `3333`). `tunnel-client` exposes its local health/admin surface on `tunnel.health_port` (default `8080`). Both port settings accept integers from 1 through 65535. `state_dir` defaults to `~/.openchatx-mcp`; setup creates `<state_dir>/AGENTS.md` and runtime state only. Reusable skills live exclusively inside Toolbox folders. Relative shell/file/search/image paths resolve from the operating-system user's home directory through `MCP_CONFIG.defaultCwd`. There is no separate workspace directory.
+Production HTTP binds to loopback `127.0.0.1` at the configured root `port` (default `8001`). `tunnel-client` exposes its local health/admin surface on `tunnel.health_port` (default `8080`). Both port settings accept integers from 1 through 65535. `state_dir` defaults to `~/.openchatx-mcp`; setup creates `<state_dir>/AGENTS.md` and runtime state only. Reusable skills live exclusively inside Toolbox folders. Relative shell/file/search/image paths resolve from the operating-system user's home directory through `MCP_CONFIG.defaultCwd`. There is no separate workspace directory.
 
 ## Secure MCP Tunnel Runtime
 

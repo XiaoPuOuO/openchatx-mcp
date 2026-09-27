@@ -88,7 +88,7 @@ function checkTunnelClient(tunnelProfile: string, platform: NodeJS.Platform): st
   })
   if (profiles.status !== 0 || !profiles.stdout.includes(`"${tunnelProfile}"`)) {
     errors.push(
-      `tunnel-client profile "${tunnelProfile}" is missing. Initialize it with tunnel-client init --profile ${tunnelProfile} --tunnel-id <tunnel_id> --mcp-server-url http://127.0.0.1:3333/mcp.`
+      `tunnel-client profile "${tunnelProfile}" is missing. Initialize it with tunnel-client init --profile ${tunnelProfile} --tunnel-id <tunnel_id> --mcp-server-url http://127.0.0.1:8001/mcp (or use the port configured in openchatx.toml).`
     )
   }
   if (!process.env.CONTROL_PLANE_API_KEY && !process.env.OPENAI_API_KEY) {

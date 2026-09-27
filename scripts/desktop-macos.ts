@@ -286,7 +286,7 @@ async function writeDesktopConfig(destination: string): Promise<void> {
     destination,
     [
       'state_dir = "~/.openchatx-mcp"',
-      "port = 3333",
+      "port = 8001",
       "",
       "[shell]",
       'path = "/bin/zsh"',

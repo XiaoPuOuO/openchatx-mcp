@@ -152,8 +152,9 @@ internal sealed class MainForm : Form
         if (_snapshot.Backend)
         {
             var current = _webView.Source;
-            if (current is null || current.Host != "127.0.0.1" || current.Port != 3333)
-                _webView.Source = new Uri("http://127.0.0.1:3333/ui/");
+            var dashboard = _supervisor.DashboardUrl;
+            if (current is null || current.Host != dashboard.Host || current.Port != dashboard.Port)
+                _webView.Source = dashboard;
         }
         else
         {
@@ -303,7 +304,7 @@ internal readonly record struct RuntimeSnapshot(bool Backend, bool Tunnel, bool 
 
 internal sealed class RuntimeSupervisor
 {
-    private static readonly Uri BackendHealth = new("http://127.0.0.1:3333/healthz");
+    private const int DefaultRuntimePort = 8001;
     private static readonly Uri TunnelHealth = new("http://127.0.0.1:8080/health?details=true");
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMilliseconds(700) };
     private readonly string _runtimeRoot;
@@ -319,6 +320,9 @@ internal sealed class RuntimeSupervisor
 
     public string LogsDirectory { get; }
     public string WebViewUserDataDirectory { get; }
+    public Uri DashboardUrl => new($"http://127.0.0.1:{RuntimePort}/ui/");
+    private Uri BackendHealth => new($"http://127.0.0.1:{RuntimePort}/healthz");
+    private string McpServerUrl => $"http://127.0.0.1:{RuntimePort}/mcp";
 
     public RuntimeSupervisor()
     {
@@ -342,10 +346,12 @@ internal sealed class RuntimeSupervisor
         Directory.CreateDirectory(LogsDirectory);
         Directory.CreateDirectory(_profileDirectory);
 
+        var publicConfigPath = Path.Combine(configDirectory, "openchatx.toml");
         CopyIfMissing(
             Path.Combine(_runtimeRoot, ".openchatx", "config.toml"),
-            Path.Combine(configDirectory, "openchatx.toml")
+            publicConfigPath
         );
+        MigrateLegacyRuntimePort(publicConfigPath);
         CopyIfMissing(
             Path.Combine(_runtimeRoot, "defaults", "mcp-servers.json"),
             Path.Combine(configDirectory, "mcp-servers.json")
@@ -431,7 +437,7 @@ internal sealed class RuntimeSupervisor
                     "--profile-dir", _profileDirectory,
                     "--profile", "openchatx",
                     "--tunnel-id", trimmedTunnelId,
-                    "--mcp-server-url", "http://127.0.0.1:3333/mcp",
+                    "--mcp-server-url", McpServerUrl,
                     "--health-listen-addr", "127.0.0.1:8080",
                     "--control-plane-api-key-ref", "env:CONTROL_PLANE_API_KEY",
                     "--force"
@@ -478,6 +484,7 @@ internal sealed class RuntimeSupervisor
                 "run",
                 "--profile-dir", _profileDirectory,
                 "--profile", "openchatx",
+                "--mcp.server-url", $"url={McpServerUrl}",
                 "--health.listen-addr", "127.0.0.1:8080"
             },
             Path.Combine(LogsDirectory, "tunnel.log")
@@ -488,6 +495,57 @@ internal sealed class RuntimeSupervisor
         _tunnelProcess = StartLoggedProcess(startInfo, Path.Combine(LogsDirectory, "tunnel.log"));
         _tunnelOwned = true;
         AppendDesktopLog($"Started tunnel-client pid={_tunnelProcess.Id}");
+    }
+
+    private int RuntimePort
+    {
+        get
+        {
+            var configPath = Path.Combine(_appSupport, "config", "openchatx.toml");
+            if (!File.Exists(configPath)) return DefaultRuntimePort;
+
+            foreach (var rawLine in File.ReadLines(configPath))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith('#')) continue;
+                if (line.StartsWith('[')) break;
+                if (!line.StartsWith("port", StringComparison.Ordinal)) continue;
+
+                var equals = line.IndexOf('=');
+                if (equals < 0) continue;
+                var value = line[(equals + 1)..].Split('#', 2)[0].Trim();
+                if (int.TryParse(value, out var port) && port is >= 1 and <= 65535) return port;
+            }
+
+            return DefaultRuntimePort;
+        }
+    }
+
+    private static void MigrateLegacyRuntimePort(string configPath)
+    {
+        if (!File.Exists(configPath)) return;
+        var lines = File.ReadAllLines(configPath);
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var raw = lines[index];
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            if (line.StartsWith('[')) break;
+            if (!line.StartsWith("port", StringComparison.Ordinal)) continue;
+
+            var equals = raw.IndexOf('=');
+            if (equals < 0) break;
+            var valueStart = equals + 1;
+            while (valueStart < raw.Length && char.IsWhiteSpace(raw[valueStart])) valueStart++;
+            var valueEnd = valueStart;
+            while (valueEnd < raw.Length && char.IsDigit(raw[valueEnd])) valueEnd++;
+            if (!int.TryParse(raw[valueStart..valueEnd], out var port) || port != 3333) break;
+
+            lines[index] = raw[..valueStart] + DefaultRuntimePort + raw[valueEnd..];
+            File.WriteAllLines(configPath, lines);
+            return;
+        }
     }
 
     private ProcessStartInfo NewProcessStartInfo(string executable, IEnumerable<string> arguments, string logPath)

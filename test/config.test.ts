@@ -42,7 +42,7 @@ test("loads and validates OpenChatX TOML config", async (t) => {
 
   assert.deepEqual(loadPublicConfig(path), {
     state_dir: "~/.openchatx-test",
-    port: 3333,
+    port: 8001,
     shell: { path: "/bin/zsh", rtk: false },
     tunnel: { profile: "personal", health_port: 8181 },
     mcp: { tool_output: "structured" },
@@ -132,7 +132,7 @@ test("MCP and tunnel health ports accept overrides and default invalid values in
   const root = await tempDir(t, "openchatx-config-ports-")
   const { configPath } = await initializeOpenChatXConfig(root)
   const scaffold = await readFile(configPath, "utf8")
-  assert.match(scaffold, /^port = 3333$/mu)
+  assert.match(scaffold, /^port = 8001$/mu)
   assert.match(scaffold, /^health_port = 8080$/mu)
 
   await writeFile(configPath, 'port = 3334\n[tunnel]\nprofile = "custom"\nhealth_port = 8181\n')
@@ -143,7 +143,7 @@ test("MCP and tunnel health ports accept overrides and default invalid values in
   for (const invalid of ["0", "65536", "1.5", '"3334"']) {
     await writeFile(configPath, `port = ${invalid}\n[tunnel]\nhealth_port = ${invalid}\n`)
     const config = loadPublicConfig(configPath)
-    assert.equal(config.port, 3333)
+    assert.equal(config.port, 8001)
     assert.equal(config.tunnel.health_port, 8080)
   }
   assert.equal(warning.mock.callCount(), 8)

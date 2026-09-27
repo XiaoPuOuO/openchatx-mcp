@@ -10,7 +10,7 @@ const defaultConfigPath =
   process.env.OPENCHATX_PUBLIC_CONFIG?.trim() || resolve(__dirname, "../.openchatx/config.toml")
 const publicConfigSchema = z.object({
   state_dir: z.string().trim().min(1).default("~/.openchatx-mcp"),
-  port: z.number().int().min(1).max(65535).default(3333),
+  port: z.number().int().min(1).max(65535).default(8001),
   shell: z.object({
     path: z
       .string()

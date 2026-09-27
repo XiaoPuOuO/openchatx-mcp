@@ -3,11 +3,11 @@ import Foundation
 import Security
 import WebKit
 
-private let dashboardURL = URL(string: "http://127.0.0.1:3333/ui/")!
-private let backendHealthURL = URL(string: "http://127.0.0.1:3333/healthz")!
 private let tunnelHealthURL = URL(string: "http://127.0.0.1:8080/health?details=true")!
 
 final class RuntimeSupervisor: NSObject {
+    private static let defaultRuntimePort = 8001
+
     struct Snapshot {
         let backend: Bool
         let tunnel: Bool
@@ -28,6 +28,9 @@ final class RuntimeSupervisor: NSObject {
     private let fileManager = FileManager.default
 
     var onSnapshot: ((Snapshot) -> Void)?
+    var dashboardURL: URL { URL(string: "http://127.0.0.1:\(runtimePort)/ui/")! }
+    private var backendHealthURL: URL { URL(string: "http://127.0.0.1:\(runtimePort)/healthz")! }
+    private var mcpServerURL: String { "http://127.0.0.1:\(runtimePort)/mcp" }
 
     override init() {
         let bundleResources = Bundle.main.resourceURL!
@@ -52,10 +55,12 @@ final class RuntimeSupervisor: NSObject {
         try fileManager.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: profileDirectory, withIntermediateDirectories: true)
 
+        let publicConfig = configDirectory.appendingPathComponent("openchatx.toml")
         try copyDefault(
             from: runtimeRoot.appendingPathComponent(".openchatx/config.toml"),
-            to: configDirectory.appendingPathComponent("openchatx.toml")
+            to: publicConfig
         )
+        try migrateLegacyRuntimePort(publicConfig)
         try copyDefault(
             from: runtimeRoot.appendingPathComponent("defaults/mcp-servers.json"),
             to: configDirectory.appendingPathComponent("mcp-servers.json")
@@ -125,7 +130,7 @@ final class RuntimeSupervisor: NSObject {
                             "--profile-dir", self.profileDirectory.path,
                             "--profile", "openchatx",
                             "--tunnel-id", trimmedTunnelID,
-                            "--mcp-server-url", "http://127.0.0.1:3333/mcp",
+                            "--mcp-server-url", self.mcpServerURL,
                             "--health-listen-addr", "127.0.0.1:8080",
                             "--control-plane-api-key-ref", "env:CONTROL_PLANE_API_KEY",
                             "--force"
@@ -149,7 +154,7 @@ final class RuntimeSupervisor: NSObject {
     func publishSnapshot() {
         DispatchQueue.global(qos: .utility).async {
             let snapshot = Snapshot(
-                backend: self.isHealthy(backendHealthURL),
+                backend: self.isHealthy(self.backendHealthURL),
                 tunnel: self.isTunnelHealthy(),
                 tunnelProfile: self.hasTunnelProfile()
             )
@@ -196,6 +201,7 @@ final class RuntimeSupervisor: NSObject {
             "run",
             "--profile-dir", profileDirectory.path,
             "--profile", "openchatx",
+            "--mcp.server-url", "url=\(mcpServerURL)",
             "--health.listen-addr", "127.0.0.1:8080"
         ]
         process.currentDirectoryURL = runtimeRoot
@@ -213,6 +219,50 @@ final class RuntimeSupervisor: NSObject {
         tunnelProcess = process
         tunnelOwned = true
         appendDesktopLog("Started tunnel-client pid=\(process.processIdentifier)")
+    }
+
+    private var runtimePort: Int {
+        let config = appSupport
+            .appendingPathComponent("config", isDirectory: true)
+            .appendingPathComponent("openchatx.toml")
+        guard
+            let source = try? String(contentsOf: config, encoding: .utf8)
+        else {
+            return Self.defaultRuntimePort
+        }
+
+        for rawLine in source.split(whereSeparator: { $0.isNewline }) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.hasPrefix("[") { break }
+            guard line.hasPrefix("port"), let equals = line.firstIndex(of: "=") else { continue }
+            let valueStart = line.index(after: equals)
+            let rawValue = line[valueStart...].split(separator: "#", maxSplits: 1)[0]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let port = Int(rawValue), (1...65535).contains(port) { return port }
+        }
+
+        return Self.defaultRuntimePort
+    }
+
+    private func migrateLegacyRuntimePort(_ config: URL) throws {
+        guard var source = try? String(contentsOf: config, encoding: .utf8) else { return }
+        var lines = source.components(separatedBy: .newlines)
+
+        for index in lines.indices {
+            let line = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.hasPrefix("[") { break }
+            guard line.hasPrefix("port"), let equals = line.firstIndex(of: "=") else { continue }
+            let rawValue = line[line.index(after: equals)...].split(separator: "#", maxSplits: 1)[0]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard rawValue == "3333" else { break }
+            guard let range = lines[index].range(of: "3333") else { break }
+            lines[index].replaceSubrange(range, with: String(Self.defaultRuntimePort))
+            source = lines.joined(separator: "\n")
+            try source.write(to: config, atomically: true, encoding: .utf8)
+            return
+        }
     }
 
     private func migrateLegacyTunnelProfile() throws {
@@ -728,7 +778,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         moreToolbarItem?.menu = makeMoreMenu()
 
         if snapshot.backend {
-            if webView.url?.host != dashboardURL.host {
+            let dashboardURL = supervisor.dashboardURL
+            if webView.url?.host != dashboardURL.host || webView.url?.port != dashboardURL.port {
                 webView.load(URLRequest(url: dashboardURL))
             }
         } else {

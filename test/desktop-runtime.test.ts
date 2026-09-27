@@ -43,7 +43,19 @@ test("Windows desktop app owns runtime lifecycle with WebView2 and Windows Crede
   assert.match(source, /uri\.Scheme is "data" or "about" or "blob"/u)
   assert.match(source, /uri\.Scheme is "http" or "https" or "mailto"/u)
   assert.match(source, /NavigationDisposition\.Blocked/u)
+  assert.match(source, /DefaultRuntimePort = 8001/u)
+  assert.match(source, /openchatx\.toml/u)
+  assert.match(source, /--mcp\.server-url/u)
+  assert.match(source, /port != 3333/u)
   assert.doesNotMatch(source, /\bpm2\b/iu)
+})
+
+test("macOS desktop follows the configured runtime port", async () => {
+  const source = await readFile(join(root, "desktop/macos/OpenChatXApp.swift"), "utf8")
+  assert.match(source, /defaultRuntimePort = 8001/u)
+  assert.match(source, /openchatx\.toml/u)
+  assert.match(source, /--mcp\.server-url/u)
+  assert.match(source, /rawValue == "3333"/u)
 })
 
 test("Windows desktop packaging cross-builds x64 and arm64 with bundled Node and tunnel-client", async () => {
