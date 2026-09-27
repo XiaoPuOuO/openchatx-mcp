@@ -43,12 +43,24 @@ jobs:
           cache: npm
       - if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
         run: npm ci --force
+      - if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
+        run: npm --prefix ui ci
+      - if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
+        run: npm run setup -- --config-only
       - name: Verify tag matches package version
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
         shell: bash
         run: |
           VERSION="v$(node -p "require('./package.json').version")"
           test "$VERSION" = "$RELEASE_TAG"
+      - name: Validate source quality
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_validation) }}
+        run: |
+          npm run lint
+          npm run typecheck
+          npm --prefix ui run lint
+          npm run build
+          npm --prefix ui run build
 
   macos:
     name: macOS ${{ matrix.arch }}
@@ -81,6 +93,7 @@ jobs:
       - run: npm ci
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
+      - run: npm test -- --test-concurrency=1
       - name: Verify Apple signing secrets
         shell: bash
         run: |
@@ -152,6 +165,8 @@ jobs:
       - run: npm ci
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
+      - name: Windows platform tests
+        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts test/desktop-runtime.test.ts
       - name: Build unsigned desktop and installer
         run: node --import tsx scripts/desktop-windows.ts installer ${{ matrix.arch }}
       - name: Smoke test x64 runtime
