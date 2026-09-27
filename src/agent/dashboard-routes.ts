@@ -62,6 +62,7 @@ export function createDashboardRouter(
   registerUpdateRoutes(router)
   registerAgentInstructionsRoutes(router)
   registerRuleRoutes(router, toolboxRegistry)
+  registerToolboxRoutes(router, toolboxRegistry)
   registerPlatformRoute(router, platformOverview)
 
   router.get("/api/events", (req, res) => {
@@ -108,11 +109,12 @@ export function createDashboardRouter(
   router.get("/api/mcp-servers", (_req, res) => {
     res.json({
       servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
-      tools: externalMcp?.catalog().map(({ server, originalName, description }) => ({
-        server,
-        name: originalName,
-        ...(description ? { description } : {}),
-      })) ?? [],
+      tools:
+        externalMcp?.catalog().map(({ server, originalName, description }) => ({
+          server,
+          name: originalName,
+          ...(description ? { description } : {}),
+        })) ?? [],
     })
   })
 
@@ -132,11 +134,12 @@ export function createDashboardRouter(
       await externalMcp?.reload(true)
       res.json({
         servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
-        tools: externalMcp?.catalog().map(({ server, originalName, description }) => ({
-          server,
-          name: originalName,
-          ...(description ? { description } : {}),
-        })) ?? [],
+        tools:
+          externalMcp?.catalog().map(({ server, originalName, description }) => ({
+            server,
+            name: originalName,
+            ...(description ? { description } : {}),
+          })) ?? [],
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -187,6 +190,15 @@ export function createDashboardRouter(
     })
   })
 
+  const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
+  router.use(expressStatic(dashboardDir, { index: "index.html" }))
+  return router
+}
+
+function registerToolboxRoutes(
+  router: ReturnType<typeof Router>,
+  toolboxRegistry: ToolboxRegistry | undefined
+): void {
   router.get("/api/toolboxes", (_req, res) => {
     res.json({ toolboxes: toolboxRegistry?.snapshots() ?? [] })
   })
@@ -322,10 +334,6 @@ export function createDashboardRouter(
       toolboxError(res, error)
     }
   })
-
-  const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
-  router.use(expressStatic(dashboardDir, { index: "index.html" }))
-  return router
 }
 
 function registerUpdateRoutes(router: ReturnType<typeof Router>): void {

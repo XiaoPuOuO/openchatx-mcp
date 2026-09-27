@@ -113,12 +113,12 @@ export class ToolboxRegistry {
     await mkdir(this.root, { recursive: true })
     await this.reload()
     this.watcher = watch(this.root, { recursive: true }, (_event, filename) => {
-      if (this.closed) return
+      if (this.isClosed()) return
       if (typeof filename === "string" && filename.endsWith(".openchatx.mjs")) return
       if (this.reloadTimer) clearTimeout(this.reloadTimer)
       this.reloadTimer = setTimeout(() => {
         this.reloadTimer = undefined
-        if (this.closed) return
+        if (this.isClosed()) return
         const pending = this.reload()
         this.reloadPromises.add(pending)
         void pending.finally(() => this.reloadPromises.delete(pending))
@@ -135,6 +135,10 @@ export class ToolboxRegistry {
     this.watcher = undefined
     await Promise.allSettled([...this.reloadPromises])
     this.reloadPromises.clear()
+  }
+
+  private isClosed(): boolean {
+    return this.closed
   }
 
   async reload(): Promise<void> {

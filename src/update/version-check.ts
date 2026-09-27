@@ -2,7 +2,6 @@ import { MCP_CONFIG } from "../config.js"
 
 const RELEASES_URL = "https://api.github.com/repos/XiaoPuOuO/openchatx-mcp/releases/latest"
 const CACHE_MS = 6 * 60 * 60 * 1_000
-const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)/u
 const VERSION_PREFIX_PATTERN = /^v/iu
 
 export interface UpdateCheckResult {
@@ -70,8 +69,13 @@ export function compareVersions(left: string, right: string): -1 | 0 | 1 {
 
 function parseVersion(value: string): [number, number, number] {
   const normalized = normalizeVersion(value)
-  const parts = SEMVER_PATTERN.exec(normalized)?.slice(1, 4) ?? []
-  return [Number(parts[0] ?? 0), Number(parts[1] ?? 0), Number(parts[2] ?? 0)]
+  const core = normalized.split("-", 1)[0] ?? ""
+  const parts = core.split(".", 3)
+  return [
+    Number.parseInt(parts[0] ?? "0", 10) || 0,
+    Number.parseInt(parts[1] ?? "0", 10) || 0,
+    Number.parseInt(parts[2] ?? "0", 10) || 0,
+  ]
 }
 
 function normalizeVersion(value: string): string {
