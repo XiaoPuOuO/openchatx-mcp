@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises"
-import { dirname, extname, isAbsolute, resolve } from "node:path"
+import { dirname, extname, isAbsolute, parse, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
 import type { McpServer } from "@modelcontextprotocol/server"
@@ -248,7 +248,10 @@ export function registerFileWriteTool(server: McpServer, projectScope?: ProjectS
             if (!isFsError(error, "ENOENT")) throw error
             created = true
           }
-          await mkdir(dirname(filePath), { recursive: true })
+          const parentDirectory = dirname(filePath)
+          if (parentDirectory !== parse(parentDirectory).root) {
+            await mkdir(parentDirectory, { recursive: true })
+          }
           await writeFile(filePath, content, { encoding: "utf8", signal: ctx.mcpReq.signal })
           const diff = createCompactDiff(before, content)
           return {

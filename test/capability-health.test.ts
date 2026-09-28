@@ -5,6 +5,7 @@ import {
   CapabilityHealthService,
   isTunnelOperational,
   tunnelHealthStatus,
+  tunnelMcpObservation,
 } from "../src/capabilities/health.js"
 
 test("capability health reports runtime even without optional services", async () => {
@@ -28,6 +29,22 @@ test("tunnel health treats a connected control plane as operational even when re
     }),
     true
   )
+})
+
+test("tunnel health distinguishes observed and unobserved MCP sub-probes", () => {
+  assert.equal(
+    tunnelMcpObservation({
+      components: { mcp: { status: "unknown", state: "not_observed" } },
+    }),
+    "unobserved"
+  )
+  assert.equal(
+    tunnelMcpObservation({
+      components: { mcp: { status: "ok", state: "healthy" } },
+    }),
+    "observed"
+  )
+  assert.equal(tunnelMcpObservation({ components: {} }), "unobserved")
 })
 
 test("tunnel health rejects a live daemon without a connected control plane", () => {

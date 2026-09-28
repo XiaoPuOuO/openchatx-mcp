@@ -168,7 +168,7 @@ jobs:
       - run: npm --prefix ui ci
       - run: npm run setup -- --config-only
       - name: Windows platform tests
-        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts test/desktop-runtime.test.ts
+        run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts test/desktop-runtime.test.ts test/integrations/file-transfer.ts
       - name: Build unsigned desktop and installer
         run: node --import tsx scripts/desktop-windows.ts installer ${{ matrix.arch }}
       - name: Smoke test x64 runtime
@@ -200,11 +200,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          mapfile -d '' assets < <(find release-assets -type f -print0)
-          if [ "${#assets[@]}" -eq 0 ]; then
+          mapfile -d '' built_assets < <(find release-assets -type f -print0)
+          if [ "${#built_assets[@]}" -eq 0 ]; then
             echo "No release assets were downloaded." >&2
             exit 1
           fi
+          (
+            cd release-assets
+            find . -type f ! -name SHA256SUMS.txt ! -name BUILD-INFO.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+            {
+              echo "tag=$RELEASE_TAG"
+              echo "commit=$GITHUB_SHA"
+            } > BUILD-INFO.txt
+          )
+          mapfile -d '' assets < <(find release-assets -type f -print0)
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
           elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then

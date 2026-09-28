@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
-import { readFile, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { readFile, rm, writeFile } from "node:fs/promises"
+import { join, parse } from "node:path"
+import process from "node:process"
 import test from "node:test"
 
 import { tempDir } from "../helpers/temp.js"
@@ -55,4 +56,41 @@ test("file_write creates and overwrites text while returning a diff", {
   assert.match(toolText(overwritten), /-first/u)
   assert.match(toolText(overwritten), /\+second/u)
   assert.match(toolText(overwritten), /created=false/u)
+})
+
+test("file_write skips mkdir when the parent is already a filesystem root", async () => {
+  const source = await readFile(
+    join(import.meta.dirname, "..", "..", "src", "tools", "file", "file-tools.ts"),
+    "utf8"
+  )
+  assert.match(source, /parentDirectory !== parse\(parentDirectory\)\.root/u)
+  assert.doesNotMatch(source, /mkdir\(dirname\(filePath\)/u)
+})
+
+test("file_write creates and overwrites a file directly in a Windows drive root", {
+  skip: process.platform !== "win32",
+  timeout: 10_000,
+}, async (t) => {
+  const driveRoot = parse(process.cwd()).root
+  const path = join(driveRoot, `openchatx-root-write-${process.pid}-${Date.now()}.txt`)
+  t.after(() => rm(path, { force: true }))
+
+  const running = await startMcpHttpServer()
+  t.after(() => running.close())
+  const connected = await connectClient(running.url, "file-write-root-client")
+  t.after(() => connected.client.close())
+
+  const created = await connected.client.callTool({
+    name: "file_write",
+    arguments: { filePath: path, content: "root-first\n" },
+  })
+  assert.equal(created.isError, undefined)
+  assert.equal(await readFile(path, "utf8"), "root-first\n")
+
+  const overwritten = await connected.client.callTool({
+    name: "file_write",
+    arguments: { filePath: path, content: "root-second\n" },
+  })
+  assert.equal(overwritten.isError, undefined)
+  assert.equal(await readFile(path, "utf8"), "root-second\n")
 })

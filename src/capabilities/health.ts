@@ -122,7 +122,7 @@ async function tunnelHealth(starting: boolean): Promise<CapabilityHealthComponen
       kind: "tunnel",
       name: "OpenAI Secure MCP Tunnel",
       status: tunnelHealthStatus(operational, starting),
-      ...tunnelHealthDetail(operational, starting, response.status, response.ok),
+      ...tunnelHealthDetail(operational, starting, response.status, response.ok, payload),
     }
   } catch (error) {
     return {
@@ -152,13 +152,23 @@ function tunnelHealthDetail(
   operational: boolean,
   starting: boolean,
   status: number,
-  responseOk: boolean
+  responseOk: boolean,
+  payload?: unknown
 ): Pick<CapabilityHealthComponent, "detail"> {
   if (operational) {
-    return { detail: `profile ${MCP_CONFIG.tunnel.profile} · control plane connected` }
+    const suffix = tunnelMcpObservation(payload) === "unobserved" ? " · MCP probe unobserved" : ""
+    return { detail: `profile ${MCP_CONFIG.tunnel.profile} · control plane connected${suffix}` }
   }
   if (starting) return {}
   return { detail: responseOk ? "Tunnel control plane is not connected" : `HTTP ${status}` }
+}
+
+export function tunnelMcpObservation(value: unknown): "observed" | "unobserved" {
+  const health = asRecord(value)
+  const components = health ? asRecord(health.components) : undefined
+  const mcp = components ? asRecord(components.mcp) : undefined
+  if (!mcp || mcp.state === "not_observed" || mcp.status === "unknown") return "unobserved"
+  return "observed"
 }
 
 export function isTunnelOperational(value: unknown): boolean {
