@@ -1,10 +1,11 @@
-import { Check, CircleGauge, LoaderCircle, Trash2, TriangleAlert } from "lucide-react"
+import { Check, CircleGauge, LoaderCircle, Square, Trash2, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
+import { stopAgentCall } from "../../lib/api"
 import type { Agent, AgentCall } from "../../types"
 import { SteerComposer } from "./SteerComposer"
 import { ToolCallModal } from "./ToolCallModal"
@@ -22,6 +23,8 @@ export function AgentCard({
   const [selectedCallId, setSelectedCallId] = useState<string>()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string>()
+  const [stoppingCallId, setStoppingCallId] = useState<string>()
+  const [stopError, setStopError] = useState<string>()
   const active = now - agent.lastSeenAt < 30_000
   const recent = [agent.current, ...agent.recent].filter((call): call is AgentCall => Boolean(call))
   const selectedCall = recent.find((call) => call.id === selectedCallId)
@@ -35,6 +38,17 @@ export function AgentCard({
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : String(error))
       setDeleting(false)
+    }
+  }
+
+  async function stopCall(call: AgentCall) {
+    setStoppingCallId(call.id)
+    setStopError(undefined)
+    try {
+      await stopAgentCall(agent.id, call.id)
+    } catch (error) {
+      setStopError(error instanceof Error ? error.message : String(error))
+      setStoppingCallId(undefined)
     }
   }
 
@@ -108,6 +122,12 @@ export function AgentCard({
                 key={call.id}
                 call={call}
                 onClick={() => setSelectedCallId(call.id)}
+                onStop={
+                  call.tool === "bash" && call.status === "running"
+                    ? () => void stopCall(call)
+                    : undefined
+                }
+                stopping={stoppingCallId === call.id}
                 locale={locale}
               />
             ))}
@@ -115,6 +135,7 @@ export function AgentCard({
         </div>
 
         {deleteError ? <div className="text-xs text-destructive">{deleteError}</div> : null}
+        {stopError ? <div className="text-xs text-destructive">{stopError}</div> : null}
         <SteerComposer agent={agent} />
       </CardContent>
       <ToolCallModal call={selectedCall} onClose={() => setSelectedCallId(undefined)} />
@@ -125,10 +146,14 @@ export function AgentCard({
 function ActivityRow({
   call,
   onClick,
+  onStop,
+  stopping,
   locale,
 }: {
   call: AgentCall
   onClick: () => void
+  onStop?: () => void
+  stopping?: boolean
   locale: string
 }) {
   const { t } = useI18n()
@@ -136,36 +161,52 @@ function ActivityRow({
   const failed = call.status === "failed"
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={`activity-row ${failed ? "activity-row-failed" : running ? "activity-row-running" : ""}`}
     >
-      {failed ? (
-        <TriangleAlert className="size-3.5 shrink-0 text-destructive" />
-      ) : running ? (
-        <LoaderCircle className="size-3.5 shrink-0 animate-spin text-[var(--success-foreground)]" />
-      ) : (
-        <Check className="size-3.5 shrink-0 text-muted-foreground" />
-      )}
-      <span className="w-24 shrink-0 truncate font-medium">{call.tool}</span>
-      <span
-        className={`min-w-0 flex-1 truncate ${failed ? "text-destructive" : "text-muted-foreground"}`}
-      >
-        {call.summary || (running ? t("agent.working") : t("agent.completed"))}
-      </span>
-      <span
-        className={
-          failed
-            ? "shrink-0 text-destructive"
-            : running
-              ? "shrink-0 text-[var(--success-foreground)]"
-              : "shrink-0 text-muted-foreground"
-        }
-      >
-        {running ? t("agent.now") : formatClock(call.finishedAt ?? call.startedAt, locale)}
-      </span>
-    </button>
+      <button type="button" onClick={onClick} className="activity-row-open">
+        {failed ? (
+          <TriangleAlert className="size-3.5 shrink-0 text-destructive" />
+        ) : running ? (
+          <LoaderCircle className="size-3.5 shrink-0 animate-spin text-[var(--success-foreground)]" />
+        ) : (
+          <Check className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <span className="w-24 shrink-0 truncate font-medium">{call.tool}</span>
+        <span
+          className={`min-w-0 flex-1 truncate ${failed ? "text-destructive" : "text-muted-foreground"}`}
+        >
+          {call.summary || (running ? t("agent.working") : t("agent.completed"))}
+        </span>
+        <span
+          className={
+            failed
+              ? "shrink-0 text-destructive"
+              : running
+                ? "shrink-0 text-[var(--success-foreground)]"
+                : "shrink-0 text-muted-foreground"
+          }
+        >
+          {running ? t("agent.now") : formatClock(call.finishedAt ?? call.startedAt, locale)}
+        </span>
+      </button>
+      {onStop ? (
+        <button
+          type="button"
+          className="activity-stop-button"
+          onClick={onStop}
+          disabled={stopping}
+          title={t("agent.stopCall")}
+          aria-label={t("agent.stopCall")}
+        >
+          {stopping ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <Square className="size-3.5" />
+          )}
+        </button>
+      ) : null}
+    </div>
   )
 }
 

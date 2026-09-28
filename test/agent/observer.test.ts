@@ -249,6 +249,27 @@ test("deletes an observed agent and emits a removal event", () => {
   assert.deepEqual(events, ["agent_changed:agent-1", "agent_removed:agent-1"])
 })
 
+test("stops a registered running tool call and drops its stop handle after settlement", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1" }
+  const callId = observer.startTool(agent, "bash", { command: "sleep 30" })
+  assert.ok(callId)
+
+  let stops = 0
+  assert.equal(
+    observer.registerToolStop(agent, callId, () => {
+      stops += 1
+    }),
+    true
+  )
+  assert.equal(observer.stopTool("agent-1", callId ?? ""), true)
+  assert.equal(stops, 1)
+
+  observer.failTool(agent, callId, new Error("stopped"))
+  assert.equal(observer.stopTool("agent-1", callId ?? ""), false)
+  assert.equal(stops, 1)
+})
+
 test("keeps concurrent tool calls from the same agent", () => {
   let timestamp = 3_000
   const observer = createAgentObserver(() => timestamp)

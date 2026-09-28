@@ -279,6 +279,7 @@ export const ja: Messages = {
   "agent.working": "実行中...",
   "agent.completed": "完了",
   "agent.now": "今",
+  "agent.stopCall": "停止",
   "steer.title": "指示",
   "steer.placeholder": "この Agent に指示する...",
   "steer.send": "指示を送信",

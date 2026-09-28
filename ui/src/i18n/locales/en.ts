@@ -280,6 +280,7 @@ export const en: Messages = {
   "agent.working": "Working...",
   "agent.completed": "Completed",
   "agent.now": "now",
+  "agent.stopCall": "Stop",
   "steer.title": "Steer",
   "steer.placeholder": "Steer this agent...",
   "steer.send": "Send instruction",

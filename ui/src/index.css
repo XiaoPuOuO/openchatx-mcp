@@ -554,11 +554,9 @@ button {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 8px;
   border: 0;
   border-radius: 7px;
   background: transparent;
-  padding: 5px 7px;
   color: inherit;
   text-align: left;
   font-size: 11px;
@@ -567,6 +565,42 @@ button {
 
 .activity-row:hover {
   background: var(--surface-hover);
+}
+
+.activity-row-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 5px 7px;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+.activity-stop-button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--destructive);
+}
+
+.activity-stop-button:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.activity-stop-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .activity-row-running {

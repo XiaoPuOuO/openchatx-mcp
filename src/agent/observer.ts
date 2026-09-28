@@ -47,6 +47,7 @@ export interface AgentSnapshot {
 interface AgentState extends AgentSnapshot {
   sessionId: string
   activeCalls: Map<string, AgentCallSnapshot>
+  activeCallStops: Map<string, () => void>
 }
 
 interface AgentChangedEvent {
@@ -66,6 +67,12 @@ export interface AgentObserver {
   deleteAgent(agentId: string): boolean
   sessionIdForAgent(agentId: string): string | undefined
   startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
+  registerToolStop(
+    agent: AgentIdentity | undefined,
+    callId: string | undefined,
+    stop: () => void
+  ): boolean
+  stopTool(agentId: string, callId: string): boolean
   finishTool(agent: AgentIdentity | undefined, callId: string | undefined, result?: unknown): void
   failTool(agent: AgentIdentity | undefined, callId: string | undefined, error?: unknown): void
   updateContextBudget(
@@ -119,6 +126,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
       recent: [],
       instructions: [],
       activeCalls: new Map(),
+      activeCallStops: new Map(),
     }
     agentsBySession.set(identity.sessionId, state)
     sessionsByAgentId.set(identity.agent, identity.sessionId)
@@ -171,6 +179,27 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     return call.id
   }
 
+  function registerToolStop(
+    identity: AgentIdentity | undefined,
+    callId: string | undefined,
+    stop: () => void
+  ): boolean {
+    if (!identity || !callId) return false
+    const agent = agentsBySession.get(identity.sessionId)
+    if (!agent?.activeCalls.has(callId)) return false
+    agent.activeCallStops.set(callId, stop)
+    return true
+  }
+
+  function stopTool(agentId: string, callId: string): boolean {
+    const sessionId = sessionsByAgentId.get(agentId)
+    const agent = sessionId ? agentsBySession.get(sessionId) : undefined
+    const stop = agent?.activeCallStops.get(callId)
+    if (!agent || !stop || !agent.activeCalls.has(callId)) return false
+    stop()
+    return true
+  }
+
   function settleTool(
     identity: AgentIdentity | undefined,
     callId: string | undefined,
@@ -194,6 +223,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
       finishedAt: timestamp,
     }
     agent.activeCalls.delete(callId)
+    agent.activeCallStops.delete(callId)
     agent.current = latestActiveCall(agent.activeCalls)
     agent.recent = [call, ...agent.recent].slice(0, MAX_RECENT_CALLS)
     agent.lastSeenAt = timestamp
@@ -269,6 +299,8 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     deleteAgent,
     sessionIdForAgent,
     startTool,
+    registerToolStop,
+    stopTool,
     finishTool: (agent, callId, result) => settleTool(agent, callId, "completed", result),
     failTool: (agent, callId, error) => settleTool(agent, callId, "failed", error),
     updateContextBudget,

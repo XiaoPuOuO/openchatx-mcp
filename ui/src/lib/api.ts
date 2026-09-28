@@ -91,6 +91,18 @@ export async function deleteAgent(agentId: string): Promise<void> {
   }
 }
 
+export async function stopAgentCall(agentId: string, callId: string): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(
+    `/ui/api/agents/${encodeURIComponent(agentId)}/calls/${encodeURIComponent(callId)}/stop`,
+    { method: "POST" }
+  )
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to stop tool call (${response.status})`)
+  }
+}
+
 export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot> {
   if (MOCK_DASHBOARD) {
     return {

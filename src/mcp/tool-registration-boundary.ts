@@ -62,9 +62,15 @@ export function installToolRegistrationBoundary(
       }
 
       observedCallId = options.agentObserver?.startTool(agent, name, input)
+      const userStopController = new AbortController()
+      options.agentObserver?.registerToolStop(agent, observedCallId, () => {
+        if (userStopController.signal.aborted) return
+        userStopController.abort(new ToolError("USER_FORCED_STOP", "（被用戶強制停止）"))
+      })
+      const callbackContext = withToolSignal(context, userStopController.signal)
       const result = await (tool.acceptsInput
-        ? tool.callback(inputValue, context)
-        : tool.callback(context))
+        ? tool.callback(inputValue, callbackContext)
+        : tool.callback(callbackContext))
       const normalizedResult = normalizeToolResultImages(result)
       const projected =
         !tool.nativeContent && !structuredOutput
@@ -98,7 +104,15 @@ export function installToolRegistrationBoundary(
     } catch (error) {
       const agent = getAgentIdentity()
       const result = formatToolError(error, structuredOutput)
-      const resultWithProgress = appendProgressHeartbeat(result, options.progressHeartbeat, agent)
+      const resultWithEvents = appendToolEvents(
+        result,
+        collectToolEvents(name, input, agent, options)
+      )
+      const resultWithProgress = appendProgressHeartbeat(
+        resultWithEvents,
+        options.progressHeartbeat,
+        agent
+      )
       const finalResult = await applyContextBudgetNotice(
         options.contextBudget,
         options.agentObserver,
@@ -133,6 +147,16 @@ export function installToolRegistrationBoundary(
   }
   if (!Reflect.set(server, "registerTool", boundaryRegisterTool)) {
     throw new TypeError("Could not install the MCP tool registration boundary.")
+  }
+}
+
+function withToolSignal(context: ServerContext, localSignal: AbortSignal): ServerContext {
+  return {
+    ...context,
+    mcpReq: {
+      ...context.mcpReq,
+      signal: AbortSignal.any([context.mcpReq.signal, localSignal]),
+    },
   }
 }
 

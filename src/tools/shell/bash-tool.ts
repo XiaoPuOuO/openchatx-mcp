@@ -8,7 +8,7 @@ import { signalProcessGroup } from "../../child-process-termination.js"
 import { MCP_CONFIG } from "../../config.js"
 import { shellCommandArgs } from "../../host-platform.js"
 import type { JobManager } from "../../jobs/job-manager.js"
-import { toToolError } from "../../mcp/tool-error.js"
+import { ToolError, toToolError } from "../../mcp/tool-error.js"
 import type { ProjectScope } from "../../projects/project-scope.js"
 import { tokenPrefix } from "../../tokenizer.js"
 import { withApplyPatchToolHint } from "./apply-patch-guidance.js"
@@ -156,7 +156,16 @@ async function runDurableCommand(
     projectId,
     input.killAfterMs
   )
-  const waited = await jobs.wait(job.id, input.waitMs, 0, MAX_CAPTURE_BYTES, input.signal)
+  let waited: Awaited<ReturnType<JobManager["wait"]>>
+  try {
+    waited = await jobs.wait(job.id, input.waitMs, 0, MAX_CAPTURE_BYTES, input.signal)
+  } catch (error) {
+    if (isUserForcedStop(input.signal.reason)) {
+      await jobs.cancel(job.id)
+      throw input.signal.reason
+    }
+    throw error
+  }
   const bounded = tokenPrefix(withApplyPatchToolHint(waited.output), input.maxOutputTokens)
   if (waited.job.status === "running")
     return durableRunningResult(cwd, waited, bounded.value, bounded.truncated)
@@ -232,6 +241,10 @@ async function resolveExecutionScope(
 function bashJobLabel(command: string): string {
   const compact = command.replace(/\s+/gu, " ").trim()
   return `bash: ${compact.slice(0, 114)}`
+}
+
+function isUserForcedStop(value: unknown): value is ToolError {
+  return value instanceof ToolError && value.code === "USER_FORCED_STOP"
 }
 
 async function runCommand(

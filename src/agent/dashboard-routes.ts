@@ -102,6 +102,14 @@ export function createDashboardRouter(
     res.status(202).json({ instruction })
   })
 
+  router.post("/api/agents/:agentId/calls/:callId/stop", (req, res) => {
+    if (!agentObserver.stopTool(req.params.agentId, req.params.callId)) {
+      res.status(404).json({ error: "running tool call not found or not stoppable" })
+      return
+    }
+    res.status(202).json({ stopped: true })
+  })
+
   router.delete("/api/agents/:agentId/instructions/:instructionId", (req, res) => {
     const cancelled = agentObserver.cancelInstruction(req.params.agentId, req.params.instructionId)
     if (!cancelled) {

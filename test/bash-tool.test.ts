@@ -6,7 +6,10 @@ import test from "node:test"
 import { Client } from "@modelcontextprotocol/client"
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 
+import { runWithAgent, setAgentTaskSlug } from "../src/agent/context.js"
+import { createAgentObserver } from "../src/agent/observer.js"
 import { JobManager } from "../src/jobs/job-manager.js"
+import { installToolRegistrationBoundary } from "../src/mcp/tool-registration-boundary.js"
 import { registerJobTools } from "../src/tools/jobs/job-tools.js"
 import { BashProcessManager } from "../src/tools/shell/bash-process-manager.js"
 import { registerBashProcessTool } from "../src/tools/shell/bash-process-tool.js"
@@ -172,3 +175,55 @@ test("bash wait expiry promotes a live command to a durable job", async (t) => {
   assert.doesNotMatch(final.output, /phase-one/u)
   assert.ok(final.next_cursor > promoted.next_cursor)
 })
+
+test("dashboard-style forced stop cancels the durable bash job and returns queued instructions", async (t) => {
+  const state = await tempDir(t, "openchatx-bash-force-stop-")
+  const cwd = await tempDir(t, "openchatx-bash-force-stop-cwd-")
+  const manager = new BashProcessManager(join(state, "logs"))
+  const jobs = new JobManager(join(state, "jobs"), join(state, "jobs", "jobs.json"))
+  await jobs.initialize()
+  const observer = createAgentObserver()
+  const server = new McpServer({ name: "bash-stop-test", version: "1.0.0" })
+  const client = new Client({ name: "bash-stop-client", version: "1.0.0" })
+  installToolRegistrationBoundary(server, {
+    structuredOutput: false,
+    agentObserver: observer,
+  })
+  registerBashTool(server, manager, undefined, jobs)
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+  t.after(() => Promise.all([client.close(), server.close(), jobs.close()]))
+
+  const resultPromise = runWithAgent("bash-force-stop-session", () => {
+    setAgentTaskSlug("bash-force-stop")
+    return client.callTool({
+      name: "bash",
+      arguments: { command: "printf 'started\n'; sleep 30", workdir: cwd, timeout_ms: 30_000 },
+    })
+  })
+
+  await waitFor(() => observer.listAgents()[0]?.current?.status === "running")
+  const agent = observer.listAgents()[0]
+  assert.ok(agent?.current)
+  assert.ok(observer.queueInstruction(agent.id, "停止後直接處理下一步"))
+  assert.equal(observer.stopTool(agent.id, agent.current.id), true)
+
+  const result = await resultPromise
+  assert.equal(result.isError, true)
+  const content = JSON.stringify(result.content)
+  assert.match(content, /USER_FORCED_STOP/u)
+  assert.match(content, /被用戶強制停止/u)
+  assert.match(content, /Human instruction: 停止後直接處理下一步/u)
+
+  const durableJobs = await jobs.list()
+  assert.equal(durableJobs.length, 1)
+  assert.equal(durableJobs[0]?.status, "cancelled")
+})
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error("Timed out waiting for bash test condition.")
+}

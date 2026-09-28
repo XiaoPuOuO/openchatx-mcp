@@ -266,6 +266,7 @@ export const zhTW: Messages = {
   "agent.working": "執行中...",
   "agent.completed": "已完成",
   "agent.now": "現在",
+  "agent.stopCall": "停止執行",
   "steer.title": "指示",
   "steer.placeholder": "給這個 Agent 新指示...",
   "steer.send": "送出指示",
