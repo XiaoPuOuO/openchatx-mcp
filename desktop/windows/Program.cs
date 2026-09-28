@@ -15,13 +15,26 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        try
+        {
+            ApplicationConfiguration.Initialize();
+            Application.Run(new MainForm());
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                "OpenChatX could not start.\n\n" + error.Message,
+                "OpenChatX",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 }
 
 internal sealed class MainForm : Form
 {
+    private static readonly TimeSpan WebViewInitializationTimeout = TimeSpan.FromSeconds(15);
     private readonly RuntimeSupervisor _supervisor = new();
     private readonly WebView2 _webView = new() { Dock = DockStyle.Fill };
     private readonly ToolStrip _toolbar = new() { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Top };
@@ -51,22 +64,36 @@ internal sealed class MainForm : Form
         Controls.Add(_webView);
         Controls.Add(_toolbar);
 
-        Load += async (_, _) => await InitializeAsync();
+        Shown += async (_, _) => await InitializeAsync();
         FormClosing += (_, _) => _supervisor.Stop();
         _timer.Tick += async (_, _) => await RefreshSnapshotAsync();
     }
 
     private async Task InitializeAsync()
     {
+        _supervisor.LogStartupStage("window-shown");
+        _timer.Start();
+        _ = StartRuntimeInBackgroundAsync();
+
         try
         {
+            _supervisor.LogStartupStage("state-prepare-start");
             await _supervisor.PrepareStateAsync();
-            var webViewEnvironment = await CoreWebView2Environment.CreateAsync(
-                browserExecutableFolder: null,
-                userDataFolder: _supervisor.WebViewUserDataDirectory
-            );
-            await _webView.EnsureCoreWebView2Async(webViewEnvironment);
+            _supervisor.LogStartupStage("state-prepared");
+            _supervisor.LogStartupStage("webview-environment-start");
+            var webViewEnvironment = await CoreWebView2Environment
+                .CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: _supervisor.WebViewUserDataDirectory
+                )
+                .WaitAsync(WebViewInitializationTimeout);
+            _supervisor.LogStartupStage("webview-environment-ready");
+            _supervisor.LogStartupStage("webview-initialize-start");
+            await _webView
+                .EnsureCoreWebView2Async(webViewEnvironment)
+                .WaitAsync(WebViewInitializationTimeout);
             _webReady = true;
+            _supervisor.LogStartupStage("webview-ready");
             _webView.CoreWebView2.NewWindowRequested += (_, args) =>
             {
                 args.Handled = true;
@@ -88,22 +115,72 @@ internal sealed class MainForm : Form
                         return;
                 }
             };
+            ShowStartingPage();
+        }
+        catch (TimeoutException)
+        {
+            _supervisor.LogStartupStage("webview-timeout");
+            OfferIsolatedDataRecovery(
+                "OpenChatX's embedded browser did not initialize within 15 seconds."
+            );
+        }
+        catch (Exception error)
+        {
+            _supervisor.LogStartupStage("webview-failed", error.GetType().Name);
+            OfferIsolatedDataRecovery(
+                "OpenChatX could not initialize its embedded browser.\n\n" + error.Message
+            );
+        }
+
+        await UpdateSnapshotAsync();
+    }
+
+    private async Task StartRuntimeInBackgroundAsync()
+    {
+        _supervisor.LogStartupStage("runtime-start");
+        try
+        {
+            await Task.Run(() => _supervisor.StartAsync());
+            _supervisor.LogStartupStage("runtime-start-complete");
+        }
+        catch (Exception error)
+        {
+            _supervisor.LogStartupStage("runtime-start-failed", error.GetType().Name);
+        }
+
+        if (!IsDisposed && IsHandleCreated)
+            BeginInvoke(async () => await UpdateSnapshotAsync());
+    }
+
+    private void OfferIsolatedDataRecovery(string reason)
+    {
+        var choice = MessageBox.Show(
+            this,
+            reason +
+            "\n\nThe local OpenChatX runtime will continue independently of the browser." +
+            "\n\nRestart once with a fresh isolated application-data directory? Existing data will not be deleted." +
+            "\n\nIf the isolated restart also fails, install or repair Microsoft Edge WebView2 Runtime.",
+            "OpenChatX browser recovery",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning
+        );
+        if (choice != DialogResult.Yes) return;
+
+        try
+        {
+            _supervisor.RestartWithIsolatedAppData();
+            Close();
         }
         catch (Exception error)
         {
             MessageBox.Show(
                 this,
-                "OpenChatX could not initialize its embedded browser. Install or repair Microsoft Edge WebView2 Runtime.\n\n" + error.Message,
+                "Could not start the isolated recovery instance.\n\n" + error.Message,
                 "OpenChatX",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
         }
-
-        ShowStartingPage();
-        await _supervisor.StartAsync();
-        await RefreshSnapshotAsync();
-        _timer.Start();
     }
 
     private static void OpenExternal(string value)
@@ -140,6 +217,11 @@ internal sealed class MainForm : Form
     private async Task RefreshSnapshotAsync()
     {
         await _supervisor.MaintainRuntimeAsync();
+        await UpdateSnapshotAsync();
+    }
+
+    private async Task UpdateSnapshotAsync()
+    {
         _snapshot = await _supervisor.SnapshotAsync();
         RenderSnapshot();
     }
@@ -308,6 +390,7 @@ internal readonly record struct RuntimeSnapshot(bool Backend, bool Tunnel, bool 
 internal sealed class RuntimeSupervisor
 {
     private const int DefaultRuntimePort = 8001;
+    private static readonly TimeSpan TunnelProfileProbeTimeout = TimeSpan.FromSeconds(3);
     private static readonly Uri TunnelHealth = new("http://127.0.0.1:8080/health?details=true");
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMilliseconds(700) };
     private readonly string _runtimeRoot;
@@ -332,13 +415,60 @@ internal sealed class RuntimeSupervisor
         _runtimeRoot = Path.Combine(AppContext.BaseDirectory, "runtime");
         _nodeExecutable = Path.Combine(_runtimeRoot, "bin", "node.exe");
         _tunnelExecutable = Path.Combine(_runtimeRoot, "bin", "tunnel-client.exe");
-        _appSupport = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "OpenChatX"
-        );
+        _appSupport = ResolveAppSupportDirectory();
         LogsDirectory = Path.Combine(_appSupport, "logs");
         WebViewUserDataDirectory = Path.Combine(_appSupport, "webview2");
         _profileDirectory = Path.Combine(_appSupport, "tunnel-profiles");
+        LogStartupStage("supervisor-created", Environment.GetEnvironmentVariable("OPENCHATX_APP_DATA") is null ? "default-data" : "custom-data");
+    }
+
+    private static string ResolveAppSupportDirectory()
+    {
+        var configured = Environment.GetEnvironmentVariable("OPENCHATX_APP_DATA")?.Trim();
+        if (!string.IsNullOrEmpty(configured))
+        {
+            if (!Path.IsPathFullyQualified(configured))
+                throw new InvalidOperationException("OPENCHATX_APP_DATA must be an absolute path.");
+            return Path.GetFullPath(configured);
+        }
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OpenChatX"
+        );
+    }
+
+    public void RestartWithIsolatedAppData()
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable))
+            throw new InvalidOperationException("Could not resolve the OpenChatX executable path.");
+
+        var recoveryRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OpenChatX-Recovery",
+            $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"
+        );
+        Directory.CreateDirectory(recoveryRoot);
+
+        var startInfo = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = false,
+            WorkingDirectory = AppContext.BaseDirectory
+        };
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            startInfo.Environment[(string)entry.Key] = entry.Value?.ToString();
+        startInfo.Environment["OPENCHATX_APP_DATA"] = recoveryRoot;
+        Process.Start(startInfo);
+    }
+
+    public void LogStartupStage(string stage, string? detail = null)
+    {
+        AppendDesktopLog(
+            detail is null
+                ? $"startup stage={stage}"
+                : $"startup stage={stage} detail={detail}"
+        );
     }
 
     public async Task PrepareStateAsync()
@@ -381,12 +511,21 @@ internal sealed class RuntimeSupervisor
             await PrepareStateAsync();
             if (!await IsHealthyAsync(BackendHealth) && (_backendProcess?.HasExited ?? true))
             {
+                LogStartupStage("runtime-process-start");
                 StartBackend();
-                await WaitUntilHealthyAsync(BackendHealth, 50);
+                if (await WaitUntilHealthyAsync(BackendHealth, 50))
+                    LogStartupStage("runtime-healthy");
+                else
+                    LogStartupStage("runtime-health-timeout");
             }
 
-            if (HasTunnelProfile() && !await IsTunnelHealthyAsync() && (_tunnelProcess?.HasExited ?? true))
+            if (await HasTunnelProfileAsync() &&
+                !await IsTunnelHealthyAsync() &&
+                (_tunnelProcess?.HasExited ?? true))
+            {
+                LogStartupStage("tunnel-process-start");
                 StartTunnel();
+            }
         }
         catch (Exception error)
         {
@@ -403,7 +542,7 @@ internal sealed class RuntimeSupervisor
         return new RuntimeSnapshot(
             await IsHealthyAsync(BackendHealth),
             await IsTunnelHealthyAsync(),
-            HasTunnelProfile()
+            await HasTunnelProfileAsync()
         );
     }
 
@@ -427,7 +566,7 @@ internal sealed class RuntimeSupervisor
 
         WindowsCredentialStore.Save("OpenChatX/CONTROL_PLANE_API_KEY", trimmedKey);
 
-        if (!HasTunnelProfile())
+        if (!await HasTunnelProfileAsync())
         {
             var trimmedTunnelId = tunnelId?.Trim() ?? "";
             if (trimmedTunnelId.Length == 0) throw new InvalidOperationException("Tunnel ID is required for first-time setup.");
@@ -582,7 +721,7 @@ internal sealed class RuntimeSupervisor
         return process;
     }
 
-    private bool HasTunnelProfile()
+    private async Task<bool> HasTunnelProfileAsync()
     {
         if (!File.Exists(_tunnelExecutable)) return false;
         try
@@ -600,8 +739,29 @@ internal sealed class RuntimeSupervisor
             info.ArgumentList.Add(_profileDirectory);
             using var process = Process.Start(info);
             if (process is null) return false;
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(3000);
+            using var cancellation = new CancellationTokenSource(TunnelProfileProbeTimeout);
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellation.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellation.Token);
+            try
+            {
+                await process.WaitForExitAsync(cancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                try
+                {
+                    await Task.WhenAll(outputTask, errorTask);
+                }
+                catch
+                {
+                    // Cancellation closes the redirected streams; the timeout is the useful result.
+                }
+                AppendDesktopLog("Tunnel profile probe timed out after 3 seconds.");
+                return false;
+            }
+            var output = await outputTask;
+            _ = await errorTask;
             return process.ExitCode == 0 &&
                    output.Split('\n').Any(line => line.Split('\t').FirstOrDefault()?.Trim() == "openchatx");
         }
