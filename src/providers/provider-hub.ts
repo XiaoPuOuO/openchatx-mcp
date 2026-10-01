@@ -1,3 +1,5 @@
+import process from "node:process"
+
 import { z } from "zod"
 
 import { loadSubagentConfig, type SubagentConfig, saveSubagentConfig } from "../subagents/config.js"
@@ -91,7 +93,9 @@ export class ProviderHub {
     const current = this.config()
     if (current.providers[providerId])
       throw new Error(`Provider ${JSON.stringify(providerId)} already exists.`)
-    if (preset.requiresApiKey && !apiKey)
+    const resolvedApiKey =
+      apiKey ?? (presetId === "openai" ? process.env.OPENAI_API_KEY : undefined)
+    if (preset.requiresApiKey && !resolvedApiKey)
       throw new Error(`Provider preset ${presetId} requires an API key.`)
     const next: SubagentConfig = {
       ...current,
@@ -101,7 +105,7 @@ export class ProviderHub {
           type: "openai-compatible",
           base_url: baseUrlOverride ?? preset.baseUrl,
           enabled: true,
-          ...(apiKey ? { api_key: apiKey } : {}),
+          ...(resolvedApiKey ? { api_key: resolvedApiKey } : {}),
           timeout: 120_000,
           description: preset.description,
         },
@@ -117,10 +121,12 @@ export class ProviderHub {
     if (!provider) throw new Error(`Unknown provider ${JSON.stringify(providerId)}.`)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), Math.min(provider.timeout, 10_000))
+    const apiKey =
+      provider.api_key ?? (providerId === "openai" ? process.env.OPENAI_API_KEY : undefined)
     try {
       const response = await fetch(`${provider.base_url.replace(TRAILING_SLASH_RE, "")}/models`, {
         headers: {
-          ...(provider.api_key ? { Authorization: `Bearer ${provider.api_key}` } : {}),
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...provider.headers,
         },
         signal: controller.signal,

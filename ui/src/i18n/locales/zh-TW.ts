@@ -27,6 +27,8 @@ export const zhTW: Messages = {
   "update.available": "有新版本可用",
   "update.versionMessage": "目前 {current}，最新 {latest}",
   "update.viewRelease": "查看更新",
+  "update.install": "安裝更新",
+  "update.installing": "正在安裝…",
   "common.dismiss": "關閉",
   "common.refresh": "重新整理",
   "common.reload": "重新載入",

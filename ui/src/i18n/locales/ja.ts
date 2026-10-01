@@ -27,6 +27,8 @@ export const ja: Messages = {
   "update.available": "新しいバージョンがあります",
   "update.versionMessage": "現在 {current}、最新 {latest}",
   "update.viewRelease": "更新を見る",
+  "update.install": "更新をインストール",
+  "update.installing": "インストール中…",
   "common.dismiss": "閉じる",
   "common.refresh": "更新",
   "common.reload": "再読み込み",

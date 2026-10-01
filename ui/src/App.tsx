@@ -28,7 +28,7 @@ import { SummaryManager } from "./features/summaries/SummaryManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
-import { fetchUpdateCheck, type UpdateCheck } from "./lib/api"
+import { fetchUpdateCheck, installOpenChatXUpdate, type UpdateCheck } from "./lib/api"
 
 type View =
   | "dashboard"
@@ -73,6 +73,8 @@ export function App() {
   const { t } = useI18n()
   const [now, setNow] = useState(Date.now())
   const [update, setUpdate] = useState<UpdateCheck>()
+  const [installingUpdate, setInstallingUpdate] = useState(false)
+  const [updateInstallError, setUpdateInstallError] = useState<string>()
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
@@ -84,6 +86,17 @@ export function App() {
       .then(setUpdate)
       .catch(() => undefined)
   }, [])
+
+  async function installUpdate() {
+    setInstallingUpdate(true)
+    setUpdateInstallError(undefined)
+    try {
+      await installOpenChatXUpdate()
+    } catch (error) {
+      setInstallingUpdate(false)
+      setUpdateInstallError(error instanceof Error ? error.message : String(error))
+    }
+  }
 
   const activeCount = agents.filter((agent) => now - agent.lastSeenAt < 30_000).length
   const titleKey = NAV_ITEMS.find((item) => item.id === view)?.labelKey
@@ -207,17 +220,31 @@ export function App() {
                     latest: update.latestVersion ?? "?",
                   })}
                 </div>
+                {updateInstallError ? (
+                  <div className="mt-1 text-xs text-destructive">{updateInstallError}</div>
+                ) : null}
               </div>
-              {update.releaseUrl ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => window.open(update.releaseUrl, "_blank", "noopener,noreferrer")}
-                >
-                  <ExternalLink className="size-4" />
-                  {t("update.viewRelease")}
-                </Button>
-              ) : null}
+              <div className="flex shrink-0 items-center gap-2">
+                {update.downloadUrl ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void installUpdate()}
+                    disabled={installingUpdate}
+                  >
+                    {installingUpdate ? t("update.installing") : t("update.install")}
+                  </Button>
+                ) : null}
+                {update.releaseUrl ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(update.releaseUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <ExternalLink className="size-4" />
+                    {t("update.viewRelease")}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : null}
           {page}

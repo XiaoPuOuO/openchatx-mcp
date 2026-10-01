@@ -1,5 +1,6 @@
 import { type FSWatcher, watch } from "node:fs"
 import { basename, dirname } from "node:path"
+import process from "node:process"
 
 import {
   loadSubagentConfig,
@@ -126,6 +127,8 @@ async function runOpenAiCompatible(
     const maxOutputTokens = resolveMaxOutputTokens(profile.max_output_tokens, input.maxOutputTokens)
     if (maxOutputTokens !== undefined) body.max_tokens = maxOutputTokens
     applyThinking(profile, input, body)
+    const apiKey =
+      provider.api_key ?? (profile.provider === "openai" ? process.env.OPENAI_API_KEY : undefined)
 
     const response = await fetch(
       `${provider.base_url.replace(TRAILING_SLASH_RE, "")}/chat/completions`,
@@ -133,7 +136,7 @@ async function runOpenAiCompatible(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(provider.api_key ? { Authorization: `Bearer ${provider.api_key}` } : {}),
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...provider.headers,
         },
         body: JSON.stringify(body),

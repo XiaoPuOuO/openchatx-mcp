@@ -174,6 +174,8 @@ export type UpdateCheck = {
   latestVersion?: string
   updateAvailable: boolean
   releaseUrl?: string
+  downloadUrl?: string
+  downloadName?: string
   checkedAt?: string
   error?: string
 }
@@ -186,6 +188,24 @@ export async function fetchUpdateCheck(force = false): Promise<UpdateCheck> {
   const body = (await response.json().catch(() => undefined)) as UpdateCheck | undefined
   if (!response.ok && !body) throw new Error(`Failed to check for updates (${response.status})`)
   return body ?? { currentVersion: "unknown", updateAvailable: false }
+}
+
+export async function installOpenChatXUpdate(): Promise<{
+  started: boolean
+  version?: string
+  installerName?: string
+}> {
+  if (MOCK_DASHBOARD) return { started: false }
+  const response = await fetch("/ui/api/update/install", { method: "POST" })
+  const body = (await response.json().catch(() => undefined)) as
+    | { started?: boolean; version?: string; installerName?: string; error?: string }
+    | undefined
+  if (!response.ok) throw new Error(body?.error ?? `Failed to install update (${response.status})`)
+  return {
+    started: body?.started === true,
+    ...(body?.version ? { version: body.version } : {}),
+    ...(body?.installerName ? { installerName: body.installerName } : {}),
+  }
 }
 
 export async function fetchProjects(): Promise<ProjectRecord[]> {

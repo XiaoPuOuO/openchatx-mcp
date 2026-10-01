@@ -27,6 +27,8 @@ export const en: Messages = {
   "update.available": "A new version is available",
   "update.versionMessage": "Current {current}, latest {latest}",
   "update.viewRelease": "View update",
+  "update.install": "Install update",
+  "update.installing": "Installing…",
   "common.dismiss": "Dismiss",
   "common.refresh": "Refresh",
   "common.reload": "Reload",

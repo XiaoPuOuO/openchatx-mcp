@@ -387,8 +387,9 @@ internal readonly record struct RuntimeSnapshot(bool Backend, bool Tunnel, bool 
 internal sealed class RuntimeSupervisor
 {
     private const int DefaultRuntimePort = 8001;
+    private const int DefaultTunnelHealthPort = 8080;
+    private const string DefaultTunnelProfile = "openchatx";
     private static readonly TimeSpan TunnelProfileProbeTimeout = TimeSpan.FromSeconds(3);
-    private static readonly Uri TunnelHealth = new("http://127.0.0.1:8080/health?details=true");
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMilliseconds(700) };
     private readonly string _runtimeRoot;
     private readonly string _nodeExecutable;
@@ -410,7 +411,10 @@ internal sealed class RuntimeSupervisor
     public string WebViewUserDataDirectory { get; }
     public Uri DashboardUrl => new($"http://127.0.0.1:{RuntimePort}/ui/");
     private Uri BackendHealth => new($"http://127.0.0.1:{RuntimePort}/healthz");
+    private Uri TunnelHealth => new($"http://127.0.0.1:{TunnelHealthPort}/health?details=true");
     private string McpServerUrl => $"http://127.0.0.1:{RuntimePort}/mcp";
+    private string TunnelHealthListenAddress => $"127.0.0.1:{TunnelHealthPort}";
+    private string TunnelProfile => ReadConfiguredString("tunnel", "profile", DefaultTunnelProfile);
 
     public RuntimeSupervisor()
     {
@@ -485,6 +489,8 @@ internal sealed class RuntimeSupervisor
             Directory.CreateDirectory(configDirectory);
             Directory.CreateDirectory(LogsDirectory);
             Directory.CreateDirectory(_profileDirectory);
+            MigrateLegacyTunnelProfile();
+            MigrateEnvironmentTunnelCredential();
 
             var publicConfigPath = Path.Combine(configDirectory, "openchatx.toml");
             CopyIfMissing(
@@ -590,14 +596,14 @@ internal sealed class RuntimeSupervisor
                 {
                     "init",
                     "--profile-dir", _profileDirectory,
-                    "--profile", "openchatx",
+                    "--profile", TunnelProfile,
                     "--tunnel-id", trimmedTunnelId,
                     "--mcp-server-url", McpServerUrl,
-                    "--health-listen-addr", "127.0.0.1:8080",
+                    "--health-listen-addr", TunnelHealthListenAddress,
                     "--control-plane-api-key-ref", "env:CONTROL_PLANE_API_KEY",
                     "--force"
                 },
-                RuntimeEnvironment(trimmedKey)
+                RuntimeEnvironment(trimmedKey, includeTunnelKey: true)
             );
             if (exitCode != 0) throw new InvalidOperationException($"tunnel-client init exited with code {exitCode}.");
         }
@@ -638,14 +644,20 @@ internal sealed class RuntimeSupervisor
             {
                 "run",
                 "--profile-dir", _profileDirectory,
-                "--profile", "openchatx",
+                "--profile", TunnelProfile,
                 "--mcp.server-url", $"url={McpServerUrl}",
-                "--health.listen-addr", "127.0.0.1:8080"
+                "--health.listen-addr", TunnelHealthListenAddress
             },
             Path.Combine(LogsDirectory, "tunnel.log")
         );
         startInfo.WorkingDirectory = _runtimeRoot;
-        ApplyEnvironment(startInfo, RuntimeEnvironment(WindowsCredentialStore.Load("OpenChatX/CONTROL_PLANE_API_KEY")));
+        ApplyEnvironment(
+            startInfo,
+            RuntimeEnvironment(
+                WindowsCredentialStore.Load("OpenChatX/CONTROL_PLANE_API_KEY"),
+                includeTunnelKey: true
+            )
+        );
 
         _nextTunnelStartAllowedAt = DateTimeOffset.UtcNow + TunnelRestartBackoff;
         _tunnelProcess = StartLoggedProcess(startInfo, Path.Combine(LogsDirectory, "tunnel.log"));
@@ -653,28 +665,53 @@ internal sealed class RuntimeSupervisor
         AppendDesktopLog($"Started tunnel-client pid={_tunnelProcess.Id}");
     }
 
-    private int RuntimePort
+    private int RuntimePort => ReadConfiguredPort(section: null, key: "port", fallback: DefaultRuntimePort);
+
+    private int TunnelHealthPort => ReadConfiguredPort(
+        section: "tunnel",
+        key: "health_port",
+        fallback: DefaultTunnelHealthPort
+    );
+
+    private int ReadConfiguredPort(string? section, string key, int fallback)
     {
-        get
+        var value = ReadConfiguredValue(section, key);
+        return int.TryParse(value, out var port) && port is >= 1 and <= 65535 ? port : fallback;
+    }
+
+    private string ReadConfiguredString(string? section, string key, string fallback)
+    {
+        var value = ReadConfiguredValue(section, key);
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+            value = value[1..^1];
+        return value.Length == 0 ? fallback : value;
+    }
+
+    private string? ReadConfiguredValue(string? section, string key)
+    {
+        var configPath = Path.Combine(_appSupport, "config", "openchatx.toml");
+        if (!File.Exists(configPath)) return null;
+
+        string? currentSection = null;
+        foreach (var rawLine in File.ReadLines(configPath))
         {
-            var configPath = Path.Combine(_appSupport, "config", "openchatx.toml");
-            if (!File.Exists(configPath)) return DefaultRuntimePort;
-
-            foreach (var rawLine in File.ReadLines(configPath))
+            var line = rawLine.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            if (line.StartsWith('[') && line.EndsWith(']'))
             {
-                var line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith('#')) continue;
-                if (line.StartsWith('[')) break;
-                if (!line.StartsWith("port", StringComparison.Ordinal)) continue;
-
-                var equals = line.IndexOf('=');
-                if (equals < 0) continue;
-                var value = line[(equals + 1)..].Split('#', 2)[0].Trim();
-                if (int.TryParse(value, out var port) && port is >= 1 and <= 65535) return port;
+                currentSection = line[1..^1].Trim();
+                continue;
             }
+            if (!string.Equals(currentSection, section, StringComparison.Ordinal)) continue;
+            if (!line.StartsWith(key, StringComparison.Ordinal)) continue;
 
-            return DefaultRuntimePort;
+            var equals = line.IndexOf('=');
+            if (equals < 0) continue;
+            return line[(equals + 1)..].Split('#', 2)[0].Trim();
         }
+
+        return null;
     }
 
     private static void MigrateLegacyRuntimePort(string configPath)
@@ -702,6 +739,44 @@ internal sealed class RuntimeSupervisor
             File.WriteAllLines(configPath, lines);
             return;
         }
+    }
+
+    private void MigrateLegacyTunnelProfile()
+    {
+        var profile = TunnelProfile;
+        if (profile.Length == 0 || Path.GetFileName(profile) != profile) return;
+        var destination = Path.Combine(_profileDirectory, $"{profile}.yaml");
+        if (File.Exists(destination)) return;
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var candidates = new[]
+        {
+            Path.Combine(userProfile, ".config", "tunnel-client", $"{profile}.yaml"),
+            Path.Combine(roaming, "tunnel-client", $"{profile}.yaml")
+        };
+        foreach (var source in candidates)
+        {
+            if (!File.Exists(source)) continue;
+            File.Copy(source, destination, overwrite: false);
+            AppendDesktopLog($"Migrated tunnel profile {profile} into OpenChatX app data.");
+            return;
+        }
+    }
+
+    private void MigrateEnvironmentTunnelCredential()
+    {
+        MigrateEnvironmentCredential("CONTROL_PLANE_API_KEY", "OpenChatX/CONTROL_PLANE_API_KEY");
+        MigrateEnvironmentCredential("OPENAI_API_KEY", "OpenChatX/OPENAI_API_KEY");
+    }
+
+    private void MigrateEnvironmentCredential(string environmentName, string credentialTarget)
+    {
+        if (!string.IsNullOrWhiteSpace(WindowsCredentialStore.Load(credentialTarget))) return;
+        var value = Environment.GetEnvironmentVariable(environmentName)?.Trim();
+        if (string.IsNullOrWhiteSpace(value)) return;
+        WindowsCredentialStore.Save(credentialTarget, value);
+        AppendDesktopLog($"Migrated {environmentName} into Windows Credential Manager.");
     }
 
     private ProcessStartInfo NewProcessStartInfo(string executable, IEnumerable<string> arguments, string logPath)
@@ -777,7 +852,7 @@ internal sealed class RuntimeSupervisor
             var output = await outputTask;
             _ = await errorTask;
             return process.ExitCode == 0 &&
-                   output.Split('\n').Any(line => line.Split('\t').FirstOrDefault()?.Trim() == "openchatx");
+                   output.Split('\n').Any(line => line.Split('\t').FirstOrDefault()?.Trim() == TunnelProfile);
         }
         catch
         {
@@ -848,7 +923,10 @@ internal sealed class RuntimeSupervisor
         return false;
     }
 
-    private Dictionary<string, string?> RuntimeEnvironment(string? apiKey = null)
+    private Dictionary<string, string?> RuntimeEnvironment(
+        string? apiKey = null,
+        bool includeTunnelKey = false
+    )
     {
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
@@ -858,10 +936,27 @@ internal sealed class RuntimeSupervisor
         var inherited = environment.GetValueOrDefault("Path") ?? "";
         environment["Path"] = bundledBin + Path.PathSeparator + inherited;
         environment["OPENCHATX_DESKTOP"] = "1";
-        if (!string.IsNullOrWhiteSpace(apiKey))
-            environment["CONTROL_PLANE_API_KEY"] = apiKey;
+
+        if (includeTunnelKey)
+        {
+            var controlPlaneKey = string.IsNullOrWhiteSpace(apiKey)
+                ? WindowsCredentialStore.Load("OpenChatX/CONTROL_PLANE_API_KEY")
+                : apiKey;
+            if (!string.IsNullOrWhiteSpace(controlPlaneKey))
+                environment["CONTROL_PLANE_API_KEY"] = controlPlaneKey;
+            else
+                environment.Remove("CONTROL_PLANE_API_KEY");
+        }
         else
+        {
             environment.Remove("CONTROL_PLANE_API_KEY");
+        }
+
+        var openAiKey = WindowsCredentialStore.Load("OpenChatX/OPENAI_API_KEY");
+        if (!string.IsNullOrWhiteSpace(openAiKey))
+            environment["OPENAI_API_KEY"] = openAiKey;
+        else if (string.IsNullOrWhiteSpace(environment.GetValueOrDefault("OPENAI_API_KEY")))
+            environment.Remove("OPENAI_API_KEY");
 
         return environment;
     }

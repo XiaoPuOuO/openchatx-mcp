@@ -57,6 +57,14 @@ test("Windows desktop app owns runtime lifecycle with WebView2 and Windows Crede
   assert.doesNotMatch(source, /File\.AppendAllText\(logPath/u)
   assert.match(source, /IsTunnelRunningAsync/u)
   assert.match(source, /TunnelRestartBackoff/u)
+  assert.match(source, /TunnelHealthPort/u)
+  assert.match(source, /health_port/u)
+  assert.match(source, /TunnelHealthListenAddress/u)
+  assert.match(source, /TunnelProfile/u)
+  assert.match(source, /OpenChatX\/OPENAI_API_KEY/u)
+  assert.match(source, /MigrateLegacyTunnelProfile/u)
+  assert.doesNotMatch(source, /127\.0\.0\.1:8080\/health\?details=true/u)
+  assert.doesNotMatch(source, /"127\.0\.0\.1:8080"/u)
   assert.match(source, /AutoScaleMode = AutoScaleMode\.Dpi/u)
   assert.match(source, /AutoSizeMode = AutoSizeMode\.GrowAndShrink/u)
   assert.doesNotMatch(source, /Height = hasProfile \? 220 : 280/u)
@@ -105,10 +113,13 @@ test("Windows desktop packaging cross-builds x64 and arm64 with bundled Node and
   assert.match(source, /dotnet/u)
   assert.match(source, /signtool/u)
   assert.match(source, /Inno Setup 6/u)
-  assert.match(
-    await readFile(join(root, "desktop/windows/OpenChatX.iss"), "utf8"),
-    /OpenChatX-Setup/u
-  )
+  const installer = await readFile(join(root, "desktop/windows/OpenChatX.iss"), "utf8")
+  assert.match(installer, /OpenChatX-Setup/u)
+  assert.match(installer, /UsePreviousAppDir=yes/u)
+  assert.match(installer, /UsePreviousTasks=yes/u)
+  assert.match(installer, /CloseApplications=yes/u)
+  assert.match(installer, /RestartApplications=yes/u)
+  assert.doesNotMatch(installer, /UninstallDelete/u)
 })
 
 test("desktop distributable defaults do not copy repository MCP or provider config", async () => {
