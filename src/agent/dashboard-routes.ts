@@ -23,8 +23,8 @@ import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { SummaryRegistry } from "../summaries/summary-registry.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { readAgentInstructionsTemplate } from "../tools/start-here/start-here.js"
+import { launchDesktopUpdate } from "../update/desktop-installer.js"
 import { checkForOpenChatXUpdate } from "../update/version-check.js"
-import { launchWindowsDesktopUpdate } from "../update/windows-installer.js"
 import type { AgentObserver } from "./observer.js"
 
 export interface DashboardServices {
@@ -368,7 +368,7 @@ function registerUpdateRoutes(router: ReturnType<typeof Router>): void {
   router.post("/api/update/install", async (_req, res) => {
     try {
       const update = await checkForOpenChatXUpdate(true)
-      const launched = await launchWindowsDesktopUpdate(update)
+      const launched = await launchDesktopUpdate(update)
       res.status(202).json({
         started: true,
         version: launched.version,

@@ -7,6 +7,8 @@ const INTERNAL_ENV_KEYS = [
   "OPENCHATX_TOOLBOX_ROOT",
   "OPENCHATX_AUDIT_LOG",
   "OPENCHATX_DESKTOP",
+  "OPENCHATX_DESKTOP_APP_PATH",
+  "OPENCHATX_DESKTOP_APP_PID",
 ] as const
 
 export function childProcessEnvironment(

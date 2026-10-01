@@ -101,6 +101,10 @@ test("macOS desktop follows the configured runtime port", async () => {
   assert.match(source, /openchatx\.toml/u)
   assert.match(source, /--mcp\.server-url/u)
   assert.match(source, /rawValue == "3333"/u)
+  assert.match(source, /OPENCHATX_DESKTOP_APP_PATH/u)
+  assert.match(source, /Bundle\.main\.bundleURL\.path/u)
+  assert.match(source, /OPENCHATX_DESKTOP_APP_PID/u)
+  assert.match(source, /ProcessInfo\.processInfo\.processIdentifier/u)
 })
 
 test("Windows desktop packaging cross-builds x64 and arm64 with bundled Node and tunnel-client", async () => {

@@ -15,7 +15,7 @@ test("compares semantic release versions", () => {
   assert.equal(compareVersions("1.0.0-beta.2", "1.0.0-beta.10"), -1)
 })
 
-test("selects the installer matching the Windows desktop architecture", (t) => {
+test("selects the desktop update asset matching platform and architecture", (t) => {
   const previous = process.env.OPENCHATX_DESKTOP
   process.env.OPENCHATX_DESKTOP = "1"
   t.after(() => {
@@ -37,14 +37,17 @@ test("selects the installer matching the Windows desktop architecture", (t) => {
   assert.equal(selectDesktopAsset(assets, "win32", "arm64")?.name, "OpenChatX-Setup-arm64.exe")
   const macAssets = [
     {
-      name: "OpenChatX-macos-arm64.dmg",
-      browser_download_url: "https://example.test/OpenChatX-macos-arm64.dmg",
+      name: "OpenChatX-macos-arm64.app.zip",
+      browser_download_url: "https://example.test/OpenChatX-macos-arm64.app.zip",
     },
     {
-      name: "OpenChatX-macos-x64.dmg",
-      browser_download_url: "https://example.test/OpenChatX-macos-x64.dmg",
+      name: "OpenChatX-macos-x64.app.zip",
+      browser_download_url: "https://example.test/OpenChatX-macos-x64.app.zip",
     },
   ]
-  assert.equal(selectDesktopAsset(macAssets, "darwin", "arm64")?.name, "OpenChatX-macos-arm64.dmg")
+  assert.equal(
+    selectDesktopAsset(macAssets, "darwin", "arm64")?.name,
+    "OpenChatX-macos-arm64.app.zip"
+  )
   assert.equal(selectDesktopAsset(assets, "darwin", "arm64"), undefined)
 })

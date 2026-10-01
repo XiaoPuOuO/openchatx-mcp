@@ -7,6 +7,8 @@ const CACHE_MS = 6 * 60 * 60 * 1_000
 const VERSION_PREFIX_PATTERN = /^v/iu
 const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u
 const NUMERIC_IDENTIFIER_PATTERN = /^\d+$/u
+const WINDOWS_INSTALLER_ASSET_PATTERN = /^OpenChatX-Setup-(?:x64|arm64)\.exe$/u
+const MACOS_APP_ARCHIVE_ASSET_PATTERN = /^OpenChatX-macos-(?:x64|arm64)\.app\.zip$/u
 
 export interface UpdateCheckResult {
   currentVersion: string
@@ -72,7 +74,7 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
   const asset = versionIsNewer ? selectDesktopAsset(release?.assets) : undefined
   const isDesktop = process.env.OPENCHATX_DESKTOP === "1"
   const updateAvailable = versionIsNewer && (!isDesktop || asset !== undefined)
-  const installSupported = process.platform === "win32" && asset?.name.endsWith(".exe") === true
+  const installSupported = isInstallSupportedAsset(process.platform, asset?.name)
 
   return cache({
     currentVersion,
@@ -189,8 +191,15 @@ function expectedDesktopAssetName(
   arch: "arm64" | "x64"
 ): string | undefined {
   if (platform === "win32") return `OpenChatX-Setup-${arch}.exe`
-  if (platform === "darwin") return `OpenChatX-macos-${arch}.dmg`
+  if (platform === "darwin") return `OpenChatX-macos-${arch}.app.zip`
   return undefined
+}
+
+function isInstallSupportedAsset(platform: NodeJS.Platform, name?: string): boolean {
+  if (!name) return false
+  if (platform === "win32") return WINDOWS_INSTALLER_ASSET_PATTERN.test(name)
+  if (platform === "darwin") return MACOS_APP_ARCHIVE_ASSET_PATTERN.test(name)
+  return false
 }
 
 function cache(value: UpdateCheckResult): UpdateCheckResult {

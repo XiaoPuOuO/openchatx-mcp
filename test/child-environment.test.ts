@@ -13,6 +13,8 @@ test("child process environment removes OpenChatX desktop runtime internals", ()
     OPENCHATX_TOOLBOX_ROOT: "/private/toolboxes",
     OPENCHATX_AUDIT_LOG: "/private/audit.yaml",
     OPENCHATX_DESKTOP: "1",
+    OPENCHATX_DESKTOP_APP_PATH: "/Applications/OpenChatX.app",
+    OPENCHATX_DESKTOP_APP_PID: "1234",
   }
   const environment = childProcessEnvironment(source)
   assert.equal(environment.PATH, "/usr/bin")
@@ -23,6 +25,8 @@ test("child process environment removes OpenChatX desktop runtime internals", ()
   assert.equal(environment.OPENCHATX_TOOLBOX_ROOT, undefined)
   assert.equal(environment.OPENCHATX_AUDIT_LOG, undefined)
   assert.equal(environment.OPENCHATX_DESKTOP, undefined)
+  assert.equal(environment.OPENCHATX_DESKTOP_APP_PATH, undefined)
+  assert.equal(environment.OPENCHATX_DESKTOP_APP_PID, undefined)
 
   const stringEnvironment = childStringEnvironment(source)
   assert.deepEqual(stringEnvironment, {

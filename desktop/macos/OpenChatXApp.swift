@@ -314,6 +314,8 @@ final class RuntimeSupervisor: NSObject {
             environment.removeValue(forKey: "CONTROL_PLANE_API_KEY")
         }
         environment["OPENCHATX_DESKTOP"] = "1"
+        environment["OPENCHATX_DESKTOP_APP_PATH"] = Bundle.main.bundleURL.path
+        environment["OPENCHATX_DESKTOP_APP_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         return environment
     }
 
