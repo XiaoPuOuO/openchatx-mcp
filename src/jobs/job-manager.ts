@@ -117,16 +117,23 @@ export class JobManager {
       this.ownedRunningPids.add(childPid)
       await this.persist()
       this.scheduleKill(job)
-      void exit.then(async ({ code, signal }) => {
-        this.ownedRunningPids.delete(childPid)
-        this.clearKillTimer(id)
-        const current = this.jobs.get(id)
-        if (current?.status !== "running") return
-        current.status = code === 0 ? "completed" : "failed"
-        current.exitCode = code ?? (signal ? -1 : 1)
-        current.updatedAt = new Date().toISOString()
-        await this.persist()
-      })
+      void exit
+        .then(async ({ code, signal }) => {
+          this.clearKillTimer(id)
+          try {
+            const current = this.jobs.get(id)
+            if (current?.status !== "running") return
+            current.status = code === 0 ? "completed" : "failed"
+            current.exitCode = code ?? (signal ? -1 : 1)
+            current.updatedAt = new Date().toISOString()
+            await this.persist()
+          } finally {
+            this.ownedRunningPids.delete(childPid)
+          }
+        })
+        .catch((error) => {
+          console.warn(`Failed to persist durable job ${id} settlement: ${describeError(error)}`)
+        })
       child.unref()
       return { ...job }
     } finally {
@@ -137,12 +144,14 @@ export class JobManager {
   async list(): Promise<DurableJob[]> {
     await this.ensureLoaded()
     await this.reconcile()
+    await this.persistChain
     return [...this.jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
   async get(id: string): Promise<DurableJob> {
     await this.ensureLoaded()
     await this.reconcile()
+    await this.persistChain
     const job = this.jobs.get(id)
     if (!job) throw new Error(`Unknown durable job ${JSON.stringify(id)}.`)
     return { ...job }
@@ -355,12 +364,14 @@ export class JobManager {
   }
 
   private async persist(): Promise<void> {
-    await mkdir(this.root, { recursive: true, mode: 0o700 })
     const payload = { jobs: [...this.jobs.values()] }
     const serialized = `${JSON.stringify(payload, null, 2)}\n`
     const pending = this.persistChain
       .catch(() => undefined)
-      .then(() => this.writeStateAtomically(serialized))
+      .then(async () => {
+        await mkdir(this.root, { recursive: true, mode: 0o700 })
+        await this.writeStateAtomically(serialized)
+      })
     this.persistChain = pending
     await pending
   }
