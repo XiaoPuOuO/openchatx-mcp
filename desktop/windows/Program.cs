@@ -77,9 +77,6 @@ internal sealed class MainForm : Form
 
         try
         {
-            _supervisor.LogStartupStage("state-prepare-start");
-            await _supervisor.PrepareStateAsync();
-            _supervisor.LogStartupStage("state-prepared");
             _supervisor.LogStartupStage("webview-environment-start");
             var webViewEnvironment = await CoreWebView2Environment
                 .CreateAsync(
@@ -403,6 +400,11 @@ internal sealed class RuntimeSupervisor
     private bool _backendOwned;
     private bool _tunnelOwned;
     private readonly SemaphoreSlim _maintenanceGate = new(1, 1);
+    private readonly SemaphoreSlim _statePreparationGate = new(1, 1);
+    private readonly object _logWriteGate = new();
+    private bool _statePrepared;
+    private DateTimeOffset _nextTunnelStartAllowedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan TunnelRestartBackoff = TimeSpan.FromSeconds(10);
 
     public string LogsDirectory { get; }
     public string WebViewUserDataDirectory { get; }
@@ -473,29 +475,38 @@ internal sealed class RuntimeSupervisor
 
     public async Task PrepareStateAsync()
     {
-        var configDirectory = Path.Combine(_appSupport, "config");
-        var toolboxDirectory = Path.Combine(_appSupport, "toolboxes");
-        Directory.CreateDirectory(configDirectory);
-        Directory.CreateDirectory(LogsDirectory);
-        Directory.CreateDirectory(_profileDirectory);
+        await _statePreparationGate.WaitAsync();
+        try
+        {
+            if (_statePrepared) return;
 
-        var publicConfigPath = Path.Combine(configDirectory, "openchatx.toml");
-        CopyIfMissing(
-            Path.Combine(_runtimeRoot, ".openchatx", "config.toml"),
-            publicConfigPath
-        );
-        MigrateLegacyRuntimePort(publicConfigPath);
-        CopyIfMissing(
-            Path.Combine(_runtimeRoot, "defaults", "mcp-servers.json"),
-            Path.Combine(configDirectory, "mcp-servers.json")
-        );
-        CopyIfMissing(
-            Path.Combine(_runtimeRoot, "defaults", "subagents.json"),
-            Path.Combine(configDirectory, "subagents.json")
-        );
-        SyncDefaultToolboxes(Path.Combine(_runtimeRoot, "defaults", "toolboxes"), toolboxDirectory);
+            var configDirectory = Path.Combine(_appSupport, "config");
+            var toolboxDirectory = Path.Combine(_appSupport, "toolboxes");
+            Directory.CreateDirectory(configDirectory);
+            Directory.CreateDirectory(LogsDirectory);
+            Directory.CreateDirectory(_profileDirectory);
 
-        await Task.CompletedTask;
+            var publicConfigPath = Path.Combine(configDirectory, "openchatx.toml");
+            CopyIfMissing(
+                Path.Combine(_runtimeRoot, ".openchatx", "config.toml"),
+                publicConfigPath
+            );
+            MigrateLegacyRuntimePort(publicConfigPath);
+            CopyIfMissing(
+                Path.Combine(_runtimeRoot, "defaults", "mcp-servers.json"),
+                Path.Combine(configDirectory, "mcp-servers.json")
+            );
+            CopyIfMissing(
+                Path.Combine(_runtimeRoot, "defaults", "subagents.json"),
+                Path.Combine(configDirectory, "subagents.json")
+            );
+            SyncDefaultToolboxes(Path.Combine(_runtimeRoot, "defaults", "toolboxes"), toolboxDirectory);
+            _statePrepared = true;
+        }
+        finally
+        {
+            _statePreparationGate.Release();
+        }
     }
 
     public async Task StartAsync()
@@ -520,8 +531,9 @@ internal sealed class RuntimeSupervisor
             }
 
             if (await HasTunnelProfileAsync() &&
-                !await IsTunnelHealthyAsync() &&
-                (_tunnelProcess?.HasExited ?? true))
+                !await IsTunnelRunningAsync() &&
+                (_tunnelProcess?.HasExited ?? true) &&
+                DateTimeOffset.UtcNow >= _nextTunnelStartAllowedAt)
             {
                 LogStartupStage("tunnel-process-start");
                 StartTunnel();
@@ -550,6 +562,7 @@ internal sealed class RuntimeSupervisor
     {
         StopProcess(ref _tunnelProcess, ref _tunnelOwned);
         StopProcess(ref _backendProcess, ref _backendOwned);
+        _nextTunnelStartAllowedAt = DateTimeOffset.MinValue;
     }
 
     public async Task RestartAsync()
@@ -589,7 +602,7 @@ internal sealed class RuntimeSupervisor
             if (exitCode != 0) throw new InvalidOperationException($"tunnel-client init exited with code {exitCode}.");
         }
 
-        if (!await IsTunnelHealthyAsync()) StartTunnel();
+        if (!await IsTunnelRunningAsync()) StartTunnel();
     }
 
     private void StartBackend()
@@ -634,6 +647,7 @@ internal sealed class RuntimeSupervisor
         startInfo.WorkingDirectory = _runtimeRoot;
         ApplyEnvironment(startInfo, RuntimeEnvironment(WindowsCredentialStore.Load("OpenChatX/CONTROL_PLANE_API_KEY")));
 
+        _nextTunnelStartAllowedAt = DateTimeOffset.UtcNow + TunnelRestartBackoff;
         _tunnelProcess = StartLoggedProcess(startInfo, Path.Combine(LogsDirectory, "tunnel.log"));
         _tunnelOwned = true;
         AppendDesktopLog($"Started tunnel-client pid={_tunnelProcess.Id}");
@@ -709,11 +723,11 @@ internal sealed class RuntimeSupervisor
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.OutputDataReceived += (_, args) =>
         {
-            if (args.Data is not null) File.AppendAllText(logPath, args.Data + Environment.NewLine);
+            if (args.Data is not null) AppendLogLine(logPath, args.Data);
         };
         process.ErrorDataReceived += (_, args) =>
         {
-            if (args.Data is not null) File.AppendAllText(logPath, args.Data + Environment.NewLine);
+            if (args.Data is not null) AppendLogLine(logPath, args.Data);
         };
         process.Start();
         process.BeginOutputReadLine();
@@ -777,6 +791,23 @@ internal sealed class RuntimeSupervisor
         {
             using var response = await _http.GetAsync(uri);
             return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> IsTunnelRunningAsync()
+    {
+        try
+        {
+            using var response = await _http.GetAsync(TunnelHealth);
+            if (!response.IsSuccessStatusCode) return false;
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var document = await JsonDocument.ParseAsync(stream);
+            var root = document.RootElement;
+            return root.TryGetProperty("live", out var live) && live.ValueKind == JsonValueKind.True;
         }
         catch
         {
@@ -883,11 +914,37 @@ internal sealed class RuntimeSupervisor
 
     private void AppendDesktopLog(string message)
     {
-        Directory.CreateDirectory(LogsDirectory);
-        File.AppendAllText(
+        AppendLogLine(
             Path.Combine(LogsDirectory, "desktop.log"),
-            $"[{DateTimeOffset.UtcNow:O}] {message}{Environment.NewLine}"
+            $"[{DateTimeOffset.UtcNow:O}] {message}"
         );
+    }
+
+    private void AppendLogLine(string logPath, string line)
+    {
+        try
+        {
+            lock (_logWriteGate)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+                using var stream = new FileStream(
+                    logPath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite | FileShare.Delete
+                );
+                using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                writer.WriteLine(line);
+            }
+        }
+        catch (IOException)
+        {
+            // Logging must never terminate the desktop host when another process briefly owns the file.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Keep the runtime alive even when diagnostics cannot be written.
+        }
     }
 
     private static void CopyIfMissing(string source, string destination)
