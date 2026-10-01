@@ -15,6 +15,7 @@ export interface UpdateCheckResult {
   releaseUrl?: string
   downloadUrl?: string
   downloadName?: string
+  installSupported?: boolean
   checkedAt: string
 }
 
@@ -66,9 +67,12 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
   const latestVersion =
     typeof release?.tag_name === "string" ? normalizeVersion(release.tag_name) : undefined
   const releaseUrl = typeof release?.html_url === "string" ? release.html_url : undefined
-  const updateAvailable =
+  const versionIsNewer =
     latestVersion !== undefined && compareVersions(latestVersion, currentVersion) > 0
-  const asset = updateAvailable ? selectDesktopAsset(release?.assets) : undefined
+  const asset = versionIsNewer ? selectDesktopAsset(release?.assets) : undefined
+  const isDesktop = process.env.OPENCHATX_DESKTOP === "1"
+  const updateAvailable = versionIsNewer && (!isDesktop || asset !== undefined)
+  const installSupported = process.platform === "win32" && asset?.name.endsWith(".exe") === true
 
   return cache({
     currentVersion,
@@ -76,6 +80,7 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
     updateAvailable,
     releaseUrl,
     ...(asset ? { downloadUrl: asset.url, downloadName: asset.name } : {}),
+    ...(installSupported ? { installSupported: true } : {}),
     checkedAt,
   })
 }
@@ -162,9 +167,9 @@ export function selectDesktopAsset(
 ): { name: string; url: string } | undefined {
   if (process.env.OPENCHATX_DESKTOP !== "1" || !Array.isArray(value)) return undefined
 
-  if (platform !== "win32") return undefined
   const arch = architecture === "arm64" ? "arm64" : "x64"
-  const expectedName = `OpenChatX-Setup-${arch}.exe`
+  const expectedName = expectedDesktopAssetName(platform, arch)
+  if (!expectedName) return undefined
 
   for (const raw of value) {
     const asset = asRecord(raw)
@@ -176,6 +181,15 @@ export function selectDesktopAsset(
       return { name: expectedName, url: asset.browser_download_url }
     }
   }
+  return undefined
+}
+
+function expectedDesktopAssetName(
+  platform: NodeJS.Platform,
+  arch: "arm64" | "x64"
+): string | undefined {
+  if (platform === "win32") return `OpenChatX-Setup-${arch}.exe`
+  if (platform === "darwin") return `OpenChatX-macos-${arch}.dmg`
   return undefined
 }
 

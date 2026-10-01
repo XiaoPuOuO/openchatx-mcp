@@ -176,6 +176,7 @@ export type UpdateCheck = {
   releaseUrl?: string
   downloadUrl?: string
   downloadName?: string
+  installSupported?: boolean
   checkedAt?: string
   error?: string
 }

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { basename, dirname, join, resolve } from "node:path"
 import process from "node:process"
@@ -368,7 +369,7 @@ export class JobManager {
     const directory = dirname(this.statePath)
     const tempPath = join(
       directory,
-      `.${basename(this.statePath)}.${process.pid}.${Date.now()}.tmp`
+      `.${basename(this.statePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
     )
     try {
       await writeFile(tempPath, serialized, {

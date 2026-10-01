@@ -225,7 +225,7 @@ export function App() {
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {update.downloadUrl ? (
+                {update.installSupported ? (
                   <Button
                     size="sm"
                     onClick={() => void installUpdate()}

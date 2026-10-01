@@ -35,5 +35,16 @@ test("selects the installer matching the Windows desktop architecture", (t) => {
   ]
   assert.equal(selectDesktopAsset(assets, "win32", "x64")?.name, "OpenChatX-Setup-x64.exe")
   assert.equal(selectDesktopAsset(assets, "win32", "arm64")?.name, "OpenChatX-Setup-arm64.exe")
+  const macAssets = [
+    {
+      name: "OpenChatX-macos-arm64.dmg",
+      browser_download_url: "https://example.test/OpenChatX-macos-arm64.dmg",
+    },
+    {
+      name: "OpenChatX-macos-x64.dmg",
+      browser_download_url: "https://example.test/OpenChatX-macos-x64.dmg",
+    },
+  ]
+  assert.equal(selectDesktopAsset(macAssets, "darwin", "arm64")?.name, "OpenChatX-macos-arm64.dmg")
   assert.equal(selectDesktopAsset(assets, "darwin", "arm64"), undefined)
 })

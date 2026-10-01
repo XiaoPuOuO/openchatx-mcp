@@ -100,3 +100,19 @@ test("durable job persistence atomically replaces state without leaving temp fil
     false
   )
 })
+
+test("concurrent JobManager instances use distinct atomic temp files", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-job-atomic-concurrent-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const statePath = join(root, "jobs.json")
+  const managers = Array.from({ length: 20 }, () => new JobManager(root, statePath))
+
+  await Promise.all(managers.map((manager) => manager.initialize()))
+  await Promise.all(managers.map((manager) => manager.close()))
+
+  assert.deepEqual(JSON.parse(await readFile(statePath, "utf8")), { jobs: [] })
+  assert.equal(
+    (await readdir(root)).some((name) => name.startsWith(".jobs.json.") && name.endsWith(".tmp")),
+    false
+  )
+})
