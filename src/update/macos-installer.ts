@@ -5,6 +5,8 @@ import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import process from "node:process"
 
+import { MCP_CONFIG } from "../config.js"
+import { updateOperationalState } from "../recovery/operational-state.js"
 import type { UpdateCheckResult } from "./version-check.js"
 
 const RELEASE_DOWNLOAD_PREFIX = "https://github.com/XiaoPuOuO/openchatx-mcp/releases/download/"
@@ -30,6 +32,7 @@ ZIP_PATH="\${OPENCHATX_UPDATE_ZIP:?}"
 TARGET_APP="\${OPENCHATX_TARGET_APP:?}"
 TARGET_PID="\${OPENCHATX_TARGET_PID:?}"
 WORK_DIR="\${OPENCHATX_UPDATE_WORK_DIR:?}"
+HEALTH_URL="\${OPENCHATX_UPDATE_HEALTH_URL:?}"
 EXTRACT_DIR="$WORK_DIR/extracted"
 NEW_APP="$EXTRACT_DIR/OpenChatX.app"
 STAGE_APP="\${TARGET_APP}.update-\${TARGET_PID}"
@@ -74,10 +77,23 @@ fi
 /bin/mv "$TARGET_APP" "$BACKUP_APP"
 if /bin/mv "$STAGE_APP" "$TARGET_APP"; then
   /usr/bin/open "$TARGET_APP"
-  /bin/rm -rf "$BACKUP_APP"
-  trap - EXIT
-  /bin/rm -rf "$EXTRACT_DIR"
-  exit 0
+  for _ in {1..60}; do
+    if /usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+      /bin/rm -rf "$BACKUP_APP"
+      trap - EXIT
+      /bin/rm -rf "$EXTRACT_DIR"
+      exit 0
+    fi
+    /bin/sleep 0.5
+  done
+
+  # The new app did not become healthy. Restore the previous signed app bundle.
+  /usr/bin/pkill -x OpenChatX 2>/dev/null || true
+  /bin/sleep 0.5
+  /bin/rm -rf "$TARGET_APP"
+  /bin/mv "$BACKUP_APP" "$TARGET_APP"
+  /usr/bin/open "$TARGET_APP"
+  exit 1
 fi
 
 /bin/mv "$BACKUP_APP" "$TARGET_APP" 2>/dev/null || true
@@ -135,6 +151,10 @@ export async function launchMacOSDesktopUpdate(
   await writeFile(archivePath, Buffer.from(await response.arrayBuffer()))
   await writeFile(scriptPath, buildMacOSUpdaterScript(), { encoding: "utf8", mode: 0o700 })
   await chmod(scriptPath, 0o700)
+  await updateOperationalState((state) => {
+    state.update.phase = "installing"
+    state.update.progress = 75
+  })
 
   const installer = spawn("/bin/zsh", [scriptPath], {
     detached: true,
@@ -145,6 +165,7 @@ export async function launchMacOSDesktopUpdate(
       OPENCHATX_TARGET_APP: targetApp,
       OPENCHATX_TARGET_PID: targetPid,
       OPENCHATX_UPDATE_WORK_DIR: updateDirectory,
+      OPENCHATX_UPDATE_HEALTH_URL: `http://127.0.0.1:${MCP_CONFIG.port}/healthz`,
     },
   })
   installer.unref()

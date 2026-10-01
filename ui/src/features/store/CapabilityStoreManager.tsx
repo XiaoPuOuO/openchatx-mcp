@@ -82,6 +82,27 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const installWithApproval = async (id: string, revision?: string) => {
+    const permissionReview = await fetchStoreReview(id, revision)
+    const permissions = Object.entries(permissionReview.observedPermissions)
+      .filter(([, required]) => required)
+      .map(([permission]) => permission)
+    if (permissions.length === 0) return installStoreEntry(id, revision)
+    const decision = window
+      .prompt(
+        `This capability requests: ${permissions.join(", ")}. Type "once", "always", or "deny".`,
+        "once"
+      )
+      ?.trim()
+      .toLowerCase()
+    if (decision === "deny") {
+      await installStoreEntry(id, revision, [], false, permissions).catch(() => undefined)
+      return
+    }
+    if (decision !== "once" && decision !== "always") return
+    await installStoreEntry(id, revision, permissions, decision === "always")
+  }
+
   const inspect = async (entry: CapabilityStoreEntry) => {
     setBusy(entry.id)
     setReview(undefined)
@@ -329,7 +350,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                     <Button
                       size="sm"
                       disabled={busy === entry.id}
-                      onClick={() => void mutate(entry.id, () => installStoreEntry(entry.id))}
+                      onClick={() => void mutate(entry.id, () => installWithApproval(entry.id))}
                     >
                       <Download className="size-4" />
                       {t("store.install")}
@@ -370,7 +391,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
                       disabled={busy === resolvedEntry.id}
                       onClick={() =>
                         void mutate(resolvedEntry.id, () =>
-                          installStoreEntry(resolvedEntry.id, installRevision)
+                          installWithApproval(resolvedEntry.id, installRevision)
                         )
                       }
                     >

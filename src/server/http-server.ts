@@ -16,6 +16,7 @@ import type { ContextBudgetGuard } from "../mcp/context-budget.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
+import type { SystemRecoveryService } from "../recovery/system-recovery.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { SummaryRegistry } from "../summaries/summary-registry.js"
@@ -51,6 +52,7 @@ export interface McpHttpServices {
   projectRegistry?: ProjectRegistry
   summaryRegistry?: SummaryRegistry
   contextBudget?: ContextBudgetGuard
+  systemRecovery?: SystemRecoveryService
 }
 
 export interface McpHttpProfileOverrides {
@@ -81,6 +83,7 @@ export async function startMcpHttpServer(
     projectRegistry,
     summaryRegistry,
     contextBudget,
+    systemRecovery,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -119,6 +122,7 @@ export async function startMcpHttpServer(
         projectRegistry,
         summaryRegistry,
         contextBudget,
+        systemRecovery,
       })
     )
 

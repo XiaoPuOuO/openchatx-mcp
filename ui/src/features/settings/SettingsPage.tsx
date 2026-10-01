@@ -5,7 +5,20 @@ import { PageHeader } from "../../components/PageHeader"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
-import { fetchRuntimeSettings, saveRuntimeSettings } from "../../lib/api"
+import {
+  createBackup,
+  type Diagnostics,
+  fetchDiagnostics,
+  fetchRecoveryState,
+  fetchRuntimeSettings,
+  fetchUpdateCheck,
+  type RecoveryState,
+  repairDiagnostic,
+  restoreBackup,
+  saveRuntimeSettings,
+  setSafeMode,
+  updateRecoveryState,
+} from "../../lib/api"
 import type { RuntimeSettings } from "../../types"
 
 const INPUT_CLASS =
@@ -17,9 +30,18 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
+  const [recovery, setRecovery] = useState<RecoveryState>()
+  const [diagnostics, setDiagnostics] = useState<Diagnostics>()
+  const [restorePath, setRestorePath] = useState("")
 
   useEffect(() => {
     let cancelled = false
+    void fetchRecoveryState()
+      .then((value) => !cancelled && setRecovery(value))
+      .catch(() => undefined)
+    void fetchDiagnostics()
+      .then((value) => !cancelled && setDiagnostics(value))
+      .catch(() => undefined)
     void fetchRuntimeSettings()
       .then((value) => {
         if (!cancelled) setSettings(value)
@@ -182,6 +204,180 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                 </Field>
               </CardContent>
             </Card>
+
+            {recovery ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="text-sm font-semibold">Updates & Recovery</div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Update channel">
+                      <select
+                        className={INPUT_CLASS}
+                        value={recovery.update.channel}
+                        onChange={(event) => {
+                          const channel = event.target.value === "stable" ? "stable" : "beta"
+                          void updateRecoveryState({
+                            update: { ...recovery.update, channel },
+                          }).then(setRecovery)
+                        }}
+                      >
+                        <option value="stable">Stable</option>
+                        <option value="beta">Beta</option>
+                      </select>
+                    </Field>
+                    <label className="flex items-center justify-between rounded-lg border px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium">Automatic update checks</div>
+                        <div className="text-xs text-muted-foreground">
+                          Check the selected channel at startup.
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="size-4"
+                        checked={recovery.update.autoCheck}
+                        onChange={(event) =>
+                          void updateRecoveryState({
+                            update: { ...recovery.update, autoCheck: event.target.checked },
+                          }).then(setRecovery)
+                        }
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-lg border px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium">Safe Mode</div>
+                        <div className="text-xs text-muted-foreground">
+                          Starts only core OpenChatX capabilities after restart.
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="size-4"
+                        checked={recovery.safeMode.enabled}
+                        onChange={(event) =>
+                          void setSafeMode(event.target.checked).then(setRecovery)
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        void fetchUpdateCheck(true)
+                          .then((result) =>
+                            setMessage(
+                              result.updateAvailable
+                                ? `Update available: ${result.latestVersion}`
+                                : `OpenChatX ${result.currentVersion} is up to date.`
+                            )
+                          )
+                          .catch((reason: unknown) =>
+                            setError(reason instanceof Error ? reason.message : String(reason))
+                          )
+                      }
+                    >
+                      Check for Updates
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        void createBackup()
+                          .then((result) => setMessage(`Backup created: ${result.path}`))
+                          .catch((reason: unknown) =>
+                            setError(reason instanceof Error ? reason.message : String(reason))
+                          )
+                      }
+                    >
+                      Create Backup
+                    </Button>
+                    <input
+                      className={INPUT_CLASS}
+                      placeholder="Backup path to restore"
+                      value={restorePath}
+                      onChange={(event) => setRestorePath(event.target.value)}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={!restorePath.trim()}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            "Restore this backup? A safety backup will be created first."
+                          )
+                        )
+                          return
+                        void restoreBackup(restorePath.trim())
+                          .then((result) =>
+                            setMessage(
+                              `Restored. Safety backup: ${result.safetyBackupPath}. Restart OpenChatX.`
+                            )
+                          )
+                          .catch((reason: unknown) =>
+                            setError(reason instanceof Error ? reason.message : String(reason))
+                          )
+                      }}
+                    >
+                      Restore
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {diagnostics ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="text-sm font-semibold">Diagnostics & Doctor</div>
+                  <div className="text-xs text-muted-foreground">
+                    OpenChatX {diagnostics.version} · {diagnostics.platform} · {diagnostics.arch}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open("/ui/api/diagnostics/export", "_blank")}
+                  >
+                    Export Diagnostic Bundle
+                  </Button>
+                  {diagnostics.checks.map((check) => (
+                    <div
+                      key={check.id}
+                      className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                    >
+                      <div>
+                        <div className="text-sm font-medium">{check.label}</div>
+                        <div className="text-xs text-muted-foreground">{check.detail}</div>
+                      </div>
+                      {check.repairable ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void repairDiagnostic(check.id)
+                              .then(async (result) => {
+                                setMessage(result.detail)
+                                setDiagnostics(await fetchDiagnostics())
+                              })
+                              .catch((reason: unknown) =>
+                                setError(reason instanceof Error ? reason.message : String(reason))
+                              )
+                          }
+                        >
+                          Repair
+                        </Button>
+                      ) : (
+                        <span className="text-xs uppercase text-muted-foreground">
+                          {check.status}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : null}
 
             {error ? <div className="status-banner status-banner-error">{error}</div> : null}
             {message ? <div className="status-banner status-banner-success">{message}</div> : null}

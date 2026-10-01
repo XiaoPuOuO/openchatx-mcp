@@ -1,6 +1,7 @@
 import process from "node:process"
 
 import { MCP_CONFIG } from "../config.js"
+import { loadOperationalState, updateOperationalState } from "../recovery/operational-state.js"
 
 const RELEASES_URL = "https://api.github.com/repos/XiaoPuOuO/openchatx-mcp/releases?per_page=20"
 const CACHE_MS = 6 * 60 * 60 * 1_000
@@ -35,6 +36,7 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
 
   const currentVersion = MCP_CONFIG.server.version
   const checkedAt = new Date().toISOString()
+  const operationalState = await loadOperationalState()
   const response = await fetch(RELEASES_URL, {
     headers: {
       Accept: "application/vnd.github+json",
@@ -45,6 +47,7 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
   })
 
   if (response.status === 404) {
+    await recordUpdateCheck(checkedAt)
     return cache({ currentVersion, updateAvailable: false, checkedAt })
   }
   if (!response.ok) {
@@ -54,10 +57,11 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
   const payload: unknown = await response.json()
   const releases = Array.isArray(payload) ? payload.map(asRecord).filter(Boolean) : []
   const currentIsPrerelease = (parseVersion(currentVersion)?.prerelease.length ?? 0) > 0
+  const allowPrerelease = operationalState.update.channel === "beta" && currentIsPrerelease
   const release = releases
     .filter((candidate) => {
       if (!candidate || candidate.draft === true) return false
-      if (!currentIsPrerelease && candidate.prerelease === true) return false
+      if (!allowPrerelease && candidate.prerelease === true) return false
       return (
         typeof candidate.tag_name === "string" && parseVersion(candidate.tag_name) !== undefined
       )
@@ -76,6 +80,7 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
   const updateAvailable = versionIsNewer && (!isDesktop || asset !== undefined)
   const installSupported = isInstallSupportedAsset(process.platform, asset?.name)
 
+  await recordUpdateCheck(checkedAt)
   return cache({
     currentVersion,
     latestVersion,
@@ -200,6 +205,12 @@ function isInstallSupportedAsset(platform: NodeJS.Platform, name?: string): bool
   if (platform === "win32") return WINDOWS_INSTALLER_ASSET_PATTERN.test(name)
   if (platform === "darwin") return MACOS_APP_ARCHIVE_ASSET_PATTERN.test(name)
   return false
+}
+
+async function recordUpdateCheck(checkedAt: string): Promise<void> {
+  await updateOperationalState((state) => {
+    state.update.lastCheckAt = checkedAt
+  }).catch(() => undefined)
 }
 
 function cache(value: UpdateCheckResult): UpdateCheckResult {

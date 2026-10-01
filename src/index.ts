@@ -17,6 +17,8 @@ import { PlatformOverviewService } from "./platform/overview.js"
 import { ProjectRegistry } from "./projects/project-registry.js"
 import { ProjectScope } from "./projects/project-scope.js"
 import { ProviderHub } from "./providers/provider-hub.js"
+import { loadOperationalState } from "./recovery/operational-state.js"
+import { SystemRecoveryService } from "./recovery/system-recovery.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
 import { synchronizeAgentInstructions } from "./state/agent-instructions.js"
@@ -57,10 +59,17 @@ const authPath = join(MCP_CONFIG.stateDir, "auth.json")
 const authStore = new OpenChatXAuthStore(authPath)
 await authStore.ensureState()
 const webPageOpener = new WebPageOpener()
-const externalMcp = await createExternalMcpRegistry(MCP_CONFIG.externalMcp.configFile)
+const operationalState = await loadOperationalState()
+const safeModeMcpConfig = join(MCP_CONFIG.stateDir, "safe-mode", "mcp-servers.json")
+const safeModeToolboxRoot = join(MCP_CONFIG.stateDir, "safe-mode", "toolboxes")
+const externalMcp = await createExternalMcpRegistry(
+  operationalState.safeMode.enabled ? safeModeMcpConfig : MCP_CONFIG.externalMcp.configFile
+)
 const subagentRuntime = new SubagentRuntime(loadSubagentConfig(MCP_CONFIG.subagents.configFile))
 subagentRuntime.startWatching(MCP_CONFIG.subagents.configFile)
-const toolboxRegistry = new ToolboxRegistry(MCP_CONFIG.toolboxes.root)
+const toolboxRegistry = new ToolboxRegistry(
+  operationalState.safeMode.enabled ? safeModeToolboxRoot : MCP_CONFIG.toolboxes.root
+)
 await toolboxRegistry.start()
 const interactiveShellManager = new InteractiveShellManager(
   MCP_CONFIG.defaultCwd,
@@ -76,6 +85,10 @@ const goalScope = new GoalScope(goalRegistry, projectScope)
 const summaryRegistry = new SummaryRegistry()
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
+const systemRecovery = new SystemRecoveryService(capabilityHealth)
+process.on("uncaughtExceptionMonitor", (error) => {
+  void systemRecovery.recordCrash(error).catch(() => undefined)
+})
 const communityStore = new GithubCommunityStore()
 const capabilityStore = new CapabilityStoreService(
   MCP_CONFIG.store.catalogFile,
@@ -149,11 +162,14 @@ try {
     projectRegistry,
     summaryRegistry,
     contextBudget,
+    systemRecovery,
   })
 } catch (error) {
+  await systemRecovery.recordCrash(error).catch(() => undefined)
   await closeRuntimeServices()
   throw error
 }
+await systemRecovery.recordHealthyStartup().catch(() => undefined)
 console.log(`Local shell MCP server: ${running.url}`)
 console.log(`Agent dashboard: http://${running.host}:${running.port}/ui`)
 console.log("Remote MCP authentication: trusted ChatGPT origin + bound OpenAI subject")

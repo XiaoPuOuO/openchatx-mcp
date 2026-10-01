@@ -209,6 +209,104 @@ export async function installOpenChatXUpdate(): Promise<{
   }
 }
 
+export type RecoveryState = {
+  schemaVersion: number
+  onboardingCompleted: boolean
+  safeMode: { enabled: boolean; reason?: string; enabledAt?: string }
+  update: {
+    channel: "stable" | "beta"
+    autoCheck: boolean
+    phase: "idle" | "downloading" | "installing" | "health-check" | "completed" | "failed"
+    progress: number
+  }
+  crash: { consecutiveStartupFailures: number; lastCrashAt?: string; lastCrashSummary?: string }
+}
+
+export type Diagnostics = {
+  version: string
+  platform: string
+  arch: string
+  safeMode: boolean
+  checks: Array<{
+    id: string
+    label: string
+    status: "ok" | "warning" | "error"
+    detail: string
+    repairable: boolean
+  }>
+}
+
+export async function fetchRecoveryState(): Promise<RecoveryState> {
+  const response = await fetch("/ui/api/recovery/state")
+  if (!response.ok) throw new Error(`Failed to load recovery state (${response.status})`)
+  return (await response.json()) as RecoveryState
+}
+
+export async function updateRecoveryState(
+  update: Partial<Pick<RecoveryState, "onboardingCompleted" | "update">>
+): Promise<RecoveryState> {
+  const response = await fetch("/ui/api/recovery/state", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  })
+  if (!response.ok) throw new Error(`Failed to update recovery state (${response.status})`)
+  return (await response.json()) as RecoveryState
+}
+
+export async function fetchDiagnostics(): Promise<Diagnostics> {
+  const response = await fetch("/ui/api/diagnostics")
+  if (!response.ok) throw new Error(`Failed to load diagnostics (${response.status})`)
+  return (await response.json()) as Diagnostics
+}
+
+export async function repairDiagnostic(id: string): Promise<{ repaired: boolean; detail: string }> {
+  const response = await fetch("/ui/api/doctor/repair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  })
+  const body = (await response.json()) as { repaired?: boolean; detail?: string; error?: string }
+  if (!response.ok) throw new Error(body.error ?? `Repair failed (${response.status})`)
+  return { repaired: body.repaired === true, detail: body.detail ?? "" }
+}
+
+export async function setSafeMode(enabled: boolean): Promise<RecoveryState> {
+  const response = await fetch("/ui/api/safe-mode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  })
+  if (!response.ok) throw new Error(`Safe mode update failed (${response.status})`)
+  return (await response.json()) as RecoveryState
+}
+
+export async function createBackup(): Promise<{ path: string; createdAt: string }> {
+  const response = await fetch("/ui/api/backups", { method: "POST" })
+  const body = (await response.json()) as { path?: string; createdAt?: string; error?: string }
+  if (!response.ok || !body.path || !body.createdAt)
+    throw new Error(body.error ?? `Backup failed (${response.status})`)
+  return { path: body.path, createdAt: body.createdAt }
+}
+
+export async function restoreBackup(
+  path: string
+): Promise<{ restored: string[]; safetyBackupPath: string }> {
+  const response = await fetch("/ui/api/backups/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  })
+  const body = (await response.json()) as {
+    restored?: string[]
+    safetyBackupPath?: string
+    error?: string
+  }
+  if (!response.ok || !body.restored || !body.safetyBackupPath)
+    throw new Error(body.error ?? `Restore failed (${response.status})`)
+  return { restored: body.restored, safetyBackupPath: body.safetyBackupPath }
+}
+
 export async function fetchProjects(): Promise<ProjectRecord[]> {
   if (MOCK_DASHBOARD) return []
   const response = await fetch("/ui/api/projects")
@@ -578,12 +676,18 @@ export async function fetchStoreReview(
   return (await response.json()) as CapabilityStoreReview
 }
 
-export async function installStoreEntry(id: string, revision?: string): Promise<void> {
+export async function installStoreEntry(
+  id: string,
+  revision?: string,
+  approvedPermissions: string[] = [],
+  rememberPermissions = false,
+  deniedPermissions: string[] = []
+): Promise<void> {
   if (MOCK_DASHBOARD) return
   const response = await fetch(`/ui/api/store/${encodeURIComponent(id)}/install`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ revision }),
+    body: JSON.stringify({ revision, approvedPermissions, rememberPermissions, deniedPermissions }),
   })
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined

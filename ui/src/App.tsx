@@ -19,6 +19,7 @@ import { Button } from "./components/ui/button"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
+import { Onboarding } from "./features/onboarding/Onboarding"
 import { ProjectManager } from "./features/projects/ProjectManager"
 import { SettingsPage } from "./features/settings/SettingsPage"
 import { StatusPage } from "./features/status/StatusPage"
@@ -28,7 +29,13 @@ import { SummaryManager } from "./features/summaries/SummaryManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
-import { fetchUpdateCheck, installOpenChatXUpdate, type UpdateCheck } from "./lib/api"
+import {
+  fetchRecoveryState,
+  fetchUpdateCheck,
+  installOpenChatXUpdate,
+  type RecoveryState,
+  type UpdateCheck,
+} from "./lib/api"
 
 type View =
   | "dashboard"
@@ -75,6 +82,8 @@ export function App() {
   const [update, setUpdate] = useState<UpdateCheck>()
   const [installingUpdate, setInstallingUpdate] = useState(false)
   const [updateInstallError, setUpdateInstallError] = useState<string>()
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [recoveryState, setRecoveryState] = useState<RecoveryState>()
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
@@ -82,10 +91,28 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    void fetchUpdateCheck()
-      .then(setUpdate)
+    void fetchRecoveryState()
+      .then((state) => {
+        setShowOnboarding(!state.onboardingCompleted)
+        setRecoveryState(state)
+        if (state.update.autoCheck) {
+          void fetchUpdateCheck()
+            .then(setUpdate)
+            .catch(() => undefined)
+        }
+      })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (!installingUpdate) return
+    const timer = window.setInterval(() => {
+      void fetchRecoveryState()
+        .then(setRecoveryState)
+        .catch(() => undefined)
+    }, 500)
+    return () => window.clearInterval(timer)
+  }, [installingUpdate])
 
   async function installUpdate() {
     setInstallingUpdate(true)
@@ -143,6 +170,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {showOnboarding ? <Onboarding onComplete={() => setShowOnboarding(false)} /> : null}
       <aside className="app-sidebar">
         <div className="sidebar-brand">
           <img src="/ui/openchatx-mcp-icon.png" alt="" className="size-8 rounded-[9px]" />
@@ -220,6 +248,11 @@ export function App() {
                     latest: update.latestVersion ?? "?",
                   })}
                 </div>
+                {installingUpdate && recoveryState ? (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {recoveryState.update.phase} · {recoveryState.update.progress}%
+                  </div>
+                ) : null}
                 {updateInstallError ? (
                   <div className="mt-1 text-xs text-destructive">{updateInstallError}</div>
                 ) : null}

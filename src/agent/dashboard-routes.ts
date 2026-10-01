@@ -12,6 +12,9 @@ import type { ContextBudgetGuard } from "../mcp/context-budget.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
 import { loadPublicConfig, savePublicConfig } from "../public-config.cjs"
+import { registerRecoveryRoutes } from "../recovery/dashboard-routes.js"
+import { loadOperationalState, updateOperationalState } from "../recovery/operational-state.js"
+import type { SystemRecoveryService } from "../recovery/system-recovery.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import {
   loadSubagentConfig,
@@ -38,6 +41,7 @@ export interface DashboardServices {
   projectRegistry?: ProjectRegistry
   summaryRegistry?: SummaryRegistry
   contextBudget?: ContextBudgetGuard
+  systemRecovery?: SystemRecoveryService
 }
 
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
@@ -56,6 +60,7 @@ export function createDashboardRouter(
     projectRegistry,
     summaryRegistry,
     contextBudget,
+    systemRecovery,
   } = services
   const router = Router()
 
@@ -65,6 +70,7 @@ export function createDashboardRouter(
   registerWorkspaceRoutes(router, projectRegistry)
   registerSummaryRoutes(router, summaryRegistry)
   registerUpdateRoutes(router)
+  registerRecoveryRoutes(router, systemRecovery)
   registerAgentInstructionsRoutes(router)
   registerRuleRoutes(router, toolboxRegistry)
   registerToolboxRoutes(router, toolboxRegistry)
@@ -690,6 +696,67 @@ function registerStoreRoutes(
     }
     try {
       const revision = typeof req.body?.revision === "string" ? req.body.revision : undefined
+      const review = await capabilityStore.review(req.params.id, revision)
+      const requiredPermissions = Object.entries(review.observedPermissions)
+        .filter(([, required]) => required)
+        .map(([permission]) => permission)
+      const approvedPermissions = Array.isArray(req.body?.approvedPermissions)
+        ? req.body.approvedPermissions.filter(
+            (value: unknown): value is string => typeof value === "string"
+          )
+        : []
+      const deniedPermissions = Array.isArray(req.body?.deniedPermissions)
+        ? req.body.deniedPermissions.filter(
+            (value: unknown): value is string => typeof value === "string"
+          )
+        : []
+      if (deniedPermissions.length > 0) {
+        await updateOperationalState((state) => {
+          const current = state.capabilityPermissions[req.params.id] ?? {}
+          state.capabilityPermissions[req.params.id] = {
+            ...current,
+            ...Object.fromEntries(
+              deniedPermissions.map((permission: string) => [permission, "deny" as const])
+            ),
+          }
+        })
+        res
+          .status(403)
+          .json({ error: `Capability permission denied: ${deniedPermissions.join(", ")}.` })
+        return
+      }
+      const operationalState = await loadOperationalState()
+      const policies = operationalState.capabilityPermissions[req.params.id] ?? {}
+      const denied = requiredPermissions.filter(
+        (permission: string) => policies[permission] === "deny"
+      )
+      if (denied.length > 0) {
+        res.status(403).json({ error: `Capability permission denied: ${denied.join(", ")}.` })
+        return
+      }
+      const missing = requiredPermissions.filter(
+        (permission: string) =>
+          policies[permission] !== "allow" && !approvedPermissions.includes(permission)
+      )
+      if (missing.length > 0) {
+        res.status(409).json({
+          error: "Capability permissions require explicit approval.",
+          requiredPermissions,
+          review,
+        })
+        return
+      }
+      if (req.body?.rememberPermissions === true && approvedPermissions.length > 0) {
+        await updateOperationalState((state) => {
+          const current = state.capabilityPermissions[req.params.id] ?? {}
+          state.capabilityPermissions[req.params.id] = {
+            ...current,
+            ...Object.fromEntries(
+              approvedPermissions.map((permission: string) => [permission, "allow" as const])
+            ),
+          }
+        })
+      }
       res.status(201).json({ entry: await capabilityStore.install(req.params.id, revision) })
     } catch (error) {
       toolboxError(res, error)

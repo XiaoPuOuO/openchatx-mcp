@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import process from "node:process"
 
+import { updateOperationalState } from "../recovery/operational-state.js"
 import type { UpdateCheckResult } from "./version-check.js"
 
 const RELEASE_DOWNLOAD_PREFIX = "https://github.com/XiaoPuOuO/openchatx-mcp/releases/download/"
@@ -49,6 +50,10 @@ export async function launchWindowsDesktopUpdate(
   await mkdir(updateDirectory, { recursive: true })
   const installerPath = join(updateDirectory, update.downloadName)
   await writeFile(installerPath, Buffer.from(await response.arrayBuffer()))
+  await updateOperationalState((state) => {
+    state.update.phase = "installing"
+    state.update.progress = 75
+  })
 
   const installer = spawn(
     installerPath,
