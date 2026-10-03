@@ -8,6 +8,7 @@ import {
 } from "../agent/context.js"
 import { MCP_CONFIG } from "../config.js"
 import { ToolError } from "../mcp/tool-error.js"
+import type { RuntimeControlService } from "../runtime/runtime-control.js"
 import {
   type ProjectPermission,
   type ProjectRegistry,
@@ -21,7 +22,16 @@ export interface ResolvedProjectPath {
 }
 
 export class ProjectScope {
-  constructor(private readonly projects: ProjectRegistry) {}
+  private workspaceActivator?: (projectId: string) => Promise<void>
+
+  constructor(
+    private readonly projects: ProjectRegistry,
+    private readonly runtimeControl?: RuntimeControlService
+  ) {}
+
+  setWorkspaceActivator(activator: (projectId: string) => Promise<void>): void {
+    this.workspaceActivator = activator
+  }
 
   async list(): Promise<RegisteredProject[]> {
     return this.projects.list()
@@ -44,11 +54,45 @@ export class ProjectScope {
       return undefined
     }
     const project = await this.projects.get(projectId)
+    await this.workspaceActivator?.(project.id)
     setAgentProjectId(project.id)
     return project
   }
 
   async resolvePath(
+    input: string | undefined,
+    permission: ProjectPermission,
+    explicitProjectId?: string
+  ): Promise<ResolvedProjectPath> {
+    const fullAccess = (await this.runtimeControl?.snapshot())?.accessMode === "full-access"
+    return fullAccess
+      ? this.resolveTrustedPath(input, explicitProjectId)
+      : this.resolveRestrictedPath(input, permission, explicitProjectId)
+  }
+
+  private async resolveTrustedPath(
+    input: string | undefined,
+    explicitProjectId?: string
+  ): Promise<ResolvedProjectPath> {
+    const active = await this.current()
+    if (explicitProjectId) {
+      const project = await this.projects.get(explicitProjectId)
+      return { path: resolveProjectInputPath(project.path, input), project }
+    }
+    if (!input)
+      return active ? { path: active.path, project: active } : { path: MCP_CONFIG.defaultCwd }
+    if (!isAbsolute(input)) {
+      return active
+        ? { path: resolve(active.path, input), project: active }
+        : { path: resolve(MCP_CONFIG.defaultCwd, input) }
+    }
+    const path = resolve(input)
+    if (active) return { path, project: active }
+    const matching = await this.projects.findForPath(path)
+    return matching ? { path, project: matching } : { path }
+  }
+
+  private async resolveRestrictedPath(
     input: string | undefined,
     permission: ProjectPermission,
     explicitProjectId?: string
@@ -64,30 +108,22 @@ export class ProjectScope {
         `Project ${JSON.stringify(explicit.id)} is not the active Project. Call project_manage with action="use" and project_id=${JSON.stringify(explicit.id)}.`
       )
     }
-
     if (explicit) {
-      let path = explicit.path
-      if (input) path = isAbsolute(input) ? resolve(input) : resolve(explicit.path, input)
+      const path = resolveProjectInputPath(explicit.path, input)
       ensureInsideProjectOrAuthorized(path, explicit)
       return { path, project: explicit }
     }
-
     if (!input) {
-      if (active) {
-        ensurePermission(active, permission)
-        return { path: active.path, project: active }
-      }
-      return { path: MCP_CONFIG.defaultCwd }
+      if (!active) return { path: MCP_CONFIG.defaultCwd }
+      ensurePermission(active, permission)
+      return { path: active.path, project: active }
     }
-
     if (!isAbsolute(input)) {
-      if (active) {
-        ensurePermission(active, permission)
-        const path = resolve(active.path, input)
-        ensureInsideProjectOrAuthorized(path, active)
-        return { path, project: active }
-      }
-      return { path: resolve(MCP_CONFIG.defaultCwd, input) }
+      if (!active) return { path: resolve(MCP_CONFIG.defaultCwd, input) }
+      ensurePermission(active, permission)
+      const path = resolve(active.path, input)
+      ensureInsideProjectOrAuthorized(path, active)
+      return { path, project: active }
     }
 
     const path = resolve(input)
@@ -97,12 +133,15 @@ export class ProjectScope {
       return { path, project: active }
     }
     const matching = await this.projects.findForPath(path)
-    if (matching) {
-      ensurePermission(matching, permission)
-      return { path, project: matching }
-    }
-    return { path }
+    if (!matching) return { path }
+    ensurePermission(matching, permission)
+    return { path, project: matching }
   }
+}
+
+function resolveProjectInputPath(projectRoot: string, input: string | undefined): string {
+  if (!input) return projectRoot
+  return isAbsolute(input) ? resolve(input) : resolve(projectRoot, input)
 }
 
 function ensurePermission(project: RegisteredProject, permission: ProjectPermission): void {

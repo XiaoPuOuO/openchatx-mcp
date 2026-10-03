@@ -611,6 +611,10 @@ button {
   background: var(--danger-soft);
 }
 
+.activity-row-interrupted {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
 .session-section {
   margin-top: 24px;
 }

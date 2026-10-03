@@ -41,8 +41,14 @@ internal sealed class MainForm : Form
     private readonly ToolStripButton _runtimeButton = new() { DisplayStyle = ToolStripItemDisplayStyle.Text };
     private readonly ToolStripDropDownButton _moreButton = new("More");
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 2000 };
+    private readonly NotifyIcon _trayIcon;
     private RuntimeSnapshot _snapshot = new(false, false, false);
     private bool _webReady;
+    private bool _allowClose;
+    private bool _desktopPreferencesLoaded;
+    private bool _closeToTray = true;
+    private bool _notificationsEnabled = true;
+    private bool _notifyTunnelDisconnected = true;
 
     public MainForm()
     {
@@ -64,8 +70,9 @@ internal sealed class MainForm : Form
         Controls.Add(_webView);
         Controls.Add(_toolbar);
 
+        _trayIcon = BuildTrayIcon();
         Shown += async (_, _) => await InitializeAsync();
-        FormClosing += (_, _) => _supervisor.Stop();
+        FormClosing += OnFormClosing;
         _timer.Tick += async (_, _) => await RefreshSnapshotAsync();
     }
 
@@ -201,6 +208,91 @@ internal sealed class MainForm : Form
         return NavigationDisposition.Blocked;
     }
 
+    private NotifyIcon BuildTrayIcon()
+    {
+        var menu = new ContextMenuStrip();
+
+        var open = new ToolStripMenuItem("Open OpenChatX");
+        open.Click += (_, _) => ShowFromTray();
+        menu.Items.Add(open);
+
+        var pause = new ToolStripMenuItem("Pause Agent Access");
+        pause.Click += async (_, _) => await _supervisor.SetAgentAccessPausedAsync(paused: true);
+        menu.Items.Add(pause);
+
+        var resume = new ToolStripMenuItem("Resume Agent Access");
+        resume.Click += async (_, _) => await _supervisor.SetAgentAccessPausedAsync(paused: false);
+        menu.Items.Add(resume);
+
+        menu.Items.Add(new ToolStripSeparator());
+
+        var quit = new ToolStripMenuItem("Quit OpenChatX");
+        quit.Click += (_, _) =>
+        {
+            _allowClose = true;
+            Close();
+        };
+        menu.Items.Add(quit);
+
+        var executable = Environment.ProcessPath;
+        var icon = !string.IsNullOrWhiteSpace(executable)
+            ? Icon.ExtractAssociatedIcon(executable)
+            : null;
+        var tray = new NotifyIcon
+        {
+            Text = "OpenChatX",
+            Icon = icon ?? SystemIcons.Application,
+            ContextMenuStrip = menu,
+            Visible = true,
+        };
+        tray.DoubleClick += (_, _) => ShowFromTray();
+        return tray;
+    }
+
+    private void ShowFromTray()
+    {
+        ShowInTaskbar = true;
+        Show();
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
+    private void HideToTray()
+    {
+        ShowInTaskbar = false;
+        Hide();
+    }
+
+    private void OnFormClosing(object? sender, FormClosingEventArgs args)
+    {
+        if (!_allowClose && _closeToTray && args.CloseReason == CloseReason.UserClosing)
+        {
+            args.Cancel = true;
+            HideToTray();
+            return;
+        }
+
+        _timer.Stop();
+        _trayIcon.Visible = false;
+        _trayIcon.Dispose();
+        _supervisor.Stop();
+    }
+
+    private async Task ApplyDesktopPreferencesAsync()
+    {
+        if (!_snapshot.Backend) return;
+        var preferences = await _supervisor.GetDesktopPreferencesAsync();
+        if (preferences is null) return;
+
+        var resolved = preferences.Value;
+        var firstLoad = !_desktopPreferencesLoaded;
+        _desktopPreferencesLoaded = true;
+        _closeToTray = resolved.CloseToTray;
+        _notificationsEnabled = resolved.NotificationsEnabled;
+        _notifyTunnelDisconnected = resolved.NotifyTunnelDisconnected;
+        if (firstLoad && resolved.StartMinimized) HideToTray();
+    }
+
     private async Task ToggleRuntimeAsync()
     {
         if (_snapshot.Backend)
@@ -219,8 +311,25 @@ internal sealed class MainForm : Form
 
     private async Task UpdateSnapshotAsync()
     {
+        var previous = _snapshot;
         _snapshot = await _supervisor.SnapshotAsync();
         RenderSnapshot();
+        await ApplyDesktopPreferencesAsync();
+        if (
+            previous.Tunnel &&
+            !_snapshot.Tunnel &&
+            _snapshot.TunnelProfile &&
+            _notificationsEnabled &&
+            _notifyTunnelDisconnected
+        )
+        {
+            _trayIcon.ShowBalloonTip(
+                4000,
+                "OpenChatX Tunnel disconnected",
+                "The Secure MCP Tunnel lost its control-plane connection.",
+                ToolTipIcon.Warning
+            );
+        }
     }
 
     private void RenderSnapshot()
@@ -383,6 +492,12 @@ internal sealed class TunnelSetupForm : Form
 }
 
 internal readonly record struct RuntimeSnapshot(bool Backend, bool Tunnel, bool TunnelProfile);
+internal readonly record struct DesktopPreferences(
+    bool CloseToTray,
+    bool StartMinimized,
+    bool NotificationsEnabled,
+    bool NotifyTunnelDisconnected
+);
 
 internal sealed class RuntimeSupervisor
 {
@@ -442,6 +557,57 @@ internal sealed class RuntimeSupervisor
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "OpenChatX"
         );
+    }
+
+    public async Task<DesktopPreferences?> GetDesktopPreferencesAsync()
+    {
+        try
+        {
+            using var response = await _http.GetAsync(new Uri(DashboardUrl, "api/recovery/state"));
+            if (!response.IsSuccessStatusCode) return null;
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (!document.RootElement.TryGetProperty("desktop", out var desktop)) return null;
+            var closeToTray = !desktop.TryGetProperty("closeToTray", out var closeValue) ||
+                              closeValue.ValueKind != JsonValueKind.False;
+            var startMinimized =
+                desktop.TryGetProperty("startMinimized", out var startValue) &&
+                startValue.ValueKind == JsonValueKind.True;
+            var notificationsEnabled = true;
+            var notifyTunnelDisconnected = true;
+            if (document.RootElement.TryGetProperty("notifications", out var notifications))
+            {
+                notificationsEnabled =
+                    !notifications.TryGetProperty("enabled", out var enabledValue) ||
+                    enabledValue.ValueKind != JsonValueKind.False;
+                notifyTunnelDisconnected =
+                    !notifications.TryGetProperty("tunnelDisconnected", out var tunnelValue) ||
+                    tunnelValue.ValueKind != JsonValueKind.False;
+            }
+            return new DesktopPreferences(
+                closeToTray,
+                startMinimized,
+                notificationsEnabled,
+                notifyTunnelDisconnected
+            );
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task SetAgentAccessPausedAsync(bool paused)
+    {
+        try
+        {
+            var body = JsonSerializer.Serialize(new { paused, stopRunning = paused });
+            using var content = new StringContent(body, Encoding.UTF8, "application/json");
+            await _http.PostAsync(new Uri(DashboardUrl, "api/runtime-control/pause"), content);
+        }
+        catch
+        {
+            // The tray action is best effort while the runtime may be restarting.
+        }
     }
 
     public void RestartWithIsolatedAppData()
@@ -936,6 +1102,8 @@ internal sealed class RuntimeSupervisor
         var inherited = environment.GetValueOrDefault("Path") ?? "";
         environment["Path"] = bundledBin + Path.PathSeparator + inherited;
         environment["OPENCHATX_DESKTOP"] = "1";
+        environment["OPENCHATX_DESKTOP_APP_PATH"] = Environment.ProcessPath;
+        environment["OPENCHATX_DESKTOP_APP_PID"] = Environment.ProcessId.ToString();
 
         if (includeTunnelKey)
         {

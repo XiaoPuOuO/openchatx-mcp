@@ -5,7 +5,9 @@ import process from "node:process"
 import { z } from "zod"
 import { MCP_CONFIG } from "../config.js"
 
-export const OPERATIONAL_STATE_VERSION = 1
+export const OPERATIONAL_STATE_VERSION = 4
+export const ACCESS_MODES = ["always-question", "allow-low-risk", "full-access"] as const
+export type AccessMode = (typeof ACCESS_MODES)[number]
 
 const stateSchema = z.object({
   schemaVersion: z.literal(OPERATIONAL_STATE_VERSION),
@@ -33,6 +35,38 @@ const stateSchema = z.object({
   capabilityPermissions: z
     .record(z.string(), z.record(z.string(), z.enum(["ask", "allow", "deny"])))
     .default({}),
+  accessMode: z.enum(ACCESS_MODES).default("allow-low-risk"),
+  agentAccess: z
+    .object({
+      paused: z.boolean().default(false),
+      pausedAt: z.string().optional(),
+    })
+    .default({ paused: false }),
+  dangerousActions: z.record(z.string(), z.enum(["ask", "allow", "deny"])).default({}),
+  toolRiskOverrides: z.record(z.string(), z.enum(["low", "approval"])).default({}),
+  desktop: z
+    .object({
+      closeToTray: z.boolean().default(true),
+      startMinimized: z.boolean().default(false),
+    })
+    .default({ closeToTray: true, startMinimized: false }),
+  notifications: z
+    .object({
+      enabled: z.boolean().default(true),
+      agentCompleted: z.boolean().default(true),
+      approvalRequired: z.boolean().default(true),
+      tunnelDisconnected: z.boolean().default(true),
+      updateAvailable: z.boolean().default(true),
+      jobFinished: z.boolean().default(true),
+    })
+    .default({
+      enabled: true,
+      agentCompleted: true,
+      approvalRequired: true,
+      tunnelDisconnected: true,
+      updateAvailable: true,
+      jobFinished: true,
+    }),
   crash: z
     .object({
       consecutiveStartupFailures: z.number().int().nonnegative().default(0),
@@ -80,7 +114,9 @@ export async function updateOperationalState(
 }
 
 export function migrateOperationalState(raw: unknown): OperationalState {
-  if (!raw || typeof raw !== "object") return stateSchema.parse({ schemaVersion: 1 })
+  if (!raw || typeof raw !== "object") {
+    return stateSchema.parse({ schemaVersion: OPERATIONAL_STATE_VERSION })
+  }
   const version =
     "schemaVersion" in raw && typeof raw.schemaVersion === "number" ? raw.schemaVersion : 0
   if (version > OPERATIONAL_STATE_VERSION) {
@@ -88,8 +124,19 @@ export function migrateOperationalState(raw: unknown): OperationalState {
       `Operational state schema ${version} is newer than supported schema ${OPERATIONAL_STATE_VERSION}.`
     )
   }
-  if (version === 0) {
-    return stateSchema.parse({ ...raw, schemaVersion: OPERATIONAL_STATE_VERSION })
+  if (version < OPERATIONAL_STATE_VERSION) {
+    const legacyTrustMode =
+      version <= 2 &&
+      "trustMode" in raw &&
+      raw.trustMode !== null &&
+      typeof raw.trustMode === "object" &&
+      "enabled" in raw.trustMode &&
+      raw.trustMode.enabled === true
+    return stateSchema.parse({
+      ...raw,
+      schemaVersion: OPERATIONAL_STATE_VERSION,
+      ...(version <= 2 ? { accessMode: legacyTrustMode ? "full-access" : "allow-low-risk" } : {}),
+    })
   }
   return stateSchema.parse(raw)
 }

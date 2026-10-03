@@ -45,6 +45,16 @@ test("keeps progress call counts isolated by session", () => {
   assert.equal(guard.record(second), FORCED_PROGRESS_INSTRUCTION)
 })
 
+test("skips progress instructions for Dot sessions", () => {
+  const guard = new ProgressHeartbeatGuard(1, (sessionId) => sessionId === "dot")
+  const dot = identity("dot")
+  const normal = identity("normal")
+
+  for (let call = 0; call < 4; call += 1) assert.equal(guard.record(dot), undefined)
+  assert.equal(guard.record(normal), undefined)
+  assert.equal(guard.record(normal), FORCED_PROGRESS_INSTRUCTION)
+})
+
 test("uses the compact hard-coded progress instruction", () => {
   assert.equal(
     FORCED_PROGRESS_INSTRUCTION,

@@ -17,6 +17,11 @@ import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
 import { createProject, deleteProject, fetchProjects, updateProject } from "../../lib/api"
+import {
+  createProjectSnapshot,
+  exportProjectWorkspace,
+  importProjectWorkspace,
+} from "../../lib/project-workspace-api"
 import type { ProjectRecord } from "../../types"
 
 const DEFAULT_PERMISSIONS: ProjectRecord["permissions"] = {
@@ -51,6 +56,7 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState<string>()
   const [mode, setMode] = useState<"detail" | "create" | "edit">("detail")
   const [draft, setDraft] = useState<ProjectDraft>({ ...EMPTY_DRAFT })
+  const [workspaceMessage, setWorkspaceMessage] = useState<string>()
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedId),
@@ -150,6 +156,52 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const snapshotWorkspace = async (project: ProjectRecord) => {
+    setBusy(`${project.id}:workspace`)
+    try {
+      await createProjectSnapshot(project.id)
+      setWorkspaceMessage(t("projects.workspaceSnapshotSaved"))
+      setError(undefined)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const exportWorkspace = async (project: ProjectRecord) => {
+    const destination = window.prompt(t("projects.workspaceExportPrompt"), "")
+    if (destination === null) return
+    setBusy(`${project.id}:workspace`)
+    try {
+      const result = await exportProjectWorkspace(project.id, destination.trim() || undefined)
+      setWorkspaceMessage(t("projects.workspaceExported", { path: result.path }))
+      setError(undefined)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const importWorkspace = async () => {
+    const path = window.prompt(t("projects.workspaceImportPrompt"))
+    if (!path?.trim()) return
+    setBusy("workspace-import")
+    try {
+      const result = await importProjectWorkspace(path.trim())
+      await load()
+      setSelectedId(result.project.id)
+      setMode("detail")
+      setWorkspaceMessage(t("projects.workspaceImported", { name: result.project.name }))
+      setError(undefined)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
   const togglePermission = async (
     project: ProjectRecord,
     permission: keyof ProjectRecord["permissions"]
@@ -178,10 +230,20 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
         subtitle={t("projects.subtitle")}
         onBack={onBack}
         actions={
-          <Button size="sm" onClick={beginCreate}>
-            <Plus className="size-4" />
-            {t("projects.registerTitle")}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy === "workspace-import"}
+              onClick={() => void importWorkspace()}
+            >
+              {t("projects.importWorkspace")}
+            </Button>
+            <Button size="sm" onClick={beginCreate}>
+              <Plus className="size-4" />
+              {t("projects.registerTitle")}
+            </Button>
+          </div>
         }
       />
 
@@ -189,6 +251,11 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
         {error ? (
           <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
+          </div>
+        ) : null}
+        {workspaceMessage ? (
+          <div className="mb-5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm">
+            {workspaceMessage}
           </div>
         ) : null}
 
@@ -281,9 +348,11 @@ export function ProjectManager({ onBack }: { onBack: () => void }) {
               ) : (
                 <ProjectDetail
                   project={selectedProject}
-                  busy={busy === selectedProject.id}
+                  busy={busy === selectedProject.id || busy === `${selectedProject.id}:workspace`}
                   onEdit={() => beginEdit(selectedProject)}
                   onDelete={() => void remove(selectedProject)}
+                  onSnapshot={() => void snapshotWorkspace(selectedProject)}
+                  onExport={() => void exportWorkspace(selectedProject)}
                   onToggle={(permission) => void togglePermission(selectedProject, permission)}
                   t={t}
                 />
@@ -315,6 +384,8 @@ function ProjectDetail({
   busy,
   onEdit,
   onDelete,
+  onSnapshot,
+  onExport,
   onToggle,
   t,
 }: {
@@ -322,6 +393,8 @@ function ProjectDetail({
   busy: boolean
   onEdit: () => void
   onDelete: () => void
+  onSnapshot: () => void
+  onExport: () => void
   onToggle: (permission: keyof ProjectRecord["permissions"]) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }) {
@@ -338,7 +411,13 @@ function ProjectDetail({
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{project.description}</p>
             ) : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={busy} onClick={onSnapshot}>
+              {t("projects.snapshotWorkspace")}
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={onExport}>
+              {t("projects.exportWorkspace")}
+            </Button>
             <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
               <Pencil className="size-4" />
               {t("common.edit")}

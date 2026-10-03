@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
+  appendInterruptedByUser,
   appendToolEvents,
   compactToolResult,
   formatOutputBlock,
@@ -37,6 +38,34 @@ test("formats top-level output blocks with a shared boundary", () => {
     formatOutputBlock(["turn_id=test_turn_1", "status=completed"], "## Result\n\nDone."),
     "---- turn_id=test_turn_1 status=completed ----\n\n## Result\n\nDone."
   )
+})
+
+test("appends interrupted marker while preserving structured partial output", () => {
+  const result = appendInterruptedByUser({
+    structuredContent: { output: "partial output", exit_code: null },
+    content: [],
+  }) as {
+    structuredContent: { output: string; interrupted: boolean }
+    content: unknown[]
+  }
+
+  assert.equal(result.structuredContent.output, "partial output\ninterrupted by user")
+  assert.equal(result.structuredContent.interrupted, true)
+  assert.deepEqual(result.content, [])
+
+  const repeated = appendInterruptedByUser(result) as {
+    structuredContent: { output: string }
+  }
+  assert.equal(repeated.structuredContent.output, "partial output\ninterrupted by user")
+})
+
+test("creates an interrupt-only result when no partial output exists", () => {
+  const result = appendInterruptedByUser(undefined) as {
+    structuredContent: { interrupted: boolean }
+    content: Array<{ type: string; text: string }>
+  }
+  assert.equal(result.structuredContent.interrupted, true)
+  assert.equal(result.content[0]?.text, "interrupted by user")
 })
 
 test("formats global tool events as notices", () => {

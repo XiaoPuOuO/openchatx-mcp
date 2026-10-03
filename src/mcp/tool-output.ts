@@ -5,6 +5,7 @@ const IMAGE_MIME_PATTERN = /^image\//iu
 const BASE64_DATA_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/u
 const IMAGE_DATA_URL_PATTERN = /data:(image\/[^;,\s]+);base64,([A-Za-z0-9+/=]+)/giu
 const IMAGE_MOVED_MARKER = "[image moved to native MCP content]"
+const TRAILING_WHITESPACE_RE = /\s+$/u
 
 export function normalizeToolResultImages(result: unknown): unknown {
   if (!isRecord(result)) return result
@@ -45,6 +46,34 @@ export function compactToolResult(toolName: string, result: unknown): unknown {
 export function formatOutputBlock(metadata: readonly string[], body?: string): string {
   const header = `---- ${metadata.filter(Boolean).join(" ")} ----`
   return body ? `${header}\n\n${body}` : header
+}
+
+export const USER_INTERRUPT_TEXT = "interrupted by user"
+
+export function appendInterruptedByUser(result: unknown): unknown {
+  if (!isRecord(result)) {
+    const prefix = typeof result === "string" && result ? `${result}\n` : ""
+    return {
+      structuredContent: { interrupted: true },
+      content: [{ type: "text", text: `${prefix}${USER_INTERRUPT_TEXT}` }],
+    }
+  }
+
+  const interrupted = { ...result }
+  let structured: unknown = result.structuredContent
+  if (isRecord(structured)) structured = { ...structured, interrupted: true }
+  else if (structured === undefined) structured = { interrupted: true }
+
+  let hasStructuredOutput = false
+  if (isRecord(structured) && typeof structured.output === "string") {
+    structured.output = appendInterruptText(structured.output)
+    hasStructuredOutput = true
+  }
+  interrupted.structuredContent = structured
+  if (!hasStructuredOutput)
+    interrupted.content = appendTextContent(result.content, USER_INTERRUPT_TEXT)
+  if ("isError" in interrupted) interrupted.isError = false
+  return interrupted
 }
 
 export function appendToolEvents(result: unknown, events: readonly string[]): unknown {
@@ -167,6 +196,12 @@ function indentBlock(value: string): string {
     .split("\n")
     .map((line) => (line ? `  ${line}` : ""))
     .join("\n")
+}
+
+function appendInterruptText(value: string): string {
+  if (!value) return USER_INTERRUPT_TEXT
+  if (value.trimEnd().endsWith(USER_INTERRUPT_TEXT)) return value
+  return `${value.replace(TRAILING_WHITESPACE_RE, "")}\n${USER_INTERRUPT_TEXT}`
 }
 
 function appendTextContent(content: unknown, text: string): unknown[] {

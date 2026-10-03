@@ -77,7 +77,8 @@ export function registerCatalogTools(
     if (input.tool.startsWith("toolbox:")) {
       return toolboxes.callCustomTool(input.tool, argumentsValue, context)
     }
-    if (input.tool.startsWith("mcp:")) return externalMcp.call(input.tool, argumentsValue)
+    if (input.tool.startsWith("mcp:"))
+      return externalMcp.call(input.tool, argumentsValue, context.mcpReq.signal)
     throw new ToolError("UNKNOWN_TOOL", `Unknown lazy tool id ${JSON.stringify(input.tool)}.`)
   }
 

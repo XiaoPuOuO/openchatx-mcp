@@ -54,6 +54,30 @@ test("warns after cumulative tool input and output cross the session threshold",
   assert.match(warning ?? "", /open a new ChatGPT conversation/u)
 })
 
+test("Dot sessions keep recording usage without emitting summarize warnings", async () => {
+  const guard = new ContextBudgetGuard(20, (value) => value.length)
+  const agent = identity("dot")
+  await guard.setDotSession(agent.sessionId, true)
+
+  const notice = await guard.record(
+    agent,
+    "grep",
+    { pattern: "x".repeat(30) },
+    textResult("result")
+  )
+
+  assert.equal(notice, undefined)
+  assert.equal(guard.isDotSession(agent.sessionId), true)
+  assert.ok((guard.usage(agent)?.tokens ?? 0) > 20)
+
+  await guard.setDotSession(agent.sessionId, false)
+  assert.equal(guard.isDotSession(agent.sessionId), false)
+  assert.match(
+    (await guard.record(agent, "grep", {}, textResult("next"))) ?? "",
+    /Context budget warning/u
+  )
+})
+
 test("tool input alone contributes to the context budget", async () => {
   const guard = new ContextBudgetGuard(20, (value) => value.length)
   const agent = identity("one")

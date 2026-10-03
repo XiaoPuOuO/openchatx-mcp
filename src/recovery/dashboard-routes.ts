@@ -22,6 +22,10 @@ export function registerRecoveryRoutes(
         state.update.channel = req.body.update.channel
       if (typeof req.body?.update?.autoCheck === "boolean")
         state.update.autoCheck = req.body.update.autoCheck
+      if (typeof req.body?.desktop?.closeToTray === "boolean")
+        state.desktop.closeToTray = req.body.desktop.closeToTray
+      if (typeof req.body?.desktop?.startMinimized === "boolean")
+        state.desktop.startMinimized = req.body.desktop.startMinimized
     })
     res.json(next)
   })

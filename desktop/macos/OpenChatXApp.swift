@@ -3,15 +3,21 @@ import Foundation
 import Security
 import WebKit
 
-private let tunnelHealthURL = URL(string: "http://127.0.0.1:8080/health?details=true")!
-
 final class RuntimeSupervisor: NSObject {
     private static let defaultRuntimePort = 8001
+    private static let defaultTunnelHealthPort = 8080
 
     struct Snapshot {
         let backend: Bool
         let tunnel: Bool
         let tunnelProfile: Bool
+    }
+
+    struct DesktopPreferences {
+        let closeToTray: Bool
+        let startMinimized: Bool
+        let notificationsEnabled: Bool
+        let notifyTunnelDisconnected: Bool
     }
 
     private var backendProcess: Process?
@@ -30,7 +36,9 @@ final class RuntimeSupervisor: NSObject {
     var onSnapshot: ((Snapshot) -> Void)?
     var dashboardURL: URL { URL(string: "http://127.0.0.1:\(runtimePort)/ui/")! }
     private var backendHealthURL: URL { URL(string: "http://127.0.0.1:\(runtimePort)/healthz")! }
+    private var tunnelHealthURL: URL { URL(string: "http://127.0.0.1:\(tunnelHealthPort)/health?details=true")! }
     private var mcpServerURL: String { "http://127.0.0.1:\(runtimePort)/mcp" }
+    private var tunnelHealthListenAddress: String { "127.0.0.1:\(tunnelHealthPort)" }
 
     override init() {
         let bundleResources = Bundle.main.resourceURL!
@@ -131,7 +139,7 @@ final class RuntimeSupervisor: NSObject {
                             "--profile", "openchatx",
                             "--tunnel-id", trimmedTunnelID,
                             "--mcp-server-url", self.mcpServerURL,
-                            "--health-listen-addr", "127.0.0.1:8080",
+                            "--health-listen-addr", self.tunnelHealthListenAddress,
                             "--control-plane-api-key-ref", "env:CONTROL_PLANE_API_KEY",
                             "--force"
                         ],
@@ -162,6 +170,51 @@ final class RuntimeSupervisor: NSObject {
                 self.onSnapshot?(snapshot)
             }
         }
+    }
+
+    func fetchDesktopPreferences(completion: @escaping (DesktopPreferences?) -> Void) {
+        let url = dashboardURL.appendingPathComponent("api/recovery/state")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 1.0
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            guard
+                let http = response as? HTTPURLResponse,
+                (200..<300).contains(http.statusCode),
+                let data,
+                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let desktop = object["desktop"] as? [String: Any]
+            else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            let closeToTray = desktop["closeToTray"] as? Bool ?? true
+            let startMinimized = desktop["startMinimized"] as? Bool ?? false
+            let notifications = object["notifications"] as? [String: Any]
+            let notificationsEnabled = notifications?["enabled"] as? Bool ?? true
+            let notifyTunnelDisconnected = notifications?["tunnelDisconnected"] as? Bool ?? true
+            DispatchQueue.main.async {
+                completion(
+                    DesktopPreferences(
+                        closeToTray: closeToTray,
+                        startMinimized: startMinimized,
+                        notificationsEnabled: notificationsEnabled,
+                        notifyTunnelDisconnected: notifyTunnelDisconnected
+                    )
+                )
+            }
+        }.resume()
+    }
+
+    func setAgentAccessPaused(_ paused: Bool) {
+        let url = dashboardURL.appendingPathComponent("api/runtime-control/pause")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 1.0
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(
+            withJSONObject: ["paused": paused, "stopRunning": paused]
+        )
+        URLSession.shared.dataTask(with: request).resume()
     }
 
     private func startBackend() throws {
@@ -202,7 +255,7 @@ final class RuntimeSupervisor: NSObject {
             "--profile-dir", profileDirectory.path,
             "--profile", "openchatx",
             "--mcp.server-url", "url=\(mcpServerURL)",
-            "--health.listen-addr", "127.0.0.1:8080"
+            "--health.listen-addr", tunnelHealthListenAddress
         ]
         process.currentDirectoryURL = runtimeRoot
         process.environment = runtimeEnvironment(apiKey: discoverTunnelAPIKey())
@@ -222,27 +275,42 @@ final class RuntimeSupervisor: NSObject {
     }
 
     private var runtimePort: Int {
+        readConfiguredPort(section: nil, key: "port", fallback: Self.defaultRuntimePort)
+    }
+
+    private var tunnelHealthPort: Int {
+        readConfiguredPort(
+            section: "tunnel",
+            key: "health_port",
+            fallback: Self.defaultTunnelHealthPort
+        )
+    }
+
+    private func readConfiguredPort(section: String?, key: String, fallback: Int) -> Int {
         let config = appSupport
             .appendingPathComponent("config", isDirectory: true)
             .appendingPathComponent("openchatx.toml")
-        guard
-            let source = try? String(contentsOf: config, encoding: .utf8)
-        else {
-            return Self.defaultRuntimePort
+        guard let source = try? String(contentsOf: config, encoding: .utf8) else {
+            return fallback
         }
 
+        var currentSection: String?
         for rawLine in source.split(whereSeparator: { $0.isNewline }) {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
-            if line.hasPrefix("[") { break }
-            guard line.hasPrefix("port"), let equals = line.firstIndex(of: "=") else { continue }
+            if line.hasPrefix("[") && line.hasSuffix("]") {
+                currentSection = String(line.dropFirst().dropLast())
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                continue
+            }
+            guard currentSection == section else { continue }
+            guard line.hasPrefix(key), let equals = line.firstIndex(of: "=") else { continue }
             let valueStart = line.index(after: equals)
             let rawValue = line[valueStart...].split(separator: "#", maxSplits: 1)[0]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if let port = Int(rawValue), (1...65535).contains(port) { return port }
         }
-
-        return Self.defaultRuntimePort
+        return fallback
     }
 
     private func migrateLegacyRuntimePort(_ config: URL) throws {
@@ -601,10 +669,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var moreToolbarItem: NSMenuToolbarItem?
     private var timer: Timer?
     private var lastSnapshot: RuntimeSupervisor.Snapshot?
+    private var statusItem: NSStatusItem?
+    private var desktopPreferencesLoaded = false
+    private var closeToTray = true
+    private var notificationsEnabled = true
+    private var tunnelDisconnectedNotificationsEnabled = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
         buildWindow()
+        buildStatusItem()
         supervisor.onSnapshot = { [weak self] snapshot in
             self?.render(snapshot)
         }
@@ -624,7 +698,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        !closeToTray
+    }
+
+    private func buildStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = item.button {
+            button.image = NSImage(
+                systemSymbolName: "bubble.left.and.bubble.right.fill",
+                accessibilityDescription: "OpenChatX"
+            )
+            button.toolTip = "OpenChatX"
+        }
+
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: "Open OpenChatX",
+            action: #selector(showMainWindow),
+            keyEquivalent: ""
+        )
+        menu.addItem(.separator())
+        menu.addItem(
+            withTitle: "Pause Agent Access",
+            action: #selector(pauseAgentAccess),
+            keyEquivalent: ""
+        )
+        menu.addItem(
+            withTitle: "Resume Agent Access",
+            action: #selector(resumeAgentAccess),
+            keyEquivalent: ""
+        )
+        menu.addItem(.separator())
+        menu.addItem(
+            withTitle: "Quit OpenChatX",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func showMainWindow() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func pauseAgentAccess() {
+        supervisor.setAgentAccessPaused(true)
+    }
+
+    @objc private func resumeAgentAccess() {
+        supervisor.setAgentAccessPaused(false)
+    }
+
+    private func applyDesktopPreferencesIfNeeded(_ snapshot: RuntimeSupervisor.Snapshot) {
+        guard snapshot.backend else { return }
+        supervisor.fetchDesktopPreferences { [weak self] preferences in
+            guard let self, let preferences else { return }
+            let firstLoad = !self.desktopPreferencesLoaded
+            self.desktopPreferencesLoaded = true
+            self.closeToTray = preferences.closeToTray
+            self.notificationsEnabled = preferences.notificationsEnabled
+            self.tunnelDisconnectedNotificationsEnabled = preferences.notifyTunnelDisconnected
+            if firstLoad, preferences.startMinimized {
+                self.window.orderOut(nil)
+            }
+        }
+    }
+
+    private func notifyTunnelDisconnected() {
+        guard notificationsEnabled, tunnelDisconnectedNotificationsEnabled else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [
+            "-e",
+            "display notification \"The Secure MCP Tunnel lost its control-plane connection.\" with title \"OpenChatX Tunnel disconnected\""
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
     }
 
     private func buildMainMenu() {
@@ -770,6 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func render(_ snapshot: RuntimeSupervisor.Snapshot) {
+        let previous = lastSnapshot
         lastSnapshot = snapshot
         runtimeToolbarItem?.label = snapshot.backend ? "Stop Runtime" : "Start Runtime"
         runtimeToolbarItem?.toolTip = runtimeToolbarItem?.label
@@ -778,6 +931,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             accessibilityDescription: runtimeToolbarItem?.label
         )
         moreToolbarItem?.menu = makeMoreMenu()
+        applyDesktopPreferencesIfNeeded(snapshot)
+        if previous?.tunnel == true, !snapshot.tunnel, snapshot.tunnelProfile {
+            notifyTunnelDisconnected()
+        }
 
         if snapshot.backend {
             let dashboardURL = supervisor.dashboardURL

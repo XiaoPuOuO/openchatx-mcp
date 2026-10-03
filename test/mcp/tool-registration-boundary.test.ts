@@ -110,11 +110,48 @@ test("forced stop returns immediately with queued human instructions", async (t)
   assert.equal(observer.stopTool(agent.id, agent.current.id), true)
 
   const result = await resultPromise
-  assert.equal(result.isError, true)
+  assert.notEqual(result.isError, true)
   const content = JSON.stringify(result.content)
-  assert.match(content, /USER_FORCED_STOP/u)
-  assert.match(content, /被用戶強制停止/u)
+  assert.match(content, /interrupted by user/u)
   assert.match(content, /Human instruction: 先說明目前做到哪裡，再繼續/u)
+  assert.equal(observer.listAgents()[0]?.recent[0]?.status, "interrupted")
+})
+
+test("forced stop finishes an uncooperative tool after the interrupt grace period", async (t) => {
+  const server = new McpServer({ name: "uncooperative-stop-test", version: "1.0.0" })
+  const client = new Client({ name: "uncooperative-stop-client", version: "1.0.0" })
+  const observer = createAgentObserver()
+  t.after(() => Promise.all([client.close(), server.close()]))
+
+  installToolRegistrationBoundary(server, {
+    structuredOutput: false,
+    agentObserver: observer,
+  })
+  server.registerTool("ignores_abort", {}, async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5_000))
+    return { content: [{ type: "text", text: "too late" }] }
+  })
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+
+  const startedAt = Date.now()
+  const resultPromise = runWithAgent("uncooperative-stop-session", () => {
+    setAgentTaskSlug("uncooperative-stop-test")
+    return client.callTool({ name: "ignores_abort", arguments: {} })
+  })
+
+  await waitFor(() => observer.listAgents()[0]?.current?.status === "running")
+  const agent = observer.listAgents()[0]
+  assert.ok(agent?.current)
+  assert.equal(observer.stopTool(agent.id, agent.current.id), true)
+
+  const result = await resultPromise
+  assert.ok(Date.now() - startedAt < 2_000)
+  assert.notEqual(result.isError, true)
+  assert.match(JSON.stringify(result.content), /interrupted by user/u)
+  assert.doesNotMatch(JSON.stringify(result.content), /too late/u)
+  assert.equal(observer.listAgents()[0]?.recent[0]?.status, "interrupted")
 })
 
 async function waitFor(predicate: () => boolean): Promise<void> {

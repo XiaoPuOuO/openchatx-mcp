@@ -12,6 +12,11 @@ import {
   refreshMcpServers,
   saveMcpServers,
 } from "../../lib/api"
+import {
+  fetchRuntimeControl,
+  type ToolRiskOverride,
+  updateToolRiskOverride,
+} from "../../lib/runtime-control-api"
 import type {
   CapabilityHealthComponent,
   CapabilityHealthStatus,
@@ -37,12 +42,14 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
   const [detectedTools, setDetectedTools] = useState<McpDetectedTool[]>([])
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
+  const [toolRiskOverrides, setToolRiskOverrides] = useState<Record<string, ToolRiskOverride>>({})
 
   useEffect(() => {
-    void fetchMcpServers()
-      .then((snapshot) => {
+    void Promise.all([fetchMcpServers(), fetchRuntimeControl()])
+      .then(([snapshot, runtime]) => {
         setServers(snapshot.servers)
         setDetectedTools(snapshot.tools)
+        setToolRiskOverrides(runtime.toolRiskOverrides)
         setSelectedId(Object.keys(snapshot.servers)[0])
         void fetchCapabilityHealth()
           .then((healthSnapshot) => setHealth(indexMcpHealth(healthSnapshot.components)))
@@ -106,6 +113,22 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
       setError(saveError instanceof Error ? saveError.message : String(saveError))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function setToolRisk(tool: McpDetectedTool, risk: ToolRiskOverride | undefined) {
+    const key = `mcp:${tool.server}:${tool.name}`
+    setError(undefined)
+    try {
+      await updateToolRiskOverride(key, risk)
+      setToolRiskOverrides((current) => {
+        const next = { ...current }
+        if (risk) next[key] = risk
+        else delete next[key]
+        return next
+      })
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError))
     }
   }
 
@@ -437,16 +460,42 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                     </div>
                   ) : (
                     <div className="divide-y border-t">
-                      {selectedTools.map((tool) => (
-                        <div key={`${tool.server}:${tool.name}`} className="px-5 py-4">
-                          <div className="break-all font-mono text-sm font-medium">{tool.name}</div>
-                          <div className="mcp-tool-description mt-2">
-                            <ReactMarkdown>
-                              {tool.description || t("mcp.noToolDescription")}
-                            </ReactMarkdown>
+                      {selectedTools.map((tool) => {
+                        const riskKey = `mcp:${tool.server}:${tool.name}`
+                        return (
+                          <div
+                            key={`${tool.server}:${tool.name}`}
+                            className="flex items-start justify-between gap-4 px-5 py-4"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="break-all font-mono text-sm font-medium">
+                                {tool.name}
+                              </div>
+                              <div className="mcp-tool-description mt-2">
+                                <ReactMarkdown>
+                                  {tool.description || t("mcp.noToolDescription")}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                            <select
+                              className="h-8 shrink-0 rounded-md border bg-background px-2 text-xs"
+                              value={toolRiskOverrides[riskKey] ?? "default"}
+                              title={t("toolboxes.riskPolicy")}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                void setToolRisk(
+                                  tool,
+                                  value === "low" || value === "approval" ? value : undefined
+                                )
+                              }}
+                            >
+                              <option value="default">{t("toolboxes.risk.default")}</option>
+                              <option value="low">{t("toolboxes.risk.low")}</option>
+                              <option value="approval">{t("toolboxes.risk.approval")}</option>
+                            </select>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>

@@ -41,6 +41,8 @@ export interface PlatformOverview {
     source: "health" | "job"
     label: string
     detail: string
+    exitCode?: number
+    timedOut?: boolean
   }>
 }
 
@@ -87,15 +89,7 @@ export class PlatformOverviewService {
         detail: component.detail ?? component.status,
       })
     }
-    for (const job of jobs) {
-      if (job.status !== "failed") continue
-      needsAttention.push({
-        id: job.id,
-        source: "job",
-        label: job.label,
-        detail: `Job failed in ${job.cwd}`,
-      })
-    }
+    needsAttention.push(...failedJobAttention(jobs))
 
     return {
       counts: {
@@ -134,4 +128,21 @@ export class PlatformOverviewService {
       needsAttention: needsAttention.slice(0, 12),
     }
   }
+}
+
+function failedJobAttention(
+  jobs: Awaited<ReturnType<JobManager["list"]>>
+): PlatformOverview["needsAttention"] {
+  return jobs
+    .filter((job) => job.status === "failed")
+    .map((job) => ({
+      id: job.id,
+      source: "job" as const,
+      label: job.label,
+      detail: job.timedOut
+        ? `Job timed out in ${job.cwd}`
+        : `Job failed with exit code ${job.exitCode ?? "unknown"} in ${job.cwd}`,
+      ...(job.exitCode !== undefined ? { exitCode: job.exitCode } : {}),
+      ...(job.timedOut ? { timedOut: true } : {}),
+    }))
 }

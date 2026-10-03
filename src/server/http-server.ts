@@ -12,11 +12,16 @@ import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import type { JobManager } from "../jobs/job-manager.js"
 import type { ContextBudgetGuard } from "../mcp/context-budget.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
+import type { ProjectWorkspaceService } from "../projects/workspace-snapshot.js"
 import type { SystemRecoveryService } from "../recovery/system-recovery.js"
+import type { RuntimeProcessService } from "../runtime/process-service.js"
+import type { RuntimeControlService } from "../runtime/runtime-control.js"
+import type { RecentWorkService } from "../sessions/recent-work.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { SummaryRegistry } from "../summaries/summary-registry.js"
@@ -53,6 +58,11 @@ export interface McpHttpServices {
   summaryRegistry?: SummaryRegistry
   contextBudget?: ContextBudgetGuard
   systemRecovery?: SystemRecoveryService
+  runtimeControl?: RuntimeControlService
+  runtimeProcesses?: RuntimeProcessService
+  projectWorkspaces?: ProjectWorkspaceService
+  recentWork?: RecentWorkService
+  jobManager?: JobManager
 }
 
 export interface McpHttpProfileOverrides {
@@ -84,6 +94,11 @@ export async function startMcpHttpServer(
     summaryRegistry,
     contextBudget,
     systemRecovery,
+    runtimeControl,
+    runtimeProcesses,
+    projectWorkspaces,
+    recentWork,
+    jobManager,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -123,6 +138,11 @@ export async function startMcpHttpServer(
         summaryRegistry,
         contextBudget,
         systemRecovery,
+        runtimeControl,
+        runtimeProcesses,
+        projectWorkspaces,
+        recentWork,
+        jobManager,
       })
     )
 

@@ -162,7 +162,18 @@ async function runDurableCommand(
   } catch (error) {
     if (isUserForcedStop(input.signal.reason)) {
       await jobs.cancel(job.id)
-      throw input.signal.reason
+      const partial = await jobs.readLogFrom(job.id, 0, MAX_CAPTURE_BYTES)
+      const bounded = tokenPrefix(withApplyPatchToolHint(partial.output), input.maxOutputTokens)
+      return {
+        structuredContent: {
+          cwd,
+          exit_code: null,
+          output: bounded.value,
+          interrupted: true,
+          ...(bounded.truncated || partial.truncated ? { output_truncated: true } : {}),
+        },
+        content: [],
+      }
     }
     throw error
   }
@@ -252,7 +263,7 @@ async function runCommand(
   cwd: string,
   timeoutMs: number,
   signal: AbortSignal
-): Promise<{ exitCode: number; output: string; timedOut: boolean }> {
+): Promise<{ exitCode: number; output: string; timedOut: boolean; interrupted?: boolean }> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(MCP_CONFIG.shell.path, shellCommandArgs(command), {
       cwd,
@@ -293,6 +304,10 @@ async function runCommand(
       clearTimeout(timeout)
       signal.removeEventListener("abort", abort)
       if (signal.aborted) {
+        if (isUserForcedStop(signal.reason)) {
+          resolvePromise({ exitCode: code ?? 1, output, timedOut, interrupted: true })
+          return
+        }
         reject(signal.reason instanceof Error ? signal.reason : new Error("Command aborted."))
         return
       }

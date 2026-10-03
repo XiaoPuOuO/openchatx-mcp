@@ -15,6 +15,7 @@ interface SessionBudgetState {
   inputTokens: number
   outputTokens: number
   summaryUuid?: string
+  dot?: boolean
 }
 
 interface PersistedContextBudgetState {
@@ -94,7 +95,7 @@ export class ContextBudgetGuard {
 
     this.sessions.set(agent.sessionId, state)
     await this.persist()
-    if (totalTokens < this.warningThreshold) return undefined
+    if (state.dot || totalTokens < this.warningThreshold) return undefined
 
     if (state.summaryUuid) {
       return [
@@ -133,6 +134,17 @@ export class ContextBudgetGuard {
       outputTokens,
       threshold: this.warningThreshold,
     }
+  }
+
+  isDotSession(sessionId: string): boolean {
+    return this.sessions.get(sessionId)?.dot === true
+  }
+
+  async setDotSession(sessionId: string, dot: boolean): Promise<void> {
+    const state = this.sessions.get(sessionId) ?? { inputTokens: 0, outputTokens: 0 }
+    state.dot = dot || undefined
+    this.sessions.set(sessionId, state)
+    await this.persist()
   }
 
   async removeSession(sessionId: string): Promise<boolean> {
@@ -228,7 +240,8 @@ function parsePersistedState(value: unknown): PersistedContextBudgetState {
       inputTokens < 0 ||
       !Number.isFinite(outputTokens) ||
       outputTokens < 0 ||
-      (rawState.summaryUuid !== undefined && typeof rawState.summaryUuid !== "string")
+      (rawState.summaryUuid !== undefined && typeof rawState.summaryUuid !== "string") ||
+      (rawState.dot !== undefined && typeof rawState.dot !== "boolean")
     ) {
       throw new TypeError(`Invalid context budget state for session ${JSON.stringify(sessionId)}.`)
     }
@@ -236,6 +249,7 @@ function parsePersistedState(value: unknown): PersistedContextBudgetState {
       inputTokens,
       outputTokens,
       ...(typeof rawState.summaryUuid === "string" ? { summaryUuid: rawState.summaryUuid } : {}),
+      ...(rawState.dot === true ? { dot: true } : {}),
     }
   }
   return { sessions }

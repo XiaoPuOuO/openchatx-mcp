@@ -69,6 +69,25 @@ test("failed MCP results preserve their text error for the dashboard", () => {
   assert.equal(observer.listAgents()[0]?.recent[0]?.error, "PATCH_FAILED: invalid patch")
 })
 
+test("interrupted tool calls preserve partial output and use interrupted status", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "interrupt" }
+
+  const callId = observer.startTool(agent, "tool_call", { tool: "toolbox:test:slow" })
+  observer.interruptTool(agent, callId, {
+    structuredContent: {
+      output: "partial result\ninterrupted by user",
+      interrupted: true,
+    },
+    content: [],
+  })
+
+  const call = observer.listAgents()[0]?.recent[0]
+  assert.equal(call?.status, "interrupted")
+  assert.equal(call?.resultDetail, "partial result\ninterrupted by user")
+  assert.equal(call?.error, undefined)
+})
+
 test("completed tool calls expose the text returned to the agent", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "shell" }

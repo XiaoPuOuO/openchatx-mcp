@@ -10,12 +10,14 @@ import {
   RefreshCw,
   ServerCog,
   Settings,
+  ShieldAlert,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { PageHeader } from "./components/PageHeader"
 import { Button } from "./components/ui/button"
+import { ControlCenter } from "./features/control/ControlCenter"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
@@ -36,6 +38,11 @@ import {
   type RecoveryState,
   type UpdateCheck,
 } from "./lib/api"
+import {
+  fetchRuntimeControl,
+  type RuntimeControlState,
+  setAgentAccessPaused,
+} from "./lib/runtime-control-api"
 
 type View =
   | "dashboard"
@@ -46,6 +53,7 @@ type View =
   | "toolboxes"
   | "mcp-servers"
   | "status"
+  | "control"
   | "settings"
 
 type NavItem = {
@@ -63,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "toolboxes", labelKey: "nav.toolboxes", icon: Blocks },
   { id: "mcp-servers", labelKey: "nav.mcpServers", icon: ServerCog },
   { id: "status", labelKey: "nav.systemStatus", icon: Activity },
+  { id: "control", labelKey: "nav.controlCenter", icon: ShieldAlert },
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ]
 
@@ -72,7 +81,7 @@ const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
 )
-const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "settings"].includes(item.id))
+const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "control", "settings"].includes(item.id))
 
 export function App() {
   const [view, setView] = useState<View>("dashboard")
@@ -84,9 +93,20 @@ export function App() {
   const [updateInstallError, setUpdateInstallError] = useState<string>()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [recoveryState, setRecoveryState] = useState<RecoveryState>()
+  const [runtimeControl, setRuntimeControl] = useState<RuntimeControlState>()
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const refresh = () =>
+      void fetchRuntimeControl()
+        .then(setRuntimeControl)
+        .catch(() => undefined)
+    refresh()
+    const timer = window.setInterval(refresh, 2_000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -146,6 +166,8 @@ export function App() {
         return <McpServerManager onBack={back} />
       case "status":
         return <StatusPage onBack={back} />
+      case "control":
+        return <ControlCenter onBack={back} />
       case "settings":
         return <SettingsPage onBack={back} />
       default:
@@ -216,6 +238,22 @@ export function App() {
               </div>
             </div>
           </div>
+          {runtimeControl ? (
+            <Button
+              size="sm"
+              variant={runtimeControl.agentAccess.paused ? "default" : "outline"}
+              className="mt-2 w-full"
+              onClick={() =>
+                void setAgentAccessPaused(!runtimeControl.agentAccess.paused, true)
+                  .then(() => fetchRuntimeControl())
+                  .then(setRuntimeControl)
+              }
+            >
+              {runtimeControl.agentAccess.paused
+                ? t("control.resumeAgent")
+                : t("control.emergencyPause")}
+            </Button>
+          ) : null}
           <div className="mt-2 flex items-center gap-1.5">
             <LanguageSwitcher />
             <Button
@@ -238,6 +276,20 @@ export function App() {
         ) : null}
 
         <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>
+          {runtimeControl?.accessMode === "full-access" ? (
+            <div className="mx-5 mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+              {t("control.banner.fullAccess")}
+            </div>
+          ) : runtimeControl?.accessMode === "always-question" ? (
+            <div className="mx-5 mt-4 rounded-lg border bg-card px-4 py-3 text-sm">
+              {t("control.banner.alwaysQuestion")}
+            </div>
+          ) : null}
+          {runtimeControl?.agentAccess.paused ? (
+            <div className="mx-5 mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {t("control.banner.paused")}
+            </div>
+          ) : null}
           {update?.updateAvailable ? (
             <div className="mx-5 mt-4 flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
               <div className="min-w-0">

@@ -1,10 +1,13 @@
 import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
+import process from "node:process"
 
 import { z } from "zod"
 
 import { MCP_CONFIG } from "../config.js"
+import { resolvePathExecutable } from "../host-platform.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
+import { compareVersions } from "../update/version-check.js"
 import {
   type CommunityManifest,
   type CommunityRepository,
@@ -14,6 +17,7 @@ import {
   type ResolvedCommunityCapability,
   validateRelativePath,
 } from "./github-community-store.js"
+import { communityToolboxId, pathExists } from "./store-utils.js"
 
 const entrySchema = z.object({
   id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u),
@@ -138,6 +142,19 @@ export interface StoreReviewFinding {
   detail: string
 }
 
+export interface CapabilityRequirementStatus {
+  compatible: boolean
+  platform: { required: string[]; current: string; ok: boolean }
+  architecture: { required: string[]; current: string; ok: boolean }
+  minOpenChatXVersion?: { required: string; current: string; ok: boolean }
+  dependencies: {
+    executables: Array<{ name: string; available: boolean }>
+    environment: Array<{ name: string; available: boolean }>
+    capabilities: Array<{ id: string; available: boolean }>
+  }
+  issues: string[]
+}
+
 export interface StoreReview {
   capability: StoreEntry
   revision?: string
@@ -152,6 +169,7 @@ export interface StoreReview {
   findings: StoreReviewFinding[]
   reviewedFiles: number
   reviewedBytes: number
+  requirements: CapabilityRequirementStatus
   note: string
 }
 
@@ -305,6 +323,7 @@ export class CapabilityStoreService {
       addPermissionDeclarationFindings(scan.observedPermissions, declaredPermissions, findings)
     }
     const uniqueFindings = dedupeFindings(findings)
+    const requirements = await this.requirementStatus(source.capability)
 
     return {
       capability: source.capability,
@@ -315,7 +334,129 @@ export class CapabilityStoreService {
       findings: uniqueFindings,
       reviewedFiles: scan.reviewedFiles,
       reviewedBytes: scan.reviewedBytes,
+      requirements,
       note: "This is static analysis, not a safety verdict. Ask ChatGPT to inspect cited files with store_browse action=source_read before deciding whether to install.",
+    }
+  }
+
+  async requirementStatus(entry: StoreEntry): Promise<CapabilityRequirementStatus> {
+    const manifest = entry.source === "github" ? entry.manifest : undefined
+    const compatibility = manifest?.compatibility ?? {
+      platforms: ["darwin", "win32"],
+      architectures: ["x64", "arm64"],
+    }
+    const dependencies = manifest?.dependencies ?? {
+      executables: [],
+      environment: [],
+      capabilities: [],
+    }
+    const state = await this.loadState()
+    const platformOk = compatibility.platforms.some((platform) => platform === process.platform)
+    const architectureOk = compatibility.architectures.some(
+      (architecture) => architecture === process.arch
+    )
+    const version = compatibility.min_openchatx_version
+      ? {
+          required: compatibility.min_openchatx_version,
+          current: MCP_CONFIG.server.version,
+          ok: compareVersions(MCP_CONFIG.server.version, compatibility.min_openchatx_version) >= 0,
+        }
+      : undefined
+    const executableStatus = dependencies.executables.map((name) => ({
+      name,
+      available: resolvePathExecutable(name) !== undefined,
+    }))
+    const environmentStatus = dependencies.environment.map((name) => ({
+      name,
+      available: Boolean(process.env[name]?.trim()),
+    }))
+    const capabilityStatus = dependencies.capabilities.map((id) => ({
+      id,
+      available: Boolean(state.installed[id]),
+    }))
+    const issues: string[] = []
+    if (!platformOk)
+      issues.push(
+        `Unsupported platform ${process.platform}; requires ${compatibility.platforms.join(", ")}.`
+      )
+    if (!architectureOk)
+      issues.push(
+        `Unsupported architecture ${process.arch}; requires ${compatibility.architectures.join(", ")}.`
+      )
+    if (version && !version.ok)
+      issues.push(
+        `Requires OpenChatX >= ${version.required}; current version is ${version.current}.`
+      )
+    for (const dependency of executableStatus)
+      if (!dependency.available) issues.push(`Missing executable: ${dependency.name}.`)
+    for (const dependency of environmentStatus)
+      if (!dependency.available) issues.push(`Missing environment value: ${dependency.name}.`)
+    for (const dependency of capabilityStatus)
+      if (!dependency.available) issues.push(`Missing capability: ${dependency.id}.`)
+
+    return {
+      compatible: issues.length === 0,
+      platform: {
+        required: compatibility.platforms,
+        current: process.platform,
+        ok: platformOk,
+      },
+      architecture: {
+        required: compatibility.architectures,
+        current: process.arch,
+        ok: architectureOk,
+      },
+      ...(version ? { minOpenChatXVersion: version } : {}),
+      dependencies: {
+        executables: executableStatus,
+        environment: environmentStatus,
+        capabilities: capabilityStatus,
+      },
+      issues,
+    }
+  }
+
+  async fixDependencies(
+    id: string,
+    revision?: string
+  ): Promise<{
+    installed: string[]
+    requiresApproval: string[]
+    unresolvedExecutables: string[]
+    unresolvedEnvironment: string[]
+    requirements: CapabilityRequirementStatus
+  }> {
+    const entry = await this.get(id, revision)
+    const before = await this.requirementStatus(entry)
+    const installed: string[] = []
+    const requiresApproval: string[] = []
+
+    for (const dependency of before.dependencies.capabilities) {
+      if (dependency.available) continue
+      const candidate = await this.get(dependency.id)
+      const candidateReview = await this.review(dependency.id)
+      const needsApproval = Object.values(candidateReview.observedPermissions).some(Boolean)
+      if (needsApproval) {
+        requiresApproval.push(dependency.id)
+        continue
+      }
+      const nested = await this.requirementStatus(candidate)
+      if (!nested.compatible) continue
+      await this.install(dependency.id)
+      installed.push(dependency.id)
+    }
+
+    const requirements = await this.requirementStatus(entry)
+    return {
+      installed,
+      requiresApproval,
+      unresolvedExecutables: requirements.dependencies.executables
+        .filter((dependency) => !dependency.available)
+        .map((dependency) => dependency.name),
+      unresolvedEnvironment: requirements.dependencies.environment
+        .filter((dependency) => !dependency.available)
+        .map((dependency) => dependency.name),
+      requirements,
     }
   }
 
@@ -397,6 +538,11 @@ export class CapabilityStoreService {
     const state = await this.loadState()
     if (state.installed[id])
       throw new Error(`Capability ${JSON.stringify(id)} is already installed.`)
+    const candidate = this.communityEntry(resolved, state)
+    const requirements = await this.requirementStatus(candidate)
+    if (!requirements.compatible) {
+      throw new Error(`Capability requirements are not satisfied: ${requirements.issues.join(" ")}`)
+    }
 
     const tree = await community.tree(resolved)
     const files = installFiles(tree, resolved.manifest.toolbox_path)
@@ -647,15 +793,6 @@ function safeChild(root: string, child: string): string {
   return resolvedChild
 }
 
-function communityToolboxId(repository: string): string {
-  const normalized = `gh-${repository}`
-    .replace(/[^A-Za-z0-9._-]+/gu, "-")
-    .replace(/-+/gu, "-")
-    .slice(0, 120)
-  if (!normalized) throw new Error(`Could not derive Toolbox id from ${repository}.`)
-  return normalized
-}
-
 function isReviewableText(path: string): boolean {
   return (
     TEXT_EXTENSION_RE.test(path) ||
@@ -852,14 +989,4 @@ function dedupeFindings(findings: StoreReviewFinding[]): StoreReviewFinding[] {
     seen.add(key)
     return true
   })
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false
-    throw error
-  }
 }

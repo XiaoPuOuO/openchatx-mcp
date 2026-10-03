@@ -12,6 +12,7 @@ import {
 } from "../src/agent/context.js"
 import { ProjectRegistry } from "../src/projects/project-registry.js"
 import { ProjectScope } from "../src/projects/project-scope.js"
+import type { RuntimeControlService } from "../src/runtime/runtime-control.js"
 
 test("active Project controls relative roots and enforces read/write/shell permissions", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "openchatx-project-scope-"))
@@ -85,6 +86,35 @@ test("active Project controls relative roots and enforces read/write/shell permi
 
     await scope.use(undefined)
     assert.equal(getAgentIdentity()?.projectId, undefined)
+  })
+})
+
+test("full-access mode bypasses Project permission and path boundaries", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-project-full-access-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const app = join(root, "app")
+  const outside = join(root, "outside")
+  await Promise.all([mkdir(app), mkdir(outside)])
+
+  const registry = new ProjectRegistry(join(root, "projects.json"))
+  await registry.upsert({
+    id: "app",
+    name: "App",
+    path: app,
+    permissions: { read: true, write: false, shell: false },
+  })
+  const runtimeControl = {
+    snapshot: async () => ({ accessMode: "full-access" as const, agentAccessPaused: false }),
+  } as RuntimeControlService
+  const scope = new ProjectScope(registry, runtimeControl)
+
+  await runWithAgent("project-full-access-session", async () => {
+    await scope.use("app")
+    assert.equal((await scope.resolvePath("src/index.ts", "write")).path, join(app, "src/index.ts"))
+    assert.equal(
+      (await scope.resolvePath(join(outside, "file.txt"), "shell")).path,
+      join(outside, "file.txt")
+    )
   })
 })
 

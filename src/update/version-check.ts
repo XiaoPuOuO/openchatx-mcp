@@ -1,6 +1,7 @@
 import process from "node:process"
 
 import { MCP_CONFIG } from "../config.js"
+import { desktopNotificationService } from "../notifications/notification-service.js"
 import { loadOperationalState, updateOperationalState } from "../recovery/operational-state.js"
 
 const RELEASES_URL = "https://api.github.com/repos/XiaoPuOuO/openchatx-mcp/releases?per_page=20"
@@ -81,6 +82,15 @@ export async function checkForOpenChatXUpdate(force = false): Promise<UpdateChec
   const installSupported = isInstallSupportedAsset(process.platform, asset?.name)
 
   await recordUpdateCheck(checkedAt)
+  if (updateAvailable && latestVersion) {
+    await desktopNotificationService
+      .notify(
+        "updateAvailable",
+        "OpenChatX update available",
+        `${currentVersion} → ${latestVersion}`
+      )
+      .catch(() => undefined)
+  }
   return cache({
     currentVersion,
     latestVersion,
@@ -154,7 +164,8 @@ function compareStrings(left: string, right: string): -1 | 0 | 1 {
 
 function parseVersion(value: string): ParsedVersion | undefined {
   const match = SEMVER_PATTERN.exec(normalizeVersion(value))
-  if (!match) return undefined
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: RegExp.exec can return null for invalid release tags at runtime.
+  if (match === null) return undefined
   return {
     major: Number(match[1]),
     minor: Number(match[2]),

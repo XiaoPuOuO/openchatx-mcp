@@ -191,7 +191,7 @@ export class WorkflowService {
       }
       if (step.tool.startsWith("mcp:")) {
         if (!this.services.externalMcp) throw new Error("External MCP runtime is unavailable.")
-        return this.services.externalMcp.call(step.tool, args)
+        return this.services.externalMcp.call(step.tool, args, signal)
       }
       throw new Error(
         `Workflow tool step requires a lazy tool id, got ${JSON.stringify(step.tool)}.`

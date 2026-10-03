@@ -140,7 +140,7 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
                         key={summary.uuid}
                         type="button"
                         className={
-                          "w-full rounded-lg border px-3 py-3 text-left transition-colors " +
+                          "h-[76px] w-full overflow-hidden rounded-lg border px-3 py-3 text-left transition-colors " +
                           (active
                             ? "border-border bg-muted/70"
                             : "border-transparent hover:bg-muted/40")
@@ -151,8 +151,8 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
                         }}
                       >
                         <div className="truncate font-mono text-xs font-medium">{summary.uuid}</div>
-                        <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                          {summary.content}
+                        <div className="mt-1 truncate text-xs text-muted-foreground">
+                          {summaryPreview(summary.content)}
                         </div>
                       </button>
                     )
@@ -252,4 +252,9 @@ export function SummaryManager({ onBack }: { onBack: () => void }) {
       </div>
     </main>
   )
+}
+
+function summaryPreview(content: string): string {
+  const normalized = content.replace(/\s+/gu, " ").trim()
+  return normalized.length > 180 ? `${normalized.slice(0, 177)}…` : normalized
 }

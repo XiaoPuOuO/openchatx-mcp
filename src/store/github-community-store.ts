@@ -48,6 +48,20 @@ export const communityManifestSchema = z.object({
       secrets: z.boolean().default(false),
     })
     .default({ shell: false, network: false, filesystem: false, secrets: false }),
+  compatibility: z
+    .object({
+      platforms: z.array(z.enum(["darwin", "win32", "linux"])).default(["darwin", "win32"]),
+      architectures: z.array(z.enum(["x64", "arm64"])).default(["x64", "arm64"]),
+      min_openchatx_version: z.string().optional(),
+    })
+    .default({ platforms: ["darwin", "win32"], architectures: ["x64", "arm64"] }),
+  dependencies: z
+    .object({
+      executables: z.array(z.string().min(1)).default([]),
+      environment: z.array(z.string().min(1)).default([]),
+      capabilities: z.array(z.string().min(1)).default([]),
+    })
+    .default({ executables: [], environment: [], capabilities: [] }),
 })
 export type CommunityManifest = z.infer<typeof communityManifestSchema>
 export type GithubTreeItem = z.infer<typeof treeItemSchema>

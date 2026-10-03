@@ -5,12 +5,45 @@ import { migrateOperationalState } from "../src/recovery/operational-state.js"
 import { redactSecrets, redactText } from "../src/security/redact.js"
 import { buildMacOSUpdaterScript } from "../src/update/macos-installer.js"
 
-test("operational state migrates legacy unversioned state and applies defaults", () => {
+test("operational state migrates legacy unversioned state to low-risk defaults", () => {
   const state = migrateOperationalState({ onboardingCompleted: true })
-  assert.equal(state.schemaVersion, 1)
+  assert.equal(state.schemaVersion, 4)
   assert.equal(state.onboardingCompleted, true)
   assert.equal(state.update.channel, "beta")
   assert.equal(state.safeMode.enabled, false)
+  assert.equal(state.accessMode, "allow-low-risk")
+  assert.equal(state.agentAccess.paused, false)
+  assert.equal(state.notifications.enabled, true)
+  assert.equal(state.notifications.approvalRequired, true)
+})
+
+test("operational state preserves legacy full access trust mode during migration", () => {
+  const state = migrateOperationalState({
+    schemaVersion: 2,
+    trustMode: { enabled: true, enabledAt: "2026-10-03T00:00:00.000Z" },
+  })
+  assert.equal(state.schemaVersion, 4)
+  assert.equal(state.accessMode, "full-access")
+})
+
+test("operational state migrates disabled legacy trust mode to low-risk", () => {
+  const state = migrateOperationalState({
+    schemaVersion: 2,
+    trustMode: { enabled: false },
+  })
+  assert.equal(state.accessMode, "allow-low-risk")
+})
+
+test("operational state preserves v3 access mode while adding tool-risk defaults", () => {
+  const state = migrateOperationalState({
+    schemaVersion: 3,
+    accessMode: "full-access",
+    dangerousActions: {},
+    capabilityPermissions: {},
+  })
+  assert.equal(state.schemaVersion, 4)
+  assert.equal(state.accessMode, "full-access")
+  assert.deepEqual(state.toolRiskOverrides, {})
 })
 
 test("operational state rejects a newer unsupported schema", () => {

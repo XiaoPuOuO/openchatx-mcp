@@ -10,8 +10,9 @@ import { z } from "zod"
 import { childProcessEnvironment } from "../child-environment.js"
 import { MCP_CONFIG } from "../config.js"
 import { isProcessRunning, shellCommandArgs, signalProcessTree } from "../host-platform.js"
+import { desktopNotificationService } from "../notifications/notification-service.js"
 
-export type JobStatus = "running" | "completed" | "failed" | "cancelled"
+export type JobStatus = "running" | "completed" | "failed" | "cancelled" | "interrupted"
 
 export interface DurableJob {
   id: string
@@ -36,7 +37,7 @@ const jobSchema = z.object({
   cwd: z.string(),
   projectId: z.string().optional(),
   pid: z.number().int().positive(),
-  status: z.enum(["running", "completed", "failed", "cancelled"]),
+  status: z.enum(["running", "completed", "failed", "cancelled", "interrupted"]),
   createdAt: z.string(),
   updatedAt: z.string(),
   exitCode: z.number().int().optional(),
@@ -127,6 +128,15 @@ export class JobManager {
             current.exitCode = code ?? (signal ? -1 : 1)
             current.updatedAt = new Date().toISOString()
             await this.persist()
+            try {
+              await desktopNotificationService.notify(
+                "jobFinished",
+                current.status === "completed" ? "OpenChatX job completed" : "OpenChatX job failed",
+                current.label
+              )
+            } catch {
+              // Desktop notifications are best effort.
+            }
           } finally {
             this.ownedRunningPids.delete(childPid)
           }
@@ -311,7 +321,7 @@ export class JobManager {
         isProcessRunning(job.pid)
       )
         continue
-      job.status = "failed"
+      job.status = "interrupted"
       job.updatedAt = new Date().toISOString()
       changed = true
     }

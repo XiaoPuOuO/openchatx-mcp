@@ -25,6 +25,12 @@ import {
   installStoreEntry,
   uninstallStoreEntry,
 } from "../../lib/api"
+import { fetchRuntimeControl } from "../../lib/runtime-control-api"
+import {
+  type CapabilityRequirementStatus,
+  fetchCapabilityRequirements,
+  fixCapabilityDependencies,
+} from "../../lib/store-requirements-api"
 import type {
   CapabilityStoreEntry,
   CapabilityStoreReview,
@@ -47,6 +53,7 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   const [tree, setTree] = useState<CapabilityStoreSourceTree>()
   const [sourceFile, setSourceFile] = useState<{ path: string; content: string }>()
   const [review, setReview] = useState<CapabilityStoreReview>()
+  const [requirements, setRequirements] = useState<CapabilityRequirementStatus>()
   const { toasts, pushToast, dismissToast } = useNotificationToasts()
 
   const load = useCallback(async () => {
@@ -83,6 +90,18 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   }
 
   const installWithApproval = async (id: string, revision?: string) => {
+    const requirementStatus = await fetchCapabilityRequirements(id, revision)
+    if (!requirementStatus.compatible) {
+      setRequirements(requirementStatus)
+      throw new Error(
+        `Capability requirements are not satisfied: ${requirementStatus.issues.join(" ")}`
+      )
+    }
+    const runtimeControl = await fetchRuntimeControl()
+    if (runtimeControl.accessMode === "full-access") {
+      await installStoreEntry(id, revision)
+      return
+    }
     const permissionReview = await fetchStoreReview(id, revision)
     const permissions = Object.entries(permissionReview.observedPermissions)
       .filter(([, required]) => required)
@@ -106,10 +125,15 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
   const inspect = async (entry: CapabilityStoreEntry) => {
     setBusy(entry.id)
     setReview(undefined)
+    setRequirements(undefined)
     setSourceFile(undefined)
     try {
-      const nextTree = await fetchStoreSourceTree(entry.id, entry.revision)
+      const [nextTree, nextRequirements] = await Promise.all([
+        fetchStoreSourceTree(entry.id, entry.revision),
+        fetchCapabilityRequirements(entry.id, entry.revision),
+      ])
       setTree(nextTree)
+      setRequirements(nextRequirements)
       setError(undefined)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -125,6 +149,42 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
       const result = await fetchStoreSourceFile(tree.capability.id, path, tree.revision)
       setSourceFile({ path: result.path, content: result.content })
       setError(undefined)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const fixRequirements = async () => {
+    if (!tree) return
+    setBusy(`${tree.capability.id}:dependencies`)
+    try {
+      const result = await fixCapabilityDependencies(tree.capability.id, tree.revision)
+      setRequirements(result.requirements)
+      const messages = [
+        result.installed.length > 0
+          ? t("store.requirements.installed", { items: result.installed.join(", ") })
+          : "",
+        result.requiresApproval.length > 0
+          ? t("store.requirements.needsApproval", {
+              items: result.requiresApproval.join(", "),
+            })
+          : "",
+        result.unresolvedExecutables.length > 0
+          ? t("store.requirements.missingExecutables", {
+              items: result.unresolvedExecutables.join(", "),
+            })
+          : "",
+        result.unresolvedEnvironment.length > 0
+          ? t("store.requirements.missingEnvironment", {
+              items: result.unresolvedEnvironment.join(", "),
+            })
+          : "",
+      ].filter(Boolean)
+      pushToast(messages.join(" · ") || t("store.requirements.dependenciesSatisfied"))
+      setError(undefined)
+      await load()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -403,6 +463,83 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
               </div>
             </CardHeader>
             <CardContent>
+              {requirements ? (
+                <div
+                  className={`mb-4 rounded-md border p-3 text-sm ${
+                    requirements.compatible
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : "border-amber-500/30 bg-amber-500/5"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium">
+                        {requirements.compatible
+                          ? t("store.requirements.satisfied")
+                          : t("store.requirements.attention")}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {t("store.requirements.os", {
+                          value: requirements.platform.current,
+                        })}{" "}
+                        ·{" "}
+                        {t("store.requirements.architecture", {
+                          value: requirements.architecture.current,
+                        })}
+                        {requirements.minOpenChatXVersion
+                          ? ` · ${t("store.requirements.version", {
+                              current: requirements.minOpenChatXVersion.current,
+                              required: requirements.minOpenChatXVersion.required,
+                            })}`
+                          : ""}
+                      </div>
+                    </div>
+                    {!requirements.compatible ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy === `${resolvedEntry.id}:dependencies`}
+                        onClick={() => void fixRequirements()}
+                      >
+                        {t("store.requirements.fix")}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <RequirementGroup
+                      label={t("store.requirements.executables")}
+                      items={requirements.dependencies.executables.map((item) => ({
+                        name: item.name,
+                        ok: item.available,
+                      }))}
+                    />
+                    <RequirementGroup
+                      label={t("store.requirements.environment")}
+                      items={requirements.dependencies.environment.map((item) => ({
+                        name: item.name,
+                        ok: item.available,
+                      }))}
+                    />
+                    <RequirementGroup
+                      label={t("store.requirements.capabilities")}
+                      items={requirements.dependencies.capabilities.map((item) => ({
+                        name: item.id,
+                        ok: item.available,
+                      }))}
+                    />
+                  </div>
+
+                  {requirements.issues.length > 0 ? (
+                    <div className="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                      {requirements.issues.map((issue) => (
+                        <div key={issue}>• {issue}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               {review ? (
                 <div className="mb-4 rounded-md border p-3 text-sm">
                   <div className="font-medium">{localizeReviewSummary(review.summary, t)}</div>
@@ -470,6 +607,35 @@ export function CapabilityStoreManager({ onBack }: { onBack: () => void }) {
         ) : null}
       </div>
     </main>
+  )
+}
+
+function RequirementGroup({
+  label,
+  items,
+}: {
+  label: string
+  items: Array<{ name: string; ok: boolean }>
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="rounded-md border bg-background/60 p-2">
+      <div className="mb-1 text-xs font-medium">{label}</div>
+      {items.length === 0 ? (
+        <div className="text-xs text-muted-foreground">{t("store.requirements.none")}</div>
+      ) : (
+        <div className="space-y-1">
+          {items.map((item) => (
+            <div
+              key={item.name}
+              className={`text-xs ${item.ok ? "text-muted-foreground" : "text-destructive"}`}
+            >
+              {item.ok ? "✓" : "✕"} {item.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

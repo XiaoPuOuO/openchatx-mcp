@@ -1,9 +1,10 @@
 import { EventEmitter } from "node:events"
 
+import { agentActivityNotifier } from "../notifications/agent-activity-notifier.js"
 import type { AgentIdentity } from "./context.js"
 import { presentToolCall, presentToolFailure, presentToolResult } from "./tool-call-presentation.js"
 
-type AgentCallStatus = "running" | "completed" | "failed"
+type AgentCallStatus = "running" | "completed" | "failed" | "interrupted"
 
 interface AgentCallSnapshot {
   id: string
@@ -31,6 +32,7 @@ export interface AgentSnapshot {
   taskSlug?: string
   projectId?: string
   goalId?: string
+  dot?: boolean
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCallSnapshot
@@ -66,6 +68,7 @@ export interface AgentObserver {
   listAgents(): AgentSnapshot[]
   deleteAgent(agentId: string): boolean
   sessionIdForAgent(agentId: string): string | undefined
+  setDot(agentId: string, dot: boolean): boolean
   startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
   registerToolStop(
     agent: AgentIdentity | undefined,
@@ -73,8 +76,14 @@ export interface AgentObserver {
     stop: () => void
   ): boolean
   stopTool(agentId: string, callId: string): boolean
+  stopAllTools(): number
   finishTool(agent: AgentIdentity | undefined, callId: string | undefined, result?: unknown): void
   failTool(agent: AgentIdentity | undefined, callId: string | undefined, error?: unknown): void
+  interruptTool(
+    agent: AgentIdentity | undefined,
+    callId: string | undefined,
+    result?: unknown
+  ): void
   updateContextBudget(
     agent: AgentIdentity | undefined,
     usage:
@@ -97,11 +106,10 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   let callCounter = 0
   let instructionCounter = 0
 
-  function listAgents(): AgentSnapshot[] {
-    return [...agentsBySession.values()]
+  const listAgents = (): AgentSnapshot[] =>
+    [...agentsBySession.values()]
       .map(toSnapshot)
       .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
-  }
 
   function ensureAgent(identity: AgentIdentity | undefined): AgentState | undefined {
     if (!identity) return undefined
@@ -152,17 +160,15 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     return true
   }
 
-  function sessionIdForAgent(agentId: string): string | undefined {
-    return sessionsByAgentId.get(agentId)
-  }
-
   function startTool(
     identity: AgentIdentity | undefined,
     tool: string,
     input: unknown
   ): string | undefined {
+    if (!identity) return undefined
     const agent = ensureAgent(identity)
     if (!agent) return undefined
+    agentActivityNotifier.activityStarted(identity.sessionId)
     const timestamp = now()
     const presentation = presentToolCall(tool, input)
     const call: AgentCallSnapshot = {
@@ -203,7 +209,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   function settleTool(
     identity: AgentIdentity | undefined,
     callId: string | undefined,
-    status: "completed" | "failed",
+    status: "completed" | "failed" | "interrupted",
     result?: unknown
   ): void {
     if (!identity || !callId) return
@@ -216,9 +222,9 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     agent.goalId = identity.goalId
     const call: AgentCallSnapshot = {
       ...activeCall,
-      ...(status === "completed"
-        ? presentToolResult(activeCall.tool, result)
-        : presentToolFailure(result)),
+      ...(status === "failed"
+        ? presentToolFailure(result)
+        : presentToolResult(activeCall.tool, result)),
       status,
       finishedAt: timestamp,
     }
@@ -228,6 +234,9 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     agent.recent = [call, ...agent.recent].slice(0, MAX_RECENT_CALLS)
     agent.lastSeenAt = timestamp
     emitAgent(agent)
+    if (agent.activeCalls.size === 0) {
+      agentActivityNotifier.activitySettled(identity.sessionId, identity.taskSlug)
+    }
   }
 
   function queueInstruction(
@@ -289,26 +298,60 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     return pending.reverse().map((instruction) => `Human instruction: ${instruction.message}`)
   }
 
-  function subscribe(listener: (event: AgentObserverEvent) => void): () => void {
-    events.on("event", listener)
-    return () => events.off("event", listener)
-  }
-
   return {
     listAgents,
     deleteAgent,
-    sessionIdForAgent,
+    sessionIdForAgent: (agentId) => sessionsByAgentId.get(agentId),
+    setDot: (agentId, dot) =>
+      setAgentDot(agentsBySession, sessionsByAgentId, emitAgent, agentId, dot),
     startTool,
     registerToolStop,
     stopTool,
+    stopAllTools: () => stopAllActiveTools(agentsBySession.values()),
     finishTool: (agent, callId, result) => settleTool(agent, callId, "completed", result),
     failTool: (agent, callId, error) => settleTool(agent, callId, "failed", error),
+    interruptTool: (agent, callId, result) => settleTool(agent, callId, "interrupted", result),
     updateContextBudget,
     queueInstruction,
     cancelInstruction,
     drainInstructions,
-    subscribe,
+    subscribe: (listener) => subscribeAgentEvents(events, listener),
   }
+}
+
+function subscribeAgentEvents(
+  events: EventEmitter,
+  listener: (event: AgentObserverEvent) => void
+): () => void {
+  events.on("event", listener)
+  return () => events.off("event", listener)
+}
+
+function setAgentDot(
+  agentsBySession: Map<string, AgentState>,
+  sessionsByAgentId: Map<string, string>,
+  emitAgent: (agent: AgentState) => void,
+  agentId: string,
+  dot: boolean
+): boolean {
+  const sessionId = sessionsByAgentId.get(agentId)
+  const agent = sessionId ? agentsBySession.get(sessionId) : undefined
+  if (!agent) return false
+  agent.dot = dot || undefined
+  emitAgent(agent)
+  return true
+}
+
+function stopAllActiveTools(agents: Iterable<AgentState>) {
+  let stopped = 0
+  for (const agent of agents) {
+    for (const [callId, stop] of agent.activeCallStops) {
+      if (!agent.activeCalls.has(callId)) continue
+      stop()
+      stopped += 1
+    }
+  }
+  return stopped
 }
 
 function latestActiveCall(calls: Map<string, AgentCallSnapshot>): AgentCallSnapshot | undefined {
@@ -325,6 +368,7 @@ function toSnapshot(agent: AgentState): AgentSnapshot {
     taskSlug: agent.taskSlug,
     projectId: agent.projectId,
     goalId: agent.goalId,
+    dot: agent.dot,
     firstSeenAt: agent.firstSeenAt,
     lastSeenAt: agent.lastSeenAt,
     current: agent.current ? { ...agent.current } : undefined,

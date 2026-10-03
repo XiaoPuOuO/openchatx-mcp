@@ -205,20 +205,36 @@ test("dashboard-style forced stop cancels the durable bash job and returns queue
   await waitFor(() => observer.listAgents()[0]?.current?.status === "running")
   const agent = observer.listAgents()[0]
   assert.ok(agent?.current)
+  await waitForJobOutput(jobs, /started/u)
   assert.ok(observer.queueInstruction(agent.id, "停止後直接處理下一步"))
   assert.equal(observer.stopTool(agent.id, agent.current.id), true)
 
   const result = await resultPromise
-  assert.equal(result.isError, true)
+  assert.notEqual(result.isError, true)
   const content = JSON.stringify(result.content)
-  assert.match(content, /USER_FORCED_STOP/u)
-  assert.match(content, /被用戶強制停止/u)
+  assert.match(content, /started/u)
+  assert.match(content, /interrupted by user/u)
   assert.match(content, /Human instruction: 停止後直接處理下一步/u)
+  assert.equal(observer.listAgents()[0]?.recent[0]?.status, "interrupted")
+  assert.match(observer.listAgents()[0]?.recent[0]?.resultDetail ?? "", /started/u)
+  assert.match(observer.listAgents()[0]?.recent[0]?.resultDetail ?? "", /interrupted by user/u)
 
   const durableJobs = await jobs.list()
   assert.equal(durableJobs.length, 1)
   assert.equal(durableJobs[0]?.status, "cancelled")
 })
+
+async function waitForJobOutput(jobs: JobManager, pattern: RegExp): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [job] = await jobs.list()
+    if (job) {
+      const log = await jobs.readLogFrom(job.id, 0, 1024 * 1024)
+      if (pattern.test(log.output)) return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error("Timed out waiting for durable job output.")
+}
 
 async function waitFor(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {

@@ -36,6 +36,11 @@ import {
   setToolboxSkillEnabled,
   setToolEnabled,
 } from "../../lib/api"
+import {
+  fetchRuntimeControl,
+  type ToolRiskOverride,
+  updateToolRiskOverride,
+} from "../../lib/runtime-control-api"
 import type { LoadedRule, RuleMode, RuleSummary, ToolboxSnapshot } from "../../types"
 
 type Tab = "tools" | "skills" | "rules"
@@ -71,15 +76,17 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>()
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
+  const [toolRiskOverrides, setToolRiskOverrides] = useState<Record<string, ToolRiskOverride>>({})
 
   useEffect(() => {
-    void Promise.all([fetchToolboxes(), fetchAgentInstructions()])
-      .then(([items, instructions]) => {
+    void Promise.all([fetchToolboxes(), fetchAgentInstructions(), fetchRuntimeControl()])
+      .then(([items, instructions, runtime]) => {
         setToolboxes(items)
         setSelectedId(items[0]?.id)
         setAgentInstructionsPath(instructions.path)
         setAgentInstructions(instructions.content)
         setSavedAgentInstructions(instructions.content)
+        setToolRiskOverrides(runtime.toolRiskOverrides)
       })
       .catch((loadError) =>
         setError(loadError instanceof Error ? loadError.message : String(loadError))
@@ -125,6 +132,23 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
     const name = window.prompt(t("toolboxes.promptTool"))?.trim()
     if (!name) return
     await run(() => createTool(selected.id, name), t("toolboxes.createdTool", { name }))
+  }
+
+  async function setToolRisk(name: string, risk: ToolRiskOverride | undefined) {
+    if (!selected) return
+    const key = toolboxToolRiskKey(selected, name)
+    setError(undefined)
+    try {
+      await updateToolRiskOverride(key, risk)
+      setToolRiskOverrides((current) => {
+        const next = { ...current }
+        if (risk) next[key] = risk
+        else delete next[key]
+        return next
+      })
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError))
+    }
   }
 
   async function addSkill() {
@@ -394,6 +418,8 @@ export function ToolboxManager({ onBack }: { onBack: () => void }) {
                     onToggle={(name: string, enabled: boolean) =>
                       void run(() => setToolEnabled(selected.id, name, enabled))
                     }
+                    riskOverrides={toolRiskOverrides}
+                    onRiskChange={(name, risk) => void setToolRisk(name, risk)}
                     t={t}
                   />
                 ) : tab === "skills" ? (
@@ -516,6 +542,8 @@ function ToolContent({
   onOpen,
   onDelete,
   onToggle,
+  riskOverrides,
+  onRiskChange,
   t,
 }: {
   selected: ToolboxSnapshot
@@ -523,6 +551,8 @@ function ToolContent({
   onOpen: (name: string) => void
   onDelete: (name: string) => void
   onToggle: (name: string, enabled: boolean) => void
+  riskOverrides: Record<string, ToolRiskOverride>
+  onRiskChange: (name: string, risk: ToolRiskOverride | undefined) => void
   t: Translate
 }) {
   return (
@@ -553,6 +583,22 @@ function ToolContent({
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <select
+                className="h-8 rounded-md border bg-background px-2 text-xs"
+                value={riskOverrides[toolboxToolRiskKey(selected, tool.name)] ?? "default"}
+                title={t("toolboxes.riskPolicy")}
+                onChange={(event) => {
+                  const value = event.target.value
+                  onRiskChange(
+                    tool.name,
+                    value === "low" || value === "approval" ? value : undefined
+                  )
+                }}
+              >
+                <option value="default">{t("toolboxes.risk.default")}</option>
+                <option value="low">{t("toolboxes.risk.low")}</option>
+                <option value="approval">{t("toolboxes.risk.approval")}</option>
+              </select>
               {tool.path ? (
                 <Button variant="ghost" size="sm" onClick={() => onOpen(tool.name)}>
                   <FolderOpen className="size-3.5" />
@@ -765,6 +811,10 @@ function RulesContent({
       </div>
     </div>
   )
+}
+
+function toolboxToolRiskKey(toolbox: ToolboxSnapshot, toolName: string): string {
+  return toolbox.builtin ? `builtin:${toolName}` : `toolbox:${toolbox.id}:${toolName}`
 }
 
 function ruleToDraft(rule: LoadedRule): RuleDraft {

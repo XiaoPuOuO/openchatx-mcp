@@ -11,6 +11,7 @@ import type { NodeRegistry } from "../nodes/node-registry.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { ProjectScope } from "../projects/project-scope.js"
 import type { ProviderHub } from "../providers/provider-hub.js"
+import type { RuntimeControlService } from "../runtime/runtime-control.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import type { SmartModelRouter } from "../subagents/router.js"
@@ -83,6 +84,7 @@ export interface CreateMcpServerOptions {
   agentObserver?: AgentObserver
   contextBudget?: ContextBudgetGuard
   progressHeartbeat?: ProgressHeartbeatGuard
+  runtimeControl?: RuntimeControlService
 }
 
 export interface McpCapabilityServices {
@@ -107,6 +109,7 @@ export interface McpCapabilityServices {
   workflows?: WorkflowService
   nodes?: NodeRegistry
   contextBudget?: ContextBudgetGuard
+  runtimeControl?: RuntimeControlService
 }
 
 export interface McpRuntimeProfile {
@@ -139,7 +142,9 @@ export function createMcpServerFactory(
 ): McpServerFactory {
   const profile = snapshotMcpRuntimeProfile(profileOverrides)
   const contextBudget = services.contextBudget ?? new ContextBudgetGuard()
-  const progressHeartbeat = new ProgressHeartbeatGuard()
+  const progressHeartbeat = new ProgressHeartbeatGuard(12, (sessionId) =>
+    contextBudget.isDotSession(sessionId)
+  )
   return (context = {}) =>
     createMcpServer(
       {
@@ -163,6 +168,7 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
     auditRequest: options.auditRequest,
     contextBudget: options.contextBudget,
     progressHeartbeat: options.progressHeartbeat,
+    runtimeControl: options.runtimeControl,
   })
 
   let lazyBuiltins: LazyBuiltinTools | undefined

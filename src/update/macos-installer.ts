@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { constants } from "node:fs"
-import { access, chmod, mkdir, writeFile } from "node:fs/promises"
+import { access, chmod, copyFile, mkdir, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import process from "node:process"
@@ -33,6 +33,9 @@ TARGET_APP="\${OPENCHATX_TARGET_APP:?}"
 TARGET_PID="\${OPENCHATX_TARGET_PID:?}"
 WORK_DIR="\${OPENCHATX_UPDATE_WORK_DIR:?}"
 HEALTH_URL="\${OPENCHATX_UPDATE_HEALTH_URL:?}"
+STATE_PATH="\${OPENCHATX_OPERATIONAL_STATE_PATH:?}"
+STATE_BACKUP="\${OPENCHATX_OPERATIONAL_STATE_BACKUP:?}"
+STATE_EXISTED="\${OPENCHATX_OPERATIONAL_STATE_EXISTED:?}"
 EXTRACT_DIR="$WORK_DIR/extracted"
 NEW_APP="$EXTRACT_DIR/OpenChatX.app"
 STAGE_APP="\${TARGET_APP}.update-\${TARGET_PID}"
@@ -40,6 +43,14 @@ BACKUP_APP="\${TARGET_APP}.backup-\${TARGET_PID}"
 
 cleanup() {
   /bin/rm -rf "$EXTRACT_DIR" "$STAGE_APP"
+}
+
+restore_state() {
+  if [[ "$STATE_EXISTED" == "1" && -f "$STATE_BACKUP" ]]; then
+    /bin/cp -f "$STATE_BACKUP" "$STATE_PATH"
+  elif [[ "$STATE_EXISTED" != "1" ]]; then
+    /bin/rm -f "$STATE_PATH"
+  fi
 }
 trap cleanup EXIT
 
@@ -80,6 +91,7 @@ if /bin/mv "$STAGE_APP" "$TARGET_APP"; then
   for _ in {1..60}; do
     if /usr/bin/curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
       /bin/rm -rf "$BACKUP_APP"
+      /bin/rm -f "$STATE_BACKUP"
       trap - EXIT
       /bin/rm -rf "$EXTRACT_DIR"
       exit 0
@@ -92,11 +104,13 @@ if /bin/mv "$STAGE_APP" "$TARGET_APP"; then
   /bin/sleep 0.5
   /bin/rm -rf "$TARGET_APP"
   /bin/mv "$BACKUP_APP" "$TARGET_APP"
+  restore_state
   /usr/bin/open "$TARGET_APP"
   exit 1
 fi
 
 /bin/mv "$BACKUP_APP" "$TARGET_APP" 2>/dev/null || true
+restore_state
 exit 1
 `
 }
@@ -148,7 +162,16 @@ export async function launchMacOSDesktopUpdate(
   await mkdir(updateDirectory, { recursive: true })
   const archivePath = join(updateDirectory, update.downloadName)
   const scriptPath = join(updateDirectory, "install-macos-update.zsh")
+  const statePath = join(MCP_CONFIG.stateDir, "operational-state.json")
+  const stateBackup = join(updateDirectory, "operational-state.preupdate.json")
   await writeFile(archivePath, Buffer.from(await response.arrayBuffer()))
+  let stateExisted = false
+  try {
+    await copyFile(statePath, stateBackup)
+    stateExisted = true
+  } catch (error) {
+    if (!isEnoent(error)) throw error
+  }
   await writeFile(scriptPath, buildMacOSUpdaterScript(), { encoding: "utf8", mode: 0o700 })
   await chmod(scriptPath, 0o700)
   await updateOperationalState((state) => {
@@ -166,6 +189,9 @@ export async function launchMacOSDesktopUpdate(
       OPENCHATX_TARGET_PID: targetPid,
       OPENCHATX_UPDATE_WORK_DIR: updateDirectory,
       OPENCHATX_UPDATE_HEALTH_URL: `http://127.0.0.1:${MCP_CONFIG.port}/healthz`,
+      OPENCHATX_OPERATIONAL_STATE_PATH: statePath,
+      OPENCHATX_OPERATIONAL_STATE_BACKUP: stateBackup,
+      OPENCHATX_OPERATIONAL_STATE_EXISTED: stateExisted ? "1" : "0",
     },
   })
   installer.unref()
@@ -175,4 +201,8 @@ export async function launchMacOSDesktopUpdate(
     installerPath: archivePath,
     installerName: update.downloadName,
   }
+}
+
+function isEnoent(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT"
 }

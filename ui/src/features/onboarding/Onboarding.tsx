@@ -3,9 +3,11 @@ import { useEffect, useState } from "react"
 
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { useI18n } from "../../i18n"
 import { type Diagnostics, fetchDiagnostics, updateRecoveryState } from "../../lib/api"
 
 export function Onboarding({ onComplete }: { onComplete: () => void }) {
+  const { t } = useI18n()
   const [diagnostics, setDiagnostics] = useState<Diagnostics>()
   const [error, setError] = useState<string>()
 
@@ -25,12 +27,9 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
         <CardHeader>
           <div className="flex items-center gap-2 text-lg font-semibold">
             <PlugZap className="size-5" />
-            Set up OpenChatX
+            {t("onboarding.title")}
           </div>
-          <p className="text-sm text-muted-foreground">
-            Verify the local runtime, connect ChatGPT through the Secure MCP Tunnel, then run your
-            first Agent task.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("onboarding.subtitle")}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {diagnostics?.checks.map((check) => (
@@ -47,16 +46,13 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
             </div>
           ))}
           <div className="rounded-md border p-3 text-sm">
-            <div className="font-medium">Next: connect ChatGPT</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              Confirm your Tunnel is connected, then ask ChatGPT to call OpenChatX and create a
-              temporary test file. You can remove it afterward.
-            </div>
+            <div className="font-medium">{t("onboarding.nextTitle")}</div>
+            <div className="mt-1 text-xs text-muted-foreground">{t("onboarding.nextHint")}</div>
           </div>
           {error ? <div className="text-sm text-destructive">{error}</div> : null}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => void fetchDiagnostics().then(setDiagnostics)}>
-              Recheck
+              {t("onboarding.recheck")}
             </Button>
             <Button
               disabled={blocking}
@@ -64,7 +60,7 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
                 void updateRecoveryState({ onboardingCompleted: true }).then(() => onComplete())
               }
             >
-              Finish setup
+              {t("onboarding.finish")}
             </Button>
           </div>
         </CardContent>

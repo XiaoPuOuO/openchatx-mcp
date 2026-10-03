@@ -31,6 +31,7 @@ test("platform overview aggregates counts, current work, and attention", async (
           label: "Tests",
           status: "failed",
           cwd: "/tmp/demo",
+          exitCode: 7,
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
@@ -83,5 +84,10 @@ test("platform overview aggregates counts, current work, and attention", async (
   assert.deepEqual(
     snapshot.needsAttention.map((item) => item.id).sort((a, b) => a.localeCompare(b)),
     ["failed", "mcp:blender"]
+  )
+  assert.equal(snapshot.needsAttention.find((item) => item.id === "failed")?.exitCode, 7)
+  assert.match(
+    snapshot.needsAttention.find((item) => item.id === "failed")?.detail ?? "",
+    /exit code 7/u
   )
 })

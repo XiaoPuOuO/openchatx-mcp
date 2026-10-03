@@ -32,6 +32,37 @@ test("durable jobs persist status and logs across manager instances", {
   assert.equal(restored.projectId, "openchatx")
 })
 
+test("reconciles a vanished job from a previous runtime as interrupted, not failed", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openchatx-job-interrupted-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const statePath = join(root, "jobs.json")
+  await writeFile(
+    statePath,
+    JSON.stringify({
+      jobs: [
+        {
+          id: "lost",
+          label: "Lost process",
+          command: "sleep 1",
+          cwd: root,
+          pid: 2_147_483_647,
+          status: "running",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          logPath: join(root, "lost.log"),
+        },
+      ],
+    }),
+    "utf8"
+  )
+
+  const manager = new JobManager(root, statePath)
+  await manager.initialize()
+  const job = await manager.get("lost")
+  assert.equal(job.status, "interrupted")
+  assert.equal(job.exitCode, undefined)
+})
+
 test("durable jobs enforce an explicit hard deadline", { timeout: 10000 }, async (t) => {
   const root = await mkdtemp(join(tmpdir(), "openchatx-job-timeout-"))
   t.after(() => rm(root, { recursive: true, force: true }))

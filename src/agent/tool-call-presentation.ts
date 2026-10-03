@@ -33,6 +33,10 @@ export function presentToolResult(
     return { resultDetail: structured.diff, resultDetailLanguage: "diff" }
   }
 
+  if (structured?.interrupted === true && typeof structured.output === "string") {
+    return { resultDetail: structured.output }
+  }
+
   const text = extractTextContent(record.content)
   if (text) return { resultDetail: text }
 

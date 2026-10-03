@@ -20,6 +20,7 @@ import {
   SkillCatalog,
   type SkillSummary,
 } from "../tools/skills/skill-catalog.js"
+import { runToolInSandbox } from "./sandbox-runner.js"
 import type { Tool } from "./tool.js"
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
@@ -188,7 +189,8 @@ export class ToolboxRegistry {
         if (box.loadErrors.has(name)) continue
         if (!this.isToolEnabled(box.id, name)) continue
         const publicName = `${sanitizeName(box.id)}__${sanitizeName(tool.name)}`
-        registerCustomTool(server, publicName, box.id, tool)
+        const runtimePath = join(box.path, "tools", `${name}.openchatx.mjs`)
+        registerCustomTool(server, publicName, box.id, runtimePath, tool)
       }
     }
   }
@@ -228,11 +230,12 @@ export class ToolboxRegistry {
     if (!tool || box.loadErrors.has(parsed.tool))
       throw new Error(`Unknown custom tool ${JSON.stringify(id)}.`)
     const input = tool.inputSchema.parse(args)
-    return tool.execute(input, {
-      name: `${sanitizeName(box.id)}__${sanitizeName(tool.name)}`,
+    return runToolInSandbox({
+      runtimePath: join(box.path, "tools", `${parsed.tool}.openchatx.mjs`),
       toolboxId: box.id,
+      name: `${sanitizeName(box.id)}__${sanitizeName(tool.name)}`,
+      argumentsValue: input,
       signal: context.mcpReq.signal,
-      mcp: context,
     })
   }
 
@@ -677,7 +680,13 @@ async function loadCustomToolHooks(toolboxes: Map<string, LoadedToolbox>): Promi
   }
 }
 
-function registerCustomTool(server: McpServer, publicName: string, toolboxId: string, tool: Tool) {
+function registerCustomTool(
+  server: McpServer,
+  publicName: string,
+  toolboxId: string,
+  runtimePath: string,
+  tool: Tool
+) {
   const originalName = tool.name
   const config = {
     title: tool.title,
@@ -690,11 +699,12 @@ function registerCustomTool(server: McpServer, publicName: string, toolboxId: st
   }
   const callback = async (input: unknown, context: Parameters<Tool["execute"]>[1]["mcp"]) => {
     const parsed = tool.inputSchema.parse(input)
-    return tool.execute(parsed, {
-      name: publicName,
+    return runToolInSandbox({
+      runtimePath,
       toolboxId,
+      name: publicName,
+      argumentsValue: parsed,
       signal: context.mcpReq.signal,
-      mcp: context,
     })
   }
   Reflect.apply(server.registerTool, server, [publicName, config, callback])

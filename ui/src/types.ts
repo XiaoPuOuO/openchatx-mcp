@@ -1,4 +1,4 @@
-type AgentCallStatus = "running" | "completed" | "failed"
+type AgentCallStatus = "running" | "completed" | "failed" | "interrupted"
 
 export interface AgentCall {
   id: string
@@ -26,6 +26,7 @@ export interface Agent {
   taskSlug?: string
   projectId?: string
   goalId?: string
+  dot?: boolean
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCall
@@ -62,6 +63,22 @@ export interface RuntimeSettings {
   context: {
     warning_threshold: number
   }
+}
+
+export interface DurableJobDetail {
+  job: {
+    id: string
+    label: string
+    command: string
+    cwd: string
+    status: "running" | "completed" | "failed" | "cancelled" | "interrupted"
+    exitCode?: number
+    timedOut?: boolean
+    createdAt: string
+    updatedAt: string
+  }
+  output: string
+  truncated: boolean
 }
 
 export type AgentEvent = AgentChangedEvent | AgentRemovedEvent
@@ -234,6 +251,8 @@ export interface PlatformOverview {
     source: "health" | "job"
     label: string
     detail: string
+    exitCode?: number
+    timedOut?: boolean
   }>
 }
 

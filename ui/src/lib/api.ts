@@ -6,6 +6,7 @@ import type {
   CapabilityStoreEntry,
   CapabilityStoreReview,
   CapabilityStoreSourceTree,
+  DurableJobDetail,
   GoalRecord,
   GoalStatus,
   LoadedRule,
@@ -91,6 +92,19 @@ export async function deleteAgent(agentId: string): Promise<void> {
   }
 }
 
+export async function setAgentDot(agentId: string, dot: boolean): Promise<void> {
+  if (MOCK_DASHBOARD) return
+  const response = await fetch(`/ui/api/agents/${encodeURIComponent(agentId)}/dot`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dot }),
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to update Dot session (${response.status})`)
+  }
+}
+
 export async function stopAgentCall(agentId: string, callId: string): Promise<void> {
   if (MOCK_DASHBOARD) return
   const response = await fetch(
@@ -101,6 +115,17 @@ export async function stopAgentCall(agentId: string, callId: string): Promise<vo
     const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
     throw new Error(body?.error ?? `Failed to stop tool call (${response.status})`)
   }
+}
+
+export async function fetchJobDetail(jobId: string): Promise<DurableJobDetail> {
+  const response = await fetch(`/ui/api/jobs/${encodeURIComponent(jobId)}`)
+  const body = (await response.json().catch(() => undefined)) as
+    | (DurableJobDetail & { error?: string })
+    | undefined
+  if (!response.ok || !body?.job) {
+    throw new Error(body?.error ?? `Failed to load job detail (${response.status})`)
+  }
+  return body
 }
 
 export async function fetchCapabilityHealth(): Promise<CapabilityHealthSnapshot> {
@@ -219,6 +244,7 @@ export type RecoveryState = {
     phase: "idle" | "downloading" | "installing" | "health-check" | "completed" | "failed"
     progress: number
   }
+  desktop: { closeToTray: boolean; startMinimized: boolean }
   crash: { consecutiveStartupFailures: number; lastCrashAt?: string; lastCrashSummary?: string }
 }
 
@@ -243,7 +269,7 @@ export async function fetchRecoveryState(): Promise<RecoveryState> {
 }
 
 export async function updateRecoveryState(
-  update: Partial<Pick<RecoveryState, "onboardingCompleted" | "update">>
+  update: Partial<Pick<RecoveryState, "onboardingCompleted" | "update" | "desktop">>
 ): Promise<RecoveryState> {
   const response = await fetch("/ui/api/recovery/state", {
     method: "PATCH",

@@ -8,13 +8,22 @@ import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import { registerJobRoutes } from "../jobs/dashboard-routes.js"
+import type { JobManager } from "../jobs/job-manager.js"
 import type { ContextBudgetGuard } from "../mcp/context-budget.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
+import { registerProjectWorkspaceRoutes } from "../projects/workspace-dashboard-routes.js"
+import type { ProjectWorkspaceService } from "../projects/workspace-snapshot.js"
 import { loadPublicConfig, savePublicConfig } from "../public-config.cjs"
 import { registerRecoveryRoutes } from "../recovery/dashboard-routes.js"
-import { loadOperationalState, updateOperationalState } from "../recovery/operational-state.js"
 import type { SystemRecoveryService } from "../recovery/system-recovery.js"
+import { registerRuntimeControlRoutes } from "../runtime/dashboard-routes.js"
+import type { RuntimeProcessService } from "../runtime/process-service.js"
+import type { RuntimeControlService } from "../runtime/runtime-control.js"
+import { registerSessionHistoryRoutes } from "../sessions/dashboard-routes.js"
+import type { RecentWorkService } from "../sessions/recent-work.js"
+import { handleCapabilityInstall } from "../store/dashboard-install.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
 import {
   loadSubagentConfig,
@@ -42,6 +51,11 @@ export interface DashboardServices {
   summaryRegistry?: SummaryRegistry
   contextBudget?: ContextBudgetGuard
   systemRecovery?: SystemRecoveryService
+  runtimeControl?: RuntimeControlService
+  runtimeProcesses?: RuntimeProcessService
+  projectWorkspaces?: ProjectWorkspaceService
+  recentWork?: RecentWorkService
+  jobManager?: JobManager
 }
 
 /** Build the localhost-only observer dashboard and steering API mounted under `/ui`. */
@@ -61,16 +75,25 @@ export function createDashboardRouter(
     summaryRegistry,
     contextBudget,
     systemRecovery,
+    runtimeControl,
+    runtimeProcesses,
+    projectWorkspaces,
+    recentWork,
+    jobManager,
   } = services
   const router = Router()
 
   registerAgentRoutes(router, agentObserver, contextBudget)
+  registerJobRoutes(router, jobManager)
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
   registerWorkspaceRoutes(router, projectRegistry)
   registerSummaryRoutes(router, summaryRegistry)
   registerUpdateRoutes(router)
   registerRecoveryRoutes(router, systemRecovery)
+  registerRuntimeControlRoutes(router, runtimeControl, agentObserver, runtimeProcesses)
+  registerProjectWorkspaceRoutes(router, projectWorkspaces, externalMcp)
+  registerSessionHistoryRoutes(router, recentWork)
   registerAgentInstructionsRoutes(router)
   registerRuleRoutes(router, toolboxRegistry)
   registerToolboxRoutes(router, toolboxRegistry)
@@ -582,7 +605,30 @@ function registerAgentRoutes(
   contextBudget?: ContextBudgetGuard
 ): void {
   router.get("/api/agents", (_req, res) => {
-    res.json({ agents: agentObserver.listAgents() })
+    const agents = agentObserver.listAgents().map((agent) => {
+      const sessionId = agentObserver.sessionIdForAgent(agent.id)
+      if (sessionId && contextBudget?.isDotSession(sessionId)) {
+        agentObserver.setDot(agent.id, true)
+        return { ...agent, dot: true }
+      }
+      return agent
+    })
+    res.json({ agents })
+  })
+
+  router.put("/api/agents/:agentId/dot", async (req, res) => {
+    const sessionId = agentObserver.sessionIdForAgent(req.params.agentId)
+    if (!sessionId) return res.status(404).json({ error: "agent not found" })
+    if (!contextBudget) return res.status(503).json({ error: "context budget is unavailable" })
+    if (typeof req.body?.dot !== "boolean")
+      return res.status(400).json({ error: "dot must be boolean" })
+    try {
+      await contextBudget.setDotSession(sessionId, req.body.dot)
+      agentObserver.setDot(req.params.agentId, req.body.dot)
+      res.json({ dot: req.body.dot })
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+    }
   })
 
   router.delete("/api/agents/:agentId", async (req, res) => {
@@ -683,84 +729,45 @@ function registerStoreRoutes(
     }
     try {
       const revision = typeof req.query.revision === "string" ? req.query.revision : undefined
-      res.json(await capabilityStore.review(req.params.id, revision))
+      res.json(await capabilityStore.review(String(req.params.id ?? ""), revision))
     } catch (error) {
       toolboxError(res, error)
     }
   })
 
-  router.post("/api/store/:id/install", async (req, res) => {
+  router.get("/api/store/:id/requirements", async (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    try {
+      const revision = typeof req.query.revision === "string" ? req.query.revision : undefined
+      const entry = await capabilityStore.get(String(req.params.id ?? ""), revision)
+      res.json(await capabilityStore.requirementStatus(entry))
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.post("/api/store/:id/dependencies/fix", async (req, res) => {
     if (!capabilityStore) {
       res.status(503).json({ error: "Capability Store is unavailable." })
       return
     }
     try {
       const revision = typeof req.body?.revision === "string" ? req.body.revision : undefined
-      const review = await capabilityStore.review(req.params.id, revision)
-      const requiredPermissions = Object.entries(review.observedPermissions)
-        .filter(([, required]) => required)
-        .map(([permission]) => permission)
-      const approvedPermissions = Array.isArray(req.body?.approvedPermissions)
-        ? req.body.approvedPermissions.filter(
-            (value: unknown): value is string => typeof value === "string"
-          )
-        : []
-      const deniedPermissions = Array.isArray(req.body?.deniedPermissions)
-        ? req.body.deniedPermissions.filter(
-            (value: unknown): value is string => typeof value === "string"
-          )
-        : []
-      if (deniedPermissions.length > 0) {
-        await updateOperationalState((state) => {
-          const current = state.capabilityPermissions[req.params.id] ?? {}
-          state.capabilityPermissions[req.params.id] = {
-            ...current,
-            ...Object.fromEntries(
-              deniedPermissions.map((permission: string) => [permission, "deny" as const])
-            ),
-          }
-        })
-        res
-          .status(403)
-          .json({ error: `Capability permission denied: ${deniedPermissions.join(", ")}.` })
-        return
-      }
-      const operationalState = await loadOperationalState()
-      const policies = operationalState.capabilityPermissions[req.params.id] ?? {}
-      const denied = requiredPermissions.filter(
-        (permission: string) => policies[permission] === "deny"
-      )
-      if (denied.length > 0) {
-        res.status(403).json({ error: `Capability permission denied: ${denied.join(", ")}.` })
-        return
-      }
-      const missing = requiredPermissions.filter(
-        (permission: string) =>
-          policies[permission] !== "allow" && !approvedPermissions.includes(permission)
-      )
-      if (missing.length > 0) {
-        res.status(409).json({
-          error: "Capability permissions require explicit approval.",
-          requiredPermissions,
-          review,
-        })
-        return
-      }
-      if (req.body?.rememberPermissions === true && approvedPermissions.length > 0) {
-        await updateOperationalState((state) => {
-          const current = state.capabilityPermissions[req.params.id] ?? {}
-          state.capabilityPermissions[req.params.id] = {
-            ...current,
-            ...Object.fromEntries(
-              approvedPermissions.map((permission: string) => [permission, "allow" as const])
-            ),
-          }
-        })
-      }
-      res.status(201).json({ entry: await capabilityStore.install(req.params.id, revision) })
+      res.json(await capabilityStore.fixDependencies(String(req.params.id ?? ""), revision))
     } catch (error) {
       toolboxError(res, error)
     }
+  })
+
+  router.post("/api/store/:id/install", (req, res) => {
+    if (!capabilityStore) {
+      res.status(503).json({ error: "Capability Store is unavailable." })
+      return
+    }
+    void handleCapabilityInstall(req, res, capabilityStore)
   })
 
   router.delete("/api/store/:id", async (req, res) => {

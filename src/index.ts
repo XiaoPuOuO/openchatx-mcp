@@ -16,11 +16,16 @@ import { NodeRegistry } from "./nodes/node-registry.js"
 import { PlatformOverviewService } from "./platform/overview.js"
 import { ProjectRegistry } from "./projects/project-registry.js"
 import { ProjectScope } from "./projects/project-scope.js"
+import { ProjectWorkspaceService } from "./projects/workspace-snapshot.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { loadOperationalState } from "./recovery/operational-state.js"
 import { SystemRecoveryService } from "./recovery/system-recovery.js"
+import { runtimeProcessRegistry } from "./runtime/process-registry.js"
+import { RuntimeProcessService } from "./runtime/process-service.js"
+import { RuntimeControlService } from "./runtime/runtime-control.js"
 import { McpAuditLogger } from "./server/audit/audit-log.js"
 import { startMcpHttpServer } from "./server/http-server.js"
+import { RecentWorkService } from "./sessions/recent-work.js"
 import { synchronizeAgentInstructions } from "./state/agent-instructions.js"
 import { GithubCommunityStore } from "./store/github-community-store.js"
 import { CapabilityStoreService } from "./store/store-service.js"
@@ -29,6 +34,7 @@ import { SmartModelRouter } from "./subagents/router.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
 import { SummaryRegistry } from "./summaries/summary-registry.js"
 import { AgentTeamService } from "./teams/team-service.js"
+import { timelineRegistry } from "./timeline/timeline-registry.js"
 import { ToolboxRegistry } from "./toolbox/registry.js"
 import { BashProcessManager } from "./tools/shell/bash-process-manager.js"
 import { InteractiveShellManager } from "./tools/shell/interactive-shell.js"
@@ -78,11 +84,39 @@ const interactiveShellManager = new InteractiveShellManager(
 const bashProcessManager = new BashProcessManager()
 const jobManager = new JobManager()
 await jobManager.initialize()
+const runtimeControl = new RuntimeControlService()
+const runtimeProcessId = runtimeProcessRegistry.register({
+  kind: "runtime",
+  label: "OpenChatX Runtime",
+  pid: process.pid,
+  detail: `OpenChatX ${MCP_CONFIG.server.version}`,
+})
 const projectRegistry = new ProjectRegistry()
-const projectScope = new ProjectScope(projectRegistry)
+const projectScope = new ProjectScope(projectRegistry, runtimeControl)
 const goalRegistry = new GoalRegistry()
 const goalScope = new GoalScope(goalRegistry, projectScope)
 const summaryRegistry = new SummaryRegistry()
+const projectWorkspaces = new ProjectWorkspaceService(
+  projectRegistry,
+  goalRegistry,
+  toolboxRegistry,
+  MCP_CONFIG.externalMcp.configFile,
+  () => externalMcp.reload(true)
+)
+projectScope.setWorkspaceActivator(async (projectId) => {
+  await projectWorkspaces.activate(projectId)
+})
+const recentWork = new RecentWorkService(
+  timelineRegistry,
+  goalRegistry,
+  projectRegistry,
+  summaryRegistry
+)
+const runtimeProcesses = new RuntimeProcessService(
+  jobManager,
+  bashProcessManager,
+  interactiveShellManager
+)
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
 const systemRecovery = new SystemRecoveryService(capabilityHealth)
@@ -148,6 +182,7 @@ try {
       workflows,
       nodes,
       contextBudget,
+      runtimeControl,
     }),
     auditLogger,
     authStore,
@@ -163,6 +198,11 @@ try {
     summaryRegistry,
     contextBudget,
     systemRecovery,
+    runtimeControl,
+    runtimeProcesses,
+    projectWorkspaces,
+    recentWork,
+    jobManager,
   })
 } catch (error) {
   await systemRecovery.recordCrash(error).catch(() => undefined)
@@ -195,6 +235,7 @@ const shutdown = async (signal: string) => {
 }
 
 async function closeRuntimeServices(): Promise<void> {
+  runtimeProcessRegistry.remove(runtimeProcessId)
   await Promise.allSettled([
     interactiveShellManager.close(),
     bashProcessManager.close(),
