@@ -18,10 +18,10 @@ import { useEffect, useMemo, useState } from "react"
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { PageHeader } from "./components/PageHeader"
 import { Button } from "./components/ui/button"
-import { DotPage } from "./features/dot/DotPage"
 import { ControlCenter } from "./features/control/ControlCenter"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
+import { DotPage } from "./features/dot/DotPage"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
 import { Onboarding } from "./features/onboarding/Onboarding"
 import { ProjectManager } from "./features/projects/ProjectManager"
@@ -85,9 +85,7 @@ const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
 )
-const SYSTEM_NAV = NAV_ITEMS.filter((item) =>
-  ["status", "control", "settings"].includes(item.id)
-)
+const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "control", "settings"].includes(item.id))
 
 export function App() {
   const [view, setView] = useState<View>("dashboard")
@@ -174,14 +172,7 @@ export function App() {
       case "status":
         return <StatusPage onBack={back} />
       case "dot":
-        return (
-          <DotPage
-            agents={agents}
-            now={now}
-            onBack={back}
-            onRemoveAgent={removeAgent}
-          />
-        )
+        return <DotPage agents={agents} now={now} onBack={back} onRemoveAgent={removeAgent} />
       case "control":
         return <ControlCenter onBack={back} />
       case "settings":

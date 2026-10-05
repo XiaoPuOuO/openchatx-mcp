@@ -66,7 +66,8 @@ export const en: Messages = {
   "dot.sessions": "Dot sessions",
   "dot.sessionsSummary": "{active} active · {total} sessions",
   "dot.noSessions": "No sessions have arrived through the Dot tunnel yet",
-  "dot.noSessionsHint": "Conversations reaching this runtime via the Dot tunnel appear here automatically.",
+  "dot.noSessionsHint":
+    "Conversations reaching this runtime via the Dot tunnel appear here automatically.",
   "settings.title": "Settings",
   "settings.subtitle": "Configure the OpenChatX runtime and context behavior.",
   "settings.loading": "Loading settings…",

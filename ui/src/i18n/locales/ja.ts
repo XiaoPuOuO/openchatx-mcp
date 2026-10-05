@@ -395,7 +395,8 @@ export const ja: Messages = {
   "mcp.remoteOption": "リモート (HTTP)",
   "mcp.expose": "この MCP サーバーを ChatGPT に公開します。",
   "mcp.dotExposure": "Dot に提供",
-  "mcp.dotExposureHint": "Dot セッションがこの MCP サーバーのツールを検索・呼び出せるようにします。",
+  "mcp.dotExposureHint":
+    "Dot セッションがこの MCP サーバーのツールを検索・呼び出せるようにします。",
   "mcp.url": "URL",
   "mcp.headers": "Headers",
   "mcp.headersHint": "1 行につき 1 つの Header: value",

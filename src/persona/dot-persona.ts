@@ -26,6 +26,8 @@ import { WINDOWS_COMPUTE_SHIMS } from "./compute-shims-win32.js"
 const decoder = new TextDecoder()
 const MAX_ARTIFACT_BYTES = 512 * 1024
 const WORKSPACE_PREFIX = "/workspace"
+const WORKSPACE_PATH_PATTERN = /^(?:\.\/)?workspace(?:\/|$)/u
+const LEADING_DOT_SLASH_PATTERN = /^\.\//u
 
 export interface DotPersonaServices {
   jobManager?: JobManager
@@ -191,7 +193,6 @@ function sanitizeToolResult(result: unknown): unknown {
 function dotToolError(error: unknown, code = "INTERNAL_ERROR"): ToolError {
   const base = toToolError(error, code)
   const message = sanitizeDotText(base.message)
-  // biome-ignore lint/style/useErrorCause: ToolError stores the original error as its cause.
   return message === base.message ? base : new ToolError(base.code, message, base.cause)
 }
 
@@ -199,14 +200,15 @@ function dotToolError(error: unknown, code = "INTERNAL_ERROR"): ToolError {
 export function hostPathFromWorkspace(path: string | undefined, base?: string): string {
   const root = base ?? MCP_CONFIG.defaultCwd
   if (!path) return root
-  if (/^(?:\.\/)?workspace(?:\/|$)/u.test(path) && !path.startsWith(WORKSPACE_PREFIX)) {
-    path = `/${path.replace(/^\.\//u, "")}`
-  }
-  if (path === WORKSPACE_PREFIX) return homedir()
-  if (path.startsWith(`${WORKSPACE_PREFIX}/`))
-    return resolve(homedir(), path.slice(WORKSPACE_PREFIX.length + 1))
-  if (resolve(path) === path) return path
-  return resolve(root, path)
+  const normalizedPath =
+    WORKSPACE_PATH_PATTERN.test(path) && !path.startsWith(WORKSPACE_PREFIX)
+      ? `/${path.replace(LEADING_DOT_SLASH_PATTERN, "")}`
+      : path
+  if (normalizedPath === WORKSPACE_PREFIX) return homedir()
+  if (normalizedPath.startsWith(`${WORKSPACE_PREFIX}/`))
+    return resolve(homedir(), normalizedPath.slice(WORKSPACE_PREFIX.length + 1))
+  if (resolve(normalizedPath) === normalizedPath) return normalizedPath
+  return resolve(root, normalizedPath)
 }
 
 function workspacePathFromHost(path: string | undefined): string {
@@ -232,6 +234,8 @@ const JOB_STATE_LABELS: Record<DurableJob["status"], string> = {
 
 function dotJobView(job: DurableJob): Record<string, unknown> {
   return sanitizeDeep({
+    service: "OpenDotX Cloud",
+    node: "node-01",
     job_id: job.id,
     state: JOB_STATE_LABELS[job.status],
     label: job.label,
@@ -428,6 +432,7 @@ function registerDotSummarizeTool(server: McpServer, summaries: SummaryRegistry)
   )
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Dot runtime registration intentionally keeps the hosted surface contract together.
 export function registerDotRuntime(server: McpServer, options: DotPersonaServices): void {
   const { jobManager, projectRegistry, summaries } = options
 

@@ -244,9 +244,9 @@ async function normalizeMcpPostHeaders(req: Request): Promise<void> {
     if (!isParsedJsonBody(req.body)) req.body = await readJsonBody(req)
   }
 
-  const accept = (req.headers["accept"] ?? "").toLowerCase()
+  const accept = (req.headers.accept ?? "").toLowerCase()
   if (!accept.includes("application/json") && !accept.includes("text/event-stream"))
-    req.headers["accept"] = "application/json, text/event-stream"
+    req.headers.accept = "application/json, text/event-stream"
 }
 
 function isParsedJsonBody(body: unknown): boolean {
@@ -257,7 +257,7 @@ async function readJsonBody(req: Request): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
-    const piece = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string)
+    const piece = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += piece.length
     if (size > MCP_BODY_LIMIT_BYTES) break
     chunks.push(piece)

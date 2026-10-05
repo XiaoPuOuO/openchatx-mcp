@@ -173,15 +173,15 @@ async function prepareToolModelResult(input: {
     input.options.progressHeartbeat,
     input.agent
   )
-  return applyContextBudgetNotice(
-    input.options.contextBudget,
-    input.options.agentObserver,
-    input.agent,
-    input.name,
-    input.argumentsValue,
-    withEvents,
-    input.options.surface === "dot"
-  )
+  return applyContextBudgetNotice({
+    contextBudget: input.options.contextBudget,
+    observer: input.options.agentObserver,
+    agent: input.agent,
+    name: input.name,
+    input: input.argumentsValue,
+    result: withEvents,
+    suppressNotice: input.options.surface === "dot",
+  })
 }
 
 function settleObservedToolCall(input: {
@@ -298,15 +298,15 @@ async function prepareErrorModelResult(input: {
     input.options.progressHeartbeat,
     input.agent
   )
-  return applyContextBudgetNotice(
-    input.options.contextBudget,
-    input.options.agentObserver,
-    input.agent,
-    input.name,
-    input.argumentsValue,
-    withProgress,
-    input.options.surface === "dot"
-  )
+  return applyContextBudgetNotice({
+    contextBudget: input.options.contextBudget,
+    observer: input.options.agentObserver,
+    agent: input.agent,
+    name: input.name,
+    input: input.argumentsValue,
+    result: withProgress,
+    suppressNotice: input.options.surface === "dot",
+  })
 }
 
 export function installToolRegistrationBoundary(
@@ -443,18 +443,23 @@ function appendProgressHeartbeat(
   return appendToolEvents(result, instruction ? [instruction] : [])
 }
 
-async function applyContextBudgetNotice(
-  contextBudget: ContextBudgetGuard | undefined,
-  observer: AgentObserver | undefined,
-  agent: ReturnType<typeof getAgentIdentity>,
-  name: string,
-  input: Record<string, unknown>,
-  result: unknown,
-  suppressNotice = false
-): Promise<unknown> {
-  const notice = await contextBudget?.record(agent, name, input, result)
-  observer?.updateContextBudget(agent, contextBudget?.usage(agent))
-  return appendToolEvents(result, !suppressNotice && notice ? [notice] : [])
+async function applyContextBudgetNotice(options: {
+  contextBudget?: ContextBudgetGuard
+  observer?: AgentObserver
+  agent: ReturnType<typeof getAgentIdentity>
+  name: string
+  input: Record<string, unknown>
+  result: unknown
+  suppressNotice?: boolean
+}): Promise<unknown> {
+  const notice = await options.contextBudget?.record(
+    options.agent,
+    options.name,
+    options.input,
+    options.result
+  )
+  options.observer?.updateContextBudget(options.agent, options.contextBudget?.usage(options.agent))
+  return appendToolEvents(options.result, !options.suppressNotice && notice ? [notice] : [])
 }
 
 function collectToolEvents(

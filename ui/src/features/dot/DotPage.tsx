@@ -2,9 +2,9 @@ import { Cloud } from "lucide-react"
 
 import { PageHeader } from "../../components/PageHeader"
 import { Card, CardContent } from "../../components/ui/card"
-import { AgentCard } from "../dashboard/AgentCard"
 import { useI18n } from "../../i18n"
 import type { Agent } from "../../types"
+import { AgentCard } from "../dashboard/AgentCard"
 
 export function DotPage({
   agents,
