@@ -25,6 +25,7 @@ import {
 
 export interface ToolRegistrationBoundaryOptions {
   structuredOutput: boolean
+  surface?: "chat" | "dot"
   agentObserver?: AgentObserver
   auditRequest?: McpAuditRequest
   contextBudget?: ContextBudgetGuard
@@ -72,7 +73,8 @@ async function runRegisteredTool(input: {
   input.state.observedCallId = input.options.agentObserver?.startTool(
     agent,
     input.name,
-    input.argumentsValue
+    input.argumentsValue,
+    input.options.surface === "dot"
   )
   recordTimelineEvent({
     type: "tool-started",
@@ -177,7 +179,8 @@ async function prepareToolModelResult(input: {
     input.agent,
     input.name,
     input.argumentsValue,
-    withEvents
+    withEvents,
+    input.options.surface === "dot"
   )
 }
 
@@ -301,7 +304,8 @@ async function prepareErrorModelResult(input: {
     input.agent,
     input.name,
     input.argumentsValue,
-    withProgress
+    withProgress,
+    input.options.surface === "dot"
   )
 }
 
@@ -445,11 +449,12 @@ async function applyContextBudgetNotice(
   agent: ReturnType<typeof getAgentIdentity>,
   name: string,
   input: Record<string, unknown>,
-  result: unknown
+  result: unknown,
+  suppressNotice = false
 ): Promise<unknown> {
   const notice = await contextBudget?.record(agent, name, input, result)
   observer?.updateContextBudget(agent, contextBudget?.usage(agent))
-  return appendToolEvents(result, notice ? [notice] : [])
+  return appendToolEvents(result, !suppressNotice && notice ? [notice] : [])
 }
 
 function collectToolEvents(

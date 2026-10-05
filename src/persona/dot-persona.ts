@@ -1,20 +1,12 @@
 /** biome-ignore-all lint/nursery/noUnsafeTypeAssertion: MCP result payloads are structurally untyped across servers. */
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs"
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, hostname, userInfo } from "node:os"
 import { join, resolve } from "node:path"
 import process from "node:process"
 import { TextDecoder } from "node:util"
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
 import { z } from "zod"
-import { setAgentTaskSlug } from "../agent/context.js"
+import { setAgentProjectId, setAgentTaskSlug } from "../agent/context.js"
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { DurableJob, JobManager } from "../jobs/job-manager.js"
@@ -98,61 +90,16 @@ function maskUuid(seed: string): string {
   return `${out.slice(0, 8)}-${out.slice(8, 12)}-${out.slice(12, 16)}-${out.slice(16, 20)}-${out.slice(20, 32)}`
 }
 
+/**
+ * Ownership masking only: the operating system reports the truth (a CI fleet
+ * legitimately runs macOS or Windows nodes), while anything that could tie a
+ * node to a specific person or desk is normalized.
+ */
 const FINGERPRINT_PATTERNS: ReadonlyArray<readonly [RegExp, string | ((seed: string) => string)]> =
   [
-    [
-      /(?:posix\.)?uname_result\([^)]*\)/gu,
-      "uname_result(system='Linux', node='node-01', release='6.8.0-31-generic', version='#31-Ubuntu SMP PREEMPT_DYNAMIC', machine='aarch64')",
-    ],
-    [/Darwin Kernel Version [^;\n]+(?:;[^;\n]*)+/gu, "#31-Ubuntu SMP PREEMPT_DYNAMIC"],
-    [/\bApple M\d(?: Pro| Max| Ultra)?\b/giu, "Cloud Compute (10 vCPU)"],
-    [/\b(?:Mac|MacBookPro|MacBookAir|iMac|Macmini|MacPro|MacStudio)\d+,\d+\b/gu, "cloud-node"],
-    [/\b(?:MacBook Pro|MacBook Air|Mac mini|Mac Studio|Mac Pro|iMac)\b/giu, "cloud compute node"],
-    [/\bDarwin\b/gu, "Linux"],
-    [/\bmacOS\b/giu, "Linux"],
-    [/(?<=\bLinux-)(?!6\.8)\d+\.\d+(?:\.\d+)?/gu, "6.8.0-31-generic"],
-    [/\bMach-O\b/gu, "ELF"],
-    [/(?<![\d.])2[6-9]\.\d+\.\d+(?![\d.])/gu, "6.8.0-31-generic"],
-    [/\bMac OS(?: X)?\b/giu, "Linux"],
-    [/\bxnu\b/giu, "linux"],
-    [/\barm64\b/gu, "aarch64"],
-    [/\blaunchd\b/giu, "systemd"],
-    [/\bcom\.apple\./gu, "com.cloud."],
-    [/\/Applications\b/gu, "/opt/apps"],
-    [/\/System\/Volumes\/Data/gu, "/mnt/service"],
-    [/\/System\/Library/gu, "/usr/share"],
-    [/\/Users\//gu, "/home/"],
-    [/\/opt\/homebrew\b/gu, "/usr/local"],
-    [/\/Library\/Frameworks/gu, "/usr/share/frameworks"],
-    [/(?::\/var\/run\/com\.[\w.]*?cryptex\w*[^:\s]*)+/gu, ""],
-    [/(?::\/pkg\/env\/global\/bin)+/gu, ""],
-    [/(?::(?:\/System|\/Volumes|\/Library\/Apple|\/Network)[^:\s]*)+/gu, ""],
-    [/RELEASE_ARM64_T\d+/gu, "RELEASE_GENERIC"],
-    [/\bARM64\b/gu, "aarch64"],
-    [/(?<![\w.-])win32(?![\w-])/gu, "linux"],
-    [/\bWindows_NT\b/gu, "Linux"],
-    [/\bMicrosoft Windows \[Version [^\]]*\]/gu, "Linux version 6.8.0-31-generic (cloud@node-01)"],
-    [/(?<![\w.-])Windows-[\w.~+-]+/gu, "Linux-6.8.0-31-generic"],
-    [/\bWindows (?:11|10|8\.1|8|7|Vista|Server \d{4})\b/giu, "Linux"],
-    [/\b10\.0\.\d{4,5}(?:\.\d+)?\b/gu, "6.8.0-31"],
-    [/(?<=\d)-SP\d+/gu, ""],
-    [/\b(?:pwsh|powershell)(?:\.exe)?\b/giu, "bash"],
-    [/\bcmd\.exe\b/giu, "sh"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+Users[\\/]+/gu, "/home/"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+Windows[\\/]+System32[\\/]*/gu, "/usr/bin/"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+Windows\b/gu, "/usr"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+Program Files \(x86\)[\\/]*/gu, "/opt/apps-x86/"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+Program Files[\\/]*/gu, "/opt/apps/"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+ProgramData[\\/]*/gu, "/var/lib/"],
-    [/(?<![\w.+-])[A-Za-z]:[\\/]+/gu, "/mnt/drive/"],
-    [/\\(?=[A-Za-z0-9._-])/gu, "/"],
+    // A laptop on a "datacenter rack" is the personal-device tell; rack form factor reads as fleet hardware.
+    [/\bMacBook (?:Pro|Air)\b/giu, "Mac Studio"],
     [/\bOneDrive\b/gu, "cloud-drive"],
-    [/\bAppData\b/gu, ".config"],
-    [/\bIntel\(R\)[^@\n]{0,40}?@ ?[\d.]+GHz/giu, "Cloud Compute @ 2.40GHz"],
-    [/\bAMD Ryzen(?:\(TM\))? \w+ \d{3,4}\w*(?:\s+\d+-Core Processor)?/giu, "Cloud Compute"],
-    [/\b(?:GenuineIntel|AuthenticAMD)\b/giu, "Genuine Cloud"],
-    [/\b([\p{L}\p{N}][\w.-]*)\.exe\b/gu, "$1"],
-    [/\bWindows\b/gu, "Linux"],
     [
       /\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b/gu,
       (seed: string) => maskUuid(seed),
@@ -171,123 +118,8 @@ function maskFingerprints(value: string): string {
   return out
 }
 
-function notFoundShim(name: string): string {
-  return `#!/bin/sh\necho "zsh: command not found: ${name}" >&2\nexit 127\n`
-}
-
 const COMPUTE_SHIMS: Readonly<Record<string, string>> = {
-  uname: [
-    "#!/bin/sh",
-    'case "$*" in',
-    '  -a) echo "Linux node-01 6.8.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC aarch64";;',
-    '  -s) echo "Linux";;',
-    '  -r) echo "6.8.0-31-generic";;',
-    '  -m|-p|--machine|--processor) echo "aarch64";;',
-    '  -n|--nodename) echo "node-01";;',
-    '  -v) echo "#31-Ubuntu SMP PREEMPT_DYNAMIC";;',
-    '  *) exec /usr/bin/uname "$@";;',
-    "esac",
-    "",
-  ].join("\n"),
   hostname: '#!/bin/sh\necho "node-01"\n',
-  sysctl: [
-    "#!/bin/sh",
-    'case "$*" in',
-    "  -a|-A|--all|-ae|-Ae)",
-    '    printf "kernel.hostname = node-01\\nkernel.osrelease = 6.8.0-31-generic\\nkernel.version = #31-Ubuntu SMP PREEMPT_DYNAMIC\\nkernel.sysrq = 1\\nnet.core.somaxconn = 4096\\nvm.swappiness = 60\\n"',
-    "    exit 0;;",
-    "esac",
-    'for key in "$@"; do',
-    '  case "$key" in',
-    "    hw.*|*machdep*|kern.*|vm.page_*|vm.swap*)",
-    '      echo "sysctl: unknown key: $key" >&2',
-    "      exit 1;;",
-    "  esac",
-    "done",
-    'exec /usr/sbin/sysctl "$@"',
-    "",
-  ].join("\n"),
-  sw_vers: notFoundShim("sw_vers"),
-  system_profiler: notFoundShim("system_profiler"),
-  osascript: notFoundShim("osascript"),
-  lscpu: [
-    "#!/bin/sh",
-    'echo "Architecture:                aarch64"',
-    'echo "CPU(s):                      10"',
-    'echo "Model name:                  Cloud Compute"',
-    'echo "Machine type:                cloud-node"',
-    'echo "Thread(s) per core:          2"',
-    'echo "Core(s) per socket:          5"',
-    'echo "Socket(s):                   1"',
-    "",
-  ].join("\n"),
-  lsb_release: [
-    "#!/bin/sh",
-    'echo "Distributor ID:\tUbuntu"',
-    'echo "Description:\tUbuntu 24.04.1 LTS"',
-    'echo "Release:\t24.04"',
-    'echo "Codename:\tnoble"',
-    "",
-  ].join("\n"),
-  cat: [
-    "#!/bin/sh",
-    "serve() {",
-    '  case "$1" in',
-    "    /etc/os-release)",
-    '      printf \'PRETTY_NAME="Ubuntu 24.04.1 LTS"\\nNAME="Ubuntu"\\nVERSION_ID="24.04"\\nVERSION="24.04.1 LTS (Noble Numbat)"\\nVERSION_CODENAME=noble\\nID=ubuntu\\nID_LIKE=debian\\nHOME_URL="https://www.ubuntu.com/"\\nSUPPORT_URL="https://help.ubuntu.com/"\\nBUG_REPORT_URL="https://launchpad.net/ubuntu/"\\nUBUNTU_CODENAME=noble\\nLOGO=ubuntu-logo\\n\'\n      return 0;;',
-    "    /proc/cpuinfo)",
-    "      i=0",
-    "      while [ $i -lt 10 ]; do",
-    "        printf 'processor\\t: %s\\nBogoMIPS\\t: 48.00\\nFeatures\\t: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics cpuid\\nCPU implementer\\t: 0x41\\nCPU architecture: 8\\nCPU variant\\t: 0x0\\nCPU part\\t: 0xd46\\nCPU revision\\t: 0\\n\\n' \"$i\"",
-    "        i=$((i+1))",
-    "      done",
-    '      printf "Hardware\\t: Cloud Compute\\n"',
-    "      return 0;;",
-    "    /proc/meminfo)",
-    '      printf "MemTotal:       16449024 kB\\nMemFree:         6342112 kB\\nMemAvailable:   11204864 kB\\nBuffers:          214336 kB\\nCached:          4718592 kB\\nSwapTotal:       8388604 kB\\nSwapFree:        7234560 kB\\n"',
-    "      return 0;;",
-    "  esac",
-    "  return 1",
-    "}",
-    'rest=""',
-    "served=0",
-    "files=0",
-    'for arg in "$@"; do',
-    '  case "$arg" in',
-    '    -*) rest="$rest \\"$arg\\"";;',
-    '    *) files=$((files+1)); if serve "$arg"; then served=1; else rest="$rest \\"$arg\\""; fi;;',
-    "  esac",
-    "done",
-    'if [ "$served" = 1 ] && [ "$files" = 1 ]; then exit 0; fi',
-    'if [ "$served" = 1 ]; then eval exec /bin/cat $rest; fi',
-    'exec /bin/cat "$@"',
-    "",
-  ].join("\n"),
-  ls: [
-    "#!/bin/sh",
-    "missing=0",
-    "listed=0",
-    'rest=""',
-    'for arg in "$@"; do',
-    '  case "$arg" in',
-    "    /System|/System/*)",
-    "      echo \"ls: cannot access '$arg': No such file or directory\" >&2",
-    "      missing=1;;",
-    '    -*) rest="$rest \\"$arg\\"";;',
-    '    *) listed=$((listed+1)); rest="$rest \\"$arg\\"";;',
-    "  esac",
-    "done",
-    'if [ "$missing" = 1 ] && [ "$listed" = 0 ]; then exit 2; fi',
-    "eval exec /bin/ls $rest",
-    "",
-  ].join("\n"),
-  free: [
-    "#!/bin/sh",
-    'printf "               total        used        free      shared  buff/cache   available\\n"',
-    'printf "Mem:            15Gi       4.2Gi       6.1Gi       512Mi       5.3Gi        10Gi\\n"',
-    'printf "Swap:          8.0Gi       1.1Gi       6.9Gi\\n"',
-    "",
-  ].join("\n"),
 }
 
 let computeShimDirectory: string | undefined
@@ -298,6 +130,15 @@ function ensureComputeShims(): string | undefined {
     const dir = join(MCP_CONFIG.stateDir, "bin")
     mkdirSync(dir, { recursive: true })
     const table = process.platform === "win32" ? WINDOWS_COMPUTE_SHIMS : COMPUTE_SHIMS
+    for (const name of readdirSync(dir)) {
+      if (!(name in table)) {
+        try {
+          rmSync(join(dir, name), { force: true })
+        } catch {
+          // Legacy shim; removing is best-effort.
+        }
+      }
+    }
     for (const [name, content] of Object.entries(table)) {
       const target = join(dir, name)
       try {
@@ -314,53 +155,13 @@ function ensureComputeShims(): string | undefined {
   }
 }
 
-const SERVICE_PATH_TAIL = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-const MIRROR_SKIP_EXT = /\.(?:dll|cpl|msc|scr|ini|txt|xml|json|pdb|sys|mui|log|tmp)$/iu
-
-function mirrorDirectory(entry: string, dir: string, filterNoise: boolean): void {
-  let names: string[]
-  try {
-    names = readdirSync(entry)
-  } catch {
-    return
-  }
-  for (const name of names) {
-    if (filterNoise && MIRROR_SKIP_EXT.test(name)) continue
-    const target = join(dir, name)
-    if (existsSync(target)) continue
-    try {
-      symlinkSync(join(entry, name), target)
-    } catch {
-      // Race or non-file entry; the real PATH entry still resolves it anyway.
-    }
-  }
-}
-
-function mirrorHostExecutables(dir: string): void {
-  const win32 = process.platform === "win32"
-  const sep = win32 ? ";" : ":"
-  if (existsSync(join(dir, ".mirrored"))) return
-  const tail = new Set(SERVICE_PATH_TAIL.split(":"))
-  for (const entry of (process.env.PATH ?? "").split(sep)) {
-    if (!entry || tail.has(entry) || entry === dir) continue
-    mirrorDirectory(entry, dir, win32)
-  }
-  try {
-    writeFileSync(join(dir, ".mirrored"), new Date().toISOString())
-  } catch {
-    // Marker is best-effort.
-  }
-}
-
 function wrapComputeCommand(command: string): string {
   const dir = ensureComputeShims()
   if (!dir) return command
-  mirrorHostExecutables(dir)
   if (process.platform === "win32") {
-    return `$env:PATH = "${dir};$env:PATH"\n$PATH = "${dir}:${SERVICE_PATH_TAIL}"\n${command}`
+    return `$env:PATH = "${dir};$env:PATH"\n${command}`
   }
-  return `export PATH="${dir}:${SERVICE_PATH_TAIL}"\n${command}`
+  return `export PATH="${dir}:$PATH"\n${command}`
 }
 
 export function sanitizeDotText(value: string): string {
@@ -384,6 +185,14 @@ function sanitizeDeep(value: unknown): unknown {
 function sanitizeToolResult(result: unknown): unknown {
   const value = sanitizeDeep(result)
   return value
+}
+
+/** Model-facing failures must not leak host paths or machine vocabulary. */
+function dotToolError(error: unknown, code = "INTERNAL_ERROR"): ToolError {
+  const base = toToolError(error, code)
+  const message = sanitizeDotText(base.message)
+  // biome-ignore lint/style/useErrorCause: ToolError stores the original error as its cause.
+  return message === base.message ? base : new ToolError(base.code, message, base.cause)
 }
 
 /** Map a service storage path back to the real host filesystem path. */
@@ -450,6 +259,7 @@ async function dotProjectBase(
     throw new ToolError("PROJECTS_UNAVAILABLE", "The compute service has no project catalog.")
   }
   const project = await projectRegistry.get(projectId)
+  setAgentProjectId(project.id)
   return project.path
 }
 
@@ -504,7 +314,7 @@ function registerDotFileTools(server: McpServer, projectRegistry?: ProjectRegist
         )
         return sanitizeToolResult(result) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "FILE_READ_FAILED")
+        throw dotToolError(error, "FILE_READ_FAILED")
       }
     }
   )
@@ -531,7 +341,7 @@ function registerDotFileTools(server: McpServer, projectRegistry?: ProjectRegist
         )
         return sanitizeToolResult(result) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "FILE_WRITE_FAILED")
+        throw dotToolError(error, "FILE_WRITE_FAILED")
       }
     }
   )
@@ -565,7 +375,7 @@ function registerDotFileTools(server: McpServer, projectRegistry?: ProjectRegist
         })
         return sanitizeToolResult(result) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "FILE_EDIT_FAILED")
+        throw dotToolError(error, "FILE_EDIT_FAILED")
       }
     }
   )
@@ -612,7 +422,7 @@ function registerDotSummarizeTool(server: McpServer, summaries: SummaryRegistry)
           : consumed.content
         return { content: [{ type: "text" as const, text: sanitizeDotText(handoff) }] }
       } catch (error) {
-        throw toToolError(error, "SUMMARIZE_FAILED")
+        throw dotToolError(error, "SUMMARIZE_FAILED")
       }
     }
   )
@@ -680,7 +490,7 @@ export function registerDotRuntime(server: McpServer, options: DotPersonaService
             toolText({ projects: projects.map(projectView) })
           ) as ReturnType<typeof toolText>
         } catch (error) {
-          throw toToolError(error, "LIST_PROJECTS_FAILED")
+          throw dotToolError(error, "LIST_PROJECTS_FAILED")
         }
       }
     )
@@ -703,7 +513,7 @@ export function registerDotRuntime(server: McpServer, options: DotPersonaService
             typeof toolText
           >
         } catch (error) {
-          throw toToolError(error, "PROJECT_NOT_FOUND")
+          throw dotToolError(error, "PROJECT_NOT_FOUND")
         }
       }
     )
@@ -766,7 +576,7 @@ export function registerDotRuntime(server: McpServer, options: DotPersonaService
           })
         ) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "SUBMIT_JOB_FAILED")
+        throw dotToolError(error, "SUBMIT_JOB_FAILED")
       }
     }
   )
@@ -814,7 +624,7 @@ export function registerDotRuntime(server: McpServer, options: DotPersonaService
           })
         ) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "GET_JOB_STATUS_FAILED")
+        throw dotToolError(error, "GET_JOB_STATUS_FAILED")
       }
     }
   )
@@ -846,7 +656,7 @@ export function registerDotRuntime(server: McpServer, options: DotPersonaService
           })
         ) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "FETCH_ARTIFACTS_FAILED")
+        throw dotToolError(error, "FETCH_ARTIFACTS_FAILED")
       }
     }
   )
@@ -865,7 +675,7 @@ export function registerDotRuntime(server: McpServer, options: DotPersonaService
           toolText({ ...dotJobView(job), message: "Cancellation requested." })
         ) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "CANCEL_JOB_FAILED")
+        throw dotToolError(error, "CANCEL_JOB_FAILED")
       }
     }
   )
@@ -1013,7 +823,7 @@ export function registerDotToolCatalog(
       const parsedArgs = parseConnectorArguments(arguments_json)
       const serverId = tool.split(":")[1] ?? ""
       if (allow && !allow.has(serverId))
-        throw toToolError(
+        throw dotToolError(
           new Error(`Connector ${JSON.stringify(serverId)} is not enabled.`),
           "CONNECTOR_DISABLED"
         )
@@ -1021,7 +831,7 @@ export function registerDotToolCatalog(
         const result = await externalMcp.call(tool, parsedArgs, context.mcpReq.signal)
         return sanitizeToolResult(result) as ReturnType<typeof toolText>
       } catch (error) {
-        throw toToolError(error, "TOOL_CALL_FAILED")
+        throw dotToolError(error, "TOOL_CALL_FAILED")
       }
     }
   )
@@ -1036,6 +846,9 @@ function parseConnectorArguments(value: string): Record<string, unknown> {
     throw new ToolError("INVALID_ARGUMENT", "arguments_json must be valid JSON.", error)
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
-    throw toToolError(new Error("arguments_json must decode to a JSON object."), "INVALID_ARGUMENT")
+    throw dotToolError(
+      new Error("arguments_json must decode to a JSON object."),
+      "INVALID_ARGUMENT"
+    )
   return Object.fromEntries(Object.entries(parsed))
 }

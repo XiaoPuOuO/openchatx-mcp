@@ -151,7 +151,8 @@ export function App() {
     }
   }
 
-  const activeCount = agents.filter((agent) => now - agent.lastSeenAt < 30_000).length
+  const chatAgents = useMemo(() => agents.filter((agent) => !agent.dot), [agents])
+  const activeCount = chatAgents.filter((agent) => now - agent.lastSeenAt < 30_000).length
   const titleKey = NAV_ITEMS.find((item) => item.id === view)?.labelKey
   const title = titleKey ? t(titleKey) : "OpenChatX"
 
@@ -173,7 +174,14 @@ export function App() {
       case "status":
         return <StatusPage onBack={back} />
       case "dot":
-        return <DotPage agents={agents} now={now} onBack={back} />
+        return (
+          <DotPage
+            agents={agents}
+            now={now}
+            onBack={back}
+            onRemoveAgent={removeAgent}
+          />
+        )
       case "control":
         return <ControlCenter onBack={back} />
       case "settings":
@@ -181,7 +189,7 @@ export function App() {
       default:
         return (
           <Dashboard
-            agents={agents}
+            agents={chatAgents}
             activeCount={activeCount}
             connected={connected}
             loading={loading}
@@ -196,7 +204,7 @@ export function App() {
           />
         )
     }
-  }, [view, agents, activeCount, connected, loading, error, now, removeAgent, t])
+  }, [view, agents, chatAgents, activeCount, connected, loading, error, now, removeAgent, t])
 
   return (
     <div className="app-shell">
@@ -242,7 +250,7 @@ export function App() {
                 {connected ? t("sidebar.connected") : t("dashboard.reconnecting")}
               </div>
               <div className="text-[11px] text-muted-foreground">
-                {t("sidebar.sessionsSummary", { active: activeCount, total: agents.length })}
+                {t("sidebar.sessionsSummary", { active: activeCount, total: chatAgents.length })}
               </div>
             </div>
           </div>

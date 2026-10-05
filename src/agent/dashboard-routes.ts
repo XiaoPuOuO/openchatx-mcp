@@ -627,11 +627,21 @@ function registerAgentRoutes(
   router.get("/api/agents", (_req, res) => {
     const agents = agentObserver.listAgents().map((agent) => {
       const sessionId = agentObserver.sessionIdForAgent(agent.id)
+      const usage = sessionId
+        ? contextBudget?.usage({ sessionId, agent: agent.id })
+        : undefined
       if (sessionId && contextBudget?.isDotSession(sessionId)) {
         agentObserver.setDot(agent.id, true)
-        return { ...agent, dot: true }
+        return {
+          ...agent,
+          ...(usage ? { contextBudget: usage } : {}),
+          dot: true,
+        }
       }
-      return agent
+      return {
+        ...agent,
+        ...(usage ? { contextBudget: usage } : {}),
+      }
     })
     res.json({ agents })
   })

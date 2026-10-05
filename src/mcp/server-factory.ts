@@ -177,6 +177,7 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
   })
   installToolRegistrationBoundary(server, {
     structuredOutput: profile.toolOutput === "structured",
+    surface: "chat",
     agentObserver: options.agentObserver,
     auditRequest: options.auditRequest,
     contextBudget: options.contextBudget,
@@ -213,12 +214,14 @@ function createDotMcpServer(
     { ...profile.server, name: "open-dotx-cloud" },
     { instructions: buildDotInstructions() }
   )
+  // Dot is a separate product surface. Chat-only context budget checkpoints and
+  // synthetic progress instructions must never be injected into Dot responses.
   installToolRegistrationBoundary(server, {
     structuredOutput: profile.toolOutput === "structured",
+    surface: "dot",
     agentObserver: options.agentObserver,
     auditRequest: options.auditRequest,
     contextBudget: options.contextBudget,
-    progressHeartbeat: options.progressHeartbeat,
     runtimeControl: options.runtimeControl,
   })
   installDotRegistrationFilter(server, dotServerIds)

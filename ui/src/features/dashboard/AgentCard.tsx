@@ -14,10 +14,12 @@ export function AgentCard({
   agent,
   now,
   onDelete,
+  showContextLimit = true,
 }: {
   agent: Agent
   now: number
   onDelete: () => Promise<void>
+  showContextLimit?: boolean
 }) {
   const { t, locale } = useI18n()
   const [selectedCallId, setSelectedCallId] = useState<string>()
@@ -82,8 +84,13 @@ export function AgentCard({
               >
                 <CircleGauge className="size-3.5" />
                 <span>
-                  {formatContextTokens(agent.contextBudget.tokens)} /{" "}
-                  {formatContextTokens(agent.contextBudget.threshold)}
+                  {formatContextTokens(agent.contextBudget.tokens)}
+                  {showContextLimit ? (
+                    <>
+                      {" / "}
+                      {formatContextTokens(agent.contextBudget.threshold)}
+                    </>
+                  ) : null}
                 </span>
                 <span className="text-muted-foreground/80">
                   input={formatContextTokens(agent.contextBudget.inputTokens)} output=
