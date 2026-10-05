@@ -83,7 +83,12 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
     }
     setServers((current) => ({
       ...current,
-      [id]: { type: "remote", url: "http://127.0.0.1:8000/mcp", enabled: true },
+      [id]: {
+        type: "remote",
+        url: "http://127.0.0.1:8000/mcp",
+        enabled: true,
+        dot: false,
+      },
     }))
     setSelectedId(id)
     setMessage(undefined)
@@ -313,12 +318,14 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                               type: "local",
                               command: [""],
                               enabled: selected.enabled,
+                              dot: selected.dot,
                             })
                           } else {
                             updateSelected({
                               type: "remote",
                               url: "http://127.0.0.1:8000/mcp",
                               enabled: selected.enabled,
+                              dot: selected.dot,
                             })
                           }
                         }}
@@ -341,6 +348,21 @@ export function McpServerManager({ onBack }: { onBack: () => void }) {
                         updateSelected({ ...selected, enabled: event.target.checked })
                       }
                       className="size-4"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between rounded-lg border px-4 py-3">
+                    <div className="pr-4">
+                      <p className="text-sm font-medium">{t("mcp.dotExposure")}</p>
+                      <p className="text-xs text-muted-foreground">{t("mcp.dotExposureHint")}</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={selected.dot}
+                      onChange={(event) =>
+                        updateSelected({ ...selected, dot: event.target.checked })
+                      }
+                      className="size-4 shrink-0"
                     />
                   </label>
 

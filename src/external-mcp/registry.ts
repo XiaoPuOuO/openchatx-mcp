@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises"
 import {
   Client,
   fromJsonSchema,
+  type Resource,
   StreamableHTTPClientTransport,
   type Tool,
 } from "@modelcontextprotocol/client"
@@ -26,6 +27,12 @@ interface ExternalConnection {
   config: ExternalMcpServerConfig
   client: Client
   tools: Tool[]
+  resources: Resource[]
+}
+
+export interface ExternalMcpResourceOptions {
+  allowServers?: readonly string[]
+  transformText?: (value: string) => string
 }
 
 export interface ExternalMcpCatalogTool {
@@ -50,6 +57,7 @@ export interface ExternalMcpRegistry {
   readonly toolCount: number
   capabilities(): ExternalMcpCapability[]
   registerTools(server: McpServer): void
+  registerResources(server: McpServer, options?: ExternalMcpResourceOptions): void
   catalog(): ExternalMcpCatalogTool[]
   call(id: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>
   reload(force?: boolean): Promise<void>
@@ -190,6 +198,14 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
         Reflect.apply(server.registerTool, server, [publicName, toolConfig, callback])
       }
     },
+    registerResources(server, options = {}) {
+      const allow = options.allowServers?.length ? new Set(options.allowServers) : undefined
+      for (const connection of connections) {
+        if (allow && !allow.has(connection.id)) continue
+        for (const resource of connection.resources)
+          registerExternalResource(server, connection, resource, options.transformText)
+      }
+    },
     catalog() {
       return registrations.map(({ connection, tool, publicName }) => ({
         id: `mcp:${connection.id}:${tool.name}`,
@@ -206,7 +222,12 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
         ({ connection, tool }) => connection.id === parsed.server && tool.name === parsed.tool
       )
       if (!registration) throw new Error(`Unknown external MCP tool ${JSON.stringify(id)}.`)
-      return supervisor.call(parsed.server, registration.tool.name, args, signal)
+      return supervisor.call(
+        parsed.server,
+        registration.tool.name,
+        normalizeExternalToolArguments(parsed.tool, args),
+        signal
+      )
     },
     reload: reloadRegistry,
     async close() {
@@ -471,6 +492,53 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
   }
 }
 
+function registerExternalResource(
+  server: McpServer,
+  connection: ExternalConnection,
+  resource: Resource,
+  transform: ((value: string) => string) | undefined
+): void {
+  const publicName = `${sanitizeToolName(connection.id)}__res__${sanitizeToolName(resource.name)}`
+  const read = async (uri: URL, context: ServerContext) => {
+    const result = await connection.client.readResource(
+      { uri: uri.href },
+      { signal: context.mcpReq.signal }
+    )
+    return {
+      contents: result.contents.map((item) =>
+        transform && "text" in item && typeof item.text === "string"
+          ? { ...item, text: transform(item.text) }
+          : item
+      ),
+    }
+  }
+  try {
+    server.registerResource(
+      publicName,
+      resource.uri,
+      {
+        ...(resource.title ? { title: applyText(transform, resource.title) } : {}),
+        ...(resource.description
+          ? { description: applyText(transform, resource.description) }
+          : {}),
+        ...(resource.mimeType ? { mimeType: resource.mimeType } : {}),
+        _meta: {
+          ...(resource._meta ?? {}),
+          "shellby/externalMcp": true,
+          "shellby/externalServer": connection.id,
+        },
+      },
+      read
+    )
+  } catch {
+    // Duplicate resource name or uri: keep the first registration.
+  }
+}
+
+function applyText(transform: ((value: string) => string) | undefined, value: string): string {
+  return transform ? transform(value) : value
+}
+
 function buildRegistrations(connections: readonly ExternalConnection[]) {
   const publicNames = new Set<string>()
   return connections.flatMap((connection) =>
@@ -494,6 +562,17 @@ function parseExternalToolId(id: string): { server: string; tool: string } {
     throw new Error(`Invalid external MCP tool id ${JSON.stringify(id)}.`)
   const separator = id.indexOf(":", 4)
   return { server: id.slice(4, separator), tool: id.slice(separator + 1) }
+}
+
+export function normalizeExternalToolArguments(
+  toolName: string,
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  if (toolName !== "call_tool") return args
+  const toolset = typeof args.toolset_name === "string" ? args.toolset_name.trim() : ""
+  const tool = typeof args.tool_name === "string" ? args.tool_name.trim() : ""
+  if (!toolset || !tool.startsWith(`${toolset}.`)) return args
+  return { ...args, tool_name: tool.slice(toolset.length + 1) }
 }
 
 async function connectServer(
@@ -530,8 +609,17 @@ async function connectServer(
     const { tools } = await client.listTools(undefined, {
       timeout: DEFAULT_CONNECT_TIMEOUT_MS,
     })
-    console.log(`External MCP ${id}: connected (${tools.length} tools)`)
-    return { id, config, client, tools }
+    let resources: Resource[] = []
+    try {
+      resources = (await client.listResources(undefined, { timeout: DEFAULT_CONNECT_TIMEOUT_MS }))
+        .resources
+    } catch {
+      resources = []
+    }
+    console.log(
+      `External MCP ${id}: connected (${tools.length} tools, ${resources.length} resources)`
+    )
+    return { id, config, client, tools, resources }
   } catch (error) {
     await client.close().catch(() => undefined)
     const message = error instanceof Error ? error.message : String(error)

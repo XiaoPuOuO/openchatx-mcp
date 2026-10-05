@@ -63,6 +63,8 @@ export interface McpHttpServices {
   projectWorkspaces?: ProjectWorkspaceService
   recentWork?: RecentWorkService
   jobManager?: JobManager
+  /** When "dot", every arriving session is flagged as a Dot (cloud) surface. */
+  persona?: "chat" | "dot"
 }
 
 export interface McpHttpProfileOverrides {
@@ -99,6 +101,7 @@ export async function startMcpHttpServer(
     projectWorkspaces,
     recentWork,
     jobManager,
+    persona,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -148,6 +151,7 @@ export async function startMcpHttpServer(
 
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
+    if (persona === "dot" && sessionId) void contextBudget?.setDotSession(sessionId, true)
     await runWithAgent(sessionId, async () => {
       const auditRequest = auditLogger?.startRequest(req.body)
       let auditFinished = false
@@ -164,6 +168,7 @@ export async function startMcpHttpServer(
   }
 
   app.all(MCP_ROUTE, async (req: Request, res: Response) => {
+    await normalizeMcpPostHeaders(req)
     if (
       req.method === "POST" &&
       authStore &&
@@ -219,9 +224,51 @@ function containsToolCall(payload: unknown): boolean {
   })
 }
 
-function requestSessionId(req: Request): string | undefined {
-  const value = req.get("x-openai-session")?.trim()
+export function requestSessionId(req: Request): string | undefined {
+  const value =
+    req.get("x-openai-session")?.trim() ||
+    req.get("mcp-session-id")?.trim() ||
+    req.get("x-openai-conversation-id")?.trim() ||
+    req.get("x-openai-session-id")?.trim()
   return value || undefined
+}
+
+const MCP_BODY_LIMIT_BYTES = 10 * 1024 * 1024
+
+async function normalizeMcpPostHeaders(req: Request): Promise<void> {
+  if (req.method !== "POST") return
+
+  const contentType = req.headers["content-type"] ?? ""
+  if (!contentType.toLowerCase().includes("application/json")) {
+    req.headers["content-type"] = "application/json"
+    if (!isParsedJsonBody(req.body)) req.body = await readJsonBody(req)
+  }
+
+  const accept = (req.headers["accept"] ?? "").toLowerCase()
+  if (!accept.includes("application/json") && !accept.includes("text/event-stream"))
+    req.headers["accept"] = "application/json, text/event-stream"
+}
+
+function isParsedJsonBody(body: unknown): boolean {
+  return typeof body === "object" && body !== null && Object.keys(body).length > 0
+}
+
+async function readJsonBody(req: Request): Promise<unknown> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req) {
+    const piece = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string)
+    size += piece.length
+    if (size > MCP_BODY_LIMIT_BYTES) break
+    chunks.push(piece)
+  }
+  const text = Buffer.concat(chunks).toString("utf8").trim()
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 
 function reportMcpError(error: Error): void {

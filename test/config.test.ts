@@ -45,6 +45,13 @@ test("loads and validates OpenChatX TOML config", async (t) => {
     port: 8001,
     shell: { path: "/bin/zsh", rtk: false },
     tunnel: { profile: "personal", health_port: 8181 },
+    dot: {
+      enabled: false,
+      port: 8002,
+      health_port: 8081,
+      profile: "openchatx-dot",
+      external_servers: [],
+    },
     context: { warning_threshold: 400_000 },
     mcp: { tool_output: "structured" },
     tools: {

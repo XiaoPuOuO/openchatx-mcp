@@ -63,6 +63,13 @@ export interface RuntimeSettings {
   context: {
     warning_threshold: number
   }
+  dot: {
+    enabled: boolean
+    port: number
+    health_port: number
+    profile: string
+    external_servers: string[]
+  }
 }
 
 export interface DurableJobDetail {
@@ -258,6 +265,7 @@ export interface PlatformOverview {
 
 interface McpServerBase {
   enabled: boolean
+  dot: boolean
   description?: string
   timeout?: number
 }

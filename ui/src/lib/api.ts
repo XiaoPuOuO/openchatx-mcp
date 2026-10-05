@@ -45,6 +45,13 @@ export async function fetchRuntimeSettings(): Promise<RuntimeSettings> {
       shell: { path: "/bin/zsh", rtk: false },
       tunnel: { profile: "openchatx", health_port: 8080 },
       context: { warning_threshold: 400_000 },
+      dot: {
+        enabled: false,
+        port: 8002,
+        health_port: 8081,
+        profile: "openchatx-dot",
+        external_servers: [],
+      },
     }
   }
   const response = await fetch("/ui/api/settings")
@@ -89,19 +96,6 @@ export async function deleteAgent(agentId: string): Promise<void> {
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
     throw new Error(body?.error ?? `Failed to delete agent (${response.status})`)
-  }
-}
-
-export async function setAgentDot(agentId: string, dot: boolean): Promise<void> {
-  if (MOCK_DASHBOARD) return
-  const response = await fetch(`/ui/api/agents/${encodeURIComponent(agentId)}/dot`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dot }),
-  })
-  if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
-    throw new Error(body?.error ?? `Failed to update Dot session (${response.status})`)
   }
 }
 

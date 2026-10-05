@@ -2,6 +2,7 @@ import {
   Activity,
   Blocks,
   BrainCircuit,
+  Cloud,
   ExternalLink,
   FileText,
   FolderKanban,
@@ -17,6 +18,7 @@ import { useEffect, useMemo, useState } from "react"
 import { LanguageSwitcher } from "./components/LanguageSwitcher"
 import { PageHeader } from "./components/PageHeader"
 import { Button } from "./components/ui/button"
+import { DotPage } from "./features/dot/DotPage"
 import { ControlCenter } from "./features/control/ControlCenter"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
@@ -53,6 +55,7 @@ type View =
   | "toolboxes"
   | "mcp-servers"
   | "status"
+  | "dot"
   | "control"
   | "settings"
 
@@ -66,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", labelKey: "nav.overview", icon: Gauge },
   { id: "projects", labelKey: "nav.projects", icon: FolderKanban },
   { id: "summaries", labelKey: "nav.summaries", icon: FileText },
+  { id: "dot", labelKey: "nav.dot", icon: Cloud },
   { id: "store", labelKey: "nav.store", icon: PackageOpen },
   { id: "subagents", labelKey: "nav.subagents", icon: BrainCircuit },
   { id: "toolboxes", labelKey: "nav.toolboxes", icon: Blocks },
@@ -76,12 +80,14 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
-  ["dashboard", "projects", "summaries"].includes(item.id)
+  ["dashboard", "projects", "summaries", "dot"].includes(item.id)
 )
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
 )
-const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "control", "settings"].includes(item.id))
+const SYSTEM_NAV = NAV_ITEMS.filter((item) =>
+  ["status", "control", "settings"].includes(item.id)
+)
 
 export function App() {
   const [view, setView] = useState<View>("dashboard")
@@ -166,6 +172,8 @@ export function App() {
         return <McpServerManager onBack={back} />
       case "status":
         return <StatusPage onBack={back} />
+      case "dot":
+        return <DotPage agents={agents} now={now} onBack={back} />
       case "control":
         return <ControlCenter onBack={back} />
       case "settings":

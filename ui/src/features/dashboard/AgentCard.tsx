@@ -1,19 +1,11 @@
-import {
-  Check,
-  CircleGauge,
-  LoaderCircle,
-  Orbit,
-  Square,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react"
+import { Check, CircleGauge, LoaderCircle, Square, Trash2, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
-import { setAgentDot, stopAgentCall } from "../../lib/api"
+import { stopAgentCall } from "../../lib/api"
 import type { Agent, AgentCall } from "../../types"
 import { SteerComposer } from "./SteerComposer"
 import { ToolCallModal } from "./ToolCallModal"
@@ -33,8 +25,6 @@ export function AgentCard({
   const [deleteError, setDeleteError] = useState<string>()
   const [stoppingCallId, setStoppingCallId] = useState<string>()
   const [stopError, setStopError] = useState<string>()
-  const [dotUpdating, setDotUpdating] = useState(false)
-  const [dotError, setDotError] = useState<string>()
   const active = now - agent.lastSeenAt < 30_000
   const recent = [agent.current, ...agent.recent].filter((call): call is AgentCall => Boolean(call))
   const selectedCall = recent.find((call) => call.id === selectedCallId)
@@ -48,18 +38,6 @@ export function AgentCard({
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : String(error))
       setDeleting(false)
-    }
-  }
-
-  async function toggleDot() {
-    setDotUpdating(true)
-    setDotError(undefined)
-    try {
-      await setAgentDot(agent.id, !agent.dot)
-    } catch (error) {
-      setDotError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setDotUpdating(false)
     }
   }
 
@@ -85,7 +63,6 @@ export function AgentCard({
               <span className={active ? "session-state session-state-active" : "session-state"}>
                 {active ? t("agent.active") : t("agent.inactive")}
               </span>
-              {agent.dot ? <Badge>Dot</Badge> : null}
             </div>
             <p className="mt-1 truncate text-[12px] text-muted-foreground">
               {agent.taskSlug ?? t("agent.noTask")}
@@ -101,12 +78,12 @@ export function AgentCard({
             {agent.contextBudget ? (
               <div
                 className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"
-                title={agent.dot ? "OpenChatX usage" : "OpenChatX context budget"}
+                title="OpenChatX context budget"
               >
                 <CircleGauge className="size-3.5" />
                 <span>
-                  {formatContextTokens(agent.contextBudget.tokens)}
-                  {agent.dot ? null : ` / ${formatContextTokens(agent.contextBudget.threshold)}`}
+                  {formatContextTokens(agent.contextBudget.tokens)} /{" "}
+                  {formatContextTokens(agent.contextBudget.threshold)}
                 </span>
                 <span className="text-muted-foreground/80">
                   input={formatContextTokens(agent.contextBudget.inputTokens)} output=
@@ -116,22 +93,6 @@ export function AgentCard({
             ) : null}
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant={agent.dot ? "outline" : "ghost"}
-              size="sm"
-              disabled={dotUpdating}
-              aria-label={agent.dot ? "取消 Dot" : "標記為 Dot"}
-              title={agent.dot ? "取消 Dot" : "標記為 Dot"}
-              onClick={() => void toggleDot()}
-            >
-              {dotUpdating ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
-              ) : (
-                <Orbit className="size-3.5" />
-              )}
-              <span>Dot</span>
-            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -150,7 +111,6 @@ export function AgentCard({
             </Button>
           </div>
         </div>
-        {dotError ? <p className="mt-2 text-xs text-destructive">{dotError}</p> : null}
       </CardHeader>
 
       <CardContent className="space-y-3 pt-3">
@@ -167,6 +127,7 @@ export function AgentCard({
                 onStop={call.status === "running" ? () => void stopCall(call) : undefined}
                 stopping={stoppingCallId === call.id}
                 locale={locale}
+                now={now}
               />
             ))}
           </div>
@@ -187,12 +148,14 @@ function ActivityRow({
   onStop,
   stopping,
   locale,
+  now,
 }: {
   call: AgentCall
   onClick: () => void
   onStop?: () => void
   stopping?: boolean
   locale: string
+  now: number
 }) {
   const { t } = useI18n()
   const running = call.status === "running"
@@ -225,6 +188,12 @@ function ActivityRow({
           className={`min-w-0 flex-1 truncate ${failed ? "text-destructive" : "text-muted-foreground"}`}
         >
           {call.summary || fallbackSummary}
+        </span>
+        <span
+          className="w-14 shrink-0 text-right tabular-nums text-muted-foreground"
+          title={t("agent.duration")}
+        >
+          {formatDuration(Math.max(0, (call.finishedAt ?? now) - call.startedAt))}
         </span>
         <span
           className={
@@ -270,6 +239,22 @@ function formatContextTokens(tokens: number): string {
   }
   const thousands = tokens / 1_000
   return `${thousands >= 100 ? Math.round(thousands) : thousands.toFixed(1).replace(/\.0$/u, "")}k`
+}
+
+function formatDuration(milliseconds: number): string {
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`
+  if (milliseconds < 60_000) {
+    const seconds = milliseconds / 1_000
+    return `${seconds < 10 ? seconds.toFixed(1).replace(/\.0$/u, "") : Math.round(seconds)}s`
+  }
+  if (milliseconds < 3_600_000) {
+    const minutes = Math.floor(milliseconds / 60_000)
+    const seconds = Math.floor((milliseconds % 60_000) / 1_000)
+    return `${minutes}m ${seconds}s`
+  }
+  const hours = Math.floor(milliseconds / 3_600_000)
+  const minutes = Math.floor((milliseconds % 3_600_000) / 60_000)
+  return `${hours}h ${minutes}m`
 }
 
 function formatClock(timestamp: number, locale: string): string {
