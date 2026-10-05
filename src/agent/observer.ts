@@ -69,7 +69,12 @@ export interface AgentObserver {
   deleteAgent(agentId: string): boolean
   sessionIdForAgent(agentId: string): string | undefined
   setDot(agentId: string, dot: boolean): boolean
-  startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
+  startTool(
+    agent: AgentIdentity | undefined,
+    tool: string,
+    input: unknown,
+    dot?: boolean
+  ): string | undefined
   registerToolStop(
     agent: AgentIdentity | undefined,
     callId: string | undefined,
@@ -163,11 +168,13 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   function startTool(
     identity: AgentIdentity | undefined,
     tool: string,
-    input: unknown
+    input: unknown,
+    dot?: boolean
   ): string | undefined {
     if (!identity) return undefined
     const agent = ensureAgent(identity)
     if (!agent) return undefined
+    if (dot) agent.dot = true
     agentActivityNotifier.activityStarted(identity.sessionId)
     const timestamp = now()
     const presentation = presentToolCall(tool, input)

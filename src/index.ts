@@ -2,7 +2,6 @@ import { join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { createAgentObserver } from "./agent/observer.js"
-import { OpenChatXAuthStore } from "./auth/store.js"
 import { CapabilityRegistry } from "./capabilities/catalog.js"
 import { CapabilityHealthService } from "./capabilities/health.js"
 import { MCP_CONFIG } from "./config.js"
@@ -61,9 +60,6 @@ await synchronizeAgentInstructions(
   await readBundledAgentTemplate(),
   await readMigrationBundledAgentTemplate()
 )
-const authPath = join(MCP_CONFIG.stateDir, "auth.json")
-const authStore = new OpenChatXAuthStore(authPath)
-await authStore.ensureState()
 const webPageOpener = new WebPageOpener()
 const operationalState = await loadOperationalState()
 const safeModeMcpConfig = join(MCP_CONFIG.stateDir, "safe-mode", "mcp-servers.json")
@@ -185,7 +181,9 @@ try {
       runtimeControl,
     }),
     auditLogger,
-    authStore,
+    // No authStore: the private Secure MCP Tunnel is the credential on every
+    // surface. OpenAI issues different subjects per client app, so subject
+    // binding was fragile; tunnel topology replaced it.
     agentObserver,
     toolboxRegistry,
     subagentRuntime,
@@ -212,7 +210,7 @@ try {
 await systemRecovery.recordHealthyStartup().catch(() => undefined)
 console.log(`Local shell MCP server: ${running.url}`)
 console.log(`Agent dashboard: http://${running.host}:${running.port}/ui`)
-console.log("Remote MCP authentication: trusted ChatGPT origin + bound OpenAI subject")
+console.log("Remote MCP authentication: private Secure MCP Tunnel topology (per-surface)")
 console.log(`Default cwd: ${MCP_CONFIG.defaultCwd}`)
 console.log(`Agent instructions: ${MCP_CONFIG.agentInstructionsFile}`)
 console.log(`Shell tools: bash + terminal (${MCP_CONFIG.shell.path})`)
@@ -222,6 +220,38 @@ console.log(
 )
 console.log(`Toolboxes: ${toolboxRegistry.snapshots().length} loaded`)
 
+let dotRunning: Awaited<ReturnType<typeof startMcpHttpServer>> | undefined
+if (MCP_CONFIG.dot.enabled) {
+  try {
+    dotRunning = await startMcpHttpServer(
+      {
+        persona: "dot",
+        createMcpServer: createMcpServerFactory({
+          externalMcp,
+          jobManager,
+          contextBudget,
+          runtimeControl,
+          projectRegistry,
+          summaryRegistry,
+          persona: "dot",
+        }),
+        auditLogger,
+        // No authStore: same tunnel-topology credential as the Chat surface.
+        externalMcp,
+        contextBudget,
+        jobManager,
+        agentObserver,
+      },
+      { port: MCP_CONFIG.dot.port, instanceId: `${MCP_CONFIG.instanceId}-dot` }
+    )
+    console.log(`Dot persona MCP server: ${dotRunning.url}`)
+  } catch (error) {
+    console.warn(
+      `Dot persona listener failed to start: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+}
+
 let shuttingDown = false
 const shutdown = async (signal: string) => {
   if (shuttingDown) return
@@ -229,6 +259,7 @@ const shutdown = async (signal: string) => {
   console.log(`Received ${signal}; shutting down.`)
   try {
     await running.close()
+    if (dotRunning) await dotRunning.close()
   } finally {
     await closeRuntimeServices()
   }

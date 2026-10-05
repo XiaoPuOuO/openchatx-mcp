@@ -17,6 +17,7 @@ test("Capability Composer persists workflows and passes prior results through te
         toolCount: 0,
         capabilities: () => [],
         registerTools() {},
+        registerResources() {},
         catalog: () => [],
         async call(id, args) {
           calls.push({ id, args })

@@ -412,6 +412,62 @@ function GeneralSettingsPage({
           </Field>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="text-sm font-semibold">{t("settings.dot.title")}</div>
+          <div className="text-xs text-muted-foreground">{t("settings.dot.subtitle")}</div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="flex items-center justify-between rounded-lg border px-4 py-3">
+            <div>
+              <div className="text-sm font-medium">{t("settings.dot.enabled")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.restartHint")}</div>
+            </div>
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={settings.dot.enabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  dot: { ...settings.dot, enabled: event.target.checked },
+                })
+              }
+            />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t("settings.dot.port")} hint={t("settings.restartHint")}>
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                step={1}
+                className={INPUT_CLASS}
+                value={settings.dot.port}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    dot: { ...settings.dot, port: Number(event.target.value) },
+                  })
+                }
+              />
+            </Field>
+            <Field label={t("settings.dot.profile")} hint={t("settings.dot.profileHint")}>
+              <input
+                className={INPUT_CLASS}
+                value={settings.dot.profile}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    dot: { ...settings.dot, profile: event.target.value },
+                  })
+                }
+              />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
     </>
   )
 }

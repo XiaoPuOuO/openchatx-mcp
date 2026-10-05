@@ -23,6 +23,13 @@ const publicConfigSchema = z.object({
     profile: z.string().trim().min(1).default("openchatx"),
     health_port: z.number().int().min(1).max(65535).default(8080),
   }),
+  dot: z.object({
+    enabled: z.boolean().default(false),
+    port: z.number().int().min(1).max(65535).default(8002),
+    health_port: z.number().int().min(1).max(65535).default(8081),
+    profile: z.string().trim().min(1).default("openchatx-dot"),
+    external_servers: z.array(z.string().trim().min(1)).default([]),
+  }),
   context: z.object({
     warning_threshold: z.number().int().positive().default(400_000),
   }),

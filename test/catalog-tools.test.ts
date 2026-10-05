@@ -57,6 +57,7 @@ export default {
       },
     ],
     registerTools() {},
+    registerResources() {},
     catalog: () => [
       {
         id: "mcp:blender:get_scene",

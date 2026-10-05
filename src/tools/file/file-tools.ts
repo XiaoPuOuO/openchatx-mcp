@@ -99,7 +99,12 @@ export function registerFileReadTool(server: McpServer, projectScope?: ProjectSc
   )
 }
 
-async function readLocalPath(filePath: string, offset: number, limit: number, signal: AbortSignal) {
+export async function readLocalPath(
+  filePath: string,
+  offset: number,
+  limit: number,
+  signal: AbortSignal
+) {
   const info = await stat(filePath)
   if (info.isDirectory()) return readDirectory(filePath, offset, limit)
 
@@ -237,33 +242,37 @@ export function registerFileWriteTool(server: McpServer, projectScope?: ProjectS
     async ({ filePath: inputPath, content, project_id }, ctx) => {
       try {
         const filePath = await resolveLocalPath(inputPath, "write", projectScope, project_id)
-        return await withFileEditLock(filePath, async () => {
-          let before = ""
-          let created = false
-          try {
-            const info = await stat(filePath)
-            if (info.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
-            before = await readFile(filePath, { encoding: "utf8", signal: ctx.mcpReq.signal })
-          } catch (error) {
-            if (!isFsError(error, "ENOENT")) throw error
-            created = true
-          }
-          const parentDirectory = dirname(filePath)
-          if (parentDirectory !== parse(parentDirectory).root) {
-            await mkdir(parentDirectory, { recursive: true })
-          }
-          await writeFile(filePath, content, { encoding: "utf8", signal: ctx.mcpReq.signal })
-          const diff = createCompactDiff(before, content)
-          return {
-            structuredContent: { path: filePath, diff, created },
-            content: [{ type: "text" as const, text: `File written successfully.\n\n${diff}` }],
-          }
-        })
+        return await writeLocalFile(filePath, content, ctx.mcpReq.signal)
       } catch (error) {
         throw toToolError(error, "FILE_WRITE_FAILED")
       }
     }
   )
+}
+
+export async function writeLocalFile(filePath: string, content: string, signal: AbortSignal) {
+  return withFileEditLock(filePath, async () => {
+    let before = ""
+    let created = false
+    try {
+      const info = await stat(filePath)
+      if (info.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+      before = await readFile(filePath, { encoding: "utf8", signal })
+    } catch (error) {
+      if (!isFsError(error, "ENOENT")) throw error
+      created = true
+    }
+    const parentDirectory = dirname(filePath)
+    if (parentDirectory !== parse(parentDirectory).root) {
+      await mkdir(parentDirectory, { recursive: true })
+    }
+    await writeFile(filePath, content, { encoding: "utf8", signal })
+    const diff = createCompactDiff(before, content)
+    return {
+      structuredContent: { path: filePath, diff, created },
+      content: [{ type: "text" as const, text: `File written successfully.\n\n${diff}` }],
+    }
+  })
 }
 
 export function registerFileEditTool(server: McpServer, projectScope?: ProjectScope): void {
@@ -326,7 +335,7 @@ export function registerFileEditTool(server: McpServer, projectScope?: ProjectSc
   )
 }
 
-async function editLocalFile(input: {
+export async function editLocalFile(input: {
   filePath: string
   oldString: string
   newString: string

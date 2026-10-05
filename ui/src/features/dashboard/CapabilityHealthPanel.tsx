@@ -105,6 +105,7 @@ function localizeHealthDetail(
 const COMPONENT_NAME_KEYS: Record<string, string> = {
   "OpenChatX Runtime": "status.component.runtime",
   "OpenAI Secure MCP Tunnel": "status.component.tunnel",
+  "OpenChatX Cloud (Dot)": "status.component.dot",
   Files: "status.component.files",
   "Durable Jobs": "status.component.durableJobs",
   "MCP Manager": "status.component.mcpManager",
