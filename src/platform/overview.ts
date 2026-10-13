@@ -38,11 +38,9 @@ export interface PlatformOverview {
   }>
   needsAttention: Array<{
     id: string
-    source: "health" | "job"
+    source: "health"
     label: string
     detail: string
-    exitCode?: number
-    timedOut?: boolean
   }>
 }
 
@@ -89,7 +87,7 @@ export class PlatformOverviewService {
         detail: component.detail ?? component.status,
       })
     }
-    needsAttention.push(...failedJobAttention(jobs))
+    // Command and job failures belong to execution history, not platform health.
 
     return {
       counts: {
@@ -128,21 +126,4 @@ export class PlatformOverviewService {
       needsAttention: needsAttention.slice(0, 12),
     }
   }
-}
-
-function failedJobAttention(
-  jobs: Awaited<ReturnType<JobManager["list"]>>
-): PlatformOverview["needsAttention"] {
-  return jobs
-    .filter((job) => job.status === "failed")
-    .map((job) => ({
-      id: job.id,
-      source: "job" as const,
-      label: job.label,
-      detail: job.timedOut
-        ? `Job timed out in ${job.cwd}`
-        : `Job failed with exit code ${job.exitCode ?? "unknown"} in ${job.cwd}`,
-      ...(job.exitCode !== undefined ? { exitCode: job.exitCode } : {}),
-      ...(job.timedOut ? { timedOut: true } : {}),
-    }))
 }

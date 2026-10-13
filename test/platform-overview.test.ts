@@ -34,6 +34,22 @@ test("platform overview aggregates counts, current work, and attention", async (
           exitCode: 7,
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
+        {
+          id: "timed-out",
+          label: "Build timeout",
+          status: "failed",
+          cwd: "/tmp/demo",
+          timedOut: true,
+          exitCode: -1,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "interrupted",
+          label: "Interrupted build",
+          status: "interrupted",
+          cwd: "/tmp/demo",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
       ],
     } as never,
     health: {
@@ -83,11 +99,6 @@ test("platform overview aggregates counts, current work, and attention", async (
   assert.equal(snapshot.currentWork[0]?.projectId, "demo")
   assert.deepEqual(
     snapshot.needsAttention.map((item) => item.id).sort((a, b) => a.localeCompare(b)),
-    ["failed", "mcp:blender"]
-  )
-  assert.equal(snapshot.needsAttention.find((item) => item.id === "failed")?.exitCode, 7)
-  assert.match(
-    snapshot.needsAttention.find((item) => item.id === "failed")?.detail ?? "",
-    /exit code 7/u
+    ["mcp:blender"]
   )
 })

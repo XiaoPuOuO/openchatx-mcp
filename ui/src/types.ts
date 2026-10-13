@@ -255,11 +255,9 @@ export interface PlatformOverview {
   }>
   needsAttention: Array<{
     id: string
-    source: "health" | "job"
+    source: "health"
     label: string
     detail: string
-    exitCode?: number
-    timedOut?: boolean
   }>
 }
 
