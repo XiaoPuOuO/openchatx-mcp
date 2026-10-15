@@ -1,9 +1,10 @@
-import type { Messages } from "../types"
+import type { Messages } from "../types.js"
 
-export const en: Messages = {
+export const en = {
   "language.english": "English",
   "language.traditionalChinese": "繁體中文",
   "language.japanese": "日本語",
+  "language.russian": "Русский",
   "common.back": "Back to dashboard",
   "common.language": "Language",
   "common.enabled": "Enabled",
@@ -648,4 +649,4 @@ export const en: Messages = {
     "Confirm your Tunnel is connected, then ask ChatGPT to call OpenChatX and create a temporary test file. You can remove it afterward.",
   "onboarding.recheck": "Recheck",
   "onboarding.finish": "Finish setup",
-}
+} satisfies Messages
