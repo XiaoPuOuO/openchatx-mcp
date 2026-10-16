@@ -6,7 +6,11 @@ import { static as expressStatic, Router } from "express"
 import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
-import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
+import {
+  loadExternalMcpConfig,
+  resolveDotExposure,
+  saveExternalMcpConfig,
+} from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import { registerJobRoutes } from "../jobs/dashboard-routes.js"
 import type { JobManager } from "../jobs/job-manager.js"
@@ -150,8 +154,13 @@ export function createDashboardRouter(
   })
 
   router.get("/api/mcp-servers", (_req, res) => {
+    const servers = resolveDotExposure(
+      loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
+      MCP_CONFIG.dot.externalServers
+    )
     res.json({
-      servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
+      servers,
+      authorization: externalMcp?.authorization?.() ?? {},
       tools:
         externalMcp?.catalog().map(({ server, originalName, description }) => ({
           server,
@@ -165,7 +174,11 @@ export function createDashboardRouter(
     try {
       const servers = saveExternalMcpConfig(MCP_CONFIG.externalMcp.configFile, req.body?.servers)
       await externalMcp?.reload()
-      res.json({ servers, restartRequired: false })
+      res.json({
+        servers,
+        authorization: externalMcp?.authorization?.() ?? {},
+        restartRequired: false,
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       res.status(400).json({ error: message })
@@ -175,8 +188,13 @@ export function createDashboardRouter(
   router.post("/api/mcp-servers/refresh", async (_req, res) => {
     try {
       await externalMcp?.reload(true)
+      const servers = resolveDotExposure(
+        loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
+        MCP_CONFIG.dot.externalServers
+      )
       res.json({
-        servers: loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
+        servers,
+        authorization: externalMcp?.authorization?.() ?? {},
         tools:
           externalMcp?.catalog().map(({ server, originalName, description }) => ({
             server,
@@ -187,6 +205,39 @@ export function createDashboardRouter(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       res.status(500).json({ error: message })
+    }
+  })
+
+  // OAuth initiation/disconnect are user actions, never exposed as agent tools.
+  // Reject cross-origin browser requests to avoid drive-by account linking.
+  router.post("/api/mcp-servers/:id/oauth/start", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!externalMcp?.beginAuthorization) throw new Error("MCP OAuth unavailable")
+      let result: { authorizationUrl: string }
+      try {
+        result = externalMcp.beginAuthorization(req.params.id)
+      } catch {
+        if (externalMcp.restartAuthorization) await externalMcp.restartAuthorization(req.params.id)
+        else await externalMcp.reload(true)
+        result = externalMcp.beginAuthorization(req.params.id)
+      }
+      res.json(result)
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "OAuth unavailable" })
+    }
+  })
+
+  router.post("/api/mcp-servers/:id/oauth/disconnect", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!externalMcp?.disconnectAuthorization) throw new Error("MCP OAuth unavailable")
+      await externalMcp.disconnectAuthorization(req.params.id)
+      res.json({ authorization: externalMcp.authorization?.() ?? {} })
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "OAuth unavailable" })
     }
   })
 
@@ -236,6 +287,17 @@ export function createDashboardRouter(
   const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
   router.use(expressStatic(dashboardDir, { index: "index.html" }))
   return router
+}
+
+function isSameOriginAction(req: import("express").Request): boolean {
+  if (req.get("sec-fetch-site") === "cross-site") return false
+  const origin = req.get("origin")
+  if (!origin) return true // Non-browser desktop/internal callers.
+  try {
+    return new URL(origin).host === req.get("host")
+  } catch {
+    return false
+  }
 }
 
 function registerToolboxRoutes(
@@ -574,15 +636,22 @@ function registerSettingsRoutes(
           ...current.context,
           ...(isRecord(body.context) ? body.context : {}),
         },
+        dot: {
+          ...current.dot,
+          ...(isRecord(body.dot) ? body.dot : {}),
+        },
       }
       const saved = savePublicConfig(next, MCP_CONFIG.publicConfigFile)
       contextBudget?.setWarningThreshold(saved.context.warning_threshold)
+      MCP_CONFIG.dot.externalServers = saved.dot.external_servers
       const restartRequired =
         saved.port !== current.port ||
         saved.shell.path !== current.shell.path ||
         saved.shell.rtk !== current.shell.rtk ||
         saved.tunnel.profile !== current.tunnel.profile ||
-        saved.tunnel.health_port !== current.tunnel.health_port
+        saved.tunnel.health_port !== current.tunnel.health_port ||
+        saved.dot.enabled !== current.dot.enabled ||
+        saved.dot.port !== current.dot.port
       res.json({ settings: editableSettings(saved), restartRequired })
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
@@ -596,6 +665,7 @@ function editableSettings(config: ReturnType<typeof loadPublicConfig>) {
     shell: config.shell,
     tunnel: config.tunnel,
     context: config.context,
+    dot: config.dot,
   }
 }
 
@@ -607,11 +677,19 @@ function registerAgentRoutes(
   router.get("/api/agents", (_req, res) => {
     const agents = agentObserver.listAgents().map((agent) => {
       const sessionId = agentObserver.sessionIdForAgent(agent.id)
+      const usage = sessionId ? contextBudget?.usage({ sessionId, agent: agent.id }) : undefined
       if (sessionId && contextBudget?.isDotSession(sessionId)) {
         agentObserver.setDot(agent.id, true)
-        return { ...agent, dot: true }
+        return {
+          ...agent,
+          ...(usage ? { contextBudget: usage } : {}),
+          dot: true,
+        }
       }
-      return agent
+      return {
+        ...agent,
+        ...(usage ? { contextBudget: usage } : {}),
+      }
     })
     res.json({ agents })
   })

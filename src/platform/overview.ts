@@ -38,11 +38,10 @@ export interface PlatformOverview {
   }>
   needsAttention: Array<{
     id: string
-    source: "health" | "job"
+    source: "health"
     label: string
     detail: string
-    exitCode?: number
-    timedOut?: boolean
+    action?: "authenticate_mcp"
   }>
 }
 
@@ -81,15 +80,23 @@ export class PlatformOverviewService {
 
     const needsAttention: PlatformOverview["needsAttention"] = []
     for (const component of health?.components ?? []) {
-      if (component.status !== "unavailable" && component.status !== "degraded") continue
+      if (
+        component.status !== "unavailable" &&
+        component.status !== "degraded" &&
+        component.status !== "auth_required"
+      )
+        continue
       needsAttention.push({
         id: component.id,
         source: "health",
         label: component.name,
         detail: component.detail ?? component.status,
+        ...(component.kind === "mcp" && component.status === "auth_required"
+          ? { action: "authenticate_mcp" as const }
+          : {}),
       })
     }
-    needsAttention.push(...failedJobAttention(jobs))
+    // Command and job failures belong to execution history, not platform health.
 
     return {
       counts: {
@@ -128,21 +135,4 @@ export class PlatformOverviewService {
       needsAttention: needsAttention.slice(0, 12),
     }
   }
-}
-
-function failedJobAttention(
-  jobs: Awaited<ReturnType<JobManager["list"]>>
-): PlatformOverview["needsAttention"] {
-  return jobs
-    .filter((job) => job.status === "failed")
-    .map((job) => ({
-      id: job.id,
-      source: "job" as const,
-      label: job.label,
-      detail: job.timedOut
-        ? `Job timed out in ${job.cwd}`
-        : `Job failed with exit code ${job.exitCode ?? "unknown"} in ${job.cwd}`,
-      ...(job.exitCode !== undefined ? { exitCode: job.exitCode } : {}),
-      ...(job.timedOut ? { timedOut: true } : {}),
-    }))
 }

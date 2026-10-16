@@ -61,7 +61,11 @@ export class SystemRecoveryService {
     for (const component of health?.components ?? []) {
       let status: DoctorCheck["status"] = "error"
       if (component.status === "healthy" || component.status === "disabled") status = "ok"
-      else if (component.status === "degraded" || component.status === "starting")
+      else if (
+        component.status === "degraded" ||
+        component.status === "starting" ||
+        component.status === "auth_required"
+      )
         status = "warning"
       checks.push({
         id: `health:${component.id}`,

@@ -45,10 +45,13 @@ export function CapabilityHealthPanel() {
   const issues = snapshot.components.filter(
     (component) => component.status === "unavailable" || component.status === "degraded"
   )
+  const loginRequired = snapshot.components.filter(
+    (component) => component.kind === "mcp" && component.status === "auth_required"
+  ).length
   return (
     <Card className="mb-5">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2 text-sm font-semibold">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           <Activity className="size-4" />
           {t("status.capabilityHealth")}
           <Badge className={issues.length > 0 ? "text-destructive" : undefined}>
@@ -56,6 +59,11 @@ export function CapabilityHealthPanel() {
               ? t("status.healthy")
               : t("status.issueCount", { count: issues.length })}
           </Badge>
+          {loginRequired > 0 && (
+            <span className="text-xs font-normal text-amber-600">
+              {t("mcp.needsLoginCount", { count: loginRequired })}
+            </span>
+          )}
         </div>
       </CardHeader>
       <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -99,12 +107,16 @@ function localizeHealthDetail(
   if (model) return t("status.modelProfiles", { count: Number(model[1]) })
   if (detail === "profile openchatx") return t("status.profileOpenchatx")
   if (detail === "Configured but unavailable") return t("status.configuredUnavailable")
+  if (detail === "Authentication required") return t("mcp.oauthRequired")
+  if (detail === "Authorization failed. Retry connection.") return t("mcp.oauthRetry")
+  if (detail === "Completing authorization") return t("mcp.oauthAuthorizing")
   return detail
 }
 
 const COMPONENT_NAME_KEYS: Record<string, string> = {
   "OpenChatX Runtime": "status.component.runtime",
   "OpenAI Secure MCP Tunnel": "status.component.tunnel",
+  "OpenChatX Cloud (Dot)": "status.component.dot",
   Files: "status.component.files",
   "Durable Jobs": "status.component.durableJobs",
   "MCP Manager": "status.component.mcpManager",
@@ -130,6 +142,7 @@ function HealthIcon({ status }: { status: CapabilityHealthStatus }) {
     return <CircleCheck className="size-4 text-[var(--success-foreground)]" />
   if (status === "starting")
     return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+  if (status === "auth_required") return <CircleAlert className="size-4 text-amber-600" />
   if (status === "disabled") return <CircleOff className="size-4 text-muted-foreground" />
   return <CircleAlert className="size-4 text-amber-600" />
 }

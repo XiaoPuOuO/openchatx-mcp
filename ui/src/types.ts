@@ -63,6 +63,13 @@ export interface RuntimeSettings {
   context: {
     warning_threshold: number
   }
+  dot: {
+    enabled: boolean
+    port: number
+    health_port: number
+    profile: string
+    external_servers: string[]
+  }
 }
 
 export interface DurableJobDetail {
@@ -86,6 +93,7 @@ export type AgentEvent = AgentChangedEvent | AgentRemovedEvent
 export type CapabilityHealthStatus =
   | "healthy"
   | "starting"
+  | "auth_required"
   | "degraded"
   | "unavailable"
   | "disabled"
@@ -248,16 +256,16 @@ export interface PlatformOverview {
   }>
   needsAttention: Array<{
     id: string
-    source: "health" | "job"
+    source: "health"
     label: string
     detail: string
-    exitCode?: number
-    timedOut?: boolean
+    action?: "authenticate_mcp"
   }>
 }
 
 interface McpServerBase {
   enabled: boolean
+  dot: boolean
   description?: string
   timeout?: number
 }
@@ -273,6 +281,9 @@ export interface RemoteMcpServer extends McpServerBase {
   type: "remote"
   url: string
   headers?: Record<string, string>
+  auth?: "auto" | "none" | "oauth" | "headers"
+  oauthClientId?: string
+  oauthClientMetadataUrl?: string
 }
 
 export type McpServerConfig = LocalMcpServer | RemoteMcpServer
@@ -287,6 +298,15 @@ export interface McpDetectedTool {
 export interface McpServerSnapshot {
   servers: McpServerMap
   tools: McpDetectedTool[]
+  authorization?: Record<
+    string,
+    {
+      status: "none" | "auth_required" | "authorizing" | "error"
+      detail?: string
+      redirectUrl?: string
+      oauthDetected?: boolean
+    }
+  >
 }
 
 export interface ToolboxItem {

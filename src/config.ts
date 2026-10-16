@@ -83,6 +83,14 @@ export const MCP_CONFIG = {
     /** Local tunnel-client health/admin UI port. */
     healthPort: publicConfig.tunnel.health_port,
   },
+  /** Dot persona: second MCP listener with cloud-service semantics for ChatGPT for Work (Dots). */
+  dot: {
+    enabled: publicConfig.dot.enabled,
+    port: publicConfig.dot.port,
+    healthPort: publicConfig.dot.health_port,
+    profile: publicConfig.dot.profile,
+    externalServers: publicConfig.dot.external_servers,
+  },
   context: {
     warningThreshold: publicConfig.context.warning_threshold,
   },

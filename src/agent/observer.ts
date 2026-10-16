@@ -69,7 +69,12 @@ export interface AgentObserver {
   deleteAgent(agentId: string): boolean
   sessionIdForAgent(agentId: string): string | undefined
   setDot(agentId: string, dot: boolean): boolean
-  startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
+  startTool(
+    agent: AgentIdentity | undefined,
+    tool: string,
+    input: unknown,
+    dot?: boolean
+  ): string | undefined
   registerToolStop(
     agent: AgentIdentity | undefined,
     callId: string | undefined,
@@ -98,6 +103,30 @@ export interface AgentObserver {
 
 const MAX_RECENT_CALLS = 12
 const MAX_INSTRUCTIONS = 12
+// Dashboard previews must not retain arbitrarily large tool payloads in memory.
+const MAX_DASHBOARD_DETAIL_CHARS = 32_768
+
+function boundedDashboardText(value: string | undefined): string | undefined {
+  if (value === undefined || value.length <= MAX_DASHBOARD_DETAIL_CHARS) return value
+  return `${value.slice(0, MAX_DASHBOARD_DETAIL_CHARS)}\n… [Dashboard preview truncated]`
+}
+
+function boundCallPresentation<
+  T extends { detail?: string; resultDetail?: string; error?: string },
+>(presentation: T): T {
+  return {
+    ...presentation,
+    ...(presentation.detail === undefined
+      ? {}
+      : { detail: boundedDashboardText(presentation.detail) }),
+    ...(presentation.resultDetail === undefined
+      ? {}
+      : { resultDetail: boundedDashboardText(presentation.resultDetail) }),
+    ...(presentation.error === undefined
+      ? {}
+      : { error: boundedDashboardText(presentation.error) }),
+  }
+}
 
 export function createAgentObserver(now: () => number = () => Date.now()): AgentObserver {
   const agentsBySession = new Map<string, AgentState>()
@@ -163,18 +192,19 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   function startTool(
     identity: AgentIdentity | undefined,
     tool: string,
-    input: unknown
+    input: unknown,
+    dot?: boolean
   ): string | undefined {
     if (!identity) return undefined
     const agent = ensureAgent(identity)
     if (!agent) return undefined
+    if (dot) agent.dot = true
     agentActivityNotifier.activityStarted(identity.sessionId)
     const timestamp = now()
-    const presentation = presentToolCall(tool, input)
     const call: AgentCallSnapshot = {
       id: `call-${++callCounter}`,
       tool,
-      ...presentation,
+      ...boundCallPresentation(presentToolCall(tool, input)),
       startedAt: timestamp,
       status: "running",
     }
@@ -222,9 +252,11 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     agent.goalId = identity.goalId
     const call: AgentCallSnapshot = {
       ...activeCall,
-      ...(status === "failed"
-        ? presentToolFailure(result)
-        : presentToolResult(activeCall.tool, result)),
+      ...boundCallPresentation(
+        status === "failed"
+          ? presentToolFailure(result)
+          : presentToolResult(activeCall.tool, result)
+      ),
       status,
       finishedAt: timestamp,
     }
