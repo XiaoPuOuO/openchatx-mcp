@@ -28,6 +28,7 @@ export interface RuntimeAuthorizationInput {
   toolName: string
   argumentsValue: Record<string, unknown>
   source?: RuntimeToolSource
+  signal?: AbortSignal
 }
 
 export type CapabilityPermission = "shell" | "network" | "filesystem" | "secrets"
@@ -44,7 +45,10 @@ export interface RuntimeControlSnapshot {
   agentAccessPaused: boolean
 }
 
-type ApprovalStoreLike = Pick<ApprovalStore, "list" | "request" | "decide" | "consume">
+type ApprovalStoreLike = Pick<ApprovalStore, "list" | "request" | "decide" | "isApproved">
+
+type RuntimeApprovalDecision = "allow-operation" | "approve-once" | "always-allow" | "deny"
+type ApprovalWaitResult = "approved" | "denied"
 
 interface RuntimeStateStore {
   load(): Promise<OperationalState>
@@ -65,6 +69,8 @@ export function currentRuntimeExecutionGrant(): RuntimeExecutionGrant | undefine
 }
 
 export class RuntimeControlService {
+  private readonly approvalWaiters = new Map<string, Set<(decision: ApprovalWaitResult) => void>>()
+
   constructor(
     private readonly approvals: ApprovalStoreLike = new ApprovalStore(),
     private readonly stateStore: RuntimeStateStore = DEFAULT_STATE_STORE
@@ -120,7 +126,7 @@ export class RuntimeControlService {
     if (policy === "deny") throw new ToolError("DANGEROUS_ACTION_DENIED", reason)
 
     if (state.accessMode === "always-question") {
-      await this.requireApproval(resolvedInput, category, reason)
+      await this.requireApproval(resolvedInput, category, reason, false)
     } else if (risk.level === "approval" && policy === "ask") {
       await this.requireApproval(resolvedInput, category, reason)
     }
@@ -158,43 +164,55 @@ export class RuntimeControlService {
     return this.approvals.list()
   }
 
-  async decideApproval(
-    id: string,
-    decision: "approve-once" | "always-allow" | "deny"
-  ): Promise<RuntimeApproval> {
+  async decideApproval(id: string, decision: RuntimeApprovalDecision): Promise<RuntimeApproval> {
     const approval = (await this.approvals.list()).find((candidate) => candidate.id === id)
     if (!approval) throw new Error(`Unknown approval ${JSON.stringify(id)}.`)
+    if (approval.status !== "pending") {
+      throw new Error(`Approval ${JSON.stringify(id)} has already been decided.`)
+    }
 
-    if (decision === "approve-once") return this.approvals.decide(id, "approve-once")
+    if (decision === "approve-once") {
+      const result = await this.approvals.decide(id, "dismiss")
+      this.resolveApprovalWaiters(id, "approved")
+      return result
+    }
 
-    await this.stateStore.update((state) => {
-      if (approval.category.startsWith("permissions:") && approval.source?.id) {
-        const permissions = approval.category
-          .slice("permissions:".length)
-          .split(",")
-          .filter(isCapabilityPermission)
-        const key = `${approval.source.kind}:${approval.source.id}`
-        const current = state.capabilityPermissions[key] ?? {}
-        state.capabilityPermissions[key] = {
-          ...current,
-          ...Object.fromEntries(
-            permissions.map((permission) => [
-              permission,
-              decision === "always-allow" ? "allow" : "deny",
-            ])
-          ),
+    if (decision === "allow-operation") {
+      const result = await this.approvals.decide(id, "approve")
+      this.resolveApprovalWaiters(id, "approved")
+      return result
+    }
+
+    if (decision === "always-allow") {
+      await this.stateStore.update((state) => {
+        if (approval.category.startsWith("permissions:") && approval.source?.id) {
+          const permissions = approval.category
+            .slice("permissions:".length)
+            .split(",")
+            .filter(isCapabilityPermission)
+          const key = `${approval.source.kind}:${approval.source.id}`
+          const current = state.capabilityPermissions[key] ?? {}
+          state.capabilityPermissions[key] = {
+            ...current,
+            ...Object.fromEntries(permissions.map((permission) => [permission, "allow"])),
+          }
+          return
         }
-        return
-      }
-      if (approval.category.startsWith("tool-risk:")) {
-        const key = approval.category.slice("tool-risk:".length)
-        if (decision === "always-allow") state.toolRiskOverrides[key] = "low"
-        else state.dangerousActions[approval.category] = "deny"
-        return
-      }
-      state.dangerousActions[approval.category] = decision === "always-allow" ? "allow" : "deny"
-    })
-    return this.approvals.decide(id, decision === "deny" ? "deny" : "dismiss")
+        if (approval.category.startsWith("tool-risk:")) {
+          const key = approval.category.slice("tool-risk:".length)
+          state.toolRiskOverrides[key] = "low"
+          return
+        }
+        state.dangerousActions[approval.category] = "allow"
+      })
+      const result = await this.approvals.decide(id, "dismiss")
+      this.resolveApprovalWaiters(id, "approved")
+      return result
+    }
+
+    const result = await this.approvals.decide(id, "deny")
+    this.resolveApprovalWaiters(id, "denied")
+    return result
   }
 
   async setAccessMode(mode: AccessMode): Promise<void> {
@@ -222,9 +240,14 @@ export class RuntimeControlService {
   private async requireApproval(
     input: RuntimeAuthorizationInput,
     category: string,
-    reason: string
+    reason: string,
+    reuseApproved = true
   ): Promise<void> {
-    if (await this.approvals.consume(input.toolName, input.argumentsValue, category)) return
+    if (
+      reuseApproved &&
+      (await this.approvals.isApproved(input.toolName, input.argumentsValue, category))
+    )
+      return
     const approval = await this.approvals.request({
       toolName: input.toolName,
       category,
@@ -235,10 +258,51 @@ export class RuntimeControlService {
     await desktopNotificationService
       .notify("approvalRequired", "OpenChatX approval required", reason)
       .catch(() => undefined)
-    throw new ToolError(
-      "APPROVAL_REQUIRED",
-      `${reason} Approval id: ${approval.id}. Approve it in OpenChatX, then retry the same tool call.`
-    )
+    const decision = await this.waitForApproval(approval.id, input.signal)
+    if (decision === "denied") {
+      throw new ToolError("APPROVAL_DENIED", `${reason} The user denied this action.`)
+    }
+  }
+
+  private waitForApproval(id: string, signal?: AbortSignal): Promise<ApprovalWaitResult> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new ToolError("APPROVAL_CANCELLED", "Approval wait was cancelled."))
+        return
+      }
+
+      let settled = false
+      const cleanup = () => {
+        const waiters = this.approvalWaiters.get(id)
+        waiters?.delete(onDecision)
+        if (waiters?.size === 0) this.approvalWaiters.delete(id)
+        signal?.removeEventListener("abort", onAbort)
+      }
+      const onDecision = (decision: ApprovalWaitResult) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(decision)
+      }
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        if (!this.approvalWaiters.has(id)) {
+          void this.approvals.decide(id, "dismiss").catch(() => undefined)
+        }
+        reject(new ToolError("APPROVAL_CANCELLED", "Approval wait was cancelled."))
+      }
+
+      const waiters = this.approvalWaiters.get(id) ?? new Set()
+      waiters.add(onDecision)
+      this.approvalWaiters.set(id, waiters)
+      signal?.addEventListener("abort", onAbort, { once: true })
+    })
+  }
+
+  private resolveApprovalWaiters(id: string, decision: ApprovalWaitResult): void {
+    for (const waiter of this.approvalWaiters.get(id) ?? []) waiter(decision)
   }
 }
 

@@ -68,6 +68,7 @@ async function runRegisteredTool(input: {
     toolName: input.name,
     argumentsValue: input.argumentsValue,
     ...(input.tool.source ? { source: input.tool.source } : {}),
+    signal: input.context.mcpReq.signal,
   })
 
   input.state.observedCallId = input.options.agentObserver?.startTool(

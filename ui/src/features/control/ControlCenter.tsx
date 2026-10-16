@@ -96,10 +96,7 @@ export function ControlCenter({ onBack }: { onBack: () => void }) {
   }, [load])
 
   const pendingApprovals = useMemo(
-    () =>
-      (control?.approvals ?? []).filter(
-        (approval) => approval.status === "pending" || approval.status === "approved-once"
-      ),
+    () => (control?.approvals ?? []).filter((approval) => approval.status === "pending"),
     [control?.approvals]
   )
   const runningProcesses = useMemo(
@@ -116,7 +113,7 @@ export function ControlCenter({ onBack }: { onBack: () => void }) {
 
   const decide = async (
     approval: RuntimeApproval,
-    decision: "approve-once" | "always-allow" | "deny"
+    decision: "allow-operation" | "approve-once" | "always-allow" | "deny"
   ) => {
     setBusy(approval.id)
     try {
@@ -126,7 +123,9 @@ export function ControlCenter({ onBack }: { onBack: () => void }) {
           ? t("control.message.permissionDenied")
           : decision === "always-allow"
             ? t("control.message.permissionAlwaysAllowed")
-            : t("control.message.approvedOnce")
+            : decision === "approve-once"
+              ? t("control.message.approvedAlwaysQuestion")
+              : t("control.message.approvedOnce")
       )
       await load()
     } catch (cause) {
@@ -383,7 +382,7 @@ function ApprovalPage({
   alwaysQuestion: boolean
   onDecision: (
     approval: RuntimeApproval,
-    decision: "approve-once" | "always-allow" | "deny"
+    decision: "allow-operation" | "approve-once" | "always-allow" | "deny"
   ) => void
 }) {
   const { t } = useI18n()
@@ -411,10 +410,16 @@ function ApprovalPage({
                   size="sm"
                   variant="outline"
                   disabled={busy === approval.id}
-                  onClick={() => onDecision(approval, "approve-once")}
+                  onClick={() =>
+                    onDecision(approval, alwaysQuestion ? "approve-once" : "allow-operation")
+                  }
                 >
                   <Check className="size-4" />
-                  {t("control.approvals.once")}
+                  {t(
+                    alwaysQuestion
+                      ? "control.approvals.onceAlwaysQuestion"
+                      : "control.approvals.once"
+                  )}
                 </Button>
                 {!alwaysQuestion ? (
                   <Button

@@ -607,16 +607,21 @@ export const ja: Messages = {
   "control.overview.recentHint": "再開可能なセッション",
   "control.overview.timelineHint": "最近の監査イベント",
   "control.approvals.title": "承認センター",
-  "control.approvals.subtitle": "Runtime 権限と危険操作のリクエスト。",
+  "control.approvals.subtitle":
+    "承認が必要なツール呼び出しはここで待機します。同じ操作を許可すると、次回から再確認しません。",
   "control.approvals.empty": "保留中の承認はありません。",
-  "control.approvals.once": "今回のみ",
+  "control.approvals.once": "この操作を許可",
+  "control.approvals.onceAlwaysQuestion": "今回のみ許可",
   "control.approvals.always": "常に許可",
   "control.approvals.deny": "拒否",
   "control.approvals.permissionRequest": "{permission} 権限を要求しています",
   "control.approvals.actionRequest": "危険操作の承認が必要です",
   "control.message.permissionDenied": "権限を拒否しました。",
   "control.message.permissionAlwaysAllowed": "この権限を常に許可しました。",
-  "control.message.approvedOnce": "今回のみ許可しました。Agent は同じ呼び出しを再試行できます。",
+  "control.message.approvedOnce":
+    "許可しました。待機中のツール呼び出しはそのまま続行され、同じ操作では再確認されません。",
+  "control.message.approvedAlwaysQuestion":
+    "今回のみ許可しました。待機中の呼び出しは続行され、Always Question Mode では次回も確認します。",
   "control.message.resumeCopied":
     "Resume Context（{uuid}）を作成しクリップボードにコピーしました。",
   "control.permission.shell": "Shell",
