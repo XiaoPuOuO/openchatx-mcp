@@ -1,4 +1,4 @@
-export type Locale = "en" | "zh-TW" | "ja"
+export type Locale = "en" | "zh-TW" | "ja" | "ru"
 
 export type TranslationValues = Record<string, string | number>
 

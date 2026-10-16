@@ -4,6 +4,7 @@ export const zhTW: Messages = {
   "language.english": "English",
   "language.traditionalChinese": "繁體中文",
   "language.japanese": "日本語",
+  "language.russian": "Русский",
   "common.back": "返回儀表板",
   "common.language": "語言",
   "common.enabled": "已啟用",
