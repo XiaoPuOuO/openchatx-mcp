@@ -90,8 +90,9 @@ export const zhTW: Messages = {
   "settings.dot.externalServers": "允許的外部 MCP 伺服器",
   "settings.dot.externalServersHint":
     "以逗號分隔的伺服器 id，會開放給 Dot（已消毒）。留空 = 開放全部伺服器（一律消毒）。",
-  "settings.restartHint": "變更後需要重新啟動 OpenChatX 才會生效。",
-  "settings.savedRestart": "設定已儲存；部分變更需要重新啟動 OpenChatX 才會生效。",
+  "settings.restartHint": "儲存後請使用 More → Restart Runtime；只關閉視窗不會重新啟動 Runtime。",
+  "settings.savedRestart":
+    "設定已儲存。請使用 More → Restart Runtime 套用變更；只關閉視窗並不算重新啟動。",
   "settings.savedApplied": "設定已儲存並套用。",
   "settings.saving": "儲存中…",
   "sidebar.connected": "執行環境已連線",

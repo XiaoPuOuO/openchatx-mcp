@@ -1,5 +1,6 @@
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
+import { loadPublicConfig } from "../public-config.cjs"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 
@@ -159,16 +160,28 @@ async function tunnelHealth(starting: boolean): Promise<CapabilityHealthComponen
   }
 }
 
+function configuredDotEnabled(): boolean {
+  try {
+    return loadPublicConfig(MCP_CONFIG.publicConfigFile).dot.enabled
+  } catch {
+    return MCP_CONFIG.dot.enabled
+  }
+}
+
 async function dotHealth(starting: boolean): Promise<CapabilityHealthComponent> {
   const name = "OpenChatX Cloud (Dot)"
-  if (!MCP_CONFIG.dot.enabled)
+  if (!MCP_CONFIG.dot.enabled) {
+    const configuredEnabled = configuredDotEnabled()
     return {
       id: "dot",
       kind: "tunnel",
       name,
-      status: "disabled",
-      detail: "Dot mode off in settings",
+      status: configuredEnabled ? "starting" : "disabled",
+      detail: configuredEnabled
+        ? "Dot is enabled in settings. Use More → Restart Runtime to apply it; closing the window does not restart the Runtime."
+        : "Dot mode off in settings",
     }
+  }
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 1500)

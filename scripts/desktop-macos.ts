@@ -5,6 +5,8 @@ import { basename, dirname, join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 
+import { runAppleCommandWithRetry } from "./apple-notary-retry.js"
+
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outputRoot = join(repositoryRoot, "dist-desktop")
 const appPath = join(outputRoot, "OpenChatX.app")
@@ -346,29 +348,31 @@ async function notarizeDesktop(): Promise<void> {
 
   await rm(notarizationZipPath, { force: true })
   run("/usr/bin/ditto", ["-c", "-k", "--keepParent", appPath, notarizationZipPath])
-  run("/usr/bin/xcrun", [
-    "notarytool",
-    "submit",
-    notarizationZipPath,
-    "--keychain-profile",
-    notaryProfile,
-    "--wait",
-  ])
-  run("/usr/bin/xcrun", ["stapler", "staple", appPath])
-  run("/usr/bin/xcrun", ["stapler", "validate", appPath])
+  await runAppleCommandWithRetry(
+    "/usr/bin/xcrun",
+    ["notarytool", "submit", notarizationZipPath, "--keychain-profile", notaryProfile, "--wait"],
+    { cwd: repositoryRoot }
+  )
+  await runAppleCommandWithRetry("/usr/bin/xcrun", ["stapler", "staple", appPath], {
+    cwd: repositoryRoot,
+  })
+  await runAppleCommandWithRetry("/usr/bin/xcrun", ["stapler", "validate", appPath], {
+    cwd: repositoryRoot,
+  })
 
   await createDmg()
   signDmg(signingIdentity)
-  run("/usr/bin/xcrun", [
-    "notarytool",
-    "submit",
-    dmgPath,
-    "--keychain-profile",
-    notaryProfile,
-    "--wait",
-  ])
-  run("/usr/bin/xcrun", ["stapler", "staple", dmgPath])
-  run("/usr/bin/xcrun", ["stapler", "validate", dmgPath])
+  await runAppleCommandWithRetry(
+    "/usr/bin/xcrun",
+    ["notarytool", "submit", dmgPath, "--keychain-profile", notaryProfile, "--wait"],
+    { cwd: repositoryRoot }
+  )
+  await runAppleCommandWithRetry("/usr/bin/xcrun", ["stapler", "staple", dmgPath], {
+    cwd: repositoryRoot,
+  })
+  await runAppleCommandWithRetry("/usr/bin/xcrun", ["stapler", "validate", dmgPath], {
+    cwd: repositoryRoot,
+  })
   run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])
 
   console.log(`Notarization complete using Keychain profile ${JSON.stringify(notaryProfile)}.`)

@@ -65,9 +65,10 @@ export const ru = {
   "settings.tunnel": "Туннель",
   "settings.tunnelProfile": "Профиль",
   "settings.tunnelHealthPort": "Порт проверки состояния",
-  "settings.restartHint": "Перезапустите OpenChatX, чтобы применить изменение.",
+  "settings.restartHint":
+    "После сохранения выберите More → Restart Runtime. Простое закрытие окна не перезапускает Runtime.",
   "settings.savedRestart":
-    "Настройки сохранены. Некоторые изменения требуют перезапуска OpenChatX.",
+    "Настройки сохранены. Выберите More → Restart Runtime, чтобы применить изменения; закрытия окна недостаточно.",
   "settings.savedApplied": "Настройки сохранены и применены.",
   "settings.saving": "Сохранение…",
   "sidebar.connected": "Среда выполнения подключена",
