@@ -57,25 +57,29 @@
     "vendor:apply-patch": "scripts/vendor/build-apply-patch.sh"
   },
   "overrides": {
+    "basic-ftp": "6.2.3",
+    "chokidar": "4.0.3",
+    "ip-address": "10.7.4",
     "pm2": {
-      "js-yaml": "5.2.3"
-    }
+      "js-yaml": "4.3.2"
+    },
+    "proxy-addr": "2.0.8"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.0.0",
-    "@modelcontextprotocol/express": "2.0.0",
-    "@modelcontextprotocol/node": "2.0.0",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/express": "2.0.2",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "@napi-rs/keyring": "^2.1.1",
     "cloakbrowser": "^0.5.9",
     "express": "^5.2.1",
-    "js-yaml": "5.2.3",
+    "js-yaml": "5.5.0",
     "linkedom": "^0.18.13",
     "node-html-markdown": "^2.0.0",
     "node-pty": "^1.1.0",
     "playwright-core": "^1.63.0",
     "pm2": "^7.0.4",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "smol-toml": "^1.9.0",
     "tiktoken": "^1.0.22",
     "unpdf": "1.8.1",
