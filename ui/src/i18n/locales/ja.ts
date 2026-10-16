@@ -4,6 +4,7 @@ export const ja: Messages = {
   "language.english": "English",
   "language.traditionalChinese": "繁體中文",
   "language.japanese": "日本語",
+  "language.russian": "Русский",
   "common.back": "ダッシュボードに戻る",
   "common.language": "言語",
   "common.enabled": "有効",

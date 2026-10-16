@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 
 import { en } from "./locales/en"
 import { ja } from "./locales/ja"
+import { ru } from "./locales/ru"
 import { zhTW } from "./locales/zh-TW"
 import type { Locale, Messages, TranslationValues } from "./types"
 
@@ -11,12 +12,14 @@ const localeMessages: Record<Locale, Messages> = {
   en,
   "zh-TW": zhTW,
   ja,
+  ru,
 }
 
 const localeLabels: Record<Locale, string> = {
   en: "English",
   "zh-TW": "繁體中文",
   ja: "日本語",
+  ru: "Русский",
 }
 
 interface I18nContextValue {
@@ -41,9 +44,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     () => ({
       locale,
       setLocale,
-      locales: ["zh-TW", "en", "ja"],
+      locales: ["zh-TW", "en", "ja", "ru"],
       localeLabels,
-      t: (key, values) => interpolate(localeMessages[locale][key] ?? en[key] ?? key, values),
+      t: (key, values) =>
+        interpolate(localeMessages[locale][key] ?? localeMessages.en[key] ?? key, values),
     }),
     [locale]
   )
@@ -59,10 +63,11 @@ export function useI18n(): I18nContextValue {
 
 function detectLocale(): Locale {
   const saved = window.localStorage.getItem(STORAGE_KEY)
-  if (saved === "en" || saved === "zh-TW" || saved === "ja") return saved
+  if (saved === "en" || saved === "zh-TW" || saved === "ja" || saved === "ru") return saved
   const browser = navigator.language.toLowerCase()
   if (browser.startsWith("ja")) return "ja"
   if (browser.startsWith("zh")) return "zh-TW"
+  if (browser.startsWith("ru")) return "ru"
   return "en"
 }
 

@@ -168,16 +168,28 @@ Useful links:
 
 | Feature | What it does |
 | --- | --- |
-| MCP Servers | Connect local or remote MCP servers behind one OpenChatX connection |
+| MCP Servers | Connect local or remote MCP servers behind one OpenChatX connection; handle OAuth sign-in when required |
+| Dot mode | Run a separate MCP listener and tunnel for ChatGPT Dot, with independent sessions and configurable external MCP exposure |
+| Runtime health | Inspect capability status, sign-in requirements, and memory usage in the Dashboard |
 | Toolboxes | Add or manage custom TypeScript tools |
 | Skills | Portable `SKILL.md` workflows, loaded only when needed |
 | Rules | Persistent `.mdc` rules with Always / Auto Attached / Agent Requested / Manual modes |
 | AGENTS.md | Editable `start_here` template with runtime placeholders |
-| Projects | Bind ChatGPT work to existing folders without moving them |
+| Projects | Bind work to a primary folder and optional additional folders, with workspace-scoped access |
+| Goals & workflows | Track longer-running tasks and compose reusable capabilities |
 | Summaries | Continue long-running work across fresh ChatGPT conversations with UUID handoffs |
 | Subagents | Delegate work to explicitly configured model profiles |
 | Capability Store | Install built-ins or inspect/install GitHub-hosted community capabilities |
-| Dashboard | Manage sessions, temporary Summaries, tools, Skills, Rules, MCP servers, Projects, status, and more |
+| Dashboard | Manage ChatGPT and Dot sessions, temporary Summaries, tools, Skills, Rules, MCP servers, Projects, status, and more |
+| Languages | English, Traditional Chinese, Japanese, and Russian interface translations |
+
+### ChatGPT Dot support
+
+Dot mode exposes **a separate MCP endpoint and secure tunnel** alongside the regular ChatGPT connection. Its sessions appear on the dedicated Dot page rather than in the normal workspace overview. Configure its listener, port, and tunnel profile under **Settings → Dot Mode**; the Dot tunnel must use a different Tunnel ID from the primary tunnel. External MCP servers can be selectively exposed to Dot from the MCP server settings. Only enable access to servers you trust.
+
+### MCP sign-in and status
+
+Remote MCP connections can use OAuth when the server requires sign-in. OpenChatX surfaces an authorization prompt and connection status in the MCP management UI, and stores OAuth credentials in the OS secure store instead of the MCP configuration. The Dashboard also distinguishes authentication-required services from runtime failures.
 
 External MCP and Toolbox schemas stay lazy so the normal ChatGPT tool context stays small.
 
