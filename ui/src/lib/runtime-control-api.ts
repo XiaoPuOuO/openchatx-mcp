@@ -9,7 +9,7 @@ export type RuntimeApproval = {
   category: string
   reason: string
   createdAt: string
-  status: "pending" | "approved-once" | "denied" | "consumed"
+  status: "pending" | "approved" | "approved-once" | "denied" | "consumed"
   input: unknown
   source?: { kind: "builtin" | "toolbox" | "mcp"; id?: string }
 }
@@ -142,7 +142,7 @@ export async function updateNotificationSettings(
 
 export async function decideApproval(
   id: string,
-  decision: "approve-once" | "always-allow" | "deny"
+  decision: "allow-operation" | "approve-once" | "always-allow" | "deny"
 ): Promise<void> {
   await fetchJson(`/ui/api/approvals/${encodeURIComponent(id)}/decision`, {
     method: "POST",

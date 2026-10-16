@@ -15,7 +15,7 @@ const approvalSchema = z.object({
   category: z.string(),
   reason: z.string(),
   createdAt: z.string(),
-  status: z.enum(["pending", "approved-once", "denied", "consumed"]),
+  status: z.enum(["pending", "approved", "approved-once", "denied", "consumed"]),
   input: z.unknown(),
   source: z
     .object({ kind: z.enum(["builtin", "toolbox", "mcp"]), id: z.string().optional() })
@@ -32,7 +32,7 @@ export class ApprovalStore {
 
   async list(): Promise<RuntimeApproval[]> {
     return (await this.load()).approvals
-      .filter((approval) => approval.status !== "consumed")
+      .filter((approval) => approval.status === "pending")
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
@@ -66,21 +66,19 @@ export class ApprovalStore {
     return approval
   }
 
-  async decide(
-    id: string,
-    decision: "approve-once" | "deny" | "dismiss"
-  ): Promise<RuntimeApproval> {
+  async decide(id: string, decision: "approve" | "deny" | "dismiss"): Promise<RuntimeApproval> {
     const state = await this.load()
     const approval = state.approvals.find((candidate) => candidate.id === id)
     if (!approval) throw new Error(`Unknown approval ${JSON.stringify(id)}.`)
-    if (decision === "approve-once") approval.status = "approved-once"
+    if (approval.status !== "pending") return approval
+    if (decision === "approve") approval.status = "approved"
     else if (decision === "deny") approval.status = "denied"
     else approval.status = "consumed"
     await this.save(state)
     return approval
   }
 
-  async consume(
+  async isApproved(
     toolName: string,
     argumentsValue: Record<string, unknown>,
     category: string
@@ -88,18 +86,25 @@ export class ApprovalStore {
     const state = await this.load()
     const fingerprint = approvalFingerprint(toolName, argumentsValue, category)
     const approval = state.approvals.find(
-      (candidate) => candidate.fingerprint === fingerprint && candidate.status === "approved-once"
+      (candidate) =>
+        candidate.fingerprint === fingerprint &&
+        (candidate.status === "approved" || candidate.status === "approved-once")
     )
     if (!approval) return false
-    approval.status = "consumed"
-    await this.save(state)
+    if (approval.status === "approved-once") {
+      approval.status = "approved"
+      await this.save(state)
+    }
     return true
   }
 
   async clearSettled(): Promise<void> {
     const state = await this.load()
     state.approvals = state.approvals.filter(
-      (approval) => approval.status === "pending" || approval.status === "approved-once"
+      (approval) =>
+        approval.status === "pending" ||
+        approval.status === "approved" ||
+        approval.status === "approved-once"
     )
     await this.save(state)
   }

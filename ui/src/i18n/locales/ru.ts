@@ -554,16 +554,20 @@ export const ru = {
   "control.overview.timelineHint": "Последние события аудита",
   "control.approvals.title": "Центр подтверждений",
   "control.approvals.subtitle":
-    "Запросы разрешений среды выполнения и подтверждения опасных действий.",
+    "Вызовы инструментов ждут здесь решения; после разрешения точной операции она больше не запрашивает подтверждение.",
   "control.approvals.empty": "Нет ожидающих подтверждений.",
-  "control.approvals.once": "Один раз",
+  "control.approvals.once": "Разрешить эту операцию",
+  "control.approvals.onceAlwaysQuestion": "Разрешить один раз",
   "control.approvals.always": "Всегда разрешать",
   "control.approvals.deny": "Запретить",
   "control.approvals.permissionRequest": "Запрашивается разрешение: {permission}",
   "control.approvals.actionRequest": "Требуется подтверждение опасного действия",
   "control.message.permissionDenied": "В разрешении отказано.",
   "control.message.permissionAlwaysAllowed": "Разрешение выдано на постоянной основе.",
-  "control.message.approvedOnce": "Разрешено один раз. Агент может повторить тот же вызов.",
+  "control.message.approvedOnce":
+    "Разрешено. Ожидающий вызов продолжится, и эта точная операция больше не запросит подтверждение.",
+  "control.message.approvedAlwaysQuestion":
+    "Разрешено один раз. Ожидающий вызов продолжится; в режиме Always Question подтверждение снова потребуется в следующий раз.",
   "control.message.resumeCopied":
     "Контекст продолжения создан ({uuid}) и скопирован в буфер обмена.",
   "control.permission.shell": "Оболочка",

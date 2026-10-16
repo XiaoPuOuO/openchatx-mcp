@@ -76,6 +76,8 @@ const HIGH_RISK_SCRIPT_TOKEN_RE =
   /(?:^|[:._-])(?:release|publish|deploy|upload|push|install|uninstall|remove|delete|clean|reset)(?:$|[:._-])/iu
 const SAFE_SHELL_UTILITY_RE =
   /^(?:cd|pwd|which|command\s+-v|uname|printf|echo|sleep|mkdir|touch|node\s+--version|python(?:3)?\s+--version)(?:\s|$)/iu
+const SAFE_POWERSHELL_READ_RE =
+  /^(?:Get-(?:Date|PSDrive|Location|ChildItem|Item|Content|Process|Service|Command|Host|Culture|UICulture|ComputerInfo|ExecutionPolicy|AuthenticodeSignature|FileHash)|Test-Path|Resolve-Path)(?:\s|$)/iu
 
 const COMMAND_RISKS: ReadonlyArray<{ pattern: RegExp; category: string; reason: string }> = [
   {
@@ -278,6 +280,7 @@ function isKnownLowRiskShellSegment(command: string): boolean {
     SAFE_GIT_COMMIT_RE.test(command) ||
     SAFE_BUILD_RE.test(command) ||
     isLowRiskPackageScript(command) ||
+    SAFE_POWERSHELL_READ_RE.test(command) ||
     SAFE_SHELL_UTILITY_RE.test(command)
   )
 }

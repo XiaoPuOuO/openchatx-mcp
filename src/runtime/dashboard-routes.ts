@@ -170,7 +170,12 @@ function registerApprovalRoutes(
   router.post("/api/approvals/:id/decision", async (req, res) => {
     if (!runtimeControl) return res.status(503).json({ error: "Runtime control unavailable." })
     const decision = req.body?.decision
-    if (decision !== "approve-once" && decision !== "always-allow" && decision !== "deny") {
+    if (
+      decision !== "allow-operation" &&
+      decision !== "approve-once" &&
+      decision !== "always-allow" &&
+      decision !== "deny"
+    ) {
       res.status(400).json({ error: "Invalid approval decision." })
       return
     }
