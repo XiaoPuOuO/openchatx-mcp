@@ -394,7 +394,8 @@ export const zhTW: Messages = {
   "mcp.oauthTitle": "OAuth 帳號授權",
   "mcp.oauthDescription": "使用瀏覽器登入後，憑證會保存在作業系統安全儲存區，不會寫進 MCP 設定檔。",
   "mcp.oauthRedirect": "OAuth 回呼網址",
-  "mcp.oauthRedirectHint": "預先註冊 OAuth Client 時請使用此網址，並在執行 OpenChatX 的同一台電腦開啟瀏覽器授權。",
+  "mcp.oauthRedirectHint":
+    "預先註冊 OAuth Client 時請使用此網址，並在執行 OpenChatX 的同一台電腦開啟瀏覽器授權。",
   "mcp.oauthClientId": "預先註冊的 Client ID",
   "mcp.oauthMetadataUrl": "Client ID Metadata URL",
   "mcp.oauthOptional": "選填，支援自動註冊時可留空",

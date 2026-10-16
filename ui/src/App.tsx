@@ -176,10 +176,15 @@ export function App() {
       case "mcp-servers":
         return <McpServerManager onBack={back} initialServerId={focusedMcpServerId} />
       case "status":
-        return <StatusPage onBack={back} onOpenMcpServer={(serverId) => {
-          setFocusedMcpServerId(serverId)
-          setView("mcp-servers")
-        }} />
+        return (
+          <StatusPage
+            onBack={back}
+            onOpenMcpServer={(serverId) => {
+              setFocusedMcpServerId(serverId)
+              setView("mcp-servers")
+            }}
+          />
+        )
       case "dot":
         return <DotPage agents={agents} now={now} onBack={back} onRemoveAgent={removeAgent} />
       case "control":
@@ -204,7 +209,19 @@ export function App() {
           />
         )
     }
-  }, [view, focusedMcpServerId, agents, chatAgents, activeCount, connected, loading, error, now, removeAgent, t])
+  }, [
+    view,
+    focusedMcpServerId,
+    agents,
+    chatAgents,
+    activeCount,
+    connected,
+    loading,
+    error,
+    now,
+    removeAgent,
+    t,
+  ])
 
   return (
     <div className="app-shell">

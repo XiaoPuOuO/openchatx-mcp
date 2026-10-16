@@ -111,8 +111,12 @@ export function StatusPage({
                             : item.detail}
                       </div>
                       {item.action === "authenticate_mcp" && item.id.startsWith("mcp:") && (
-                        <Button variant="outline" size="sm" className="mt-3"
-                          onClick={() => onOpenMcpServer(item.id.slice(4))}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={() => onOpenMcpServer(item.id.slice(4))}
+                        >
                           {t("status.mcpSignIn")}
                         </Button>
                       )}

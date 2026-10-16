@@ -403,14 +403,17 @@ export const ja: Messages = {
   "mcp.headers": "Headers",
   "mcp.headersHint": "1 行につき 1 つの Header: value",
   "mcp.authMode": "認証方式",
-  "mcp.authHint": "Auto は必要に応じて OAuth を使用します。従来の Authorization Header も利用できます。",
+  "mcp.authHint":
+    "Auto は必要に応じて OAuth を使用します。従来の Authorization Header も利用できます。",
   "mcp.authAuto": "自動",
   "mcp.authNone": "認証なし",
   "mcp.authHeaders": "カスタム Headers",
   "mcp.oauthTitle": "OAuth アカウント連携",
-  "mcp.oauthDescription": "ブラウザでサインインします。認証情報は OS の安全なストアに保存されます。",
+  "mcp.oauthDescription":
+    "ブラウザでサインインします。認証情報は OS の安全なストアに保存されます。",
   "mcp.oauthRedirect": "OAuth リダイレクト URL",
-  "mcp.oauthRedirectHint": "OAuth クライアント登録時にこの URL を指定します。OpenChatX と同じ端末のブラウザを使用してください。",
+  "mcp.oauthRedirectHint":
+    "OAuth クライアント登録時にこの URL を指定します。OpenChatX と同じ端末のブラウザを使用してください。",
   "mcp.oauthClientId": "登録済み Client ID",
   "mcp.oauthMetadataUrl": "Client ID Metadata URL",
   "mcp.oauthOptional": "自動登録が可能なら省略可",

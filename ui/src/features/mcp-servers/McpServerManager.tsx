@@ -1,4 +1,12 @@
-import { CircleAlert, CirclePlus, FolderOpen, RefreshCw, Save, ServerCog, Trash2 } from "lucide-react"
+import {
+  CircleAlert,
+  CirclePlus,
+  FolderOpen,
+  RefreshCw,
+  Save,
+  ServerCog,
+  Trash2,
+} from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { PageHeader } from "../../components/PageHeader"
@@ -6,9 +14,9 @@ import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
 import {
+  disconnectMcpAuthorization,
   fetchCapabilityHealth,
   fetchMcpServers,
-  disconnectMcpAuthorization,
   openMcpConfigInFinder,
   refreshMcpServers,
   saveMcpServers,
@@ -50,7 +58,9 @@ export function McpServerManager({
   const [tab, setTab] = useState<"settings" | "tools">("settings")
   const [health, setHealth] = useState<Record<string, CapabilityHealthComponent>>({})
   const [detectedTools, setDetectedTools] = useState<McpDetectedTool[]>([])
-  const [authorization, setAuthorization] = useState<NonNullable<McpServerSnapshot["authorization"]>>({})
+  const [authorization, setAuthorization] = useState<
+    NonNullable<McpServerSnapshot["authorization"]>
+  >({})
   const [authBusy, setAuthBusy] = useState(false)
   const [authorizationUrl, setAuthorizationUrl] = useState<string>()
   const [awaitingAuthId, setAwaitingAuthId] = useState<string>()
@@ -78,7 +88,7 @@ export function McpServerManager({
         setError(loadError instanceof Error ? loadError.message : String(loadError))
       )
       .finally(() => setLoading(false))
-  }, [])
+  }, [initialServerId])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -96,7 +106,8 @@ export function McpServerManager({
           } else if (
             status === "none" &&
             healthSnapshot.components.some(
-              (component) => component.id === `mcp:${awaitingAuthId}` && component.status === "healthy"
+              (component) =>
+                component.id === `mcp:${awaitingAuthId}` && component.status === "healthy"
             )
           ) {
             setAuthorizationUrl(undefined)
@@ -115,9 +126,10 @@ export function McpServerManager({
     (id) =>
       serverStatus(servers[id], health[`mcp:${id}`], authorization[id]?.status) === "auth_required"
   )
-  const selectedStatus = selected && selectedId
-    ? serverStatus(selected, health[`mcp:${selectedId}`], authorization[selectedId]?.status)
-    : undefined
+  const selectedStatus =
+    selected && selectedId
+      ? serverStatus(selected, health[`mcp:${selectedId}`], authorization[selectedId]?.status)
+      : undefined
   const selectedTools = useMemo(
     () => detectedTools.filter((tool) => tool.server === selectedId),
     [detectedTools, selectedId]
@@ -334,7 +346,11 @@ export function McpServerManager({
               <div className="space-y-1">
                 {serverIds.map((id) => {
                   const server = servers[id]
-                  const status = serverStatus(server, health[`mcp:${id}`], authorization[id]?.status)
+                  const status = serverStatus(
+                    server,
+                    health[`mcp:${id}`],
+                    authorization[id]?.status
+                  )
                   return (
                     <button
                       type="button"
@@ -397,16 +413,23 @@ export function McpServerManager({
                 </Button>
               </CardHeader>
               {selectedStatus === "auth_required" && (
-                <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3"
+                >
                   <div className="flex items-center gap-2 text-sm">
                     <CircleAlert className="size-4 shrink-0 text-amber-600" />
                     <span>{t("mcp.loginPrompt")}</span>
                   </div>
-                  <Button variant="outline" size="sm" disabled={authBusy || saving}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={authBusy || saving}
                     onClick={() => {
                       setTab("settings")
                       void connectAccount()
-                    }}>
+                    }}
+                  >
                     {t("mcp.oauthConnect")}
                   </Button>
                 </div>
@@ -520,10 +543,12 @@ export function McpServerManager({
                         <select
                           className={INPUT_CLASS}
                           value={selected.auth ?? "auto"}
-                          onChange={(event) => updateSelected({
-                            ...selected,
-                            auth: event.target.value as "auto" | "none" | "oauth" | "headers",
-                          })}
+                          onChange={(event) =>
+                            updateSelected({
+                              ...selected,
+                              auth: event.target.value as "auto" | "none" | "oauth" | "headers",
+                            })
+                          }
                         >
                           <option value="auto">{t("mcp.authAuto")}</option>
                           <option value="none">{t("mcp.authNone")}</option>
@@ -534,42 +559,79 @@ export function McpServerManager({
                       {shouldShowMcpOAuthControls(selected, authorization[selectedId]) ? (
                         <div className="space-y-3 rounded-lg border p-4">
                           <p className="text-sm font-medium">{t("mcp.oauthTitle")}</p>
-                          <p className="text-xs text-muted-foreground">{t("mcp.oauthDescription")}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t("mcp.oauthDescription")}
+                          </p>
                           <Field label={t("mcp.oauthRedirect")} hint={t("mcp.oauthRedirectHint")}>
-                            <input className={INPUT_CLASS} readOnly
+                            <input
+                              className={INPUT_CLASS}
+                              readOnly
                               value={authorization[selectedId]?.redirectUrl ?? ""}
-                              onFocus={(event) => event.currentTarget.select()} />
+                              onFocus={(event) => event.currentTarget.select()}
+                            />
                           </Field>
                           <Field label={t("mcp.oauthClientId")}>
-                            <input className={INPUT_CLASS} value={selected.oauthClientId ?? ""}
-                              onChange={(event) => updateSelected({ ...selected, oauthClientId: event.target.value || undefined })}
-                              placeholder={t("mcp.oauthOptional")} />
+                            <input
+                              className={INPUT_CLASS}
+                              value={selected.oauthClientId ?? ""}
+                              onChange={(event) =>
+                                updateSelected({
+                                  ...selected,
+                                  oauthClientId: event.target.value || undefined,
+                                })
+                              }
+                              placeholder={t("mcp.oauthOptional")}
+                            />
                           </Field>
                           <Field label={t("mcp.oauthMetadataUrl")}>
-                            <input className={INPUT_CLASS} value={selected.oauthClientMetadataUrl ?? ""}
-                              onChange={(event) => updateSelected({ ...selected, oauthClientMetadataUrl: event.target.value || undefined })}
-                              placeholder="https://example.com/oauth/client.json" />
+                            <input
+                              className={INPUT_CLASS}
+                              value={selected.oauthClientMetadataUrl ?? ""}
+                              onChange={(event) =>
+                                updateSelected({
+                                  ...selected,
+                                  oauthClientMetadataUrl: event.target.value || undefined,
+                                })
+                              }
+                              placeholder="https://example.com/oauth/client.json"
+                            />
                           </Field>
                           {authorization[selectedId]?.status === "auth_required" && (
                             <p className="text-sm text-amber-600">{t("mcp.oauthRequired")}</p>
                           )}
                           {authorization[selectedId]?.status === "authorizing" && (
-                            <p className="text-sm text-muted-foreground">{t("mcp.oauthAuthorizing")}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {t("mcp.oauthAuthorizing")}
+                            </p>
                           )}
                           {authorization[selectedId]?.status === "error" && (
                             <p className="text-sm text-destructive">{t("mcp.oauthRetry")}</p>
                           )}
                           {authorizationUrl && awaitingAuthId === selectedId && (
-                            <a className="text-sm text-primary underline underline-offset-2"
-                              href={authorizationUrl} target="_blank" rel="noopener noreferrer">
+                            <a
+                              className="text-sm text-primary underline underline-offset-2"
+                              href={authorizationUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
                               {t("mcp.oauthOpenBrowser")}
                             </a>
                           )}
                           <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" disabled={authBusy || !selected.enabled}
-                              onClick={() => void connectAccount()}>{t("mcp.oauthConnect")}</Button>
-                            <Button variant="outline" disabled={authBusy}
-                              onClick={() => void disconnectAccount()}>{t("mcp.oauthDisconnect")}</Button>
+                            <Button
+                              variant="outline"
+                              disabled={authBusy || !selected.enabled}
+                              onClick={() => void connectAccount()}
+                            >
+                              {t("mcp.oauthConnect")}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={authBusy}
+                              onClick={() => void disconnectAccount()}
+                            >
+                              {t("mcp.oauthDisconnect")}
+                            </Button>
                           </div>
                         </div>
                       ) : null}

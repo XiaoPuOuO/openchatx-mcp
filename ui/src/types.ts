@@ -298,12 +298,15 @@ export interface McpDetectedTool {
 export interface McpServerSnapshot {
   servers: McpServerMap
   tools: McpDetectedTool[]
-  authorization?: Record<string, {
-    status: "none" | "auth_required" | "authorizing" | "error"
-    detail?: string
-    redirectUrl?: string
-    oauthDetected?: boolean
-  }>
+  authorization?: Record<
+    string,
+    {
+      status: "none" | "auth_required" | "authorizing" | "error"
+      detail?: string
+      redirectUrl?: string
+      oauthDetected?: boolean
+    }
+  >
 }
 
 export interface ToolboxItem {

@@ -142,8 +142,7 @@ function HealthIcon({ status }: { status: CapabilityHealthStatus }) {
     return <CircleCheck className="size-4 text-[var(--success-foreground)]" />
   if (status === "starting")
     return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-  if (status === "auth_required")
-    return <CircleAlert className="size-4 text-amber-600" />
+  if (status === "auth_required") return <CircleAlert className="size-4 text-amber-600" />
   if (status === "disabled") return <CircleOff className="size-4 text-muted-foreground" />
   return <CircleAlert className="size-4 text-amber-600" />
 }
