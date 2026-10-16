@@ -92,8 +92,10 @@ export const ja: Messages = {
   "settings.dot.externalServers": "許可する外部 MCP サーバー",
   "settings.dot.externalServersHint":
     "Dot に公開するサーバー ID（カンマ区切り、サニタイズ済み）。空 = 全サーバーを公開（サニタイズ付き）。",
-  "settings.restartHint": "この変更を反映するには OpenChatX の再起動が必要です。",
-  "settings.savedRestart": "設定を保存しました。一部の変更は OpenChatX の再起動が必要です。",
+  "settings.restartHint":
+    "保存後、More → Restart Runtime を使用してください。ウィンドウを閉じるだけでは Runtime は再起動しません。",
+  "settings.savedRestart":
+    "設定を保存しました。More → Restart Runtime で変更を適用してください。ウィンドウを閉じるだけでは再起動されません。",
   "settings.savedApplied": "設定を保存して適用しました。",
   "settings.saving": "保存中…",
   "sidebar.connected": "ランタイム接続済み",

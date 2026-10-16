@@ -93,8 +93,10 @@ export const en = {
   "settings.dot.externalServers": "Allowed External MCP Servers",
   "settings.dot.externalServersHint":
     "Comma-separated server ids exposed to Dot (sanitized). Empty = expose all servers (sanitized).",
-  "settings.restartHint": "Restart OpenChatX for this change to take effect.",
-  "settings.savedRestart": "Settings saved. Some changes require an OpenChatX restart.",
+  "settings.restartHint":
+    "Save, then use More → Restart Runtime. Closing the window does not restart the Runtime.",
+  "settings.savedRestart":
+    "Settings saved. Use More → Restart Runtime to apply these changes; closing the window is not enough.",
   "settings.savedApplied": "Settings saved and applied.",
   "settings.saving": "Saving…",
   "sidebar.connected": "Runtime connected",
