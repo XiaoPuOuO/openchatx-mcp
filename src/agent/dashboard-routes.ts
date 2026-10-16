@@ -160,6 +160,7 @@ export function createDashboardRouter(
     )
     res.json({
       servers,
+      authorization: externalMcp?.authorization?.() ?? {},
       tools:
         externalMcp?.catalog().map(({ server, originalName, description }) => ({
           server,
@@ -173,7 +174,11 @@ export function createDashboardRouter(
     try {
       const servers = saveExternalMcpConfig(MCP_CONFIG.externalMcp.configFile, req.body?.servers)
       await externalMcp?.reload()
-      res.json({ servers, restartRequired: false })
+      res.json({
+        servers,
+        authorization: externalMcp?.authorization?.() ?? {},
+        restartRequired: false,
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       res.status(400).json({ error: message })
@@ -189,6 +194,7 @@ export function createDashboardRouter(
       )
       res.json({
         servers,
+        authorization: externalMcp?.authorization?.() ?? {},
         tools:
           externalMcp?.catalog().map(({ server, originalName, description }) => ({
             server,
@@ -199,6 +205,39 @@ export function createDashboardRouter(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       res.status(500).json({ error: message })
+    }
+  })
+
+  // OAuth initiation/disconnect are user actions, never exposed as agent tools.
+  // Reject cross-origin browser requests to avoid drive-by account linking.
+  router.post("/api/mcp-servers/:id/oauth/start", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!externalMcp?.beginAuthorization) throw new Error("MCP OAuth unavailable")
+      let result: { authorizationUrl: string }
+      try {
+        result = externalMcp.beginAuthorization(req.params.id)
+      } catch {
+        if (externalMcp.restartAuthorization) await externalMcp.restartAuthorization(req.params.id)
+        else await externalMcp.reload(true)
+        result = externalMcp.beginAuthorization(req.params.id)
+      }
+      res.json(result)
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "OAuth unavailable" })
+    }
+  })
+
+  router.post("/api/mcp-servers/:id/oauth/disconnect", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!externalMcp?.disconnectAuthorization) throw new Error("MCP OAuth unavailable")
+      await externalMcp.disconnectAuthorization(req.params.id)
+      res.json({ authorization: externalMcp.authorization?.() ?? {} })
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "OAuth unavailable" })
     }
   })
 
@@ -248,6 +287,17 @@ export function createDashboardRouter(
   const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
   router.use(expressStatic(dashboardDir, { index: "index.html" }))
   return router
+}
+
+function isSameOriginAction(req: import("express").Request): boolean {
+  if (req.get("sec-fetch-site") === "cross-site") return false
+  const origin = req.get("origin")
+  if (!origin) return true // Non-browser desktop/internal callers.
+  try {
+    return new URL(origin).host === req.get("host")
+  } catch {
+    return false
+  }
 }
 
 function registerToolboxRoutes(

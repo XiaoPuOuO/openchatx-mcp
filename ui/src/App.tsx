@@ -89,6 +89,7 @@ const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "control", "settings"].
 
 export function App() {
   const [view, setView] = useState<View>("dashboard")
+  const [focusedMcpServerId, setFocusedMcpServerId] = useState<string>()
   const { agents, connected, loading, error, removeAgent } = useAgents()
   const { t } = useI18n()
   const [now, setNow] = useState(Date.now())
@@ -154,6 +155,11 @@ export function App() {
   const titleKey = NAV_ITEMS.find((item) => item.id === view)?.labelKey
   const title = titleKey ? t(titleKey) : "OpenChatX"
 
+  const navigate = (next: View) => {
+    setFocusedMcpServerId(undefined)
+    setView(next)
+  }
+
   const page = useMemo(() => {
     const back = () => setView("dashboard")
     switch (view) {
@@ -168,9 +174,12 @@ export function App() {
       case "toolboxes":
         return <ToolboxManager onBack={back} />
       case "mcp-servers":
-        return <McpServerManager onBack={back} />
+        return <McpServerManager onBack={back} initialServerId={focusedMcpServerId} />
       case "status":
-        return <StatusPage onBack={back} />
+        return <StatusPage onBack={back} onOpenMcpServer={(serverId) => {
+          setFocusedMcpServerId(serverId)
+          setView("mcp-servers")
+        }} />
       case "dot":
         return <DotPage agents={agents} now={now} onBack={back} onRemoveAgent={removeAgent} />
       case "control":
@@ -195,7 +204,7 @@ export function App() {
           />
         )
     }
-  }, [view, agents, chatAgents, activeCount, connected, loading, error, now, removeAgent, t])
+  }, [view, focusedMcpServerId, agents, chatAgents, activeCount, connected, loading, error, now, removeAgent, t])
 
   return (
     <div className="app-shell">
@@ -214,21 +223,21 @@ export function App() {
             label={t("nav.workspace")}
             items={WORKSPACE_NAV}
             view={view}
-            onSelect={setView}
+            onSelect={navigate}
             t={t}
           />
           <NavSection
             label={t("nav.capabilities")}
             items={CAPABILITY_NAV}
             view={view}
-            onSelect={setView}
+            onSelect={navigate}
             t={t}
           />
           <NavSection
             label={t("nav.system")}
             items={SYSTEM_NAV}
             view={view}
-            onSelect={setView}
+            onSelect={navigate}
             t={t}
           />
         </nav>

@@ -107,7 +107,11 @@ export function PlatformHomePanel({
                 ? t("overview.allGood")
                 : visibleAttention
                     .slice(0, 3)
-                    .map((item) => item.label)
+                    .map((item) =>
+                      item.action === "authenticate_mcp"
+                        ? `${item.label} (${t("mcp.oauthRequired")})`
+                        : item.label
+                    )
                     .join(" · ")}
             </div>
           </div>

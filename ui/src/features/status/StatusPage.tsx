@@ -9,7 +9,13 @@ import { dismissAttentionItem, visibleAttentionItems } from "../../lib/attention
 import type { PlatformOverview } from "../../types"
 import { CapabilityHealthPanel } from "../dashboard/CapabilityHealthPanel"
 
-export function StatusPage({ onBack }: { onBack: () => void }) {
+export function StatusPage({
+  onBack,
+  onOpenMcpServer,
+}: {
+  onBack: () => void
+  onOpenMcpServer: (serverId: string) => void
+}) {
   const { t } = useI18n()
   const [overview, setOverview] = useState<PlatformOverview>()
 
@@ -96,10 +102,20 @@ export function StatusPage({ onBack }: { onBack: () => void }) {
                         </Button>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {item.detail === "Configured but unavailable"
-                          ? t("status.configuredUnavailable")
-                          : item.detail}
+                        {item.action === "authenticate_mcp"
+                          ? item.detail === "Authorization failed. Retry connection."
+                            ? t("mcp.oauthRetry")
+                            : t("mcp.loginPrompt")
+                          : item.detail === "Configured but unavailable"
+                            ? t("status.configuredUnavailable")
+                            : item.detail}
                       </div>
+                      {item.action === "authenticate_mcp" && item.id.startsWith("mcp:") && (
+                        <Button variant="outline" size="sm" className="mt-3"
+                          onClick={() => onOpenMcpServer(item.id.slice(4))}>
+                          {t("status.mcpSignIn")}
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>

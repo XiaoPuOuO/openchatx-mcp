@@ -26,6 +26,7 @@ final class RuntimeSupervisor: NSObject {
     private var backendProcess: Process?
     private var tunnelProcess: Process?
     private var dotTunnelProcess: Process?
+    private let maintenanceLock = NSLock()
     private(set) var backendOwned = false
     private(set) var tunnelOwned = false
     private(set) var dotTunnelOwned = false
@@ -103,6 +104,9 @@ final class RuntimeSupervisor: NSObject {
     }
 
     func maintainRuntime() {
+        guard maintenanceLock.try() else { return }
+        defer { maintenanceLock.unlock() }
+
         do {
             try prepareState()
             if !isHealthy(backendHealthURL), backendProcess?.isRunning != true {

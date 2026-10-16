@@ -6,6 +6,7 @@ import type { ToolboxRegistry } from "../toolbox/registry.js"
 export type CapabilityHealthStatus =
   | "healthy"
   | "starting"
+  | "auth_required"
   | "degraded"
   | "unavailable"
   | "disabled"
@@ -59,16 +60,34 @@ export class CapabilityHealthService {
   }
 
   private mcpComponents(): CapabilityHealthComponent[] {
+    const authStates = this.externalMcp?.authorization?.() ?? {}
     return (
-      this.externalMcp?.capabilities().map((capability) => ({
-        id: `mcp:${capability.id}`,
-        kind: "mcp" as const,
-        name: capability.name,
-        status: capability.available ? ("healthy" as const) : ("unavailable" as const),
-        detail: capability.available
-          ? `${capability.toolCount} tools available`
-          : "Configured but unavailable",
-      })) ?? []
+      this.externalMcp?.capabilities().map((capability) => {
+        const auth = authStates[capability.id]
+        let status: CapabilityHealthStatus = "unavailable"
+        let detail = "Configured but unavailable"
+        if (auth?.status === "auth_required" || auth?.status === "error") {
+          // An account action is needed, not an OpenChatX runtime failure.
+          status = "auth_required"
+          detail =
+            auth.status === "error"
+              ? "Authorization failed. Retry connection."
+              : "Authentication required"
+        } else if (capability.available) {
+          status = "healthy"
+          detail = `${capability.toolCount} tools available`
+        } else if (auth?.status === "authorizing") {
+          status = "starting"
+          detail = "Completing authorization"
+        }
+        return {
+          id: `mcp:${capability.id}`,
+          kind: "mcp" as const,
+          name: capability.name,
+          status,
+          detail,
+        }
+      }) ?? []
     )
   }
 

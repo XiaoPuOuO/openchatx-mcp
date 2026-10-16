@@ -41,6 +41,7 @@ export interface PlatformOverview {
     source: "health"
     label: string
     detail: string
+    action?: "authenticate_mcp"
   }>
 }
 
@@ -79,12 +80,20 @@ export class PlatformOverviewService {
 
     const needsAttention: PlatformOverview["needsAttention"] = []
     for (const component of health?.components ?? []) {
-      if (component.status !== "unavailable" && component.status !== "degraded") continue
+      if (
+        component.status !== "unavailable" &&
+        component.status !== "degraded" &&
+        component.status !== "auth_required"
+      )
+        continue
       needsAttention.push({
         id: component.id,
         source: "health",
         label: component.name,
         detail: component.detail ?? component.status,
+        ...(component.kind === "mcp" && component.status === "auth_required"
+          ? { action: "authenticate_mcp" as const }
+          : {}),
       })
     }
     // Command and job failures belong to execution history, not platform health.

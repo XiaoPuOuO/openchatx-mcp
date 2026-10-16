@@ -34,6 +34,21 @@ test("tracks current and recent tool activity for one agent", () => {
   assert.equal(snapshot?.recent[0]?.finishedAt, 1_500)
 })
 
+test("bounds large dashboard inputs and results without affecting short call details", () => {
+  const observer = createAgentObserver()
+  const agent: AgentIdentity = { sessionId: "large-session", agent: "large-agent" }
+  const large = "x".repeat(1_000_000)
+  const callId = observer.startTool(agent, "bash", { command: large })
+  assert.ok(
+    (observer.listAgents()[0]?.current?.detail?.length ?? Number.POSITIVE_INFINITY) < 34_000
+  )
+  observer.finishTool(agent, callId, { content: [{ type: "text", text: large }] })
+  const call = observer.listAgents()[0]?.recent[0]
+  assert.ok((call?.resultDetail?.length ?? Number.POSITIVE_INFINITY) < 34_000)
+  assert.match(call?.resultDetail ?? "", /Dashboard preview truncated/)
+  assert.ok((call?.detail?.length ?? Number.POSITIVE_INFINITY) < 34_000)
+})
+
 test("failed tool calls preserve the error reason for the dashboard", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "session-a", agent: "agent-1", taskSlug: "search" }

@@ -19,6 +19,7 @@ import { ProjectWorkspaceService } from "./projects/workspace-snapshot.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { loadOperationalState } from "./recovery/operational-state.js"
 import { SystemRecoveryService } from "./recovery/system-recovery.js"
+import { startMemoryMonitor } from "./runtime/memory-monitor.js"
 import { runtimeProcessRegistry } from "./runtime/process-registry.js"
 import { RuntimeProcessService } from "./runtime/process-service.js"
 import { RuntimeControlService } from "./runtime/runtime-control.js"
@@ -54,6 +55,7 @@ const contextBudget = new ContextBudgetGuard(
   join(MCP_CONFIG.stateDir, "context-budget.json")
 )
 await contextBudget.initialize()
+startMemoryMonitor(MCP_CONFIG.stateDir)
 const agentObserver = createAgentObserver()
 await synchronizeAgentInstructions(
   MCP_CONFIG.stateDir,

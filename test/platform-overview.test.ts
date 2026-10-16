@@ -64,6 +64,20 @@ test("platform overview aggregates counts, current work, and attention", async (
             status: "unavailable",
             detail: "Configured but unavailable",
           },
+          {
+            id: "mcp:notion",
+            kind: "mcp",
+            name: "Notion",
+            status: "auth_required",
+            detail: "Authentication required",
+          },
+          {
+            id: "mcp:pending",
+            kind: "mcp",
+            name: "Pending",
+            status: "starting",
+            detail: "Completing authorization",
+          },
         ],
       }),
     } as never,
@@ -99,6 +113,10 @@ test("platform overview aggregates counts, current work, and attention", async (
   assert.equal(snapshot.currentWork[0]?.projectId, "demo")
   assert.deepEqual(
     snapshot.needsAttention.map((item) => item.id).sort((a, b) => a.localeCompare(b)),
-    ["mcp:blender"]
+    ["mcp:blender", "mcp:notion"]
   )
+  const login = snapshot.needsAttention.find((item) => item.id === "mcp:notion")
+  assert.equal(login?.action, "authenticate_mcp")
+  assert.equal(login?.detail, "Authentication required")
+  assert.equal(snapshot.needsAttention.find((item) => item.id === "mcp:blender")?.action, undefined)
 })

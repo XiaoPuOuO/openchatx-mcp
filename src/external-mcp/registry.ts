@@ -1,4 +1,5 @@
 import { type FSWatcher, watch } from "node:fs"
+import { mkdir } from "node:fs/promises"
 import { basename, dirname } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 
@@ -8,13 +9,16 @@ import {
   type Resource,
   StreamableHTTPClientTransport,
   type Tool,
+  UnauthorizedError,
 } from "@modelcontextprotocol/client"
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio"
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server"
 
 import { childStringEnvironment } from "../child-environment.js"
 import { runtimeProcessRegistry } from "../runtime/process-registry.js"
+import { installMacosDefaultTosGuard } from "../runtime/socket-tos-compat.js"
 import { type ExternalMcpServerConfig, loadExternalMcpConfig } from "./config.js"
+import { ExternalMcpOAuth, type McpOAuthState, shouldUseMcpOAuth } from "./oauth.js"
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
 const DEFAULT_CALL_TIMEOUT_MS = 120_000
@@ -55,6 +59,10 @@ export interface ExternalMcpCapability {
 export interface ExternalMcpRegistry {
   readonly connectedServers: readonly string[]
   readonly toolCount: number
+  authorization?(): Record<string, McpOAuthState>
+  beginAuthorization?(id: string): { authorizationUrl: string }
+  restartAuthorization?(id: string): Promise<void>
+  disconnectAuthorization?(id: string): Promise<void>
   capabilities(): ExternalMcpCapability[]
   registerTools(server: McpServer): void
   registerResources(server: McpServer, options?: ExternalMcpResourceOptions): void
@@ -64,13 +72,17 @@ export interface ExternalMcpRegistry {
   close(): Promise<void>
 }
 
-export async function createExternalMcpRegistry(configPath: string): Promise<ExternalMcpRegistry> {
+export async function createExternalMcpRegistry(
+  configPath: string,
+  oauth = new ExternalMcpOAuth()
+): Promise<ExternalMcpRegistry> {
+  await mkdir(dirname(configPath), { recursive: true })
   let config = loadExternalMcpConfig(configPath)
   let connections = (
     await Promise.all(
       Object.entries(config)
         .filter(([, server]) => server.enabled)
-        .map(async ([id, server]) => connectServer(id, server))
+        .map(async ([id, server]) => connectServer(id, server, oauth))
     )
   ).filter((connection): connection is ExternalConnection => connection !== undefined)
 
@@ -82,11 +94,12 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
     const reload = reloadQueue.then(async () => {
       const nextConfig = loadExternalMcpConfig(configPath)
       if (!force && JSON.stringify(nextConfig) === JSON.stringify(config)) return
+      const previous = config
       const nextConnections = (
         await Promise.all(
           Object.entries(nextConfig)
             .filter(([, server]) => server.enabled)
-            .map(async ([id, server]) => connectServer(id, server))
+            .map(async ([id, server]) => connectServer(id, server, oauth))
         )
       ).filter((connection): connection is ExternalConnection => connection !== undefined)
       let nextRegistrations: ReturnType<typeof buildRegistrations>
@@ -101,11 +114,28 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
       connections = nextConnections
       registrations = nextRegistrations
       await closeConnections(previousConnections)
+      for (const [id, oldServer] of Object.entries(previous)) {
+        if (oldServer.type !== "remote") continue
+        const nextServer = nextConfig[id]
+        if (
+          nextServer?.type === "remote" &&
+          nextServer.url === oldServer.url &&
+          nextServer.oauthClientId === oldServer.oauthClientId &&
+          nextServer.oauthClientMetadataUrl === oldServer.oauthClientMetadataUrl &&
+          shouldUseMcpOAuth(nextServer)
+        )
+          continue
+        await cleanupRetiredOAuth(oauth, id, oldServer)
+      }
       supervisor.sync()
     })
     reloadQueue = reload.catch(() => undefined)
     return reload
   }
+
+  oauth.setAuthorizedHandler(async () => {
+    await reloadRegistry(true)
+  })
 
   const supervisor = createExternalMcpSupervisor({
     getConfig: () => config,
@@ -114,6 +144,7 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
       connections = next
       registrations = buildRegistrations(connections)
     },
+    oauth,
   })
   supervisor.sync()
   supervisor.start()
@@ -137,6 +168,35 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
     },
     get toolCount() {
       return registrations.length
+    },
+    authorization() {
+      return Object.fromEntries(
+        Object.entries(config).map(([id, server]) => [
+          id,
+          server.type === "remote"
+            ? { ...oauth.status(id), redirectUrl: oauth.redirectUrl }
+            : oauth.status(id),
+        ])
+      )
+    },
+    beginAuthorization(id) {
+      const server = config[id]
+      if (server?.type !== "remote" || !server.enabled || !shouldUseMcpOAuth(server))
+        throw new Error("OAuth is not enabled for this MCP server.")
+      return oauth.begin(id)
+    },
+    async restartAuthorization(id) {
+      const server = config[id]
+      if (server?.type !== "remote" || !server.enabled || !shouldUseMcpOAuth(server))
+        throw new Error("OAuth is not enabled for this MCP server.")
+      await oauth.provider(id, server).invalidateCredentials?.("tokens")
+      await reloadRegistry(true)
+    },
+    async disconnectAuthorization(id) {
+      const server = config[id]
+      if (server?.type !== "remote") throw new Error("Unknown remote MCP server.")
+      await oauth.disconnect(id, server)
+      await reloadRegistry(true)
     },
     capabilities() {
       return Object.entries(config)
@@ -236,7 +296,20 @@ export async function createExternalMcpRegistry(configPath: string): Promise<Ext
       await supervisor.close()
       await reloadQueue
       await closeConnections(connections)
+      await oauth.close()
     },
+  }
+}
+
+async function cleanupRetiredOAuth(
+  oauth: ExternalMcpOAuth,
+  id: string,
+  server: Extract<ExternalMcpServerConfig, { type: "remote" }>
+): Promise<void> {
+  try {
+    await oauth.disconnect(id, server, false)
+  } catch {
+    // A locked keychain must not block reloading other MCP servers.
   }
 }
 
@@ -244,6 +317,7 @@ interface SupervisorAccess {
   getConfig: () => ReturnType<typeof loadExternalMcpConfig>
   getConnections: () => ExternalConnection[]
   replaceConnections: (connections: ExternalConnection[]) => void
+  oauth: ExternalMcpOAuth
 }
 
 interface ExternalMcpSupervisorController {
@@ -258,6 +332,7 @@ interface ExternalMcpSupervisorController {
   close: () => Promise<void>
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Existing supervisor keeps reconnect, stop and failure state together.
 function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSupervisorController {
   const restartCounts = new Map<string, number>()
   const retryAfter = new Map<string, number>()
@@ -270,15 +345,20 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
     const known = processIds.get(id)
     if (known) return known
     const connected = access.getConnections().some((connection) => connection.id === id)
+    const requiresLogin = access.oauth.requiresAuth(id)
+    let detail = "Unavailable; supervisor will retry."
+    if (connected) detail = "Connected"
+    else if (requiresLogin) detail = "Authentication required in MCP Manager."
     const processId = runtimeProcessRegistry.register({
       kind: "mcp",
       label: server.name ?? id,
       restartCount: restartCounts.get(id) ?? 0,
-      detail: connected ? "Connected" : "Unavailable; supervisor will retry.",
+      detail,
       stop: () => stopServer(id),
       restart: () => restartServer(id),
     })
-    if (!connected) runtimeProcessRegistry.update(processId, { status: "backoff" })
+    if (!connected)
+      runtimeProcessRegistry.update(processId, { status: requiresLogin ? "stopped" : "backoff" })
     processIds.set(id, processId)
     return processId
   }
@@ -329,6 +409,15 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
 
   const recordFailure = async (id: string, error: unknown): Promise<void> => {
     await stopActiveConnection(id)
+    if (access.oauth.requiresAuth(id)) {
+      const server = access.getConfig()[id]
+      if (server)
+        runtimeProcessRegistry.update(ensureProcessRecord(id, server), {
+          status: "stopped",
+          detail: "Authentication required in MCP Manager.",
+        })
+      return
+    }
 
     const count = (restartCounts.get(id) ?? 0) + 1
     restartCounts.set(id, count)
@@ -354,6 +443,7 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
     const server = access.getConfig()[id]
     if (!server?.enabled) return undefined
     if (!force && manuallyStopped.has(id)) return undefined
+    if (!force && access.oauth.requiresAuth(id)) return undefined
     if (!force && Date.now() < (retryAfter.get(id) ?? 0)) return undefined
 
     const processId = ensureProcessRecord(id, server)
@@ -363,7 +453,7 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
       detail: "Connecting…",
     })
 
-    const attempt = connectServer(id, server)
+    const attempt = connectServer(id, server, access.oauth)
       .then(async (connection) => {
         if (!connection) {
           await recordFailure(id, new Error("Connection attempt failed."))
@@ -450,7 +540,12 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
     const connection =
       access.getConnections().find((candidate) => candidate.id === serverId) ??
       (await reconnect(serverId, true))
-    if (!connection) throw new Error(`External MCP ${serverId} is unavailable.`)
+    if (!connection)
+      throw new Error(
+        access.oauth.requiresAuth(serverId)
+          ? `External MCP ${serverId} requires user authentication in MCP Manager.`
+          : `External MCP ${serverId} is unavailable.`
+      )
 
     try {
       return await callConnectionTool(connection, toolName, args, signal)
@@ -577,7 +672,8 @@ export function normalizeExternalToolArguments(
 
 async function connectServer(
   id: string,
-  config: ExternalMcpServerConfig
+  config: ExternalMcpServerConfig,
+  oauth?: ExternalMcpOAuth
 ): Promise<ExternalConnection | undefined> {
   const client = new Client({ name: `openchatx-${sanitizeToolName(id)}`, version: "1.0.0" })
   try {
@@ -598,12 +694,23 @@ async function connectServer(
         { timeout: DEFAULT_CONNECT_TIMEOUT_MS }
       )
     } else {
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL(config.url), {
-          requestInit: config.headers ? { headers: config.headers } : undefined,
-        }),
-        { timeout: DEFAULT_CONNECT_TIMEOUT_MS }
+      installMacosDefaultTosGuard()
+      const useOAuth = oauth && shouldUseMcpOAuth(config)
+      const headers = Object.fromEntries(
+        Object.entries(config.headers ?? {}).filter(
+          ([key]) =>
+            !(
+              key.toLowerCase() === "authorization" &&
+              (config.auth === "none" || config.auth === "oauth")
+            )
+        )
       )
+      const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+        requestInit: Object.keys(headers).length ? { headers } : undefined,
+        ...(useOAuth ? { authProvider: oauth.provider(id, config) } : {}),
+      })
+      oauth?.track(id, transport)
+      await client.connect(transport, { timeout: DEFAULT_CONNECT_TIMEOUT_MS })
     }
 
     const { tools } = await client.listTools(undefined, {
@@ -621,6 +728,7 @@ async function connectServer(
     )
     return { id, config, client, tools, resources }
   } catch (error) {
+    if (error instanceof UnauthorizedError && oauth?.requiresAuth(id)) return undefined
     await client.close().catch(() => undefined)
     const message = error instanceof Error ? error.message : String(error)
     console.warn(`External MCP ${id}: unavailable (${message})`)

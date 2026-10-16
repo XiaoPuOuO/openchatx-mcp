@@ -153,7 +153,7 @@ export async function refreshMcpServers(): Promise<McpServerSnapshot> {
   if (!response.ok) {
     throw new Error(body?.error ?? `Failed to refresh MCP servers (${response.status})`)
   }
-  return { servers: body?.servers ?? {}, tools: body?.tools ?? [] }
+  return { servers: body?.servers ?? {}, tools: body?.tools ?? [], authorization: body?.authorization ?? {} }
 }
 
 export async function fetchPlatformOverview(): Promise<PlatformOverview> {
@@ -773,7 +773,22 @@ export async function fetchMcpServers(): Promise<McpServerSnapshot> {
   const response = await fetch("/ui/api/mcp-servers")
   if (!response.ok) throw new Error(`Failed to load MCP servers (${response.status})`)
   const body = (await response.json()) as Partial<McpServerSnapshot>
-  return { servers: body.servers ?? {}, tools: body.tools ?? [] }
+  return { servers: body.servers ?? {}, tools: body.tools ?? [], authorization: body.authorization ?? {} }
+}
+
+export async function startMcpAuthorization(id: string): Promise<string> {
+  const response = await fetch(`/ui/api/mcp-servers/${encodeURIComponent(id)}/oauth/start`, { method: "POST" })
+  const body = (await response.json().catch(() => ({}))) as { authorizationUrl?: string; error?: string }
+  if (!response.ok || !body.authorizationUrl) throw new Error(body.error ?? "MCP OAuth unavailable")
+  return body.authorizationUrl
+}
+
+export async function disconnectMcpAuthorization(id: string): Promise<void> {
+  const response = await fetch(`/ui/api/mcp-servers/${encodeURIComponent(id)}/oauth/disconnect`, { method: "POST" })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? "Failed to disconnect MCP OAuth")
+  }
 }
 
 export async function saveMcpServers(

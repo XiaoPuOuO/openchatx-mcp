@@ -93,6 +93,7 @@ export type AgentEvent = AgentChangedEvent | AgentRemovedEvent
 export type CapabilityHealthStatus =
   | "healthy"
   | "starting"
+  | "auth_required"
   | "degraded"
   | "unavailable"
   | "disabled"
@@ -258,6 +259,7 @@ export interface PlatformOverview {
     source: "health"
     label: string
     detail: string
+    action?: "authenticate_mcp"
   }>
 }
 
@@ -279,6 +281,9 @@ export interface RemoteMcpServer extends McpServerBase {
   type: "remote"
   url: string
   headers?: Record<string, string>
+  auth?: "auto" | "none" | "oauth" | "headers"
+  oauthClientId?: string
+  oauthClientMetadataUrl?: string
 }
 
 export type McpServerConfig = LocalMcpServer | RemoteMcpServer
@@ -293,6 +298,12 @@ export interface McpDetectedTool {
 export interface McpServerSnapshot {
   servers: McpServerMap
   tools: McpDetectedTool[]
+  authorization?: Record<string, {
+    status: "none" | "auth_required" | "authorizing" | "error"
+    detail?: string
+    redirectUrl?: string
+    oauthDetected?: boolean
+  }>
 }
 
 export interface ToolboxItem {

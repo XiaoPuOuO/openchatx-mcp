@@ -107,6 +107,34 @@ test("external MCP registry hot-reloads direct config file edits", {
   assert.fail("external MCP config watcher did not reconnect the edited server")
 })
 
+test("external MCP registry creates a missing config directory before watching it", async (t) => {
+  const root = await tempDir(t, "openchatx-external-missing-config-dir-")
+  const configPath = join(root, "safe-mode", "mcp-servers.json")
+
+  const registry = await createExternalMcpRegistry(configPath)
+  t.after(() => registry.close())
+
+  assert.equal(registry.toolCount, 0)
+  assert.deepEqual(registry.connectedServers, [])
+})
+
+test("unavailable loopback MCP retries without crashing the runtime", {
+  timeout: 10_000,
+}, async (t) => {
+  const port = await reservePort()
+  const root = await tempDir(t, "openchatx-external-unavailable-retry-")
+  const configPath = join(root, "mcp-servers.json")
+  await writeFile(
+    configPath,
+    JSON.stringify({ unavailable: { type: "remote", url: `http://127.0.0.1:${port}/mcp` } })
+  )
+
+  const registry = await createExternalMcpRegistry(configPath)
+  t.after(() => registry.close())
+  await new Promise((resolve) => setTimeout(resolve, 5_000))
+  assert.deepEqual(registry.connectedServers, [])
+})
+
 test("aggregates a remote HTTP MCP and tolerates unavailable peers", {
   timeout: 10_000,
 }, async (t) => {
@@ -141,6 +169,8 @@ test("aggregates a remote HTTP MCP and tolerates unavailable peers", {
   t.after(() => registry.close())
   assert.deepEqual(registry.connectedServers, ["remote"])
   assert.equal(registry.toolCount, 1)
+  assert.equal(registry.authorization?.().remote?.status, "none")
+  assert.equal(registry.authorization?.().remote?.oauthDetected, undefined)
 
   const outer = await startMcpHttpServer(
     {

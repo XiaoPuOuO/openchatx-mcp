@@ -26,6 +26,12 @@ const remoteServer = baseServer.extend({
       "URL must use http or https"
     ),
   headers: z.record(z.string(), z.string()).optional(),
+  auth: z.enum(["auto", "none", "oauth", "headers"]).optional(),
+  oauthClientId: z.string().min(1).optional(),
+  oauthClientMetadataUrl: z
+    .url()
+    .refine((url) => url.startsWith("https://"), "Client metadata must use HTTPS")
+    .optional(),
 })
 
 export const externalMcpConfigSchema = z.record(
