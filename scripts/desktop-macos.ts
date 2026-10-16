@@ -40,9 +40,13 @@ if (desktopCommand === "build") {
 } else if (desktopCommand === "notarize") {
   await buildDesktop()
   await notarizeDesktop()
+} else if (desktopCommand === "notarize-existing") {
+  await stat(appPath)
+  run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath])
+  await notarizeDesktop()
 } else {
   throw new Error(
-    "Usage: npm run desktop:build | npm run desktop:install | npm run desktop:uninstall | npm run desktop:notarize"
+    "Usage: npm run desktop:build | npm run desktop:install | npm run desktop:uninstall | npm run desktop:notarize | notarize-existing"
   )
 }
 
