@@ -163,16 +163,28 @@ Desktop App 會把 API Key 存在系統安全儲存區：
 
 | 功能 | 用途 |
 | --- | --- |
-| MCP Servers | 把本機或遠端 MCP Server 集中到一條 OpenChatX 連線 |
+| MCP Servers | 把本機或遠端 MCP Server 集中到一條 OpenChatX 連線，並支援需要登入時的 OAuth 授權 |
+| Dot 模式 | 透過獨立 MCP Listener 與 Tunnel 支援 ChatGPT Dot，工作階段獨立，並可控制外部 MCP 的開放範圍 |
+| 系統健康狀態 | 從 Dashboard 檢查能力狀態、登入需求與記憶體使用情況 |
 | Toolboxes | 管理內建與自訂 TypeScript 工具 |
 | Skills | 可攜的 `SKILL.md` 工作流，需要時才載入 |
 | Rules | `.mdc` 規則，支援 Always / Auto Attached / Agent Requested / Manual |
 | AGENTS.md | 可直接編輯的 `start_here` Prompt Template |
-| Projects | 綁定現有專案資料夾，不需要移動檔案 |
+| Projects | 綁定主要資料夾與多個附加資料夾，並使用 Workspace 權限邊界 |
+| Goals 與 Workflows | 追蹤長時間任務，組合可重複使用的能力與工作流程 |
 | Summaries | 用 UUID 把長時間工作交接到新的 ChatGPT 對話繼續 |
 | Subagents | 把工作委派給你明確設定的模型 |
 | Capability Store | 安裝內建能力，或檢查後安裝 GitHub 社群能力 |
-| Dashboard | 管理 Sessions、暫存 Summaries、Tools、Skills、Rules、MCP、Projects、Status 等 |
+| Dashboard | 管理 ChatGPT / Dot Sessions、暫存 Summaries、Tools、Skills、Rules、MCP、Projects、Status 等 |
+| 多語系 | 英文、繁體中文、日文與俄文介面翻譯 |
+
+### ChatGPT Dot 支援
+
+Dot 模式使用**獨立的 MCP Endpoint 與 Secure MCP Tunnel**，與一般 ChatGPT 連線並行。Dot 工作階段會顯示在專屬 Dot 頁面，而不混入一般 Workspace 總覽。可在 **Settings → Dot Mode** 設定 Listener、Port、Tunnel Profile；Dot 必須使用與主要 Tunnel 不同的 Tunnel ID。外部 MCP Server 可個別設定是否允許 Dot 使用，建議只開放可信任的 Server。
+
+### MCP OAuth 登入與狀態
+
+遠端 MCP Server 需要登入時可透過 OAuth 授權，OpenChatX 會在 MCP 管理介面顯示授權提示與連線狀態。OAuth 憑證儲存在作業系統的安全儲存區，不會寫入 MCP 設定檔。Dashboard 也會區分「需要登入」與 Runtime 本身的故障。
 
 外部 MCP 與 Toolbox Tool Schema 採 lazy discovery，不會一開始全部塞進 ChatGPT Context。
 
