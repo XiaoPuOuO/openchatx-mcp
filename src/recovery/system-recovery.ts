@@ -141,9 +141,13 @@ export class SystemRecoveryService {
     await updateOperationalState((state) => {
       state.crash.consecutiveStartupFailures = 0
       if (state.update.pendingHealthCheck) {
-        state.update.lastInstalledVersion = state.update.pendingHealthCheck
+        if (state.update.pendingHealthCheck === MCP_CONFIG.server.version) {
+          state.update.lastInstalledVersion = state.update.pendingHealthCheck
+          state.update.phase = "completed"
+        } else {
+          state.update.phase = "failed"
+        }
         state.update.pendingHealthCheck = undefined
-        state.update.phase = "completed"
         state.update.progress = 100
       }
     })

@@ -32,8 +32,12 @@ ZIP_PATH="\${OPENCHATX_UPDATE_ZIP:?}"
 TARGET_APP="\${OPENCHATX_TARGET_APP:?}"
 TARGET_PID="\${OPENCHATX_TARGET_PID:?}"
 WORK_DIR="\${OPENCHATX_UPDATE_WORK_DIR:?}"
+LOG_PATH="$WORK_DIR/install.log"
+exec >>"$LOG_PATH" 2>&1
+echo "Starting OpenChatX update at $(/bin/date)"
 HEALTH_URL="\${OPENCHATX_UPDATE_HEALTH_URL:?}"
 STATE_PATH="\${OPENCHATX_OPERATIONAL_STATE_PATH:?}"
+STATE_NODE="\${OPENCHATX_RUNTIME_NODE:?}"
 STATE_BACKUP="\${OPENCHATX_OPERATIONAL_STATE_BACKUP:?}"
 STATE_EXISTED="\${OPENCHATX_OPERATIONAL_STATE_EXISTED:?}"
 EXTRACT_DIR="$WORK_DIR/extracted"
@@ -42,6 +46,23 @@ STAGE_APP="\${TARGET_APP}.update-\${TARGET_PID}"
 BACKUP_APP="\${TARGET_APP}.backup-\${TARGET_PID}"
 
 cleanup() {
+  local exit_code=$?
+  if (( exit_code != 0 )); then
+    echo "OpenChatX update failed (exit $exit_code) at $(/bin/date)" >&2
+    # Keep failure visible after the detached installer exits. Use atomic replacement
+    # so the dashboard never observes a partially written operational state file.
+    "$STATE_NODE" -e '
+      const fs = require("node:fs");
+      const path = process.argv[1];
+      const state = JSON.parse(fs.readFileSync(path, "utf8"));
+      state.update.phase = "failed";
+      state.update.progress = 100;
+      delete state.update.pendingHealthCheck;
+      const temporary = path + ".update-failed-" + process.pid;
+      fs.writeFileSync(temporary, JSON.stringify(state, null, 2), { mode: 0o600 });
+      fs.renameSync(temporary, path);
+    ' "$STATE_PATH" || echo "Failed to record update failure" >&2
+  fi
   /bin/rm -rf "$EXTRACT_DIR" "$STAGE_APP"
 }
 
@@ -58,7 +79,7 @@ trap cleanup EXIT
 /bin/mkdir -p "$EXTRACT_DIR"
 /usr/bin/ditto -x -k "$ZIP_PATH" "$EXTRACT_DIR"
 
-/usr/bin/test -d "$NEW_APP"
+/bin/test -d "$NEW_APP"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$NEW_APP/Contents/Info.plist")
 if [[ "$BUNDLE_ID" != "com.openchatx.desktop" ]]; then
   echo "Unexpected bundle identifier: $BUNDLE_ID" >&2
@@ -189,6 +210,7 @@ export async function launchMacOSDesktopUpdate(
       OPENCHATX_TARGET_PID: targetPid,
       OPENCHATX_UPDATE_WORK_DIR: updateDirectory,
       OPENCHATX_UPDATE_HEALTH_URL: `http://127.0.0.1:${MCP_CONFIG.port}/healthz`,
+      OPENCHATX_RUNTIME_NODE: join(targetApp, "Contents", "Resources", "runtime", "bin", "node"),
       OPENCHATX_OPERATIONAL_STATE_PATH: statePath,
       OPENCHATX_OPERATIONAL_STATE_BACKUP: stateBackup,
       OPENCHATX_OPERATIONAL_STATE_EXISTED: stateExisted ? "1" : "0",

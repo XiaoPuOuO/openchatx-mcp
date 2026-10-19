@@ -133,7 +133,15 @@ export function App() {
     if (!installingUpdate) return
     const timer = window.setInterval(() => {
       void fetchRecoveryState()
-        .then(setRecoveryState)
+        .then((state) => {
+          setRecoveryState(state)
+          if (state.update.phase === "failed") {
+            setInstallingUpdate(false)
+            setUpdateInstallError("Update installation failed. Check the installer log and retry.")
+          } else if (state.update.phase === "completed") {
+            setInstallingUpdate(false)
+          }
+        })
         .catch(() => undefined)
     }, 500)
     return () => window.clearInterval(timer)
@@ -144,6 +152,14 @@ export function App() {
     setUpdateInstallError(undefined)
     try {
       await installOpenChatXUpdate()
+      window.setTimeout(() => {
+        setInstallingUpdate((stillInstalling) => {
+          if (stillInstalling) {
+            setUpdateInstallError("The updater did not finish. Check the installer log and retry.")
+          }
+          return false
+        })
+      }, 90_000)
     } catch (error) {
       setInstallingUpdate(false)
       setUpdateInstallError(error instanceof Error ? error.message : String(error))
