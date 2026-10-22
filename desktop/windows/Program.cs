@@ -23,7 +23,7 @@ internal static class Program
         catch (Exception error)
         {
             MessageBox.Show(
-                "OpenChatX could not start.\n\n" + error.Message,
+                DesktopLocalization.T("OpenChatX could not start.") + "\n\n" + error.Message,
                 "OpenChatX",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
@@ -39,9 +39,13 @@ internal sealed class MainForm : Form
     private readonly WebView2 _webView = new() { Dock = DockStyle.Fill };
     private readonly ToolStrip _toolbar = new() { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Top };
     private readonly ToolStripButton _runtimeButton = new() { DisplayStyle = ToolStripItemDisplayStyle.Text };
-    private readonly ToolStripDropDownButton _moreButton = new("More");
+    private readonly ToolStripDropDownButton _moreButton = new(DesktopLocalization.T("More"));
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 2000 };
     private readonly NotifyIcon _trayIcon;
+    private ToolStripMenuItem? _trayOpenItem;
+    private ToolStripMenuItem? _trayPauseItem;
+    private ToolStripMenuItem? _trayResumeItem;
+    private ToolStripMenuItem? _trayQuitItem;
     private RuntimeSnapshot _snapshot = new(false, false, false);
     private bool _webReady;
     private bool _allowClose;
@@ -59,7 +63,7 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         _toolbar.Padding = new Padding(8, 4, 8, 4);
-        _runtimeButton.Text = "Start Runtime";
+        _runtimeButton.Text = DesktopLocalization.T("Start Runtime");
         _runtimeButton.Click += async (_, _) => await ToggleRuntimeAsync();
         _moreButton.DropDownOpening += (_, _) => PopulateMoreMenu();
         _toolbar.Items.Add(new ToolStripLabel("OpenChatX") { Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
@@ -119,20 +123,41 @@ internal sealed class MainForm : Form
                         return;
                 }
             };
+            _webView.CoreWebView2.WebMessageReceived += (_, args) =>
+            {
+                try
+                {
+                    using var message = JsonDocument.Parse(args.WebMessageAsJson);
+                    var data = message.RootElement;
+                    if (data.ValueKind != JsonValueKind.Object ||
+                        !data.TryGetProperty("type", out var type) ||
+                        type.ValueKind != JsonValueKind.String ||
+                        type.GetString() != "openchatx:locale" ||
+                        !data.TryGetProperty("locale", out var locale) ||
+                        locale.ValueKind != JsonValueKind.String)
+                        return;
+                    if (DesktopLocalization.SetLocale(locale.GetString()))
+                        UpdateNativeLabels();
+                }
+                catch (JsonException)
+                {
+                    // Unrecognized WebView messages are ignored.
+                }
+            };
             ShowStartingPage();
         }
         catch (TimeoutException)
         {
             _supervisor.LogStartupStage("webview-timeout");
             OfferIsolatedDataRecovery(
-                "OpenChatX's embedded browser did not initialize within 15 seconds."
+                DesktopLocalization.T("OpenChatX's embedded browser did not initialize within 15 seconds.")
             );
         }
         catch (Exception error)
         {
             _supervisor.LogStartupStage("webview-failed", error.GetType().Name);
             OfferIsolatedDataRecovery(
-                "OpenChatX could not initialize its embedded browser.\n\n" + error.Message
+                DesktopLocalization.T("OpenChatX could not initialize its embedded browser.") + "\n\n" + error.Message
             );
         }
 
@@ -161,10 +186,10 @@ internal sealed class MainForm : Form
         var choice = MessageBox.Show(
             this,
             reason +
-            "\n\nThe local OpenChatX runtime will continue independently of the browser." +
-            "\n\nRestart once with a fresh isolated application-data directory? Existing data will not be deleted." +
-            "\n\nIf the isolated restart also fails, install or repair Microsoft Edge WebView2 Runtime.",
-            "OpenChatX browser recovery",
+            "\n\n" + DesktopLocalization.T("The local OpenChatX runtime will continue independently of the browser.") +
+            "\n\n" + DesktopLocalization.T("Restart once with a fresh isolated application-data directory? Existing data will not be deleted.") +
+            "\n\n" + DesktopLocalization.T("If the isolated restart also fails, install or repair Microsoft Edge WebView2 Runtime."),
+            DesktopLocalization.T("OpenChatX browser recovery"),
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning
         );
@@ -179,7 +204,7 @@ internal sealed class MainForm : Form
         {
             MessageBox.Show(
                 this,
-                "Could not start the isolated recovery instance.\n\n" + error.Message,
+                DesktopLocalization.T("Could not start the isolated recovery instance.") + "\n\n" + error.Message,
                 "OpenChatX",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
@@ -212,21 +237,25 @@ internal sealed class MainForm : Form
     {
         var menu = new ContextMenuStrip();
 
-        var open = new ToolStripMenuItem("Open OpenChatX");
+        var open = new ToolStripMenuItem(DesktopLocalization.T("Open OpenChatX"));
+        _trayOpenItem = open;
         open.Click += (_, _) => ShowFromTray();
         menu.Items.Add(open);
 
-        var pause = new ToolStripMenuItem("Pause Agent Access");
+        var pause = new ToolStripMenuItem(DesktopLocalization.T("Pause Agent Access"));
+        _trayPauseItem = pause;
         pause.Click += async (_, _) => await _supervisor.SetAgentAccessPausedAsync(paused: true);
         menu.Items.Add(pause);
 
-        var resume = new ToolStripMenuItem("Resume Agent Access");
+        var resume = new ToolStripMenuItem(DesktopLocalization.T("Resume Agent Access"));
+        _trayResumeItem = resume;
         resume.Click += async (_, _) => await _supervisor.SetAgentAccessPausedAsync(paused: false);
         menu.Items.Add(resume);
 
         menu.Items.Add(new ToolStripSeparator());
 
-        var quit = new ToolStripMenuItem("Quit OpenChatX");
+        var quit = new ToolStripMenuItem(DesktopLocalization.T("Quit OpenChatX"));
+        _trayQuitItem = quit;
         quit.Click += (_, _) =>
         {
             _allowClose = true;
@@ -325,16 +354,26 @@ internal sealed class MainForm : Form
         {
             _trayIcon.ShowBalloonTip(
                 4000,
-                "OpenChatX Tunnel disconnected",
-                "The Secure MCP Tunnel lost its control-plane connection.",
+                DesktopLocalization.T("OpenChatX Tunnel disconnected"),
+                DesktopLocalization.T("The Secure MCP Tunnel lost its control-plane connection."),
                 ToolTipIcon.Warning
             );
         }
     }
 
+    private void UpdateNativeLabels()
+    {
+        _moreButton.Text = DesktopLocalization.T("More");
+        _runtimeButton.Text = DesktopLocalization.T(_snapshot.Backend ? "Stop Runtime" : "Start Runtime");
+        if (_trayOpenItem is not null) _trayOpenItem.Text = DesktopLocalization.T("Open OpenChatX");
+        if (_trayPauseItem is not null) _trayPauseItem.Text = DesktopLocalization.T("Pause Agent Access");
+        if (_trayResumeItem is not null) _trayResumeItem.Text = DesktopLocalization.T("Resume Agent Access");
+        if (_trayQuitItem is not null) _trayQuitItem.Text = DesktopLocalization.T("Quit OpenChatX");
+    }
+
     private void RenderSnapshot()
     {
-        _runtimeButton.Text = _snapshot.Backend ? "Stop Runtime" : "Start Runtime";
+        UpdateNativeLabels();
         if (!_webReady) return;
 
         if (_snapshot.Backend)
@@ -354,13 +393,13 @@ internal sealed class MainForm : Form
     {
         if (!_webReady) return;
         _webView.NavigateToString(
-            """
+            $"""
             <!doctype html>
             <html>
               <body style="font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f7f7f7;color:#333">
                 <div style="text-align:center">
                   <h2 style="font-weight:600">OpenChatX</h2>
-                  <p>Starting local capability runtime…</p>
+                  <p>{WebUtility.HtmlEncode(DesktopLocalization.T("Starting local capability runtime…"))}</p>
                 </div>
               </body>
             </html>
@@ -372,7 +411,7 @@ internal sealed class MainForm : Form
     {
         _moreButton.DropDownItems.Clear();
 
-        var restart = new ToolStripMenuItem("Restart Runtime") { Enabled = _snapshot.Backend };
+        var restart = new ToolStripMenuItem(DesktopLocalization.T("Restart Runtime")) { Enabled = _snapshot.Backend };
         restart.Click += async (_, _) =>
         {
             await _supervisor.RestartAsync();
@@ -380,7 +419,7 @@ internal sealed class MainForm : Form
         };
         _moreButton.DropDownItems.Add(restart);
 
-        var tunnel = new ToolStripMenuItem(_snapshot.Tunnel ? "Tunnel Connected" : "Connect Tunnel…")
+        var tunnel = new ToolStripMenuItem(DesktopLocalization.T(_snapshot.Tunnel ? "Tunnel Connected" : "Connect Tunnel…"))
         {
             Enabled = !_snapshot.Tunnel
         };
@@ -389,7 +428,7 @@ internal sealed class MainForm : Form
 
         _moreButton.DropDownItems.Add(new ToolStripSeparator());
 
-        var logs = new ToolStripMenuItem("Open Logs");
+        var logs = new ToolStripMenuItem(DesktopLocalization.T("Open Logs"));
         logs.Click += (_, _) => Process.Start(new ProcessStartInfo(_supervisor.LogsDirectory)
         {
             UseShellExecute = true
@@ -409,7 +448,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "Tunnel setup failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, error.Message, DesktopLocalization.T("Tunnel setup failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }
@@ -431,7 +470,7 @@ internal sealed class TunnelSetupForm : Form
 
     public TunnelSetupForm(bool hasProfile)
     {
-        Text = "Connect OpenAI Secure MCP Tunnel";
+        Text = DesktopLocalization.T("Connect OpenAI Secure MCP Tunnel");
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -454,23 +493,23 @@ internal sealed class TunnelSetupForm : Form
         table.Controls.Add(new Label
         {
             Text = hasProfile
-                ? "Enter the control-plane API key. It is stored in Windows Credential Manager."
-                : "Enter the Tunnel ID and control-plane API key. The API key is stored in Windows Credential Manager.",
+                ? DesktopLocalization.T("Enter the control-plane API key. It is stored in Windows Credential Manager.")
+                : DesktopLocalization.T("Enter the Tunnel ID and control-plane API key. The API key is stored in Windows Credential Manager."),
             AutoSize = true,
             MaximumSize = new Size(420, 0)
         });
 
         if (!hasProfile)
         {
-            table.Controls.Add(new Label { Text = "Tunnel ID", AutoSize = true });
+            table.Controls.Add(new Label { Text = DesktopLocalization.T("Tunnel ID"), AutoSize = true });
             _tunnelId.Dock = DockStyle.Top;
             _tunnelId.PlaceholderText = "tun_…";
             table.Controls.Add(_tunnelId);
         }
 
-        table.Controls.Add(new Label { Text = "Control-plane API key", AutoSize = true });
+        table.Controls.Add(new Label { Text = DesktopLocalization.T("Control-plane API key"), AutoSize = true });
         _apiKey.Dock = DockStyle.Top;
-        _apiKey.PlaceholderText = "API key";
+        _apiKey.PlaceholderText = DesktopLocalization.T("API key");
         table.Controls.Add(_apiKey);
 
         var actions = new FlowLayoutPanel
@@ -479,8 +518,8 @@ internal sealed class TunnelSetupForm : Form
             FlowDirection = FlowDirection.RightToLeft,
             AutoSize = true
         };
-        var connect = new Button { Text = "Connect", DialogResult = DialogResult.OK, AutoSize = true };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        var connect = new Button { Text = DesktopLocalization.T("Connect"), DialogResult = DialogResult.OK, AutoSize = true };
+        var cancel = new Button { Text = DesktopLocalization.T("Cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
         actions.Controls.Add(connect);
         actions.Controls.Add(cancel);
         table.Controls.Add(actions);
