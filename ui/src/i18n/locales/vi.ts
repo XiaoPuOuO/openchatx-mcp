@@ -1,4 +1,4 @@
-import type { en } from "./en"
+import type { en } from "./en.js"
 
 /**
  * Vietnamese translations for the OpenChatX dashboard.
