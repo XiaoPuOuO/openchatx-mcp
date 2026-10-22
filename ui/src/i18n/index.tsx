@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { en } from "./locales/en"
 import { ja } from "./locales/ja"
 import { ru } from "./locales/ru"
+import { vi } from "./locales/vi"
 import { zhTW } from "./locales/zh-TW"
 import type { Locale, Messages, TranslationValues } from "./types"
 
@@ -13,6 +14,7 @@ const localeMessages: Record<Locale, Messages> = {
   "zh-TW": zhTW,
   ja,
   ru,
+  vi,
 }
 
 const localeLabels: Record<Locale, string> = {
@@ -20,6 +22,11 @@ const localeLabels: Record<Locale, string> = {
   "zh-TW": "繁體中文",
   ja: "日本語",
   ru: "Русский",
+  vi: "Tiếng Việt",
+}
+
+type DesktopBridgeWindow = Window & {
+  chrome?: { webview?: { postMessage(message: { type: string; locale: Locale }): void } }
 }
 
 interface I18nContextValue {
@@ -38,13 +45,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, locale)
     document.documentElement.lang = locale
+    const webView = (window as DesktopBridgeWindow).chrome?.webview
+    webView?.postMessage({ type: "openchatx:locale", locale })
   }, [locale])
 
   const value = useMemo<I18nContextValue>(
     () => ({
       locale,
       setLocale,
-      locales: ["zh-TW", "en", "ja", "ru"],
+      locales: ["zh-TW", "en", "vi", "ja", "ru"],
       localeLabels,
       t: (key, values) =>
         interpolate(localeMessages[locale][key] ?? localeMessages.en[key] ?? key, values),
@@ -63,8 +72,10 @@ export function useI18n(): I18nContextValue {
 
 function detectLocale(): Locale {
   const saved = window.localStorage.getItem(STORAGE_KEY)
-  if (saved === "en" || saved === "zh-TW" || saved === "ja" || saved === "ru") return saved
+  if (saved === "en" || saved === "zh-TW" || saved === "ja" || saved === "ru" || saved === "vi")
+    return saved
   const browser = navigator.language.toLowerCase()
+  if (browser.startsWith("vi")) return "vi"
   if (browser.startsWith("ja")) return "ja"
   if (browser.startsWith("zh")) return "zh-TW"
   if (browser.startsWith("ru")) return "ru"
