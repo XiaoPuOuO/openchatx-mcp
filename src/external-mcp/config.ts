@@ -5,6 +5,7 @@ import { z } from "zod"
 const baseServer = z.object({
   enabled: z.boolean().default(true),
   dot: z.boolean().optional(),
+  disabledTools: z.array(z.string().min(1)).optional(),
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   timeout: z.number().int().positive().optional(),

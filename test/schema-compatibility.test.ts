@@ -95,6 +95,7 @@ function emptyExternalMcpRegistry(): ExternalMcpRegistry {
     registerTools() {},
     registerResources() {},
     catalog: () => [],
+    detectedTools: () => [],
     call: async () => {
       throw new Error("No external MCP tools are configured in this test.")
     },

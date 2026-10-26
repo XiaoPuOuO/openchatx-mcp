@@ -6,7 +6,7 @@ import process from "node:process"
 import test from "node:test"
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
-import { McpServer } from "@modelcontextprotocol/server"
+import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
 import { createExternalMcpRegistry } from "../src/external-mcp/registry.js"
@@ -190,6 +190,109 @@ test("aggregates a remote HTTP MCP and tolerates unavailable peers", {
   assert.equal(result.content.find((item) => item.type === "text")?.text, "http:ok")
 })
 
+test("per-tool disable filters discovery and rejects calls across reloads", {
+  timeout: 20_000,
+}, async (t) => {
+  const invoked: string[] = []
+  const upstream = await startMcpHttpServer(
+    {
+      createMcpServer: () => {
+        const server = new McpServer({ name: "multi-tool-fixture", version: "1.0.0" })
+        for (const name of ["generate_or_edit_image", "generate_video"]) {
+          server.registerTool(name, { inputSchema: z.object({}) }, async () => {
+            invoked.push(name)
+            return { content: [{ type: "text", text: name }] }
+          })
+        }
+        return server
+      },
+    },
+    { port: 0 }
+  )
+  t.after(() => upstream.close())
+
+  const root = await tempDir(t, "openchatx-external-tool-toggle-")
+  const configPath = join(root, "mcp-servers.json")
+  const serverConfig = {
+    type: "remote",
+    url: upstream.url,
+    enabled: true,
+    disabledTools: ["generate_or_edit_image"],
+  }
+  await writeFile(configPath, JSON.stringify({ "mcp-api": serverConfig }))
+  const registry = await createExternalMcpRegistry(configPath)
+  t.after(() => registry.close())
+
+  assert.deepEqual(
+    registry.detectedTools().map(({ name }) => name),
+    ["generate_or_edit_image", "generate_video"]
+  )
+  assert.deepEqual(
+    registry.catalog().map(({ originalName }) => originalName),
+    ["generate_video"]
+  )
+  assert.equal(registry.capabilities()[0]?.toolCount, 1)
+  await assert.rejects(
+    () => registry.call("mcp:mcp-api:generate_or_edit_image", {}),
+    /disabled or unavailable/u
+  )
+  assert.deepEqual(invoked, [])
+
+  const outer = await startMcpHttpServer(
+    { createMcpServer: createMcpServerFactory({ externalMcp: registry }, { tools: NO_BUILTINS }) },
+    { port: 0 }
+  )
+  t.after(() => outer.close())
+  const client = new Client({ name: "external-tool-toggle-test", version: "1.0.0" })
+  t.after(() => client.close())
+  await client.connect(new StreamableHTTPClientTransport(new URL(outer.url)))
+  const published = (await client.listTools()).tools.map(({ name }) => name)
+  assert.ok(published.includes("mcp_api__generate_video"))
+  assert.ok(!published.includes("mcp_api__generate_or_edit_image"))
+  await client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "external-tool-toggle-test" },
+  })
+
+  // Keep a direct MCP session alive across the reload to check cached registrations.
+  const persistentServer = new McpServer({ name: "persistent-registry-test", version: "1.0.0" })
+  registry.registerTools(persistentServer)
+  const persistentClient = new Client({ name: "persistent-registry-client", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([
+    persistentServer.connect(serverTransport),
+    persistentClient.connect(clientTransport),
+  ])
+  t.after(() => Promise.all([persistentClient.close(), persistentServer.close()]))
+
+  await writeFile(
+    configPath,
+    JSON.stringify({ "mcp-api": { ...serverConfig, disabledTools: ["generate_video"] } })
+  )
+  await registry.reload()
+  assert.deepEqual(
+    registry.catalog().map(({ originalName }) => originalName),
+    ["generate_or_edit_image"]
+  )
+  assert.deepEqual(
+    registry.detectedTools().map(({ name }) => name),
+    ["generate_or_edit_image", "generate_video"]
+  )
+  await assert.rejects(() => registry.call("mcp:mcp-api:generate_video", {}), /disabled/u)
+  await assert.rejects(
+    () => client.callTool({ name: "mcp_api__generate_video", arguments: {} }),
+    /not found/u
+  )
+  const result = await persistentClient.callTool({
+    name: "mcp_api__generate_video",
+    arguments: {},
+  })
+  assert.equal(result.isError, true)
+  assert.deepEqual(invoked, [])
+  await registry.call("mcp:mcp-api:generate_or_edit_image", {})
+  assert.deepEqual(invoked, ["generate_or_edit_image"])
+})
+
 test("forced external MCP reload reconnects unchanged config", { timeout: 10_000 }, async (t) => {
   const port = await reservePort()
   const root = await tempDir(t, "openchatx-external-force-reload-")
@@ -227,6 +330,67 @@ test("forced external MCP reload reconnects unchanged config", { timeout: 10_000
   await registry.reload(true)
   assert.equal(registry.capabilities()[0]?.available, true)
   assert.deepEqual(registry.connectedServers, ["remote"])
+})
+
+test("remote MCP tools/list changes refresh the catalog without restarting OpenChatX", {
+  timeout: 25_000,
+}, async (t) => {
+  let exposeBeta = false
+  const upstream = await startMcpHttpServer(
+    {
+      createMcpServer: () => {
+        const server = new McpServer({ name: "dynamic-tools-fixture", version: "1.0.0" })
+        server.registerTool("alpha", { inputSchema: z.object({}) }, async () => ({
+          content: [{ type: "text", text: "alpha" }],
+        }))
+        if (exposeBeta) {
+          server.registerTool("beta", { inputSchema: z.object({}) }, async () => ({
+            content: [{ type: "text", text: "beta" }],
+          }))
+        }
+        return server
+      },
+    },
+    { port: 0 }
+  )
+  t.after(() => upstream.close())
+
+  const root = await tempDir(t, "openchatx-dynamic-mcp-tools-")
+  const configPath = join(root, "mcp-servers.json")
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      dynamic: { type: "remote", url: upstream.url, enabled: true },
+    })
+  )
+  const registry = await createExternalMcpRegistry(configPath)
+  t.after(() => registry.close())
+  assert.deepEqual(
+    registry.catalog().map((x) => x.originalName),
+    ["alpha"]
+  )
+
+  exposeBeta = true
+  for (let i = 0; i < 95; i += 1) {
+    if (registry.catalog().some((x) => x.originalName === "beta")) break
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  assert.deepEqual(
+    registry
+      .catalog()
+      .map((x) => x.originalName)
+      .sort((a, b) => a.localeCompare(b)),
+    ["alpha", "beta"]
+  )
+  exposeBeta = false
+  for (let i = 0; i < 95; i += 1) {
+    if (registry.catalog().every((x) => x.originalName !== "beta")) break
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  assert.deepEqual(
+    registry.catalog().map((x) => x.originalName),
+    ["alpha"]
+  )
 })
 
 async function reservePort(): Promise<number> {

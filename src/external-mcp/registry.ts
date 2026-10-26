@@ -23,6 +23,10 @@ import { ExternalMcpOAuth, type McpOAuthState, shouldUseMcpOAuth } from "./oauth
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
 const DEFAULT_CALL_TIMEOUT_MS = 120_000
 const SUPERVISOR_INTERVAL_MS = 2_000
+// Poll remote MCP tool catalogs, so an upstream changing tools/list (GPU
+// service start/stop) is reflected without requiring an OpenChatX restart.
+const REMOTE_TOOL_REFRESH_INTERVAL_MS = 6_000
+const REMOTE_TOOL_REFRESH_TIMEOUT_MS = 5_000
 const MAX_RESTART_BACKOFF_MS = 30_000
 const EXTERNAL_TOOL_ID_RE = /^mcp:([^:]+):(.+)$/u
 
@@ -37,6 +41,12 @@ interface ExternalConnection {
 export interface ExternalMcpResourceOptions {
   allowServers?: readonly string[]
   transformText?: (value: string) => string
+}
+
+export interface ExternalMcpDetectedTool {
+  server: string
+  name: string
+  description?: string
 }
 
 export interface ExternalMcpCatalogTool {
@@ -67,6 +77,7 @@ export interface ExternalMcpRegistry {
   registerTools(server: McpServer): void
   registerResources(server: McpServer, options?: ExternalMcpResourceOptions): void
   catalog(): ExternalMcpCatalogTool[]
+  detectedTools(): ExternalMcpDetectedTool[]
   call(id: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>
   reload(force?: boolean): Promise<void>
   close(): Promise<void>
@@ -94,6 +105,13 @@ export async function createExternalMcpRegistry(
     const reload = reloadQueue.then(async () => {
       const nextConfig = loadExternalMcpConfig(configPath)
       if (!force && JSON.stringify(nextConfig) === JSON.stringify(config)) return
+      const updated = force ? undefined : reloadToolFilters(config, nextConfig, connections)
+      if (updated) {
+        config = nextConfig
+        connections = updated.connections
+        registrations = updated.registrations
+        return
+      }
       const previous = config
       const nextConnections = (
         await Promise.all(
@@ -114,19 +132,7 @@ export async function createExternalMcpRegistry(
       connections = nextConnections
       registrations = nextRegistrations
       await closeConnections(previousConnections)
-      for (const [id, oldServer] of Object.entries(previous)) {
-        if (oldServer.type !== "remote") continue
-        const nextServer = nextConfig[id]
-        if (
-          nextServer?.type === "remote" &&
-          nextServer.url === oldServer.url &&
-          nextServer.oauthClientId === oldServer.oauthClientId &&
-          nextServer.oauthClientMetadataUrl === oldServer.oauthClientMetadataUrl &&
-          shouldUseMcpOAuth(nextServer)
-        )
-          continue
-        await cleanupRetiredOAuth(oauth, id, oldServer)
-      }
+      await cleanupRetiredOAuthServers(oauth, previous, nextConfig)
       supervisor.sync()
     })
     reloadQueue = reload.catch(() => undefined)
@@ -161,6 +167,9 @@ export async function createExternalMcpRegistry(
     }, 150)
     reloadTimer.unref()
   })
+
+  const callRegisteredTool: ExternalMcpRegistry["call"] = (id, args, signal) =>
+    callRegisteredExternalTool(registrations, supervisor, id, args, signal)
 
   return {
     get connectedServers() {
@@ -203,14 +212,15 @@ export async function createExternalMcpRegistry(
         .filter(([, server]) => server.enabled)
         .map(([id, server]) => {
           const connection = connections.find((candidate) => candidate.id === id)
-          const description =
-            server.description ?? summarizeCapabilityFromTools(connection?.tools ?? [])
+          const activeTools =
+            connection?.tools.filter((tool) => !server.disabledTools?.includes(tool.name)) ?? []
+          const description = server.description ?? summarizeCapabilityFromTools(activeTools)
           return {
             id,
             name: server.name ?? id,
             ...(description ? { description } : {}),
             available: connection !== undefined,
-            toolCount: connection?.tools.length ?? 0,
+            toolCount: activeTools.length,
           }
         })
         .sort((a, b) => a.id.localeCompare(b.id))
@@ -249,9 +259,8 @@ export async function createExternalMcpRegistry(
           },
         }
         const callback = async (args: unknown, context: ServerContext) =>
-          supervisor.call(
-            connection.id,
-            tool.name,
+          callRegisteredTool(
+            `mcp:${connection.id}:${tool.name}`,
             isRecord(args) ? args : {},
             context.mcpReq.signal
           )
@@ -276,19 +285,16 @@ export async function createExternalMcpRegistry(
         inputSchema: tool.inputSchema,
       }))
     },
-    async call(id, args, signal) {
-      const parsed = parseExternalToolId(id)
-      const registration = registrations.find(
-        ({ connection, tool }) => connection.id === parsed.server && tool.name === parsed.tool
-      )
-      if (!registration) throw new Error(`Unknown external MCP tool ${JSON.stringify(id)}.`)
-      return supervisor.call(
-        parsed.server,
-        registration.tool.name,
-        normalizeExternalToolArguments(parsed.tool, args),
-        signal
+    detectedTools() {
+      return connections.flatMap((connection) =>
+        connection.tools.map((tool) => ({
+          server: connection.id,
+          name: tool.name,
+          ...(tool.description ? { description: tool.description } : {}),
+        }))
       )
     },
+    call: callRegisteredTool,
     reload: reloadRegistry,
     async close() {
       watcher?.close()
@@ -298,6 +304,26 @@ export async function createExternalMcpRegistry(
       await closeConnections(connections)
       await oauth.close()
     },
+  }
+}
+
+async function cleanupRetiredOAuthServers(
+  oauth: ExternalMcpOAuth,
+  previous: ReturnType<typeof loadExternalMcpConfig>,
+  next: ReturnType<typeof loadExternalMcpConfig>
+): Promise<void> {
+  for (const [id, oldServer] of Object.entries(previous)) {
+    if (oldServer.type !== "remote") continue
+    const nextServer = next[id]
+    if (
+      nextServer?.type === "remote" &&
+      nextServer.url === oldServer.url &&
+      nextServer.oauthClientId === oldServer.oauthClientId &&
+      nextServer.oauthClientMetadataUrl === oldServer.oauthClientMetadataUrl &&
+      shouldUseMcpOAuth(nextServer)
+    )
+      continue
+    await cleanupRetiredOAuth(oauth, id, oldServer)
   }
 }
 
@@ -339,6 +365,8 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
   const processIds = new Map<string, string>()
   const reconnecting = new Map<string, Promise<ExternalConnection | undefined>>()
   const manuallyStopped = new Set<string>()
+  const toolRefreshAfter = new Map<string, number>()
+  const toolRefreshInFlight = new Set<string>()
   let timer: NodeJS.Timeout | undefined
 
   const ensureProcessRecord = (id: string, server: ExternalMcpServerConfig): string => {
@@ -485,6 +513,32 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
     return attempt
   }
 
+  const refreshRemoteTools = async (connection: ExternalConnection): Promise<void> => {
+    if (connection.config.type !== "remote" || toolRefreshInFlight.has(connection.id)) return
+    const now = Date.now()
+    if (now < (toolRefreshAfter.get(connection.id) ?? 0)) return
+    toolRefreshAfter.set(connection.id, now + REMOTE_TOOL_REFRESH_INTERVAL_MS)
+    toolRefreshInFlight.add(connection.id)
+    try {
+      const { tools } = await connection.client.listTools(undefined, {
+        timeout: REMOTE_TOOL_REFRESH_TIMEOUT_MS,
+      })
+      // A reload/reconnect might have replaced this client during the await.
+      const current = access.getConnections()
+      if (current.find((candidate) => candidate.id === connection.id)?.client !== connection.client)
+        return
+      if (JSON.stringify(connection.tools) === JSON.stringify(tools)) return
+      connection.tools = tools
+      access.replaceConnections([...current])
+      console.log(`External MCP ${connection.id}: refreshed (${tools.length} tools)`)
+    } catch {
+      // A transient catalog failure should not break existing tool calls.
+      // Regular supervisor reconnection still handles transport failures.
+    } finally {
+      toolRefreshInFlight.delete(connection.id)
+    }
+  }
+
   const run = async (): Promise<void> => {
     const connections = access.getConnections()
     for (const [id, server] of Object.entries(access.getConfig())) {
@@ -496,6 +550,7 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
         continue
       await reconnect(id).catch(() => undefined)
     }
+    await Promise.allSettled(access.getConnections().map(refreshRemoteTools))
   }
 
   const callConnectionTool = (
@@ -573,6 +628,7 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
         processIds.delete(id)
         restartCounts.delete(id)
         retryAfter.delete(id)
+        toolRefreshAfter.delete(id)
         manuallyStopped.delete(id)
       }
     },
@@ -637,14 +693,68 @@ function applyText(transform: ((value: string) => string) | undefined, value: st
 function buildRegistrations(connections: readonly ExternalConnection[]) {
   const publicNames = new Set<string>()
   return connections.flatMap((connection) =>
-    connection.tools.map((tool) => {
-      const publicName = `${sanitizeToolName(connection.id)}__${sanitizeToolName(tool.name)}`
-      if (publicNames.has(publicName)) {
-        throw new Error(`External MCP tool name collision: ${publicName}`)
-      }
-      publicNames.add(publicName)
-      return { connection, tool, publicName }
-    })
+    connection.tools
+      .filter((tool) => !connection.config.disabledTools?.includes(tool.name))
+      .map((tool) => {
+        const publicName = `${sanitizeToolName(connection.id)}__${sanitizeToolName(tool.name)}`
+        if (publicNames.has(publicName)) {
+          throw new Error(`External MCP tool name collision: ${publicName}`)
+        }
+        publicNames.add(publicName)
+        return { connection, tool, publicName }
+      })
+  )
+}
+
+function reloadToolFilters(
+  current: ReturnType<typeof loadExternalMcpConfig>,
+  next: ReturnType<typeof loadExternalMcpConfig>,
+  connections: readonly ExternalConnection[]
+):
+  | { connections: ExternalConnection[]; registrations: ReturnType<typeof buildRegistrations> }
+  | undefined {
+  if (!sameConnectionSettings(current, next)) return undefined
+  const updatedConnections = connections.map((connection) => ({
+    ...connection,
+    config: next[connection.id] ?? connection.config,
+  }))
+  return { connections: updatedConnections, registrations: buildRegistrations(updatedConnections) }
+}
+
+function sameConnectionSettings(
+  current: ReturnType<typeof loadExternalMcpConfig>,
+  next: ReturnType<typeof loadExternalMcpConfig>
+): boolean {
+  if (Object.keys(current).length !== Object.keys(next).length) return false
+  const connectionFields = (server: ExternalMcpServerConfig) =>
+    Object.entries(server).filter(([field]) => field !== "disabledTools")
+  return Object.entries(current).every(([id, server]) => {
+    const nextServer = next[id]
+    return (
+      nextServer !== undefined &&
+      JSON.stringify(connectionFields(server)) === JSON.stringify(connectionFields(nextServer))
+    )
+  })
+}
+
+async function callRegisteredExternalTool(
+  registrations: ReturnType<typeof buildRegistrations>,
+  supervisor: ExternalMcpSupervisorController,
+  id: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<unknown> {
+  const parsed = parseExternalToolId(id)
+  const registration = registrations.find(
+    ({ connection, tool }) => connection.id === parsed.server && tool.name === parsed.tool
+  )
+  if (!registration)
+    throw new Error(`External MCP tool ${JSON.stringify(id)} is disabled or unavailable.`)
+  return supervisor.call(
+    parsed.server,
+    registration.tool.name,
+    normalizeExternalToolArguments(parsed.tool, args),
+    signal
   )
 }
 

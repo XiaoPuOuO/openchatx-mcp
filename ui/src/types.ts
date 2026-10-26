@@ -266,6 +266,7 @@ export interface PlatformOverview {
 interface McpServerBase {
   enabled: boolean
   dot: boolean
+  disabledTools?: string[]
   description?: string
   timeout?: number
 }

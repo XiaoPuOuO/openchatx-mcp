@@ -21,6 +21,7 @@ test("unified capability registry aggregates MCP, toolbox, agent, and provider c
       registerTools() {},
       registerResources() {},
       catalog: () => [],
+      detectedTools: () => [],
       call: async () => undefined,
       reload: async () => undefined,
       close: async () => undefined,

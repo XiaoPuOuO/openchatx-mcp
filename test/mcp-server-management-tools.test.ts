@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
+import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import test from "node:test"
 
@@ -42,6 +42,12 @@ test("agent can create, update, disable, list, and delete MCP servers", async (t
   assert.equal(listedServer?.headers?.Authorization, "<redacted>")
   assert.equal(listedServer?.description, "Example MCP")
 
+  const configBeforeUpdate = JSON.parse(await readFile(configPath, "utf8")) as {
+    example: { disabledTools?: string[] }
+  }
+  configBeforeUpdate.example.disabledTools = ["generate_or_edit_image"]
+  await writeFile(configPath, JSON.stringify(configBeforeUpdate))
+
   await client.callTool({
     name: "mcp_server_manage",
     arguments: {
@@ -62,8 +68,10 @@ test("agent can create, update, disable, list, and delete MCP servers", async (t
       timeout: number
       enabled: boolean
       headers: Record<string, string>
+      disabledTools: string[]
     }
   }
+  assert.deepEqual(saved.example.disabledTools, ["generate_or_edit_image"])
   assert.equal(saved.example.description, "Updated MCP")
   assert.equal(saved.example.timeout, 5000)
   assert.equal(saved.example.enabled, false)

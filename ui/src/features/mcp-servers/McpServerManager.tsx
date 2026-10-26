@@ -130,15 +130,27 @@ export function McpServerManager({
     selected && selectedId
       ? serverStatus(selected, health[`mcp:${selectedId}`], authorization[selectedId]?.status)
       : undefined
-  const selectedTools = useMemo(
-    () => detectedTools.filter((tool) => tool.server === selectedId),
-    [detectedTools, selectedId]
-  )
+  const selectedTools = useMemo<McpDetectedTool[]>(() => {
+    const detected = detectedTools.filter((tool) => tool.server === selectedId)
+    if (!selectedId) return detected
+    const missingDisabled = (servers[selectedId]?.disabledTools ?? [])
+      .filter((name) => !detected.some((tool) => tool.name === name))
+      .map((name) => ({ server: selectedId, name }))
+    return [...detected, ...missingDisabled]
+  }, [detectedTools, selectedId, servers])
 
   function updateSelected(next: McpServerConfig) {
     if (!selectedId) return
     setServers((current) => ({ ...current, [selectedId]: next }))
     setMessage(undefined)
+  }
+
+  function setSelectedToolEnabled(toolName: string, enabled: boolean) {
+    if (!selected) return
+    const disabled = new Set(selected.disabledTools ?? [])
+    if (enabled) disabled.delete(toolName)
+    else disabled.add(toolName)
+    updateSelected({ ...selected, disabledTools: disabled.size ? [...disabled] : undefined })
   }
 
   function addServer() {
@@ -180,6 +192,7 @@ export function McpServerManager({
       const result = await saveMcpServers(servers)
       setServers(result.servers)
       const current = await fetchMcpServers()
+      setDetectedTools(current.tools)
       setAuthorization(current.authorization ?? {})
       await refreshHealth().catch(() => undefined)
       setMessage(result.restartRequired ? t("mcp.savedRestart") : t("mcp.saved"))
@@ -481,6 +494,7 @@ export function McpServerManager({
                               command: [""],
                               enabled: selected.enabled,
                               dot: selected.dot,
+                              disabledTools: selected.disabledTools,
                             })
                           } else {
                             updateSelected({
@@ -488,6 +502,7 @@ export function McpServerManager({
                               url: "http://127.0.0.1:8000/mcp",
                               enabled: selected.enabled,
                               dot: selected.dot,
+                              disabledTools: selected.disabledTools,
                             })
                           }
                         }}
@@ -730,9 +745,19 @@ export function McpServerManager({
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   <div className="flex items-center justify-between px-5 py-3">
-                    <span className="text-xs text-muted-foreground">
-                      {t("mcp.detectedToolsCount", { count: selectedTools.length })}
-                    </span>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("mcp.detectedToolsCount", { count: selectedTools.length })} ·{" "}
+                        {t("mcp.toolEnabledCount", {
+                          count: selectedTools.filter(
+                            (tool) => !selected.disabledTools?.includes(tool.name)
+                          ).length,
+                        })}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t("mcp.toolToggleHint")}
+                      </p>
+                    </div>
                   </div>
                   {selectedTools.length === 0 ? (
                     <div className="border-t px-5 py-8 text-sm text-muted-foreground">
@@ -742,10 +767,11 @@ export function McpServerManager({
                     <div className="divide-y border-t">
                       {selectedTools.map((tool) => {
                         const riskKey = `mcp:${tool.server}:${tool.name}`
+                        const toolEnabled = !selected.disabledTools?.includes(tool.name)
                         return (
                           <div
                             key={`${tool.server}:${tool.name}`}
-                            className="flex items-start justify-between gap-4 px-5 py-4"
+                            className={`flex items-start justify-between gap-4 px-5 py-4 ${toolEnabled ? "" : "bg-muted/20"}`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="break-all font-mono text-sm font-medium">
@@ -757,22 +783,39 @@ export function McpServerManager({
                                 </ReactMarkdown>
                               </div>
                             </div>
-                            <select
-                              className="h-8 shrink-0 rounded-md border bg-background px-2 text-xs"
-                              value={toolRiskOverrides[riskKey] ?? "default"}
-                              title={t("toolboxes.riskPolicy")}
-                              onChange={(event) => {
-                                const value = event.target.value
-                                void setToolRisk(
-                                  tool,
-                                  value === "low" || value === "approval" ? value : undefined
-                                )
-                              }}
-                            >
-                              <option value="default">{t("toolboxes.risk.default")}</option>
-                              <option value="low">{t("toolboxes.risk.low")}</option>
-                              <option value="approval">{t("toolboxes.risk.approval")}</option>
-                            </select>
+                            <div className="flex shrink-0 flex-col items-end gap-3">
+                              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                                <span className={toolEnabled ? "text-foreground" : "text-muted-foreground"}>
+                                  {toolEnabled ? t("mcp.toolEnabled") : t("mcp.toolDisabled")}
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  className="size-4"
+                                  aria-label={t("mcp.toggleTool", { name: tool.name })}
+                                  checked={toolEnabled}
+                                  onChange={(event) =>
+                                    setSelectedToolEnabled(tool.name, event.target.checked)
+                                  }
+                                  disabled={saving}
+                                />
+                              </label>
+                              <select
+                                className="h-8 rounded-md border bg-background px-2 text-xs"
+                                value={toolRiskOverrides[riskKey] ?? "default"}
+                                title={t("toolboxes.riskPolicy")}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  void setToolRisk(
+                                    tool,
+                                    value === "low" || value === "approval" ? value : undefined
+                                  )
+                                }}
+                              >
+                                <option value="default">{t("toolboxes.risk.default")}</option>
+                                <option value="low">{t("toolboxes.risk.low")}</option>
+                                <option value="approval">{t("toolboxes.risk.approval")}</option>
+                              </select>
+                            </div>
                           </div>
                         )
                       })}

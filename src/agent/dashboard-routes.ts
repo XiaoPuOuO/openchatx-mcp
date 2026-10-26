@@ -161,12 +161,7 @@ export function createDashboardRouter(
     res.json({
       servers,
       authorization: externalMcp?.authorization?.() ?? {},
-      tools:
-        externalMcp?.catalog().map(({ server, originalName, description }) => ({
-          server,
-          name: originalName,
-          ...(description ? { description } : {}),
-        })) ?? [],
+      tools: externalMcp?.detectedTools() ?? [],
     })
   })
 
@@ -195,12 +190,7 @@ export function createDashboardRouter(
       res.json({
         servers,
         authorization: externalMcp?.authorization?.() ?? {},
-        tools:
-          externalMcp?.catalog().map(({ server, originalName, description }) => ({
-            server,
-            name: originalName,
-            ...(description ? { description } : {}),
-          })) ?? [],
+        tools: externalMcp?.detectedTools() ?? [],
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

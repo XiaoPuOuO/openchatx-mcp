@@ -76,6 +76,7 @@ export default {
         inputSchema: { type: "object", properties: {} },
       },
     ],
+    detectedTools: () => [],
     call: async (id) => ({ content: [{ type: "text", text: `called:${id}` }] }),
     reload: async () => {},
     close: async () => {},

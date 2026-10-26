@@ -137,6 +137,7 @@ function buildServerConfig(
   const timeout = nullableValue(input.timeout, existing?.timeout)
   const common = {
     enabled: input.enabled ?? existing?.enabled ?? true,
+    ...(existing?.disabledTools ? { disabledTools: existing.disabledTools } : {}),
     ...(description === undefined ? {} : { description }),
     ...(timeout === undefined ? {} : { timeout }),
   }
