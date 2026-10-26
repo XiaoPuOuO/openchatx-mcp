@@ -785,7 +785,11 @@ export function McpServerManager({
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-3">
                               <label className="flex cursor-pointer items-center gap-2 text-xs">
-                                <span className={toolEnabled ? "text-foreground" : "text-muted-foreground"}>
+                                <span
+                                  className={
+                                    toolEnabled ? "text-foreground" : "text-muted-foreground"
+                                  }
+                                >
                                   {toolEnabled ? t("mcp.toolEnabled") : t("mcp.toolDisabled")}
                                 </span>
                                 <input

@@ -385,7 +385,8 @@ export const ru = {
   "mcp.toolEnabledCount": "Включено: {count}",
   "mcp.toolEnabled": "Включён",
   "mcp.toolDisabled": "Отключён",
-  "mcp.toolToggleHint": "Снимите флажок и сохраните, чтобы агент не мог найти или вызвать инструмент.",
+  "mcp.toolToggleHint":
+    "Снимите флажок и сохраните, чтобы агент не мог найти или вызвать инструмент.",
   "mcp.toggleTool": "Включить инструмент {name}",
   "mcp.noDetectedTools": "Инструменты пока не обнаружены. Обновите данные для опроса сервера.",
   "mcp.noToolDescription": "Описание не задано.",

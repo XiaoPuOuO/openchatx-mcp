@@ -447,7 +447,8 @@ export const ja: Messages = {
   "mcp.toolEnabledCount": "有効: {count} 個",
   "mcp.toolEnabled": "有効",
   "mcp.toolDisabled": "無効",
-  "mcp.toolToggleHint": "チェックを外して保存すると、エージェントはこのツールを検索・実行できなくなります。",
+  "mcp.toolToggleHint":
+    "チェックを外して保存すると、エージェントはこのツールを検索・実行できなくなります。",
   "mcp.toggleTool": "ツール {name} を有効にする",
   "mcp.noDetectedTools":
     "まだ利用可能なツールが検出されていません。再確認するとここに表示されます。",
