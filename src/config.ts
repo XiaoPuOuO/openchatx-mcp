@@ -83,16 +83,12 @@ export const MCP_CONFIG = {
     /** Local tunnel-client health/admin UI port. */
     healthPort: publicConfig.tunnel.health_port,
   },
-  /** Dot persona: second MCP listener with cloud-service semantics for ChatGPT for Work (Dots). */
-  dot: {
-    enabled: publicConfig.dot.enabled,
-    port: publicConfig.dot.port,
-    healthPort: publicConfig.dot.health_port,
-    profile: publicConfig.dot.profile,
-    externalServers: publicConfig.dot.external_servers,
-  },
   context: {
     warningThreshold: publicConfig.context.warning_threshold,
+  },
+  /** Live session retention: 0 keeps every session. */
+  sessions: {
+    maxRetained: publicConfig.sessions.max_retained,
   },
   /** MCP protocol presentation settings. */
   mcp: {
@@ -192,7 +188,7 @@ export function buildMcpInstructions(): string {
     "- Relative file/search/shell paths use the active Project. If PROJECT_EXTERNAL_ACCESS_REQUIRED occurs, ask the user first, then use project_manage action=grant_once; use grant_all_session only when explicitly authorized.\n" +
     "- Goals are workspace-scoped session tasks created and maintained only by the Agent. goal_list and goal_manage are always available. start_here automatically injects unfinished Goals for the active Project, or unscoped Goals when no Project is active. For substantial multi-step work, use goal_list/goal_manage directly after Project routing; creation automatically binds to the current scope. Do not create Goals for trivial one-off actions, and keep status accurate: blocked, completed, or cancelled as appropriate.\n" +
     "- Skills use portable SKILL.md Markdown with name/description frontmatter. Do not enumerate skill names proactively.\n" +
-    "- When the user explicitly mentions a skill/workflow by name or asks to use one, call skill_search to search; then use skill_search action=load for the selected exact match.\n" +
+    "- Use skill_search only when a Skill plausibly helps the task or the user requests one. Load its SKILL.md only for a clear match; otherwise work without a Skill. If the user forbids Skills, do not search or load any.\n" +
     "- Use skill_manage to create, edit, or delete user-owned skills. Capability Store operations are lazy and compressed into store_browse, store_manage, and store_skill; discover them with tool_search first.\n" +
     "- Rules use two compact tools. rule_resolve resolves applicable rules by query/paths (default action) or loads one exact rule with action=load plus toolbox_id/name. rule_manage handles create/edit/delete/import/export. Always rules are injected by start_here.\n" +
     "- MCP server management and other platform administration are lazy. Discover mcp_server_list/mcp_server_manage or the relevant tool with tool_search before calling tool_call.\n" +

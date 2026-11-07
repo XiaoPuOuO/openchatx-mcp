@@ -6,7 +6,7 @@ import type {
   McpServerMap,
   SubagentConfig,
   ToolboxSnapshot,
-} from "../types"
+} from "../types.js"
 
 const now = Date.now()
 let instructionCounter = 3
@@ -129,14 +129,12 @@ let mcpServers: McpServerMap = {
     type: "local",
     command: ["/opt/homebrew/bin/uvx", "blender-mcp"],
     enabled: true,
-    dot: true,
     description: "Blender control",
   },
   "unreal-engine": {
     type: "remote",
     url: "http://127.0.0.1:8000/mcp",
     enabled: true,
-    dot: true,
     timeout: 300000,
     description: "Unreal Engine MCP",
   },
@@ -144,13 +142,11 @@ let mcpServers: McpServerMap = {
     type: "local",
     command: ["/opt/homebrew/bin/open-computer-use", "mcp"],
     enabled: true,
-    dot: false,
   },
   "mcp-api": {
     type: "remote",
     url: "https://mcp-api.vdineapp.com/mcp",
     enabled: true,
-    dot: false,
     headers: { Authorization: "Bearer ••••••••••••" },
     timeout: 900000,
     description: "VDine image / video / music tools",
@@ -360,6 +356,17 @@ export async function steerMockAgent(agentId: string, message: string): Promise<
   return instruction
 }
 
+export async function setMockUnlimitedContext(agentId: string, unlimited: boolean): Promise<void> {
+  updateAgent(agentId, (agent) => ({
+    ...agent,
+    contextBudget: {
+      tokens: 0, inputTokens: 0, outputTokens: 0, threshold: 400_000,
+      ...agent.contextBudget,
+      unlimited,
+    },
+  }))
+}
+
 export async function cancelMockSteer(agentId: string, instructionId: string): Promise<void> {
   updateAgent(agentId, (agent) => ({
     ...agent,
@@ -398,8 +405,9 @@ export async function mutateMockToolboxes(
 
 function updateAgent(agentId: string, update: (agent: Agent) => Agent): void {
   const index = agents.findIndex((agent) => agent.id === agentId)
-  if (index === -1) throw new Error(`Unknown mock agent: ${agentId}`)
-  const next = update(agents[index])
+  const current = agents[index]
+  if (!current) throw new Error(`Unknown mock agent: ${agentId}`)
+  const next = update(current)
   agents = agents.map((agent, agentIndex) => (agentIndex === index ? next : agent))
   const event: AgentChangedEvent = { type: "agent_changed", agent: structuredClone(next) }
   for (const listener of listeners) listener(event)

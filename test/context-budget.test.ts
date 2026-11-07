@@ -19,6 +19,41 @@ function textResult(text: string) {
   return { content: [{ type: "text", text }] }
 }
 
+test("unlimited sessions retain usage and resume warnings when disabled", async () => {
+  const guard = new ContextBudgetGuard(20, (value) => value.length)
+  const agent = identity("unlimited")
+  await guard.setUnlimitedSession(agent.sessionId, true)
+  assert.equal(
+    await guard.record(agent, "grep", { pattern: "x".repeat(30) }, textResult("result")),
+    undefined
+  )
+  assert.ok((guard.usage(agent)?.tokens ?? 0) > 20)
+  assert.equal(guard.usage(agent)?.unlimited, true)
+  await guard.setUnlimitedSession(agent.sessionId, false)
+  assert.match(
+    (await guard.record(agent, "grep", {}, textResult("next"))) ?? "",
+    /Context budget warning/u
+  )
+})
+
+test("unlimited setting survives guard restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "context-unlimited-"))
+  try {
+    const path = join(directory, "state.json")
+    const first = new ContextBudgetGuard(20, (value) => value.length, path)
+    await first.setUnlimitedSession("one", true)
+    const second = new ContextBudgetGuard(20, (value) => value.length, path)
+    await second.initialize()
+    assert.equal(second.usage(identity("one"))?.unlimited, true)
+    assert.equal(
+      await second.record(identity("one"), "grep", { x: "x".repeat(30) }, textResult("ok")),
+      undefined
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test("defaults the session warning threshold to 400k tokens", () => {
   const guard = new ContextBudgetGuard()
   assert.equal(guard.usage(identity("one"))?.threshold, 400_000)
@@ -52,30 +87,6 @@ test("warns after cumulative tool input and output cross the session threshold",
   assert.match(warning ?? "", /MUST NOT send ANY final user-facing completion report yet/u)
   assert.match(warning ?? "", /MUST successfully call `summarize` exactly once/u)
   assert.match(warning ?? "", /open a new ChatGPT conversation/u)
-})
-
-test("Dot sessions keep recording usage without emitting summarize warnings", async () => {
-  const guard = new ContextBudgetGuard(20, (value) => value.length)
-  const agent = identity("dot")
-  await guard.setDotSession(agent.sessionId, true)
-
-  const notice = await guard.record(
-    agent,
-    "grep",
-    { pattern: "x".repeat(30) },
-    textResult("result")
-  )
-
-  assert.equal(notice, undefined)
-  assert.equal(guard.isDotSession(agent.sessionId), true)
-  assert.ok((guard.usage(agent)?.tokens ?? 0) > 20)
-
-  await guard.setDotSession(agent.sessionId, false)
-  assert.equal(guard.isDotSession(agent.sessionId), false)
-  assert.match(
-    (await guard.record(agent, "grep", {}, textResult("next"))) ?? "",
-    /Context budget warning/u
-  )
 })
 
 test("tool input alone contributes to the context budget", async () => {

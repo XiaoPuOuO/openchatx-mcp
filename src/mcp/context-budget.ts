@@ -16,6 +16,7 @@ interface SessionBudgetState {
   outputTokens: number
   summaryUuid?: string
   dot?: boolean
+  unlimited?: boolean
 }
 
 interface PersistedContextBudgetState {
@@ -27,6 +28,7 @@ export interface ContextBudgetUsage {
   inputTokens: number
   outputTokens: number
   threshold: number
+  unlimited?: boolean
 }
 
 export class ContextBudgetGuard {
@@ -95,7 +97,7 @@ export class ContextBudgetGuard {
 
     this.sessions.set(agent.sessionId, state)
     await this.persist()
-    if (state.dot || totalTokens < this.warningThreshold) return undefined
+    if (state.unlimited || totalTokens < this.warningThreshold) return undefined
 
     if (state.summaryUuid) {
       return [
@@ -133,16 +135,13 @@ export class ContextBudgetGuard {
       inputTokens,
       outputTokens,
       threshold: this.warningThreshold,
+      ...(state?.unlimited ? { unlimited: true } : {}),
     }
   }
 
-  isDotSession(sessionId: string): boolean {
-    return this.sessions.get(sessionId)?.dot === true
-  }
-
-  async setDotSession(sessionId: string, dot: boolean): Promise<void> {
+  async setUnlimitedSession(sessionId: string, unlimited: boolean): Promise<void> {
     const state = this.sessions.get(sessionId) ?? { inputTokens: 0, outputTokens: 0 }
-    state.dot = dot || undefined
+    state.unlimited = unlimited || undefined
     this.sessions.set(sessionId, state)
     await this.persist()
   }
@@ -241,7 +240,8 @@ function parsePersistedState(value: unknown): PersistedContextBudgetState {
       !Number.isFinite(outputTokens) ||
       outputTokens < 0 ||
       (rawState.summaryUuid !== undefined && typeof rawState.summaryUuid !== "string") ||
-      (rawState.dot !== undefined && typeof rawState.dot !== "boolean")
+      !validOptionalBoolean(rawState.dot) ||
+      !validOptionalBoolean(rawState.unlimited)
     ) {
       throw new TypeError(`Invalid context budget state for session ${JSON.stringify(sessionId)}.`)
     }
@@ -249,10 +249,15 @@ function parsePersistedState(value: unknown): PersistedContextBudgetState {
       inputTokens,
       outputTokens,
       ...(typeof rawState.summaryUuid === "string" ? { summaryUuid: rawState.summaryUuid } : {}),
-      ...(rawState.dot === true ? { dot: true } : {}),
+      dot: rawState.dot === true || undefined,
+      unlimited: rawState.unlimited === true || undefined,
     }
   }
   return { sessions }
+}
+
+function validOptionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === "boolean"
 }
 
 function modelFacingToolResultText(value: unknown): string | undefined {

@@ -89,6 +89,23 @@ test("OAuth credentials are persisted per resource, bound to issuer and cleared 
   assert.equal(await restored.tokens(), undefined)
 })
 
+test("OAuth keeps the existing refresh token when a refresh response omits it", async () => {
+  const provider = new KeyringOAuthProvider(
+    "refresh",
+    remote,
+    () => undefined,
+    37792,
+    memoryStore()
+  )
+  const issuer = { issuer: "https://issuer.example.com" }
+  await provider.saveTokens(
+    { access_token: "old", refresh_token: "refresh-1", token_type: "Bearer" },
+    issuer
+  )
+  await provider.saveTokens({ access_token: "new", token_type: "Bearer" }, issuer)
+  assert.equal((await provider.tokens(issuer))?.refresh_token, "refresh-1")
+})
+
 test("OAuth loopback callback rejects wrong state and replays, and resumes connection once", async (t) => {
   const port = await freePort()
   const store = memoryStore()
@@ -168,6 +185,8 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
   let base = ""
   let challenge = ""
   let exchanged = 0
+  let refreshed = 0
+  let expired = false
   const server = createHttpServer(async (req, res) => {
     const url = new URL(req.url ?? "/", base || "http://127.0.0.1")
     const json = (data: unknown, status = 200) => {
@@ -200,6 +219,16 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
     for await (const part of req) chunks.push(Buffer.from(part))
     if (url.pathname === "/token") {
       const params = new URLSearchParams(Buffer.concat(chunks).toString())
+      if (params.get("grant_type") === "refresh_token") {
+        assert.equal(params.get("refresh_token"), "refresh-1")
+        refreshed++
+        return json({
+          access_token: "refreshed-access",
+          refresh_token: "refresh-2",
+          token_type: "Bearer",
+          expires_in: 3600,
+        })
+      }
       assert.equal(
         createHash("sha256")
           .update(params.get("code_verifier") ?? "")
@@ -209,10 +238,17 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
       assert.equal(params.get("resource"), `${base}/mcp`)
       assert.equal(params.get("code"), "valid-code")
       exchanged++
-      return json({ access_token: "mock-access", token_type: "Bearer", expires_in: 3600 })
+      return json({
+        access_token: "mock-access",
+        refresh_token: "refresh-1",
+        token_type: "Bearer",
+        expires_in: 3600,
+      })
     }
     if (url.pathname === "/mcp") {
-      if (req.headers.authorization !== "Bearer mock-access") {
+      if (
+        req.headers.authorization !== (expired ? "Bearer refreshed-access" : "Bearer mock-access")
+      ) {
         res.writeHead(401, {
           "www-authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"`,
         })
@@ -235,7 +271,9 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
                 capabilities: { tools: {} },
                 serverInfo: { name: "oauth-test", version: "1" },
               }
-            : { tools: [] },
+            : body.method === "tools/call"
+              ? { content: [{ type: "text", text: "connected" }] }
+              : { tools: [{ name: "echo", inputSchema: { type: "object", properties: {} } }] },
       })
     }
     return json({ error: "unknown route" }, 404)
@@ -267,6 +305,7 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
   t.after(() => registry.close())
   assert.equal(registry.authorization?.().protected?.status, "auth_required")
   assert.equal(registry.authorization?.().protected?.oauthDetected, true)
+
   const authorize = new URL(registry.beginAuthorization?.("protected").authorizationUrl ?? "")
   assert.equal(authorize.origin, base)
   assert.equal(authorize.searchParams.get("resource"), `${base}/mcp`)
@@ -284,6 +323,12 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
   assert.deepEqual(registry.connectedServers, ["protected"])
   assert.equal(registry.authorization?.().protected?.status, "none")
   assert.equal(registry.authorization?.().protected?.oauthDetected, true)
+
+  expired = true
+  const result = await registry.call("mcp:protected:echo", {})
+  assert.match(JSON.stringify(result), /connected/)
+  assert.deepEqual(registry.connectedServers, ["protected"])
+  assert.equal(refreshed, 1)
 
   // After a runtime restart the saved OAuth token must still identify this
   // as an OAuth MCP, rather than hiding its account-management controls.

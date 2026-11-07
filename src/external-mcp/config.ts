@@ -43,29 +43,6 @@ export const externalMcpConfigSchema = z.record(
 export type ExternalMcpServerConfig = z.infer<typeof externalMcpConfigSchema>[string]
 export type ExternalMcpConfig = z.infer<typeof externalMcpConfigSchema>
 
-export function resolveDotServerIds(
-  config: ExternalMcpConfig,
-  legacyAllowList: readonly string[]
-): string[] {
-  const legacyAllowsAll = legacyAllowList.length === 0
-  const legacyAllowed = new Set(legacyAllowList)
-  return Object.entries(config)
-    .filter(
-      ([id, server]) => server.enabled && (server.dot ?? (legacyAllowsAll || legacyAllowed.has(id)))
-    )
-    .map(([id]) => id)
-}
-
-export function resolveDotExposure(
-  config: ExternalMcpConfig,
-  legacyAllowList: readonly string[]
-): ExternalMcpConfig {
-  const allowed = new Set(resolveDotServerIds(config, legacyAllowList))
-  return Object.fromEntries(
-    Object.entries(config).map(([id, server]) => [id, { ...server, dot: allowed.has(id) }])
-  )
-}
-
 export function loadExternalMcpConfig(path: string): ExternalMcpConfig {
   if (!existsSync(path)) return {}
 

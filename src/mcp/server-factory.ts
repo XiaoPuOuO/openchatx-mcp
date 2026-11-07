@@ -3,19 +3,11 @@ import type { AgentObserver } from "../agent/observer.js"
 import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { buildMcpInstructions, MCP_CONFIG } from "../config.js"
-import { loadExternalMcpConfig, resolveDotServerIds } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import type { GoalRegistry } from "../goals/goal-registry.js"
 import type { GoalScope } from "../goals/goal-scope.js"
 import type { JobManager } from "../jobs/job-manager.js"
 import type { NodeRegistry } from "../nodes/node-registry.js"
-import {
-  buildDotInstructions,
-  installDotRegistrationFilter,
-  registerDotRuntime,
-  registerDotToolCatalog,
-  sanitizeDotText,
-} from "../persona/dot-persona.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { ProjectScope } from "../projects/project-scope.js"
 import type { ProviderHub } from "../providers/provider-hub.js"
@@ -93,8 +85,6 @@ export interface CreateMcpServerOptions {
   contextBudget?: ContextBudgetGuard
   progressHeartbeat?: ProgressHeartbeatGuard
   runtimeControl?: RuntimeControlService
-  /** Presentation persona for this request surface. Defaults to "chat". */
-  persona?: "chat" | "dot"
 }
 
 export interface McpCapabilityServices {
@@ -120,8 +110,6 @@ export interface McpCapabilityServices {
   nodes?: NodeRegistry
   contextBudget?: ContextBudgetGuard
   runtimeControl?: RuntimeControlService
-  /** Presentation persona for every server created by this factory. */
-  persona?: "chat" | "dot"
 }
 
 export interface McpRuntimeProfile {
@@ -154,9 +142,7 @@ export function createMcpServerFactory(
 ): McpServerFactory {
   const profile = snapshotMcpRuntimeProfile(profileOverrides)
   const contextBudget = services.contextBudget ?? new ContextBudgetGuard()
-  const progressHeartbeat = new ProgressHeartbeatGuard(12, (sessionId) =>
-    contextBudget.isDotSession(sessionId)
-  )
+  const progressHeartbeat = new ProgressHeartbeatGuard()
   return (context = {}) =>
     createMcpServer(
       {
@@ -171,13 +157,11 @@ export function createMcpServerFactory(
 }
 
 function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimeProfile): McpServer {
-  if (options.persona === "dot") return createDotMcpServer(options, profile)
   const server = new McpServer(profile.server, {
     instructions: buildMcpInstructions(),
   })
   installToolRegistrationBoundary(server, {
     structuredOutput: profile.toolOutput === "structured",
-    surface: "chat",
     agentObserver: options.agentObserver,
     auditRequest: options.auditRequest,
     contextBudget: options.contextBudget,
@@ -199,43 +183,6 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
   }
   options.externalMcp?.registerResources(server)
 
-  return server
-}
-
-function createDotMcpServer(
-  options: CreateMcpServerOptions,
-  profile: McpRuntimeProfile
-): McpServer {
-  const dotServerIds = resolveDotServerIds(
-    loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
-    MCP_CONFIG.dot.externalServers
-  )
-  const server = new McpServer(
-    { ...profile.server, name: "open-dotx-cloud" },
-    { instructions: buildDotInstructions() }
-  )
-  // Dot is a separate product surface. Chat-only context budget checkpoints and
-  // synthetic progress instructions must never be injected into Dot responses.
-  installToolRegistrationBoundary(server, {
-    structuredOutput: profile.toolOutput === "structured",
-    surface: "dot",
-    agentObserver: options.agentObserver,
-    auditRequest: options.auditRequest,
-    contextBudget: options.contextBudget,
-    runtimeControl: options.runtimeControl,
-  })
-  installDotRegistrationFilter(server, dotServerIds)
-  registerDotRuntime(server, {
-    jobManager: options.jobManager,
-    contextBudget: options.contextBudget,
-    projectRegistry: options.projectRegistry,
-    summaries: options.summaryRegistry,
-  })
-  if (options.externalMcp) registerDotToolCatalog(server, options.externalMcp, dotServerIds)
-  options.externalMcp?.registerResources(server, {
-    allowServers: dotServerIds,
-    transformText: sanitizeDotText,
-  })
   return server
 }
 
@@ -321,7 +268,11 @@ function registerPlatformTools(
     registerToolboxManagementTools(target, registry)
   )
   registerConfiguredBuiltin(server, lazyServer, registry, "mcp-manager", (target) =>
-    registerMcpServerManagementTools(target, MCP_CONFIG.externalMcp.configFile, options.externalMcp)
+    registerMcpServerManagementTools(
+      target,
+      () => MCP_CONFIG.externalMcp.configFile,
+      options.externalMcp
+    )
   )
   const capabilityStore = options.capabilityStore
   if (capabilityStore)

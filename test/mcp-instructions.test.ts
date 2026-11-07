@@ -11,4 +11,6 @@ test("MCP instructions route ordinary file search to dedicated tools", () => {
   assert.match(instructions, /Search inside file contents: use grep/u)
   assert.match(instructions, /Do not use bash grep or rg/u)
   assert.match(instructions, /Use bash for genuine shell work/u)
+  assert.match(instructions, /Use skill_search only when a Skill plausibly helps/u)
+  assert.match(instructions, /If the user forbids Skills, do not search or load any/u)
 })

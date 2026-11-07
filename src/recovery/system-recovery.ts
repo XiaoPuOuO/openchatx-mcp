@@ -6,7 +6,11 @@ import process from "node:process"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
 import { redactText } from "../security/redact.js"
-import { loadOperationalState, updateOperationalState } from "./operational-state.js"
+import {
+  loadOperationalState,
+  saveOperationalState,
+  updateOperationalState,
+} from "./operational-state.js"
 
 export interface DoctorCheck {
   id: string
@@ -16,8 +20,17 @@ export interface DoctorCheck {
   repairable: boolean
 }
 
+export interface SafeModeRuntime {
+  /** Applies the mode to live registries; must be idempotent. */
+  applySafeMode(enabled: boolean): Promise<void>
+}
+
 export class SystemRecoveryService {
-  constructor(private readonly health?: CapabilityHealthService) {}
+  private safeModeQueue: Promise<unknown> = Promise.resolve()
+  constructor(
+    private readonly health?: CapabilityHealthService,
+    private readonly runtime?: SafeModeRuntime
+  ) {}
 
   async diagnostics(): Promise<{
     version: string
@@ -103,8 +116,15 @@ export class SystemRecoveryService {
     throw new Error(`Unknown doctor check ${JSON.stringify(id)}.`)
   }
 
-  async setSafeMode(enabled: boolean, reason?: string) {
-    return updateOperationalState((state) => {
+  setSafeMode(enabled: boolean, reason?: string) {
+    const operation = this.safeModeQueue.then(() => this.switchSafeMode(enabled, reason))
+    this.safeModeQueue = operation.catch(() => undefined)
+    return operation
+  }
+
+  private async switchSafeMode(enabled: boolean, reason?: string) {
+    const previous = await loadOperationalState()
+    const next = await updateOperationalState((state) => {
       state.safeMode = enabled
         ? {
             enabled: true,
@@ -113,6 +133,15 @@ export class SystemRecoveryService {
           }
         : { enabled: false }
     })
+    if (!this.runtime) return next
+    try {
+      await this.runtime.applySafeMode(enabled)
+      return next
+    } catch (error) {
+      // Keep persisted state and the live runtime consistent when applying fails.
+      await saveOperationalState(previous).catch(() => undefined)
+      throw error
+    }
   }
 
   async recordCrash(error: unknown): Promise<void> {

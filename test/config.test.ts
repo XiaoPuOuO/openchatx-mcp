@@ -53,6 +53,7 @@ test("loads and validates OpenChatX TOML config", async (t) => {
       external_servers: [],
     },
     context: { warning_threshold: 400_000 },
+    sessions: { max_retained: 30 },
     mcp: { tool_output: "structured" },
     tools: {
       shell: true,

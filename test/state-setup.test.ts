@@ -21,6 +21,11 @@ test("state setup creates AGENTS.md without creating a global skills catalog", a
   const agentsPath = join(stateDir, "AGENTS.md")
   const agentsTemplate = await readFile(agentsPath, "utf8")
   assert.match(agentsTemplate, /# OpenChatX Agent Instructions/u)
+  assert.match(agentsTemplate, /Mode: `\{\{MODE\}\}`/u)
+  assert.match(agentsTemplate, /Task ID: `\{\{TASK_ID\}\}`/u)
+  assert.match(agentsTemplate, /## Agent Skills/u)
+  assert.match(agentsTemplate, /If the match is uncertain or no suitable Skill is found/u)
+  assert.match(agentsTemplate, /user explicitly asks not to use them/u)
   assert.match(agentsTemplate, /\{\{CAPABILITY_CATALOG\}\}/u)
   await assert.rejects(stat(join(stateDir, "skills")), /ENOENT/u)
 
@@ -48,6 +53,9 @@ test("state setup merges new default AGENTS sections without overwriting user cu
   const agents = await readFile(join(stateDir, "AGENTS.md"), "utf8")
   const baseline = await readFile(join(stateDir, ".managed", "AGENTS.default.md"), "utf8")
   assert.match(agents, /## Progress updates/u)
+  assert.match(agents, /## Agent Skills/u)
+  assert.match(agents, /Mode: `\{\{MODE\}\}`/u)
+  assert.match(agents, /Task ID: `\{\{TASK_ID\}\}`/u)
   assert.match(agents, /Always keep my custom instruction\./u)
   assert.equal(baseline, nextTemplate)
 

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -18,6 +19,7 @@ import { ProjectScope } from "./projects/project-scope.js"
 import { ProjectWorkspaceService } from "./projects/workspace-snapshot.js"
 import { ProviderHub } from "./providers/provider-hub.js"
 import { loadOperationalState } from "./recovery/operational-state.js"
+import { createSafeModeSwitcher } from "./recovery/safe-mode-switch.js"
 import { SystemRecoveryService } from "./recovery/system-recovery.js"
 import { startMemoryMonitor } from "./runtime/memory-monitor.js"
 import { runtimeProcessRegistry } from "./runtime/process-registry.js"
@@ -57,6 +59,14 @@ const contextBudget = new ContextBudgetGuard(
 await contextBudget.initialize()
 startMemoryMonitor(MCP_CONFIG.stateDir)
 const agentObserver = createAgentObserver()
+agentObserver.onSessionEvicted((sessionId) => {
+  void contextBudget.removeSession(sessionId).catch((error) => {
+    console.warn(
+      `Failed to release evicted session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`
+    )
+  })
+})
+agentObserver.setSessionRetention(MCP_CONFIG.sessions.maxRetained)
 await synchronizeAgentInstructions(
   MCP_CONFIG.stateDir,
   await readBundledAgentTemplate(),
@@ -65,16 +75,39 @@ await synchronizeAgentInstructions(
 const webPageOpener = new WebPageOpener()
 const operationalState = await loadOperationalState()
 const safeModeMcpConfig = join(MCP_CONFIG.stateDir, "safe-mode", "mcp-servers.json")
-const safeModeToolboxRoot = join(MCP_CONFIG.stateDir, "safe-mode", "toolboxes")
+const userMcpConfigFile = MCP_CONFIG.externalMcp.configFile
+// Safe Mode keeps the bundled, pristine core toolboxes instead of the user's install root.
+const bundledToolboxRoot = fileURLToPath(new URL("../defaults/toolboxes/", import.meta.url))
+const safeModeToolboxRoot = existsSync(bundledToolboxRoot)
+  ? bundledToolboxRoot
+  : fileURLToPath(new URL("../toolboxes/", import.meta.url))
 const externalMcp = await createExternalMcpRegistry(
-  operationalState.safeMode.enabled ? safeModeMcpConfig : MCP_CONFIG.externalMcp.configFile
+  operationalState.safeMode.enabled ? safeModeMcpConfig : userMcpConfigFile
 )
+if (operationalState.safeMode.enabled) {
+  MCP_CONFIG.externalMcp.configFile = safeModeMcpConfig
+}
 const subagentRuntime = new SubagentRuntime(loadSubagentConfig(MCP_CONFIG.subagents.configFile))
 subagentRuntime.startWatching(MCP_CONFIG.subagents.configFile)
 const toolboxRegistry = new ToolboxRegistry(
   operationalState.safeMode.enabled ? safeModeToolboxRoot : MCP_CONFIG.toolboxes.root
 )
 await toolboxRegistry.start()
+const applySafeMode = createSafeModeSwitcher({
+  root: () => toolboxRegistry.root,
+  config: () => MCP_CONFIG.externalMcp.configFile,
+  setRoot: (path) => toolboxRegistry.setRoot(path),
+  setConfig: async (path) => {
+    await externalMcp.setConfigPath?.(path)
+  },
+  publishConfig: (path) => {
+    MCP_CONFIG.externalMcp.configFile = path
+  },
+  userRoot: MCP_CONFIG.toolboxes.root,
+  safeRoot: safeModeToolboxRoot,
+  userConfig: userMcpConfigFile,
+  safeConfig: safeModeMcpConfig,
+})
 const interactiveShellManager = new InteractiveShellManager(
   MCP_CONFIG.defaultCwd,
   MCP_CONFIG.shell.path
@@ -98,7 +131,7 @@ const projectWorkspaces = new ProjectWorkspaceService(
   projectRegistry,
   goalRegistry,
   toolboxRegistry,
-  MCP_CONFIG.externalMcp.configFile,
+  () => MCP_CONFIG.externalMcp.configFile,
   () => externalMcp.reload(true)
 )
 projectScope.setWorkspaceActivator(async (projectId) => {
@@ -117,7 +150,7 @@ const runtimeProcesses = new RuntimeProcessService(
 )
 const capabilityRegistry = new CapabilityRegistry(externalMcp, toolboxRegistry, subagentRuntime)
 const capabilityHealth = new CapabilityHealthService(externalMcp, toolboxRegistry, subagentRuntime)
-const systemRecovery = new SystemRecoveryService(capabilityHealth)
+const systemRecovery = new SystemRecoveryService(capabilityHealth, { applySafeMode })
 process.on("uncaughtExceptionMonitor", (error) => {
   void systemRecovery.recordCrash(error).catch(() => undefined)
 })
@@ -222,38 +255,6 @@ console.log(
 )
 console.log(`Toolboxes: ${toolboxRegistry.snapshots().length} loaded`)
 
-let dotRunning: Awaited<ReturnType<typeof startMcpHttpServer>> | undefined
-if (MCP_CONFIG.dot.enabled) {
-  try {
-    dotRunning = await startMcpHttpServer(
-      {
-        persona: "dot",
-        createMcpServer: createMcpServerFactory({
-          externalMcp,
-          jobManager,
-          contextBudget,
-          runtimeControl,
-          projectRegistry,
-          summaryRegistry,
-          persona: "dot",
-        }),
-        auditLogger,
-        // No authStore: same tunnel-topology credential as the Chat surface.
-        externalMcp,
-        contextBudget,
-        jobManager,
-        agentObserver,
-      },
-      { port: MCP_CONFIG.dot.port, instanceId: `${MCP_CONFIG.instanceId}-dot` }
-    )
-    console.log(`Dot persona MCP server: ${dotRunning.url}`)
-  } catch (error) {
-    console.warn(
-      `Dot persona listener failed to start: ${error instanceof Error ? error.message : String(error)}`
-    )
-  }
-}
-
 let shuttingDown = false
 const shutdown = async (signal: string) => {
   if (shuttingDown) return
@@ -261,7 +262,6 @@ const shutdown = async (signal: string) => {
   console.log(`Received ${signal}; shutting down.`)
   try {
     await running.close()
-    if (dotRunning) await dotRunning.close()
   } finally {
     await closeRuntimeServices()
   }

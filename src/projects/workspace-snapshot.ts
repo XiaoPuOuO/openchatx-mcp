@@ -92,9 +92,16 @@ export class ProjectWorkspaceService {
     private readonly projects: ProjectRegistry,
     private readonly goals: GoalRegistry,
     private readonly toolboxes: ToolboxRegistry,
-    private readonly externalMcpConfigPath = MCP_CONFIG.externalMcp.configFile,
+    private readonly externalMcpConfigPath: string | (() => string) = () =>
+      MCP_CONFIG.externalMcp.configFile,
     private readonly afterEnvironmentChange?: () => Promise<void>
   ) {}
+
+  private mcpConfigPath(): string {
+    return typeof this.externalMcpConfigPath === "function"
+      ? this.externalMcpConfigPath()
+      : this.externalMcpConfigPath
+  }
 
   async snapshot(projectId: string): Promise<ProjectWorkspaceSnapshot> {
     const [project, goals, operationalState] = await Promise.all([
@@ -107,7 +114,7 @@ export class ProjectWorkspaceService {
       version: 1,
       createdAt: new Date().toISOString(),
       project: projectForExport(project),
-      mcpServers: Object.entries(loadExternalMcpConfig(this.externalMcpConfigPath)).map(
+      mcpServers: Object.entries(loadExternalMcpConfig(this.mcpConfigPath())).map(
         ([id, server]) => ({ id, enabled: server.enabled })
       ),
       capabilityPermissions: operationalState.capabilityPermissions,
@@ -235,7 +242,7 @@ export class ProjectWorkspaceService {
   }
 
   private async restoreMcp(snapshot: ProjectWorkspaceSnapshot) {
-    const config = loadExternalMcpConfig(this.externalMcpConfigPath)
+    const config = loadExternalMcpConfig(this.mcpConfigPath())
     const restored: string[] = []
     const missing: string[] = []
     for (const server of snapshot.mcpServers) {
@@ -247,7 +254,7 @@ export class ProjectWorkspaceService {
       configured.enabled = server.enabled
       restored.push(server.id)
     }
-    saveExternalMcpConfig(this.externalMcpConfigPath, config)
+    saveExternalMcpConfig(this.mcpConfigPath(), config)
     return { restored, missing }
   }
 

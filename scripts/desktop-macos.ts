@@ -6,6 +6,7 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 import { runAppleCommandWithRetry } from "./apple-notary-retry.js"
+import { installDesktopBundle } from "./desktop-install.js"
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outputRoot = join(repositoryRoot, "dist-desktop")
@@ -128,8 +129,7 @@ async function installForCurrentUser(): Promise<void> {
   const applications = join(homedir(), "Applications")
   const destination = join(applications, "OpenChatX.app")
   await mkdir(applications, { recursive: true })
-  await rm(destination, { recursive: true, force: true })
-  await cp(appPath, destination, { recursive: true })
+  const previous = await installDesktopBundle(appPath, destination)
 
   // Developer migration only: seed the user's existing local config outside the distributable app.
   const support = join(homedir(), "Library", "Application Support", "OpenChatX", "config")
@@ -138,6 +138,7 @@ async function installForCurrentUser(): Promise<void> {
   await copyIfMissing(join(repositoryRoot, "subagents.json"), join(support, "subagents.json"))
 
   console.log(`Installed OpenChatX.app at ${destination}`)
+  if (previous) console.log(`Previous app preserved at ${previous}`)
   console.log("Open it from Finder or Spotlight. npm and PM2 are not used by the app runtime.")
 }
 

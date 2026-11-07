@@ -1,11 +1,11 @@
-import { Check, CircleGauge, LoaderCircle, Square, Trash2, TriangleAlert } from "lucide-react"
+import { Check, CircleGauge, Infinity, LoaderCircle, Square, Trash2, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
-import { stopAgentCall } from "../../lib/api"
+import { setUnlimitedContext, stopAgentCall } from "../../lib/api"
 import type { Agent, AgentCall } from "../../types"
 import { SteerComposer } from "./SteerComposer"
 import { ToolCallModal } from "./ToolCallModal"
@@ -27,6 +27,8 @@ export function AgentCard({
   const [deleteError, setDeleteError] = useState<string>()
   const [stoppingCallId, setStoppingCallId] = useState<string>()
   const [stopError, setStopError] = useState<string>()
+  const [changingLimit, setChangingLimit] = useState(false)
+  const [limitError, setLimitError] = useState<string>()
   const active = now - agent.lastSeenAt < 30_000
   const recent = [agent.current, ...agent.recent].filter((call): call is AgentCall => Boolean(call))
   const selectedCall = recent.find((call) => call.id === selectedCallId)
@@ -51,6 +53,18 @@ export function AgentCard({
     } catch (error) {
       setStopError(error instanceof Error ? error.message : String(error))
       setStoppingCallId(undefined)
+    }
+  }
+
+  async function toggleUnlimited() {
+    setChangingLimit(true)
+    setLimitError(undefined)
+    try {
+      await setUnlimitedContext(agent.id, !agent.contextBudget?.unlimited)
+    } catch (error) {
+      setLimitError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setChangingLimit(false)
     }
   }
 
@@ -85,7 +99,7 @@ export function AgentCard({
                 <CircleGauge className="size-3.5" />
                 <span>
                   {formatContextTokens(agent.contextBudget.tokens)}
-                  {showContextLimit ? (
+                  {showContextLimit && !agent.contextBudget.unlimited ? (
                     <>
                       {" / "}
                       {formatContextTokens(agent.contextBudget.threshold)}
@@ -100,6 +114,12 @@ export function AgentCard({
             ) : null}
           </div>
           <div className="flex items-center gap-1">
+            <Button type="button" variant="ghost" size="icon" className="size-7"
+              disabled={changingLimit} aria-pressed={agent.contextBudget?.unlimited === true}
+              aria-label={t("agent.unlimitedContext")} title={t("agent.unlimitedContextHint")}
+              onClick={() => void toggleUnlimited()}>
+              <Infinity className={agent.contextBudget?.unlimited ? "size-3.5 text-primary" : "size-3.5"} />
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -142,6 +162,7 @@ export function AgentCard({
 
         {deleteError ? <div className="text-xs text-destructive">{deleteError}</div> : null}
         {stopError ? <div className="text-xs text-destructive">{stopError}</div> : null}
+        {limitError ? <div className="text-xs text-destructive">{limitError}</div> : null}
         <SteerComposer agent={agent} />
       </CardContent>
       <ToolCallModal call={selectedCall} onClose={() => setSelectedCallId(undefined)} />

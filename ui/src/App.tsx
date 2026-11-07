@@ -2,7 +2,6 @@ import {
   Activity,
   Blocks,
   BrainCircuit,
-  Cloud,
   ExternalLink,
   FileText,
   FolderKanban,
@@ -21,7 +20,6 @@ import { Button } from "./components/ui/button"
 import { ControlCenter } from "./features/control/ControlCenter"
 import { AgentCard } from "./features/dashboard/AgentCard"
 import { PlatformHomePanel } from "./features/dashboard/PlatformHomePanel"
-import { DotPage } from "./features/dot/DotPage"
 import { McpServerManager } from "./features/mcp-servers/McpServerManager"
 import { Onboarding } from "./features/onboarding/Onboarding"
 import { ProjectManager } from "./features/projects/ProjectManager"
@@ -33,6 +31,7 @@ import { SummaryManager } from "./features/summaries/SummaryManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
+import { sessionSummary } from "./lib/session-summary"
 import {
   fetchRecoveryState,
   fetchUpdateCheck,
@@ -55,7 +54,6 @@ type View =
   | "toolboxes"
   | "mcp-servers"
   | "status"
-  | "dot"
   | "control"
   | "settings"
 
@@ -69,7 +67,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", labelKey: "nav.overview", icon: Gauge },
   { id: "projects", labelKey: "nav.projects", icon: FolderKanban },
   { id: "summaries", labelKey: "nav.summaries", icon: FileText },
-  { id: "dot", labelKey: "nav.dot", icon: Cloud },
   { id: "store", labelKey: "nav.store", icon: PackageOpen },
   { id: "subagents", labelKey: "nav.subagents", icon: BrainCircuit },
   { id: "toolboxes", labelKey: "nav.toolboxes", icon: Blocks },
@@ -80,7 +77,7 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 const WORKSPACE_NAV = NAV_ITEMS.filter((item) =>
-  ["dashboard", "projects", "summaries", "dot"].includes(item.id)
+  ["dashboard", "projects", "summaries"].includes(item.id)
 )
 const CAPABILITY_NAV = NAV_ITEMS.filter((item) =>
   ["store", "subagents", "toolboxes", "mcp-servers"].includes(item.id)
@@ -166,8 +163,9 @@ export function App() {
     }
   }
 
-  const chatAgents = useMemo(() => agents.filter((agent) => !agent.dot), [agents])
+  const chatAgents = agents
   const activeCount = chatAgents.filter((agent) => now - agent.lastSeenAt < 30_000).length
+  const sidebarSessions = sessionSummary(agents, now)
   const titleKey = NAV_ITEMS.find((item) => item.id === view)?.labelKey
   const title = titleKey ? t(titleKey) : "OpenChatX"
 
@@ -201,8 +199,6 @@ export function App() {
             }}
           />
         )
-      case "dot":
-        return <DotPage agents={agents} now={now} onBack={back} onRemoveAgent={removeAgent} />
       case "control":
         return <ControlCenter onBack={back} />
       case "settings":
@@ -283,7 +279,7 @@ export function App() {
                 {connected ? t("sidebar.connected") : t("dashboard.reconnecting")}
               </div>
               <div className="text-[11px] text-muted-foreground">
-                {t("sidebar.sessionsSummary", { active: activeCount, total: chatAgents.length })}
+                {t("sidebar.sessionsSummary", sidebarSessions)}
               </div>
             </div>
           </div>

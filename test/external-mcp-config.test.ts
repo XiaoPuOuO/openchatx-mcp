@@ -1,11 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {
-  externalMcpConfigSchema,
-  resolveDotExposure,
-  resolveDotServerIds,
-} from "../src/external-mcp/config.js"
+import { externalMcpConfigSchema } from "../src/external-mcp/config.js"
 
 const config = externalMcpConfigSchema.parse({
   blender: {
@@ -27,15 +23,7 @@ const config = externalMcpConfigSchema.parse({
   },
 })
 
-test("Dot MCP exposure honors per-server settings and legacy allowlist fallback", () => {
-  assert.deepEqual(resolveDotServerIds(config, ["blender", "unreal-engine"]), ["blender"])
-  assert.deepEqual(resolveDotExposure(config, ["blender", "unreal-engine"]), {
-    blender: { ...config.blender, dot: true },
-    "unreal-engine": { ...config["unreal-engine"], dot: false },
-    disabled: { ...config.disabled, dot: false },
-  })
-})
-
-test("legacy empty allowlist keeps existing servers exposed until explicitly changed", () => {
-  assert.deepEqual(resolveDotServerIds(config, []), ["blender"])
+test("legacy configuration remains readable without activating a second service", () => {
+  assert.equal(config["unreal-engine"]?.enabled, true)
+  assert.equal(config.disabled?.enabled, false)
 })

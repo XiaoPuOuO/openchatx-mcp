@@ -25,7 +25,6 @@ import {
 
 export interface ToolRegistrationBoundaryOptions {
   structuredOutput: boolean
-  surface?: "chat" | "dot"
   agentObserver?: AgentObserver
   auditRequest?: McpAuditRequest
   contextBudget?: ContextBudgetGuard
@@ -74,8 +73,7 @@ async function runRegisteredTool(input: {
   input.state.observedCallId = input.options.agentObserver?.startTool(
     agent,
     input.name,
-    input.argumentsValue,
-    input.options.surface === "dot"
+    input.argumentsValue
   )
   recordTimelineEvent({
     type: "tool-started",
@@ -181,7 +179,7 @@ async function prepareToolModelResult(input: {
     name: input.name,
     input: input.argumentsValue,
     result: withEvents,
-    suppressNotice: input.options.surface === "dot",
+    suppressNotice: false,
   })
 }
 
@@ -306,7 +304,7 @@ async function prepareErrorModelResult(input: {
     name: input.name,
     input: input.argumentsValue,
     result: withProgress,
-    suppressNotice: input.options.surface === "dot",
+    suppressNotice: false,
   })
 }
 

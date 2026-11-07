@@ -80,13 +80,16 @@ export interface ExternalMcpRegistry {
   detectedTools(): ExternalMcpDetectedTool[]
   call(id: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>
   reload(force?: boolean): Promise<void>
+  /** Swaps the MCP config file at runtime (used by Safe Mode) and reconnects servers. */
+  setConfigPath?(path: string): Promise<void>
   close(): Promise<void>
 }
 
 export async function createExternalMcpRegistry(
-  configPath: string,
+  initialConfigPath: string,
   oauth = new ExternalMcpOAuth()
 ): Promise<ExternalMcpRegistry> {
+  let configPath = initialConfigPath
   await mkdir(dirname(configPath), { recursive: true })
   let config = loadExternalMcpConfig(configPath)
   let connections = (
@@ -101,43 +104,46 @@ export async function createExternalMcpRegistry(
   let watcher: FSWatcher | undefined
   let reloadTimer: NodeJS.Timeout | undefined
   let reloadQueue: Promise<void> = Promise.resolve()
-  const reloadRegistry = (force = false): Promise<void> => {
-    const reload = reloadQueue.then(async () => {
-      const nextConfig = loadExternalMcpConfig(configPath)
-      if (!force && JSON.stringify(nextConfig) === JSON.stringify(config)) return
-      const updated = force ? undefined : reloadToolFilters(config, nextConfig, connections)
-      if (updated) {
-        config = nextConfig
-        connections = updated.connections
-        registrations = updated.registrations
-        return
-      }
-      const previous = config
-      const nextConnections = (
-        await Promise.all(
-          Object.entries(nextConfig)
-            .filter(([, server]) => server.enabled)
-            .map(async ([id, server]) => connectServer(id, server, oauth))
-        )
-      ).filter((connection): connection is ExternalConnection => connection !== undefined)
-      let nextRegistrations: ReturnType<typeof buildRegistrations>
-      try {
-        nextRegistrations = buildRegistrations(nextConnections)
-      } catch (error) {
-        await closeConnections(nextConnections)
-        throw error
-      }
-      const previousConnections = connections
+  const applyRegistry = async (path: string, force = false, preserveCredentials = false) => {
+    const nextConfig = loadExternalMcpConfig(path)
+    if (!force && JSON.stringify(nextConfig) === JSON.stringify(config)) return
+    const updated = force ? undefined : reloadToolFilters(config, nextConfig, connections)
+    if (updated) {
       config = nextConfig
-      connections = nextConnections
-      registrations = nextRegistrations
-      await closeConnections(previousConnections)
-      await cleanupRetiredOAuthServers(oauth, previous, nextConfig)
-      supervisor.sync()
-    })
+      connections = updated.connections
+      registrations = updated.registrations
+      return
+    }
+    const previous = config
+    const nextConnections = (
+      await Promise.all(
+        Object.entries(nextConfig)
+          .filter(([, server]) => server.enabled)
+          .map(async ([id, server]) => connectServer(id, server, oauth))
+      )
+    ).filter((connection): connection is ExternalConnection => connection !== undefined)
+    let nextRegistrations: ReturnType<typeof buildRegistrations>
+    try {
+      nextRegistrations = buildRegistrations(nextConnections)
+    } catch (error) {
+      await closeConnections(nextConnections)
+      throw error
+    }
+    const previousConnections = connections
+    config = nextConfig
+    connections = nextConnections
+    registrations = nextRegistrations
+    await closeConnections(previousConnections)
+    if (!preserveCredentials) await cleanupRetiredOAuthServers(oauth, previous, nextConfig)
+    supervisor.sync()
+  }
+  const enqueueReload = (operation: () => Promise<void>): Promise<void> => {
+    const reload = reloadQueue.then(operation)
     reloadQueue = reload.catch(() => undefined)
     return reload
   }
+  const reloadRegistry = (force = false): Promise<void> =>
+    enqueueReload(() => applyRegistry(configPath, force))
 
   oauth.setAuthorizedHandler(async () => {
     await reloadRegistry(true)
@@ -155,18 +161,22 @@ export async function createExternalMcpRegistry(
   supervisor.sync()
   supervisor.start()
 
-  watcher = watch(dirname(configPath), (_event, filename) => {
-    if (filename && filename.toString() !== basename(configPath)) return
-    if (reloadTimer) clearTimeout(reloadTimer)
-    reloadTimer = setTimeout(() => {
-      void reloadRegistry().catch((error) => {
-        console.warn(
-          `External MCP config reload failed: ${error instanceof Error ? error.message : String(error)}`
-        )
-      })
-    }, 150)
-    reloadTimer.unref()
-  })
+  const startWatcher = () => {
+    watcher?.close()
+    watcher = watch(dirname(configPath), (_event, filename) => {
+      if (filename && filename.toString() !== basename(configPath)) return
+      if (reloadTimer) clearTimeout(reloadTimer)
+      reloadTimer = setTimeout(() => {
+        void reloadRegistry().catch((error) => {
+          console.warn(
+            `External MCP config reload failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        })
+      }, 150)
+      reloadTimer.unref()
+    })
+  }
+  startWatcher()
 
   const callRegisteredTool: ExternalMcpRegistry["call"] = (id, args, signal) =>
     callRegisteredExternalTool(registrations, supervisor, id, args, signal)
@@ -296,6 +306,15 @@ export async function createExternalMcpRegistry(
     },
     call: callRegisteredTool,
     reload: reloadRegistry,
+    setConfigPath(next: string) {
+      return enqueueReload(async () => {
+        if (next === configPath) return
+        await mkdir(dirname(next), { recursive: true })
+        await applyRegistry(next, true, true)
+        configPath = next
+        startWatcher()
+      })
+    },
     async close() {
       watcher?.close()
       if (reloadTimer) clearTimeout(reloadTimer)
@@ -403,7 +422,10 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
         // Best effort while stopping a supervised MCP.
       }
     }
-    access.replaceConnections(connections.filter((candidate) => candidate.id !== id))
+    if (connection)
+      access.replaceConnections(
+        access.getConnections().filter((candidate) => candidate !== connection)
+      )
     const processId = processIds.get(id)
     if (processId) {
       runtimeProcessRegistry.update(processId, {
@@ -432,7 +454,10 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
         // Best effort while replacing a supervised MCP.
       }
     }
-    access.replaceConnections(connections.filter((candidate) => candidate.id !== id))
+    if (connection)
+      access.replaceConnections(
+        access.getConnections().filter((candidate) => candidate !== connection)
+      )
   }
 
   const recordFailure = async (id: string, error: unknown): Promise<void> => {
@@ -483,12 +508,22 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
 
     const attempt = connectServer(id, server, access.oauth)
       .then(async (connection) => {
+        // A config switch or stop can complete while the transport is connecting.
+        // Never publish a connection belonging to a retired configuration.
+        if (access.getConfig()[id] !== server || manuallyStopped.has(id)) {
+          if (connection) await closeConnections([connection])
+          return
+        }
         if (!connection) {
           await recordFailure(id, new Error("Connection attempt failed."))
           return
         }
         const current = access.getConnections()
         const previous = current.find((candidate) => candidate.id === id)
+        access.replaceConnections([
+          ...current.filter((candidate) => candidate.id !== id),
+          connection,
+        ])
         if (previous) {
           try {
             await previous.client.close()
@@ -496,10 +531,6 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
             // Best effort: the new connection replaces the previous one regardless.
           }
         }
-        access.replaceConnections([
-          ...current.filter((candidate) => candidate.id !== id),
-          connection,
-        ])
         retryAfter.delete(id)
         runtimeProcessRegistry.update(processId, {
           status: "running",

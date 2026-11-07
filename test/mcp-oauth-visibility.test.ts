@@ -8,7 +8,6 @@ const remote: RemoteMcpServer = {
   type: "remote",
   url: "https://mcp.example.com/mcp",
   enabled: true,
-  dot: false,
 }
 
 test("OAuth settings stay hidden for normal Auto and header-authenticated MCP servers", () => {
@@ -32,7 +31,7 @@ test("OAuth settings stay hidden for normal Auto and header-authenticated MCP se
   )
   assert.equal(
     shouldShowMcpOAuthControls(
-      { type: "local", command: ["node"], enabled: true, dot: false },
+      { type: "local", command: ["node"], enabled: true },
       { status: "auth_required" }
     ),
     false

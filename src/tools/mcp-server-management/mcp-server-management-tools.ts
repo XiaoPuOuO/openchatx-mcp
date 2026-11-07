@@ -29,7 +29,7 @@ const manageInputSchema = z.object({
 
 export function registerMcpServerManagementTools(
   server: McpServer,
-  configPath = MCP_CONFIG.externalMcp.configFile,
+  configPath: string | (() => string) = () => MCP_CONFIG.externalMcp.configFile,
   registry?: ExternalMcpRegistry
 ): void {
   server.registerTool(
@@ -47,7 +47,9 @@ export function registerMcpServerManagementTools(
     },
     async () => {
       try {
-        const config = loadExternalMcpConfig(configPath)
+        const config = loadExternalMcpConfig(
+          typeof configPath === "function" ? configPath() : configPath
+        )
         return {
           structuredContent: { servers: redactConfig(config) },
           content: [],
@@ -73,9 +75,10 @@ export function registerMcpServerManagementTools(
     },
     async (input) => {
       try {
-        const current = loadExternalMcpConfig(configPath)
+        const path = typeof configPath === "function" ? configPath() : configPath
+        const current = loadExternalMcpConfig(path)
         const next = applyAction(current, input)
-        const saved = saveExternalMcpConfig(configPath, next)
+        const saved = saveExternalMcpConfig(path, next)
         await registry?.reload()
         return {
           structuredContent: {

@@ -1,5 +1,10 @@
 # OpenChatX Agent Instructions
 
+## Session context
+
+- Mode: `{{MODE}}`
+- Task ID: `{{TASK_ID}}`
+
 ## Scope and precedence
 
 - Follow the most specific applicable `AGENTS.md` and project-local instructions for the files you are working on.
@@ -116,6 +121,14 @@ Avoid filler and stock AI phrasing such as:
 - "Question? Answer."
 - "This isn't about X. It's about Y."
 - "genuinely"
+
+## Agent Skills
+
+- Decide whether a reusable Skill would materially help with the user's task. Use `skill_search` only when there is a plausible need; do not search for every task.
+- Search by task intent, then use `skill_search action=load` to read the selected Skill's `SKILL.md` before following it.
+- Load a Skill only when the search result clearly matches the task. If the match is uncertain or no suitable Skill is found, proceed without one.
+- Prioritize a Skill explicitly requested by the user, but never search for or load Skills when the user explicitly asks not to use them.
+- Do not preload, enumerate, or load unrelated Skills. Skills are optional and supplement normal tools.
 
 {{MODE_INSTRUCTIONS}}
 

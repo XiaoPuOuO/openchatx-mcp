@@ -11,9 +11,6 @@ final class RuntimeSupervisor: NSObject {
         let backend: Bool
         let tunnel: Bool
         let tunnelProfile: Bool
-        let dotEnabled: Bool
-        let dotTunnel: Bool
-        let dotTunnelProfile: Bool
     }
 
     struct DesktopPreferences {
@@ -25,11 +22,9 @@ final class RuntimeSupervisor: NSObject {
 
     private var backendProcess: Process?
     private var tunnelProcess: Process?
-    private var dotTunnelProcess: Process?
     private let maintenanceLock = NSLock()
     private(set) var backendOwned = false
     private(set) var tunnelOwned = false
-    private(set) var dotTunnelOwned = false
 
     let appSupport: URL
     let logsDirectory: URL
@@ -45,13 +40,6 @@ final class RuntimeSupervisor: NSObject {
     private var tunnelHealthURL: URL { URL(string: "http://127.0.0.1:\(tunnelHealthPort)/health?details=true")! }
     private var mcpServerURL: String { "http://127.0.0.1:\(runtimePort)/mcp" }
     private var tunnelHealthListenAddress: String { "127.0.0.1:\(tunnelHealthPort)" }
-    var isDotEnabled: Bool { readConfiguredBool(section: "dot", key: "enabled", fallback: false) }
-    var dotProfileName: String { readConfiguredString(section: "dot", key: "profile", fallback: "openchatx-dot") }
-    private var dotRuntimePort: Int { readConfiguredPort(section: "dot", key: "port", fallback: 8002) }
-    private var dotTunnelHealthPort: Int { readConfiguredPort(section: "dot", key: "health_port", fallback: 8081) }
-    private var dotMcpServerURL: String { "http://127.0.0.1:\(dotRuntimePort)/mcp" }
-    private var dotTunnelHealthURL: URL { URL(string: "http://127.0.0.1:\(dotTunnelHealthPort)/health?details=true")! }
-    private var dotTunnelHealthListenAddress: String { "127.0.0.1:\(dotTunnelHealthPort)" }
 
     override init() {
         let bundleResources = Bundle.main.resourceURL!
@@ -116,19 +104,12 @@ final class RuntimeSupervisor: NSObject {
             if hasTunnelProfile(), !isTunnelHealthy(), tunnelProcess?.isRunning != true {
                 try startTunnel()
             }
-            if isDotEnabled,
-               hasTunnelProfile(named: dotProfileName),
-               !isTunnelHealthy(dotTunnelHealthURL),
-               dotTunnelProcess?.isRunning != true {
-                try startDotTunnel()
-            }
         } catch {
             appendDesktopLog("Runtime maintenance failed: \(error.localizedDescription)")
         }
     }
 
     func stop() {
-        terminate(&dotTunnelProcess, owned: &dotTunnelOwned)
         terminate(&tunnelProcess, owned: &tunnelOwned)
         terminate(&backendProcess, owned: &backendOwned)
         publishSnapshot()
@@ -182,63 +163,6 @@ final class RuntimeSupervisor: NSObject {
         }
     }
 
-    func setupDotTunnel(tunnelID: String?, apiKey: String, completion: ((String?) -> Void)? = nil) {
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedTunnelID = tunnelID?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard isDotEnabled else {
-            completion?("Dot is not enabled in Settings yet.")
-            return
-        }
-        guard !trimmedKey.isEmpty else {
-            completion?("API key is required.")
-            return
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let profileName = self.dotProfileName
-                let hasDotProfile = self.hasTunnelProfile(named: profileName)
-                if !hasDotProfile {
-                    guard !trimmedTunnelID.isEmpty else {
-                        throw DesktopError.message("Tunnel ID is required for first-time Dot tunnel setup.")
-                    }
-                    if trimmedTunnelID == self.mainTunnelID() {
-                        throw DesktopError.message("Dot Tunnel ID must differ from the main tunnel ID.")
-                    }
-                    try KeychainStore.save(apiKey: trimmedKey, account: KeychainStore.dotAccount)
-                    let result = try self.runAndWait(
-                        executable: self.tunnelExecutable,
-                        arguments: [
-                            "init",
-                            "--profile-dir", self.profileDirectory.path,
-                            "--profile", profileName,
-                            "--tunnel-id", trimmedTunnelID,
-                            "--mcp-server-url", self.dotMcpServerURL,
-                            "--health-listen-addr", self.dotTunnelHealthListenAddress,
-                            "--control-plane-api-key-ref", "env:CONTROL_PLANE_API_KEY",
-                            "--force"
-                        ],
-                        environment: self.runtimeEnvironment(apiKey: trimmedKey)
-                    )
-                    guard result == 0 else {
-                        throw DesktopError.message("tunnel-client init exited with code \(result)")
-                    }
-                } else {
-                    try KeychainStore.save(apiKey: trimmedKey, account: KeychainStore.dotAccount)
-                }
-                if !self.isTunnelHealthy(self.dotTunnelHealthURL) {
-                    try self.startDotTunnel()
-                }
-                DispatchQueue.main.async { completion?(nil) }
-            } catch {
-                self.appendDesktopLog("Dot tunnel setup failed: \(error.localizedDescription)")
-                DispatchQueue.main.async { completion?(error.localizedDescription) }
-            }
-            self.publishSnapshot()
-        }
-    }
-
     func mainTunnelID() -> String? {
         profileTunnelID(profile: "openchatx")
     }
@@ -259,14 +183,10 @@ final class RuntimeSupervisor: NSObject {
 
     func publishSnapshot() {
         DispatchQueue.global(qos: .utility).async {
-            let dotEnabled = self.isDotEnabled
             let snapshot = Snapshot(
                 backend: self.isHealthy(self.backendHealthURL),
                 tunnel: self.isTunnelHealthy(),
-                tunnelProfile: self.hasTunnelProfile(),
-                dotEnabled: dotEnabled,
-                dotTunnel: dotEnabled ? self.isTunnelHealthy(self.dotTunnelHealthURL) : false,
-                dotTunnelProfile: dotEnabled ? self.hasTunnelProfile(named: self.dotProfileName) : false
+                tunnelProfile: self.hasTunnelProfile()
             )
             DispatchQueue.main.async {
                 self.onSnapshot?(snapshot)
@@ -374,34 +294,6 @@ final class RuntimeSupervisor: NSObject {
         tunnelProcess = process
         tunnelOwned = true
         appendDesktopLog("Started tunnel-client pid=\(process.processIdentifier)")
-    }
-
-    private func startDotTunnel() throws {
-        if dotTunnelProcess?.isRunning == true { return }
-        let process = Process()
-        process.executableURL = tunnelExecutable
-        process.arguments = [
-            "run",
-            "--profile-dir", profileDirectory.path,
-            "--profile", dotProfileName,
-            "--mcp.server-url", "url=\(dotMcpServerURL)",
-            "--health.listen-addr", dotTunnelHealthListenAddress
-        ]
-        process.currentDirectoryURL = runtimeRoot
-        process.environment = runtimeEnvironment(apiKey: discoverDotTunnelAPIKey())
-        let log = try openLog("dot-tunnel.log")
-        process.standardOutput = log
-        process.standardError = log
-        process.terminationHandler = { [weak self] _ in
-            guard let self else { return }
-            self.dotTunnelOwned = false
-            self.dotTunnelProcess = nil
-            self.publishSnapshot()
-        }
-        try process.run()
-        dotTunnelProcess = process
-        dotTunnelOwned = true
-        appendDesktopLog("Started dot tunnel-client pid=\(process.processIdentifier)")
     }
 
     private var runtimePort: Int {
@@ -537,13 +429,6 @@ final class RuntimeSupervisor: NSObject {
         } catch {
             return nil
         }
-    }
-
-    private func discoverDotTunnelAPIKey() -> String? {
-        if let key = KeychainStore.loadAPIKey(account: KeychainStore.dotAccount), !key.isEmpty {
-            return key
-        }
-        return discoverTunnelAPIKey()
     }
 
     private func runtimeEnvironment(apiKey: String? = nil) -> [String: String] {
@@ -795,7 +680,6 @@ final class RuntimeSupervisor: NSObject {
 enum KeychainStore {
     private static let service = "com.openchatx.desktop"
     static let defaultAccount = "CONTROL_PLANE_API_KEY"
-    static let dotAccount = "CONTROL_PLANE_API_KEY_DOT"
 
     static func save(apiKey: String, account: String = defaultAccount) throws {
         let data = Data(apiKey.utf8)
@@ -1138,7 +1022,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         for navigationAction: WKNavigationAction,
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
-        if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
+        if navigationAction.targetFrame == nil,
+           let url = navigationAction.request.url,
+           let scheme = url.scheme?.lowercased(),
+           ["http", "https", "mailto"].contains(scheme) {
             NSWorkspace.shared.open(url)
         }
         return nil
@@ -1239,16 +1126,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         tunnel.isEnabled = lastSnapshot?.tunnel != true
         menu.addItem(tunnel)
 
-        let dotTunnelItem = NSMenuItem(
-            title: lastSnapshot?.dotTunnel == true ? "Dot Tunnel Connected" : "Connect Dot Tunnel…",
-            action: #selector(setupDotTunnelViaMenu),
-            keyEquivalent: ""
-        )
-        dotTunnelItem.image = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: nil)
-        dotTunnelItem.target = self
-        dotTunnelItem.isEnabled = lastSnapshot?.dotEnabled == true && lastSnapshot?.dotTunnel != true
-        menu.addItem(dotTunnelItem)
-
         menu.addItem(.separator())
 
         let logs = NSMenuItem(title: "Open Logs", action: #selector(openLogs), keyEquivalent: "")
@@ -1299,45 +1176,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         supervisor.setupTunnel(tunnelID: tunnelIDField?.stringValue, apiKey: apiKeyField.stringValue)
     }
 
-    @objc private func setupDotTunnelViaMenu() {
-        let alert = NSAlert()
-        alert.messageText = "Connect Dot Tunnel (second OpenAI tunnel)"
-        alert.informativeText = "Enter a Tunnel ID that is different from the main tunnel, plus its control-plane API key. The key is stored only in your macOS Keychain."
-        alert.addButton(withTitle: "Connect")
-        alert.addButton(withTitle: "Cancel")
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 6
-        stack.frame = NSRect(x: 0, y: 0, width: 380, height: 98)
-
-        stack.addArrangedSubview(NSTextField(labelWithString: "Dot Tunnel ID (must differ from main)"))
-        let tunnelIDField = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
-        tunnelIDField.placeholderString = "tun_…"
-        tunnelIDField.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        stack.addArrangedSubview(tunnelIDField)
-
-        stack.addArrangedSubview(NSTextField(labelWithString: "Control-plane API key"))
-        let apiKeyField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
-        apiKeyField.placeholderString = "API key"
-        apiKeyField.widthAnchor.constraint(equalToConstant: 380).isActive = true
-        stack.addArrangedSubview(apiKeyField)
-
-        alert.accessoryView = stack
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        supervisor.setupDotTunnel(
-            tunnelID: tunnelIDField.stringValue,
-            apiKey: apiKeyField.stringValue
-        ) { error in
-            guard let error else { return }
-            let failure = NSAlert()
-            failure.messageText = "Dot tunnel setup failed"
-            failure.informativeText = error
-            failure.alertStyle = .warning
-            failure.runModal()
-        }
-    }
 }
 
 let application = NSApplication.shared

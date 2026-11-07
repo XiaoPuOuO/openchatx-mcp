@@ -31,6 +31,7 @@ const TOOLBOX_SDK_SPECIFIER = "openchatx-mcp/toolbox"
 const TOOLBOX_ZOD_SPECIFIER = "zod"
 const TOOLBOX_SDK_URL = new URL("./tool.js", import.meta.url).href
 const TOOLBOX_ZOD_URL = import.meta.resolve("zod")
+const TRANSFORM_MODE_SUPPORTED = supportsTransformMode()
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -106,8 +107,28 @@ export class ToolboxRegistry {
   private reloadTimer?: NodeJS.Timeout
   private reloadPromises = new Set<Promise<void>>()
   private closed = false
+  private currentRoot: string
+  private rootSwitch: Promise<void> = Promise.resolve()
 
-  constructor(readonly root: string) {}
+  constructor(root: string) {
+    this.currentRoot = root
+  }
+
+  get root(): string {
+    return this.currentRoot
+  }
+
+  /** Swaps the toolbox directory at runtime (used by Safe Mode) without restarting the runtime. */
+  async setRoot(next: string): Promise<void> {
+    const run = this.rootSwitch.then(async () => {
+      if (next === this.currentRoot) return
+      await this.close()
+      this.currentRoot = next
+      await this.start()
+    })
+    this.rootSwitch = run.catch(() => undefined)
+    return run
+  }
 
   async start(): Promise<void> {
     this.closed = false
@@ -592,10 +613,19 @@ function toolboxIsDynamic(box: LoadedToolbox): boolean {
   return box.manifest.dynamic ?? box.manifest.builtin === undefined
 }
 
+function supportsTransformMode(): boolean {
+  try {
+    stripTypeScriptTypes("const value = 1", { mode: "transform" })
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function loadTsTool(sourcePath: string): Promise<Tool> {
   const source = await readFile(sourcePath, "utf8")
   const output = stripTypeScriptTypes(source, {
-    mode: "transform",
+    mode: TRANSFORM_MODE_SUPPORTED ? "transform" : "strip",
     sourceMap: false,
     sourceUrl: sourcePath,
   })

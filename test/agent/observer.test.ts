@@ -34,6 +34,40 @@ test("tracks current and recent tool activity for one agent", () => {
   assert.equal(snapshot?.recent[0]?.finishedAt, 1_500)
 })
 
+test("updates a running session's budget without changing its identity or activity", () => {
+  let timestamp = 1_000
+  const observer = createAgentObserver(() => timestamp)
+  const agent: AgentIdentity = {
+    sessionId: "session-active-budget",
+    agent: "agent-active-budget",
+    taskSlug: "keep-task",
+    projectId: "keep-project",
+    goalId: "keep-goal",
+  }
+  const callId = observer.startTool(agent, "bash", { command: "printf running" })
+  const before = observer.listAgents()[0]
+  timestamp = 5_000
+  assert.equal(
+    observer.updateSessionContextBudget(agent.sessionId, {
+      tokens: 10,
+      inputTokens: 5,
+      outputTokens: 5,
+      threshold: 100,
+      unlimited: true,
+    }),
+    true
+  )
+  const after = observer.listAgents()[0]
+  assert.equal(after?.taskSlug, agent.taskSlug)
+  assert.equal(after?.projectId, agent.projectId)
+  assert.equal(after?.goalId, agent.goalId)
+  assert.equal(after?.lastSeenAt, before?.lastSeenAt)
+  assert.deepEqual(after?.current, before?.current)
+  assert.equal(after?.contextBudget?.unlimited, true)
+  observer.finishTool(agent, callId)
+  assert.equal(observer.listAgents()[0]?.recent[0]?.status, "completed")
+})
+
 test("bounds large dashboard inputs and results without affecting short call details", () => {
   const observer = createAgentObserver()
   const agent: AgentIdentity = { sessionId: "large-session", agent: "large-agent" }
@@ -325,5 +359,55 @@ test("keeps concurrent tool calls from the same agent", () => {
   assert.deepEqual(
     snapshot?.recent.map((call) => call.id),
     [first, second]
+  )
+})
+
+test("evicts the least recently active sessions beyond the retention limit", () => {
+  let timestamp = 1_000
+  const observer = createAgentObserver(() => timestamp)
+  const evicted: string[] = []
+  observer.onSessionEvicted((sessionId) => evicted.push(sessionId))
+  observer.setSessionRetention(2)
+
+  for (const name of ["oldest", "middle", "newest"]) {
+    timestamp += 1_000
+    observer.updateContextBudget(
+      { sessionId: `session-${name}`, agent: name },
+      { tokens: 0, inputTokens: 0, outputTokens: 0, threshold: 1 }
+    )
+  }
+
+  assert.deepEqual(
+    observer.listAgents().map((agent) => agent.id),
+    ["newest", "middle"]
+  )
+  assert.deepEqual(evicted, ["session-oldest"])
+})
+
+test("keeps running sessions even while over the retention limit", () => {
+  let timestamp = 1_000
+  const observer = createAgentObserver(() => timestamp)
+  observer.setSessionRetention(1)
+  const running = { sessionId: "session-running", agent: "running" }
+  const callId = observer.startTool(running, "bash", { command: "sleep 30" })
+
+  timestamp += 1_000
+  observer.updateContextBudget(
+    { sessionId: "session-idle", agent: "idle" },
+    { tokens: 0, inputTokens: 0, outputTokens: 0, threshold: 1 }
+  )
+  assert.deepEqual(
+    observer
+      .listAgents()
+      .map((agent) => agent.id)
+      .sort((left, right) => left.localeCompare(right)),
+    ["idle", "running"]
+  )
+
+  timestamp += 1_000
+  observer.finishTool(running, callId)
+  assert.deepEqual(
+    observer.listAgents().map((agent) => agent.id),
+    ["running"]
   )
 })

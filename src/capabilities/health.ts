@@ -1,6 +1,5 @@
 import { MCP_CONFIG } from "../config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
-import { loadPublicConfig } from "../public-config.cjs"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 
@@ -46,7 +45,6 @@ export class CapabilityHealthService {
         status: "healthy",
       },
       await tunnelHealth(Date.now() - this.startedAt < TUNNEL_STARTUP_GRACE_MS),
-      await dotHealth(Date.now() - this.startedAt < TUNNEL_STARTUP_GRACE_MS),
       ...this.mcpComponents(),
       ...this.toolboxComponents(),
       ...this.providerComponents(),
@@ -157,80 +155,6 @@ async function tunnelHealth(starting: boolean): Promise<CapabilityHealthComponen
     }
   } finally {
     clearTimeout(timeout)
-  }
-}
-
-function configuredDotEnabled(): boolean {
-  try {
-    return loadPublicConfig(MCP_CONFIG.publicConfigFile).dot.enabled
-  } catch {
-    return MCP_CONFIG.dot.enabled
-  }
-}
-
-async function dotHealth(starting: boolean): Promise<CapabilityHealthComponent> {
-  const name = "OpenChatX Cloud (Dot)"
-  if (!MCP_CONFIG.dot.enabled) {
-    const configuredEnabled = configuredDotEnabled()
-    return {
-      id: "dot",
-      kind: "tunnel",
-      name,
-      status: configuredEnabled ? "starting" : "disabled",
-      detail: configuredEnabled
-        ? "Dot is enabled in settings. Use More → Restart Runtime to apply it; closing the window does not restart the Runtime."
-        : "Dot mode off in settings",
-    }
-  }
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 1500)
-  try {
-    const response = await fetch(
-      `http://127.0.0.1:${MCP_CONFIG.dot.healthPort}/health?details=true`,
-      { signal: controller.signal }
-    )
-    const payload = response.ok ? await response.json().catch(() => undefined) : undefined
-    if (!isTunnelOperational(payload))
-      return dotTunnelDown(
-        name,
-        starting,
-        response.ok ? "control plane not connected" : `HTTP ${response.status}`
-      )
-    const endpointOnline = await dotEndpointOnline()
-    return {
-      id: "dot",
-      kind: "tunnel",
-      name,
-      status: endpointOnline ? "healthy" : "degraded",
-      detail: `profile ${MCP_CONFIG.dot.profile} · control plane connected · endpoint :${MCP_CONFIG.dot.port} ${endpointOnline ? "online" : "unreachable"}`,
-    }
-  } catch (error) {
-    return dotTunnelDown(
-      name,
-      starting,
-      error instanceof Error ? error.message : "Dot tunnel health check failed"
-    )
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-function dotTunnelDown(name: string, starting: boolean, reason: string): CapabilityHealthComponent {
-  return {
-    id: "dot",
-    kind: "tunnel",
-    name,
-    status: starting ? "starting" : "unavailable",
-    ...(starting ? {} : { detail: `profile ${MCP_CONFIG.dot.profile} · ${reason}` }),
-  }
-}
-
-async function dotEndpointOnline(): Promise<boolean> {
-  try {
-    return (await fetch(`http://127.0.0.1:${MCP_CONFIG.dot.port}/healthz`)).ok
-  } catch {
-    return false
   }
 }
 

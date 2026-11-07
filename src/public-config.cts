@@ -33,6 +33,9 @@ const publicConfigSchema = z.object({
   context: z.object({
     warning_threshold: z.number().int().positive().default(400_000),
   }),
+  sessions: z.object({
+    max_retained: z.number().int().min(0).default(30),
+  }),
   mcp: z.object({ tool_output: z.enum(["compact", "structured"]).default("compact") }),
   tools: z.object({
     shell: z.boolean().default(true),

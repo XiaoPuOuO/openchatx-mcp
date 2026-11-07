@@ -26,7 +26,6 @@ export interface Agent {
   taskSlug?: string
   projectId?: string
   goalId?: string
-  dot?: boolean
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCall
@@ -37,6 +36,7 @@ export interface Agent {
     inputTokens: number
     outputTokens: number
     threshold: number
+    unlimited?: boolean
   }
 }
 
@@ -63,12 +63,8 @@ export interface RuntimeSettings {
   context: {
     warning_threshold: number
   }
-  dot: {
-    enabled: boolean
-    port: number
-    health_port: number
-    profile: string
-    external_servers: string[]
+  sessions: {
+    max_retained: number
   }
 }
 
@@ -265,7 +261,6 @@ export interface PlatformOverview {
 
 interface McpServerBase {
   enabled: boolean
-  dot: boolean
   disabledTools?: string[]
   description?: string
   timeout?: number

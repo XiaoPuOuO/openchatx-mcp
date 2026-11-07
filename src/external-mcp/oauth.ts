@@ -171,7 +171,18 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
     // Tokens without a resolvable issuer are rejected instead of crossing AS boundaries.
     if (!tokens.issuer && !ctx?.issuer) throw new Error("OAuth token issuer missing")
     await this.save((stored) => {
-      stored.tokens = { ...tokens, issuer: tokens.issuer ?? ctx?.issuer }
+      const issuer = tokens.issuer ?? ctx?.issuer
+      // OAuth refresh responses may omit refresh_token when it has not rotated.
+      // Never carry a token across issuers or a new interactive authorization.
+      const refresh =
+        !this.expectedState && stored.tokens?.issuer === issuer
+          ? stored.tokens?.refresh_token
+          : undefined
+      stored.tokens = {
+        ...tokens,
+        ...(tokens.refresh_token || !refresh ? {} : { refresh_token: refresh }),
+        issuer,
+      }
     })
   }
 
@@ -462,6 +473,7 @@ export class ExternalMcpOAuth {
       this.states.set(id, { status: "error", detail: "Authorization failed. Retry connection." })
       throw error
     } finally {
+      pending.provider.expectedState = undefined
       if (this.transports.get(id) === pending.transport) this.transports.delete(id)
       await pending.transport.close().catch(() => undefined)
     }

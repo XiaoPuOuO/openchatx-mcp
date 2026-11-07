@@ -63,8 +63,6 @@ export interface McpHttpServices {
   projectWorkspaces?: ProjectWorkspaceService
   recentWork?: RecentWorkService
   jobManager?: JobManager
-  /** When "dot", every arriving session is flagged as a Dot (cloud) surface. */
-  persona?: "chat" | "dot"
 }
 
 export interface McpHttpProfileOverrides {
@@ -101,7 +99,6 @@ export async function startMcpHttpServer(
     projectWorkspaces,
     recentWork,
     jobManager,
-    persona,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
 
@@ -151,7 +148,6 @@ export async function startMcpHttpServer(
 
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     const sessionId = requestSessionId(req)
-    if (persona === "dot" && sessionId) void contextBudget?.setDotSession(sessionId, true)
     await runWithAgent(sessionId, async () => {
       const auditRequest = auditLogger?.startRequest(req.body)
       let auditFinished = false

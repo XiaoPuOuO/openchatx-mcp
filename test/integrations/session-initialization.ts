@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import test from "node:test"
+import test, { after, before } from "node:test"
 
 import { getAgentIdentity, runWithAgent } from "../../src/agent/context.js"
 import { MCP_CONFIG } from "../../src/config.js"
@@ -13,10 +13,28 @@ import { ToolboxRegistry } from "../../src/toolbox/registry.js"
 import {
   buildStartHereInstructions,
   discoverPromptModes,
+  readBundledAgentTemplate,
   readStartPrompt,
   renderStartHereTemplate,
 } from "../../src/tools/start-here/start-here.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
+
+const originalAgentInstructionsFile = MCP_CONFIG.agentInstructionsFile
+let agentInstructionsFixtureDir: string | undefined
+
+before(async () => {
+  agentInstructionsFixtureDir = await mkdtemp(join(tmpdir(), "openchatx-start-here-default-"))
+  const fixturePath = join(agentInstructionsFixtureDir, "AGENTS.md")
+  await writeFile(fixturePath, await readBundledAgentTemplate(), "utf8")
+  MCP_CONFIG.agentInstructionsFile = fixturePath
+})
+
+after(async () => {
+  MCP_CONFIG.agentInstructionsFile = originalAgentInstructionsFile
+  if (agentInstructionsFixtureDir) {
+    await rm(agentInstructionsFixtureDir, { recursive: true, force: true })
+  }
+})
 
 test("renders editable AGENTS.md placeholders into start_here output", () => {
   const rendered = renderStartHereTemplate(
@@ -325,7 +343,12 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   assert.match(startInstructions, /# OpenChatX Agent Instructions/u)
   assert.ok(startInstructions.includes(codingPrompt.prompt.trim()))
   assert.doesNotMatch(startInstructions, /\{\{MODE_INSTRUCTIONS\}\}/u)
-  assert.equal(startInstructions, await buildStartHereInstructions("coding"))
+  assert.match(startInstructions, /Mode: `coding`/u)
+  assert.match(startInstructions, /Task ID: `startup-session`/u)
+  assert.equal(
+    startInstructions,
+    await buildStartHereInstructions("coding", undefined, undefined, { taskId: "startup-session" })
+  )
 
   const allowed = await first.client.callTool({
     name: "bash",
@@ -363,7 +386,12 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
 
   let now = Date.now()
   t.mock.method(Date, "now", () => now)
-  const codingInstructions = await buildStartHereInstructions("coding")
+  const codingInstructions = await buildStartHereInstructions("coding", undefined, undefined, {
+    taskId: "initial-task",
+  })
+  const renamedInstructions = await buildStartHereInstructions("coding", undefined, undefined, {
+    taskId: "renamed-task",
+  })
   const simultaneous = await Promise.all([
     first.client.callTool({
       name: "start_here",
@@ -376,7 +404,11 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
   ])
   assert.ok(simultaneous.every((result) => !result.isError))
   const simultaneousText = simultaneous.map(toolText)
-  assert.equal(simultaneousText.filter((text) => text === codingInstructions).length, 1)
+  assert.equal(
+    simultaneousText.filter((text) => text === codingInstructions || text === renamedInstructions)
+      .length,
+    1
+  )
   assert.equal(
     simultaneousText.filter((text) => /loaded recently by this agent/u.test(text)).length,
     1
@@ -397,19 +429,28 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
     name: "start_here",
     arguments: { mode: "general", task_id: "general-task" },
   })
-  assert.equal(toolText(otherMode), await buildStartHereInstructions("general"))
+  assert.equal(
+    toolText(otherMode),
+    await buildStartHereInstructions("general", undefined, undefined, { taskId: "general-task" })
+  )
   const otherAgent = await second.client.callTool({
     name: "start_here",
     arguments: { mode: "coding", task_id: "other-task" },
   })
-  assert.equal(toolText(otherAgent), codingInstructions)
+  assert.equal(
+    toolText(otherAgent),
+    await buildStartHereInstructions("coding", undefined, undefined, { taskId: "other-task" })
+  )
 
   now += 1
   const expired = await first.client.callTool({
     name: "start_here",
     arguments: { mode: "coding", task_id: "after-cooldown" },
   })
-  assert.equal(toolText(expired), codingInstructions)
+  assert.equal(
+    toolText(expired),
+    await buildStartHereInstructions("coding", undefined, undefined, { taskId: "after-cooldown" })
+  )
 })
 
 test("searches skill metadata before loading full Markdown", {
@@ -577,7 +618,10 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
     name: "start_here",
     arguments: { mode: "coding", task_id: "retry-startup" },
   })
-  assert.equal(toolText(retry), await buildStartHereInstructions("coding"))
+  assert.equal(
+    toolText(retry),
+    await buildStartHereInstructions("coding", undefined, undefined, { taskId: "retry-startup" })
+  )
   const allowed = await connected.client.callTool({
     name: "bash",
     arguments: { command: "printf allowed" },
@@ -599,7 +643,9 @@ test("does not require start_here when no ChatGPT session is provided", {
   })
   assert.equal(result.isError, undefined)
 
-  const instructions = await buildStartHereInstructions("coding")
+  const instructions = await buildStartHereInstructions("coding", undefined, undefined, {
+    taskId: "local-startup",
+  })
   for (let call = 0; call < 2; call += 1) {
     const started = await connected.client.callTool({
       name: "start_here",

@@ -1,8 +1,15 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import {
+  getAgentIdentity,
+  runWithAgent,
+  setAgentGoalId,
+  setAgentProjectId,
+} from "../../src/agent/context.js"
 import { createAgentObserver } from "../../src/agent/observer.js"
 import { MCP_CONFIG } from "../../src/config.js"
+import { ContextBudgetGuard } from "../../src/mcp/context-budget.js"
 import { createMcpServerFactory } from "../../src/mcp/server-factory.js"
 import { startMcpHttpServer as startMcpHttpServerRaw } from "../../src/server/http-server.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
@@ -183,6 +190,175 @@ test("one HTTP observer drives dashboard state and tool observation", {
   assert.equal(body.agents[0]?.id, local?.id)
   assert.equal(body.agents[0]?.recent[0]?.tool, "bash")
   assert.equal(local?.recent[0]?.tool, "bash")
+})
+
+test("toggling unlimited context preserves an initialized session and its dashboard metadata", {
+  timeout: 10_000,
+}, async (t) => {
+  let now = 1_000
+  const observer = createAgentObserver(() => now)
+  const budget = new ContextBudgetGuard(1_000_000, () => 1)
+  const running = await startMcpHttpServerRaw(
+    {
+      createMcpServer: createMcpServerFactory(
+        { contextBudget: budget },
+        { tools: { shell: true, web: false } }
+      ),
+      agentObserver: observer,
+      contextBudget: budget,
+    },
+    { port: 0 }
+  )
+  t.after(() => running.close())
+  const sessionId = "unlimited-preserves-initialization-session"
+  const connected = await connectClient(
+    running.url,
+    "unlimited-preserves",
+    undefined,
+    false,
+    sessionId
+  )
+  t.after(() => connected.client.close())
+  const started = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "keep-my-name" },
+  })
+  assert.notEqual(started.isError, true)
+  runWithAgent(sessionId, () => {
+    setAgentProjectId("project-one")
+    setAgentGoalId("goal-one")
+  })
+  const initialCall = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf before" },
+  })
+  assert.notEqual(initialCall.isError, true)
+  const before = observer.listAgents()[0]
+  assert.ok(before)
+  assert.equal(before.taskSlug, "keep-my-name")
+  assert.equal(before.projectId, "project-one")
+  assert.equal(before.goalId, "goal-one")
+
+  const events: Array<ReturnType<typeof observer.listAgents>[number]> = []
+  const unsubscribe = observer.subscribe((event) => {
+    if (event.type === "agent_changed") events.push(event.agent)
+  })
+  t.after(unsubscribe)
+  now = 5_000
+  const base = `http://${running.host}:${running.port}/ui/api/agents/${before.id}`
+  for (const unlimited of [true, false]) {
+    const response = await fetch(`${base}/unlimited-context`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ unlimited }),
+    })
+    assert.equal(response.status, 200)
+    const after = observer.listAgents()[0]
+    const identity = runWithAgent(sessionId, () => getAgentIdentity())
+    assert.equal(identity?.taskSlug, before.taskSlug)
+    assert.equal(identity?.projectId, before.projectId)
+    assert.equal(identity?.goalId, before.goalId)
+    assert.equal(after?.taskSlug, before.taskSlug)
+    assert.equal(after?.projectId, before.projectId)
+    assert.equal(after?.goalId, before.goalId)
+    assert.equal(after?.lastSeenAt, before.lastSeenAt)
+    assert.deepEqual(after?.recent, before.recent)
+    assert.equal(after?.contextBudget?.unlimited === true, unlimited)
+    assert.equal(events.at(-1)?.taskSlug, before.taskSlug)
+    assert.equal(events.at(-1)?.projectId, before.projectId)
+    assert.equal(events.at(-1)?.goalId, before.goalId)
+  }
+
+  const nextCall = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf after" },
+  })
+  assert.notEqual(nextCall.isError, true)
+  assert.match(toolText(nextCall), /after/u)
+  assert.equal(observer.listAgents()[0]?.taskSlug, before.taskSlug)
+})
+
+test("a session removed during an unlimited update is not recreated", {
+  timeout: 10_000,
+}, async (t) => {
+  let signalSaved: () => void = () => {}
+  let release: () => void = () => {}
+  const saved = new Promise<void>((resolve) => {
+    signalSaved = resolve
+  })
+  const continueUpdate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  class PausedBudget extends ContextBudgetGuard {
+    override async setUnlimitedSession(sessionId: string, unlimited: boolean): Promise<void> {
+      await super.setUnlimitedSession(sessionId, unlimited)
+      signalSaved()
+      await continueUpdate
+    }
+  }
+  const observer = createAgentObserver()
+  const budget = new PausedBudget()
+  const identity = { sessionId: "removed-during-update", agent: "removed-agent", taskSlug: "task" }
+  observer.updateContextBudget(identity, budget.usage(identity))
+  const running = await startMcpHttpServerRaw(
+    { createMcpServer: createMcpServerFactory({}), agentObserver: observer, contextBudget: budget },
+    { port: 0 }
+  )
+  t.after(async () => {
+    release()
+    await running.close()
+  })
+  const response = fetch(
+    `http://${running.host}:${running.port}/ui/api/agents/removed-agent/unlimited-context`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ unlimited: true }),
+    }
+  )
+  await saved
+  assert.equal(observer.deleteAgent(identity.agent), true)
+  await budget.removeSession(identity.sessionId)
+  release()
+  assert.equal((await response).status, 404)
+  assert.deepEqual(observer.listAgents(), [])
+})
+
+test("dashboard changes unlimited context only for the selected session", async (t) => {
+  const observer = createAgentObserver()
+  const budget = new ContextBudgetGuard(10, (text) => text.length)
+  const first = { sessionId: "session-first", agent: "first" }
+  const second = { sessionId: "session-second", agent: "second" }
+  observer.updateContextBudget(first, budget.usage(first))
+  observer.updateContextBudget(second, budget.usage(second))
+  const running = await startMcpHttpServerRaw(
+    {
+      createMcpServer: createMcpServerFactory({}),
+      agentObserver: observer,
+      contextBudget: budget,
+    },
+    { port: 0 }
+  )
+  t.after(() => running.close())
+  const base = `http://${running.host}:${running.port}/ui/api`
+  const response = await fetch(`${base}/agents/first/unlimited-context`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ unlimited: true }),
+  })
+  assert.equal(response.status, 200)
+  assert.equal(budget.usage(first)?.unlimited, true)
+  assert.notEqual(budget.usage(second)?.unlimited, true)
+  const listed = (await (await fetch(`${base}/agents`)).json()) as {
+    agents: Array<{ id: string; contextBudget: { unlimited?: boolean } }>
+  }
+  assert.equal(listed.agents.find((agent) => agent.id === "first")?.contextBudget.unlimited, true)
+  const invalid = await fetch(`${base}/agents/first/unlimited-context`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ unlimited: "true" }),
+  })
+  assert.equal(invalid.status, 400)
 })
 
 test("publishes start_here and core rule tools when optional groups are disabled", {

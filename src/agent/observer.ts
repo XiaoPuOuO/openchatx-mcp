@@ -32,7 +32,6 @@ export interface AgentSnapshot {
   taskSlug?: string
   projectId?: string
   goalId?: string
-  dot?: boolean
   firstSeenAt: number
   lastSeenAt: number
   current?: AgentCallSnapshot
@@ -43,6 +42,7 @@ export interface AgentSnapshot {
     inputTokens: number
     outputTokens: number
     threshold: number
+    unlimited?: boolean
   }
 }
 
@@ -67,14 +67,11 @@ type AgentObserverEvent = AgentChangedEvent | AgentRemovedEvent
 export interface AgentObserver {
   listAgents(): AgentSnapshot[]
   deleteAgent(agentId: string): boolean
+  /** Caps retained sessions; 0 or less keeps every session. Oldest idle sessions are evicted first. */
+  setSessionRetention(limit: number): void
+  onSessionEvicted(listener: ((sessionId: string, agentId: string) => void) | undefined): void
   sessionIdForAgent(agentId: string): string | undefined
-  setDot(agentId: string, dot: boolean): boolean
-  startTool(
-    agent: AgentIdentity | undefined,
-    tool: string,
-    input: unknown,
-    dot?: boolean
-  ): string | undefined
+  startTool(agent: AgentIdentity | undefined, tool: string, input: unknown): string | undefined
   registerToolStop(
     agent: AgentIdentity | undefined,
     callId: string | undefined,
@@ -92,9 +89,17 @@ export interface AgentObserver {
   updateContextBudget(
     agent: AgentIdentity | undefined,
     usage:
-      | { tokens: number; inputTokens: number; outputTokens: number; threshold: number }
+      | {
+          tokens: number
+          inputTokens: number
+          outputTokens: number
+          threshold: number
+          unlimited?: boolean
+        }
       | undefined
   ): void
+  /** Updates an existing session without changing its identity or activity time. */
+  updateSessionContextBudget(sessionId: string, usage: AgentSnapshot["contextBudget"]): boolean
   queueInstruction(agentId: string, message: string): AgentInstructionSnapshot | undefined
   cancelInstruction(agentId: string, instructionId: string): boolean
   drainInstructions(agent: AgentIdentity | undefined): string[]
@@ -134,6 +139,9 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   const events = new EventEmitter()
   let callCounter = 0
   let instructionCounter = 0
+  const retention = createSessionRetention(agentsBySession, sessionsByAgentId, (agentId) =>
+    emitAgentRemoved(events, agentId)
+  )
 
   const listAgents = (): AgentSnapshot[] =>
     [...agentsBySession.values()]
@@ -165,40 +173,22 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
       activeCalls: new Map(),
       activeCallStops: new Map(),
     }
+    retention.evict(1)
     agentsBySession.set(identity.sessionId, state)
     sessionsByAgentId.set(identity.agent, identity.sessionId)
     return state
   }
 
-  function emitAgent(agent: AgentState): void {
-    events.emit("event", {
-      type: "agent_changed",
-      agent: toSnapshot(agent),
-    } satisfies AgentChangedEvent)
-  }
-
-  function deleteAgent(agentId: string): boolean {
-    const sessionId = sessionsByAgentId.get(agentId)
-    if (!sessionId) return false
-    sessionsByAgentId.delete(agentId)
-    agentsBySession.delete(sessionId)
-    events.emit("event", {
-      type: "agent_removed",
-      agentId,
-    } satisfies AgentRemovedEvent)
-    return true
-  }
+  const emitAgent = (agent: AgentState) => emitAgentChanged(events, agent)
 
   function startTool(
     identity: AgentIdentity | undefined,
     tool: string,
-    input: unknown,
-    dot?: boolean
+    input: unknown
   ): string | undefined {
     if (!identity) return undefined
     const agent = ensureAgent(identity)
     if (!agent) return undefined
-    if (dot) agent.dot = true
     agentActivityNotifier.activityStarted(identity.sessionId)
     const timestamp = now()
     const call: AgentCallSnapshot = {
@@ -268,6 +258,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     emitAgent(agent)
     if (agent.activeCalls.size === 0) {
       agentActivityNotifier.activitySettled(identity.sessionId, identity.taskSlug)
+      retention.evict()
     }
   }
 
@@ -292,13 +283,20 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
   function updateContextBudget(
     identity: AgentIdentity | undefined,
     usage:
-      | { tokens: number; inputTokens: number; outputTokens: number; threshold: number }
+      | {
+          tokens: number
+          inputTokens: number
+          outputTokens: number
+          threshold: number
+          unlimited?: boolean
+        }
       | undefined
   ): void {
     if (!identity || !usage) return
     const agent = ensureAgent(identity)
     if (!agent) return
     agent.contextBudget = { ...usage }
+    emitAgent(agent)
   }
 
   function cancelInstruction(agentId: string, instructionId: string): boolean {
@@ -332,10 +330,10 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
 
   return {
     listAgents,
-    deleteAgent,
+    deleteAgent: (agentId) => removeAgent(agentsBySession, sessionsByAgentId, events, agentId),
+    setSessionRetention: retention.setLimit,
+    onSessionEvicted: retention.onEvicted,
     sessionIdForAgent: (agentId) => sessionsByAgentId.get(agentId),
-    setDot: (agentId, dot) =>
-      setAgentDot(agentsBySession, sessionsByAgentId, emitAgent, agentId, dot),
     startTool,
     registerToolStop,
     stopTool,
@@ -344,10 +342,87 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     failTool: (agent, callId, error) => settleTool(agent, callId, "failed", error),
     interruptTool: (agent, callId, result) => settleTool(agent, callId, "interrupted", result),
     updateContextBudget,
+    updateSessionContextBudget: (sessionId, usage) =>
+      updateExistingSessionBudget(agentsBySession, emitAgent, sessionId, usage),
     queueInstruction,
     cancelInstruction,
     drainInstructions,
     subscribe: (listener) => subscribeAgentEvents(events, listener),
+  }
+}
+
+function emitAgentChanged(events: EventEmitter, agent: AgentState): void {
+  events.emit("event", {
+    type: "agent_changed",
+    agent: toSnapshot(agent),
+  } satisfies AgentChangedEvent)
+}
+
+function updateExistingSessionBudget(
+  agentsBySession: Map<string, AgentState>,
+  emitAgent: (agent: AgentState) => void,
+  sessionId: string,
+  usage: AgentSnapshot["contextBudget"]
+): boolean {
+  const agent = agentsBySession.get(sessionId)
+  if (!agent || !usage) return false
+  agent.contextBudget = { ...usage }
+  emitAgent(agent)
+  return true
+}
+
+function removeAgent(
+  agentsBySession: Map<string, AgentState>,
+  sessionsByAgentId: Map<string, string>,
+  events: EventEmitter,
+  agentId: string
+): boolean {
+  const sessionId = sessionsByAgentId.get(agentId)
+  if (!sessionId) return false
+  sessionsByAgentId.delete(agentId)
+  agentsBySession.delete(sessionId)
+  emitAgentRemoved(events, agentId)
+  return true
+}
+
+function emitAgentRemoved(events: EventEmitter, agentId: string): void {
+  events.emit("event", {
+    type: "agent_removed",
+    agentId,
+  } satisfies AgentRemovedEvent)
+}
+
+function createSessionRetention(
+  agentsBySession: Map<string, AgentState>,
+  sessionsByAgentId: Map<string, string>,
+  emitRemoved: (agentId: string) => void
+) {
+  let limit = 0
+  let listener: ((sessionId: string, agentId: string) => void) | undefined
+  const evict = (reserve = 0): void => {
+    if (limit <= 0) return
+    const target = Math.max(0, limit - reserve)
+    const idle = [...agentsBySession.values()]
+      .filter((agent) => agent.activeCalls.size === 0)
+      .sort((left, right) => left.lastSeenAt - right.lastSeenAt)
+    while (agentsBySession.size > target && idle.length > 0) {
+      const victim = idle.shift()
+      if (!victim) break
+      sessionsByAgentId.delete(victim.id)
+      agentsBySession.delete(victim.sessionId)
+      emitRemoved(victim.id)
+      listener?.(victim.sessionId, victim.id)
+    }
+  }
+  return {
+    evict,
+    setLimit: (next: number) => {
+      limit = Number.isFinite(next) ? Math.max(0, Math.trunc(next)) : 0
+      evict()
+    },
+    onEvicted: (next: ((sessionId: string, agentId: string) => void) | undefined) => {
+      listener = next
+    },
   }
 }
 
@@ -357,21 +432,6 @@ function subscribeAgentEvents(
 ): () => void {
   events.on("event", listener)
   return () => events.off("event", listener)
-}
-
-function setAgentDot(
-  agentsBySession: Map<string, AgentState>,
-  sessionsByAgentId: Map<string, string>,
-  emitAgent: (agent: AgentState) => void,
-  agentId: string,
-  dot: boolean
-): boolean {
-  const sessionId = sessionsByAgentId.get(agentId)
-  const agent = sessionId ? agentsBySession.get(sessionId) : undefined
-  if (!agent) return false
-  agent.dot = dot || undefined
-  emitAgent(agent)
-  return true
 }
 
 function stopAllActiveTools(agents: Iterable<AgentState>) {
@@ -400,7 +460,6 @@ function toSnapshot(agent: AgentState): AgentSnapshot {
     taskSlug: agent.taskSlug,
     projectId: agent.projectId,
     goalId: agent.goalId,
-    dot: agent.dot,
     firstSeenAt: agent.firstSeenAt,
     lastSeenAt: agent.lastSeenAt,
     current: agent.current ? { ...agent.current } : undefined,

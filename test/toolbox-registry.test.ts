@@ -11,6 +11,18 @@ import { createMcpServerFactory } from "../src/mcp/server-factory.js"
 import { ToolboxRegistry } from "../src/toolbox/registry.js"
 import { tempDir } from "./helpers/temp.js"
 
+test("serializes a switch back to the current toolbox root while another switch is pending", async (t) => {
+  const root = await tempDir(t, "openchatx-toolbox-root-switch-")
+  const initial = join(root, "initial")
+  const other = join(root, "other")
+  const registry = new ToolboxRegistry(initial)
+  await registry.start()
+  t.after(() => registry.close())
+
+  await Promise.all([registry.setRoot(other), registry.setRoot(initial)])
+  assert.equal(registry.root, initial)
+})
+
 test("loads a custom TypeScript toolbox tool and exposes it through MCP", async (t) => {
   const root = await mkdtemp(join(process.cwd(), ".openchatx-toolbox-test-"))
   t.after(() => rm(root, { recursive: true, force: true }))

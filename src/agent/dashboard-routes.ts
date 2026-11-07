@@ -6,11 +6,7 @@ import { static as expressStatic, Router } from "express"
 import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
-import {
-  loadExternalMcpConfig,
-  resolveDotExposure,
-  saveExternalMcpConfig,
-} from "../external-mcp/config.js"
+import { loadExternalMcpConfig, saveExternalMcpConfig } from "../external-mcp/config.js"
 import type { ExternalMcpRegistry } from "../external-mcp/registry.js"
 import { registerJobRoutes } from "../jobs/dashboard-routes.js"
 import type { JobManager } from "../jobs/job-manager.js"
@@ -102,7 +98,7 @@ export function createDashboardRouter(
   registerRuleRoutes(router, toolboxRegistry)
   registerToolboxRoutes(router, toolboxRegistry)
   registerPlatformRoute(router, platformOverview)
-  registerSettingsRoutes(router, contextBudget)
+  registerSettingsRoutes(router, contextBudget, agentObserver)
 
   router.get("/api/events", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream")
@@ -154,10 +150,7 @@ export function createDashboardRouter(
   })
 
   router.get("/api/mcp-servers", (_req, res) => {
-    const servers = resolveDotExposure(
-      loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
-      MCP_CONFIG.dot.externalServers
-    )
+    const servers = loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile)
     res.json({
       servers,
       authorization: externalMcp?.authorization?.() ?? {},
@@ -183,10 +176,7 @@ export function createDashboardRouter(
   router.post("/api/mcp-servers/refresh", async (_req, res) => {
     try {
       await externalMcp?.reload(true)
-      const servers = resolveDotExposure(
-        loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile),
-        MCP_CONFIG.dot.externalServers
-      )
+      const servers = loadExternalMcpConfig(MCP_CONFIG.externalMcp.configFile)
       res.json({
         servers,
         authorization: externalMcp?.authorization?.() ?? {},
@@ -596,7 +586,8 @@ function registerRuleRoutes(
 
 function registerSettingsRoutes(
   router: ReturnType<typeof Router>,
-  contextBudget?: ContextBudgetGuard
+  contextBudget?: ContextBudgetGuard,
+  agentObserver?: AgentObserver
 ): void {
   router.get("/api/settings", (_req, res) => {
     try {
@@ -626,22 +617,21 @@ function registerSettingsRoutes(
           ...current.context,
           ...(isRecord(body.context) ? body.context : {}),
         },
-        dot: {
-          ...current.dot,
-          ...(isRecord(body.dot) ? body.dot : {}),
+        sessions: {
+          ...current.sessions,
+          ...(isRecord(body.sessions) ? body.sessions : {}),
         },
       }
       const saved = savePublicConfig(next, MCP_CONFIG.publicConfigFile)
       contextBudget?.setWarningThreshold(saved.context.warning_threshold)
-      MCP_CONFIG.dot.externalServers = saved.dot.external_servers
+      MCP_CONFIG.sessions.maxRetained = saved.sessions.max_retained
+      agentObserver?.setSessionRetention(saved.sessions.max_retained)
       const restartRequired =
         saved.port !== current.port ||
         saved.shell.path !== current.shell.path ||
         saved.shell.rtk !== current.shell.rtk ||
         saved.tunnel.profile !== current.tunnel.profile ||
-        saved.tunnel.health_port !== current.tunnel.health_port ||
-        saved.dot.enabled !== current.dot.enabled ||
-        saved.dot.port !== current.dot.port
+        saved.tunnel.health_port !== current.tunnel.health_port
       res.json({ settings: editableSettings(saved), restartRequired })
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
@@ -655,7 +645,7 @@ function editableSettings(config: ReturnType<typeof loadPublicConfig>) {
     shell: config.shell,
     tunnel: config.tunnel,
     context: config.context,
-    dot: config.dot,
+    sessions: config.sessions,
   }
 }
 
@@ -668,14 +658,6 @@ function registerAgentRoutes(
     const agents = agentObserver.listAgents().map((agent) => {
       const sessionId = agentObserver.sessionIdForAgent(agent.id)
       const usage = sessionId ? contextBudget?.usage({ sessionId, agent: agent.id }) : undefined
-      if (sessionId && contextBudget?.isDotSession(sessionId)) {
-        agentObserver.setDot(agent.id, true)
-        return {
-          ...agent,
-          ...(usage ? { contextBudget: usage } : {}),
-          dot: true,
-        }
-      }
       return {
         ...agent,
         ...(usage ? { contextBudget: usage } : {}),
@@ -684,16 +666,18 @@ function registerAgentRoutes(
     res.json({ agents })
   })
 
-  router.put("/api/agents/:agentId/dot", async (req, res) => {
+  router.put("/api/agents/:agentId/unlimited-context", async (req, res) => {
     const sessionId = agentObserver.sessionIdForAgent(req.params.agentId)
     if (!sessionId) return res.status(404).json({ error: "agent not found" })
     if (!contextBudget) return res.status(503).json({ error: "context budget is unavailable" })
-    if (typeof req.body?.dot !== "boolean")
-      return res.status(400).json({ error: "dot must be boolean" })
+    if (typeof req.body?.unlimited !== "boolean")
+      return res.status(400).json({ error: "unlimited must be boolean" })
     try {
-      await contextBudget.setDotSession(sessionId, req.body.dot)
-      agentObserver.setDot(req.params.agentId, req.body.dot)
-      res.json({ dot: req.body.dot })
+      await contextBudget.setUnlimitedSession(sessionId, req.body.unlimited)
+      const identity = { sessionId, agent: req.params.agentId }
+      if (!agentObserver.updateSessionContextBudget(sessionId, contextBudget.usage(identity)))
+        return res.status(404).json({ error: "agent not found" })
+      res.json({ unlimited: req.body.unlimited })
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
     }

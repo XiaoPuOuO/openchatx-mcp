@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { writeFile } from "node:fs/promises"
+import { access, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { join } from "node:path"
 import process from "node:process"
@@ -8,9 +8,10 @@ import test from "node:test"
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
-
+import { ExternalMcpOAuth } from "../src/external-mcp/oauth.js"
 import { createExternalMcpRegistry } from "../src/external-mcp/registry.js"
 import { createMcpServerFactory } from "../src/mcp/server-factory.js"
+import { runtimeProcessRegistry } from "../src/runtime/process-registry.js"
 import { startMcpHttpServer } from "../src/server/http-server.js"
 import { tempDir } from "./helpers/temp.js"
 
@@ -23,6 +24,101 @@ const NO_BUILTINS = {
   skills: false,
   image: false,
 } as const
+
+test("switching config roots does not delete OAuth credentials", async (t) => {
+  const root = await tempDir(t, "openchatx-external-safe-switch-")
+  const userPath = join(root, "user.json")
+  const safePath = join(root, "safe.json")
+  await writeFile(
+    userPath,
+    JSON.stringify({ remote: { type: "remote", url: "https://example.com/mcp", enabled: false } })
+  )
+  await writeFile(safePath, "{}")
+  const oauth = new ExternalMcpOAuth()
+  let disconnected = false
+  oauth.disconnect = async () => {
+    disconnected = true
+  }
+  const registry = await createExternalMcpRegistry(userPath, oauth)
+  t.after(() => registry.close())
+  await registry.setConfigPath?.(safePath)
+  assert.equal(disconnected, false)
+})
+
+test("config root switches apply in order even when requested concurrently", async (t) => {
+  const root = await tempDir(t, "openchatx-external-ordered-switch-")
+  const userPath = join(root, "user.json")
+  const safePath = join(root, "safe.json")
+  await writeFile(
+    userPath,
+    JSON.stringify({ user: { type: "remote", url: "https://example.com/mcp", enabled: false } })
+  )
+  await writeFile(
+    safePath,
+    JSON.stringify({ safe: { type: "remote", url: "https://example.org/mcp", enabled: false } })
+  )
+  const registry = await createExternalMcpRegistry(userPath)
+  t.after(() => registry.close())
+  const first = registry
+    .setConfigPath?.(safePath)
+    .then(() => Object.keys(registry.authorization?.() ?? {}))
+  const second = registry.setConfigPath?.(userPath)
+  assert.deepEqual(await first, ["safe"])
+  await second
+  assert.deepEqual(Object.keys(registry.authorization?.() ?? {}), ["user"])
+})
+
+test("a reconnect started before a config switch cannot restore a retired server", {
+  timeout: 10_000,
+}, async (t) => {
+  const root = await tempDir(t, "openchatx-external-reconnect-switch-")
+  const userPath = join(root, "user.json")
+  const safePath = join(root, "safe.json")
+  const marker = join(root, "started")
+  const waiting = join(root, "waiting")
+  const release = join(root, "release")
+  const fixture = new URL("../fixtures/external-mcp-stdio.mjs", import.meta.url).href
+  const script = `import { existsSync, writeFileSync } from 'node:fs';
+if (existsSync(${JSON.stringify(marker)})) {
+  writeFileSync(${JSON.stringify(waiting)}, 'waiting');
+  while (!existsSync(${JSON.stringify(release)})) await new Promise(r => setTimeout(r, 10));
+} else writeFileSync(${JSON.stringify(marker)}, 'started');
+await import(${JSON.stringify(fixture)});`
+  await writeFile(
+    userPath,
+    JSON.stringify({
+      retired: {
+        type: "local",
+        command: [process.execPath, "--input-type=module", "-e", script],
+        enabled: true,
+      },
+    })
+  )
+  await writeFile(safePath, "{}")
+  const registry = await createExternalMcpRegistry(userPath)
+  t.after(() => registry.close())
+  const processRecord = runtimeProcessRegistry
+    .list()
+    .find((item) => item.kind === "mcp" && item.label === "retired")
+  assert.ok(processRecord)
+  const restarting = runtimeProcessRegistry.restart(processRecord.id)
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (
+      await access(waiting).then(
+        () => true,
+        () => false
+      )
+    )
+      break
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  await access(waiting)
+  await registry.setConfigPath?.(safePath)
+  await writeFile(release, "release")
+  await restarting
+  assert.deepEqual(registry.connectedServers, [])
+  assert.deepEqual(registry.catalog(), [])
+})
 
 test("aggregates a local stdio MCP and forwards tool calls", { timeout: 10_000 }, async (t) => {
   const root = await tempDir(t, "shellby-external-stdio-")
