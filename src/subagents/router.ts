@@ -1,4 +1,9 @@
-import { loadSubagentConfig, type SubagentConfig, type SubagentModelProfile } from "./config.js"
+import {
+  loadSubagentConfig,
+  type SubagentConfig,
+  type SubagentModelProfile,
+  type SubagentProviderConfig,
+} from "./config.js"
 import type { SubagentRunInput, SubagentRunResult, SubagentRuntime } from "./runtime.js"
 
 export type CostTier = "low" | "medium" | "high"
@@ -73,11 +78,11 @@ function scoreCandidate(
 ): SmartRouteSelection | undefined {
   const provider = config.providers[model.provider]
   if (!provider) return undefined
-  const local = isLocalProvider(provider.base_url)
+  const local = isLocalSubagentProvider(provider)
   if (input.localOnly && !local) return undefined
   const costTier = model.cost_tier
   if (input.maxCostTier && COST_ORDER[costTier] > COST_ORDER[input.maxCostTier]) return undefined
-  if (input.minContextWindow && model.context_window < input.minContextWindow) return undefined
+  if (!satisfiesContextWindow(model.context_window, input.minContextWindow)) return undefined
 
   const taskTerms = new Set(input.task.toLowerCase().match(WORD_RE) ?? [])
   const searchable = [id, model.name, model.description, ...model.tags].join(" ").toLowerCase()
@@ -102,7 +107,7 @@ function scoreCandidate(
     score += 2
     reasons.push("low cost")
   }
-  if (model.context_window >= 100_000) {
+  if (model.context_window && model.context_window >= 100_000) {
     score += 1
     reasons.push("large context")
   }
@@ -120,10 +125,18 @@ function scoreCandidate(
   }
 }
 
+function satisfiesContextWindow(actual?: number, minimum?: number): boolean {
+  return minimum === undefined || (actual !== undefined && actual >= minimum)
+}
+
 function isLocalProvider(baseUrl: string): boolean {
   try {
     return LOOPBACK_HOSTS.has(new URL(baseUrl).hostname)
   } catch {
     return false
   }
+}
+
+function isLocalSubagentProvider(provider: SubagentProviderConfig): boolean {
+  return provider.type !== "openai-chatgpt" && isLocalProvider(provider.base_url)
 }

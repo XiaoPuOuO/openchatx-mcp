@@ -57,6 +57,7 @@
     "vendor:apply-patch": "scripts/vendor/build-apply-patch.sh"
   },
   "overrides": {
+    "@hono/node-server": "2.1.6",
     "basic-ftp": "6.2.3",
     "chokidar": "4.0.3",
     "ip-address": "10.7.4",
@@ -68,12 +69,13 @@
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/express": "2.0.2",
-    "@modelcontextprotocol/node": "2.1.1",
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "@napi-rs/keyring": "^2.1.1",
     "@vscode/ripgrep": "1.18.0",
     "cloakbrowser": "^0.5.9",
     "express": "^5.2.1",
+    "jose": "^6.2.15",
     "js-yaml": "5.5.0",
     "linkedom": "^0.18.13",
     "node-html-markdown": "^2.0.0",

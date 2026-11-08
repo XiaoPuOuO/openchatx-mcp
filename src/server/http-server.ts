@@ -23,6 +23,7 @@ import type { RuntimeProcessService } from "../runtime/process-service.js"
 import type { RuntimeControlService } from "../runtime/runtime-control.js"
 import type { RecentWorkService } from "../sessions/recent-work.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
+import type { ChatGPTAuth } from "../subagents/chatgpt-auth.js"
 import type { SubagentRuntime } from "../subagents/runtime.js"
 import type { SummaryRegistry } from "../summaries/summary-registry.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
@@ -49,6 +50,7 @@ export interface McpHttpServices {
   agentObserver?: AgentObserver
   toolboxRegistry?: ToolboxRegistry
   subagentRuntime?: SubagentRuntime
+  chatgptAuth?: ChatGPTAuth
   externalMcp?: ExternalMcpRegistry
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
@@ -85,6 +87,7 @@ export async function startMcpHttpServer(
     agentObserver,
     toolboxRegistry,
     subagentRuntime,
+    chatgptAuth,
     externalMcp,
     capabilityHealth,
     capabilityRegistry,
@@ -129,6 +132,7 @@ export async function startMcpHttpServer(
       createDashboardRouter(agentObserver, {
         toolboxRegistry,
         subagentRuntime,
+        chatgptAuth,
         externalMcp,
         capabilityHealth,
         capabilityRegistry,

@@ -167,6 +167,7 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
     contextBudget: options.contextBudget,
     progressHeartbeat: options.progressHeartbeat,
     runtimeControl: options.runtimeControl,
+    subagentRuntime: options.subagentRuntime,
   })
 
   let lazyBuiltins: LazyBuiltinTools | undefined

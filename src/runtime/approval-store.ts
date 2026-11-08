@@ -16,6 +16,7 @@ const approvalSchema = z.object({
   reason: z.string(),
   createdAt: z.string(),
   status: z.enum(["pending", "approved", "approved-once", "denied", "consumed"]),
+  sessionId: z.string().min(1).optional(),
   input: z.unknown(),
   source: z
     .object({ kind: z.enum(["builtin", "toolbox", "mcp"]), id: z.string().optional() })
@@ -41,12 +42,16 @@ export class ApprovalStore {
     category: string
     reason: string
     argumentsValue: Record<string, unknown>
+    sessionId?: string
     source?: { kind: "builtin" | "toolbox" | "mcp"; id?: string }
   }): Promise<RuntimeApproval> {
     const state = await this.load()
     const fingerprint = approvalFingerprint(input.toolName, input.argumentsValue, input.category)
     const existing = state.approvals.find(
-      (candidate) => candidate.fingerprint === fingerprint && candidate.status === "pending"
+      (candidate) =>
+        candidate.fingerprint === fingerprint &&
+        candidate.sessionId === input.sessionId &&
+        candidate.status === "pending"
     )
     if (existing) return existing
 
@@ -58,6 +63,7 @@ export class ApprovalStore {
       reason: input.reason,
       createdAt: new Date().toISOString(),
       status: "pending",
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
       input: redactSecrets(input.argumentsValue),
       ...(input.source ? { source: input.source } : {}),
     }
@@ -81,13 +87,17 @@ export class ApprovalStore {
   async isApproved(
     toolName: string,
     argumentsValue: Record<string, unknown>,
-    category: string
+    category: string,
+    inheritedSessions: readonly string[] = []
   ): Promise<boolean> {
     const state = await this.load()
     const fingerprint = approvalFingerprint(toolName, argumentsValue, category)
     const approval = state.approvals.find(
       (candidate) =>
         candidate.fingerprint === fingerprint &&
+        (candidate.sessionId
+          ? inheritedSessions.includes(candidate.sessionId)
+          : inheritedSessions.length === 0) &&
         (candidate.status === "approved" || candidate.status === "approved-once")
     )
     if (!approval) return false

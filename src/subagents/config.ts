@@ -2,15 +2,34 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 
 import { z } from "zod"
 
-const providerSchema = z.object({
-  type: z.literal("openai-compatible"),
-  base_url: z.url(),
+const sharedProviderFields = {
   enabled: z.boolean().default(true),
-  api_key: z.string().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
   timeout: z.number().int().positive().default(120_000),
   description: z.string().optional(),
-})
+}
+
+const providerSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("openai-compatible"),
+    base_url: z.url(),
+    api_key: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    ...sharedProviderFields,
+  }),
+  z.object({
+    type: z.literal("anthropic"),
+    base_url: z.url().default("https://api.anthropic.com/v1"),
+    api_key: z.string().optional(),
+    ...sharedProviderFields,
+  }),
+  z.object({
+    type: z.literal("google"),
+    base_url: z.url().default("https://generativelanguage.googleapis.com/v1beta"),
+    api_key: z.string().optional(),
+    ...sharedProviderFields,
+  }),
+  z.object({ type: z.literal("openai-chatgpt"), ...sharedProviderFields }),
+])
 
 const thinkingSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("none") }),
@@ -35,7 +54,8 @@ const modelProfileSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   enabled: z.boolean().default(true),
-  context_window: z.number().int().positive(),
+  execution_mode: z.enum(["sync", "async"]).default("sync"),
+  context_window: z.number().int().positive().optional(),
   max_output_tokens: z.number().int().positive().optional(),
   tags: z.array(z.string().min(1)).default([]),
   cost_tier: z.enum(["low", "medium", "high"]).default("medium"),
@@ -45,6 +65,12 @@ const modelProfileSchema = z.object({
 })
 
 export const subagentConfigSchema = z.object({
+  limits: z
+    .object({
+      max_depth: z.number().int().min(1).max(20).default(5),
+      max_children_per_agent: z.number().int().min(1).max(100).default(12),
+    })
+    .default({ max_depth: 5, max_children_per_agent: 12 }),
   providers: z.record(z.string().min(1), providerSchema).default({}),
   models: z.record(z.string().min(1), modelProfileSchema).default({}),
 })
@@ -54,7 +80,7 @@ export type SubagentProviderConfig = SubagentConfig["providers"][string]
 export type SubagentModelProfile = SubagentConfig["models"][string]
 
 export function loadSubagentConfig(path: string): SubagentConfig {
-  if (!existsSync(path)) return { providers: {}, models: {} }
+  if (!existsSync(path)) return subagentConfigSchema.parse({})
   let raw: unknown
   try {
     raw = JSON.parse(readFileSync(path, "utf8"))
@@ -93,13 +119,14 @@ export function saveSubagentConfig(path: string, value: unknown): SubagentConfig
 
 export function redactSubagentConfig(config: SubagentConfig): SubagentConfig {
   return {
+    limits: config.limits,
     providers: Object.fromEntries(
       Object.entries(config.providers).map(([id, provider]) => [
         id,
         {
           ...provider,
-          ...(provider.api_key ? { api_key: "<redacted>" } : {}),
-          ...(provider.headers
+          ...("api_key" in provider && provider.api_key ? { api_key: "<redacted>" } : {}),
+          ...("headers" in provider && provider.headers
             ? {
                 headers: Object.fromEntries(
                   Object.keys(provider.headers).map((key) => [key, "<redacted>"])

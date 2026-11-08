@@ -1,5 +1,6 @@
 import {
   Bell,
+  BrainCircuit,
   type LucideIcon,
   RefreshCcw,
   Settings,
@@ -37,6 +38,7 @@ import {
   updateNotificationSettings,
 } from "../../lib/runtime-control-api"
 import type { RuntimeSettings } from "../../types"
+import { SubagentLimitsSettings } from "./SubagentLimitsSettings"
 
 const INPUT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-ring"
@@ -76,7 +78,13 @@ const ACCESS_MODE_OPTIONS: Array<{
   },
 ]
 
-type SettingsSection = "general" | "trust" | "recovery" | "notifications" | "diagnostics"
+type SettingsSection =
+  | "general"
+  | "subagents"
+  | "trust"
+  | "recovery"
+  | "notifications"
+  | "diagnostics"
 
 const SETTINGS_SECTIONS: Array<{
   id: SettingsSection
@@ -84,6 +92,7 @@ const SETTINGS_SECTIONS: Array<{
   labelKey: string
 }> = [
   { id: "general", icon: SlidersHorizontal, labelKey: "settings.nav.general" },
+  { id: "subagents", icon: BrainCircuit, labelKey: "settings.nav.subagents" },
   { id: "trust", icon: ShieldAlert, labelKey: "settings.nav.trust" },
   { id: "recovery", icon: RefreshCcw, labelKey: "settings.nav.recovery" },
   { id: "notifications", icon: Bell, labelKey: "settings.nav.notifications" },
@@ -201,7 +210,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       />
 
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 px-4 py-4 md:px-5 md:py-5">
-        <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border bg-card shadow-sm md:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="settings-layout grid min-h-0 flex-1 overflow-hidden rounded-xl border bg-card shadow-sm md:grid-cols-[220px_minmax(0,1fr)]">
           <nav className="flex gap-1 overflow-x-auto border-b p-2 md:min-h-0 md:flex-col md:overflow-y-auto md:border-r md:border-b-0 md:p-3">
             {SETTINGS_SECTIONS.map((item) => {
               const Icon = item.icon
@@ -246,6 +255,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                     {section === "general" ? (
                       <GeneralSettingsPage settings={settings} setSettings={setSettings} />
                     ) : null}
+                    {section === "subagents" ? <SubagentLimitsSettings /> : null}
                     {section === "trust" ? (
                       <TrustSettingsPage
                         runtimeControl={runtimeControl}
@@ -427,7 +437,6 @@ function GeneralSettingsPage({
           </Field>
         </CardContent>
       </Card>
-
     </>
   )
 }

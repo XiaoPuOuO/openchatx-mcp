@@ -1,4 +1,14 @@
-import { Check, CircleGauge, Infinity, LoaderCircle, Square, Trash2, TriangleAlert } from "lucide-react"
+import {
+  BrainCircuit,
+  Check,
+  ChevronRight,
+  CircleGauge,
+  Infinity as InfinityIcon,
+  LoaderCircle,
+  Square,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react"
 import { useState } from "react"
 
 import { Badge } from "../../components/ui/badge"
@@ -6,17 +16,21 @@ import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
 import { setUnlimitedContext, stopAgentCall } from "../../lib/api"
-import type { Agent, AgentCall } from "../../types"
+import type { Agent, AgentCall, SubagentSessionSummary } from "../../types"
 import { SteerComposer } from "./SteerComposer"
 import { ToolCallModal } from "./ToolCallModal"
 
 export function AgentCard({
   agent,
+  subagents = [],
+  onOpenSubagent,
   now,
   onDelete,
   showContextLimit = true,
 }: {
   agent: Agent
+  subagents?: SubagentSessionSummary[]
+  onOpenSubagent?: (jobId: string) => void
   now: number
   onDelete: () => Promise<void>
   showContextLimit?: boolean
@@ -114,11 +128,20 @@ export function AgentCard({
             ) : null}
           </div>
           <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="icon" className="size-7"
-              disabled={changingLimit} aria-pressed={agent.contextBudget?.unlimited === true}
-              aria-label={t("agent.unlimitedContext")} title={t("agent.unlimitedContextHint")}
-              onClick={() => void toggleUnlimited()}>
-              <Infinity className={agent.contextBudget?.unlimited ? "size-3.5 text-primary" : "size-3.5"} />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              disabled={changingLimit}
+              aria-pressed={agent.contextBudget?.unlimited === true}
+              aria-label={t("agent.unlimitedContext")}
+              title={t("agent.unlimitedContextHint")}
+              onClick={() => void toggleUnlimited()}
+            >
+              <InfinityIcon
+                className={agent.contextBudget?.unlimited ? "size-3.5 text-primary" : "size-3.5"}
+              />
             </Button>
             <Button
               type="button"
@@ -159,6 +182,48 @@ export function AgentCard({
             ))}
           </div>
         </div>
+
+        {subagents.length > 0 && (
+          <div className="border-t pt-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                <BrainCircuit className="size-3.5" />
+                {t("subagents.sessions")}
+                <span className="rounded bg-muted px-1.5 py-0.5 tabular-nums">
+                  {subagents.length}
+                </span>
+              </h3>
+              {subagents.some((session) => session.status === "running") && (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-500">
+                  <span className="size-1.5 rounded-full bg-emerald-500" />
+                  {subagents.filter((session) => session.status === "running").length}{" "}
+                  {t("subagents.status.running")}
+                </span>
+              )}
+            </div>
+            <div className="max-h-[172px] space-y-0.5 overflow-y-auto overscroll-contain pr-1">
+              {subagents.map((session) => (
+                <button
+                  key={session.job_id}
+                  type="button"
+                  onClick={() => onOpenSubagent?.(session.job_id)}
+                  className={`group flex h-14 w-full items-center gap-2 rounded-md pr-1 text-left hover:bg-muted/60 ${session.parent_id ? "pl-5" : "pl-2"}`}
+                  title={session.title}
+                >
+                  <SubagentStatusDot status={session.status} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">{session.title}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {session.parent_id ? "↳ " : ""}
+                      {session.profile} · {session.job_id.slice(-8)}
+                    </span>
+                  </span>
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70 group-hover:text-foreground" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {deleteError ? <div className="text-xs text-destructive">{deleteError}</div> : null}
         {stopError ? <div className="text-xs text-destructive">{stopError}</div> : null}
@@ -252,6 +317,22 @@ function ActivityRow({
         </button>
       ) : null}
     </div>
+  )
+}
+
+function SubagentStatusDot({ status }: { status: SubagentSessionSummary["status"] }) {
+  return (
+    <span
+      aria-label={status}
+      role="img"
+      className={`size-2 shrink-0 rounded-full ${
+        status === "running"
+          ? "bg-emerald-500"
+          : status === "completed"
+            ? "bg-sky-500"
+            : "bg-rose-500"
+      }`}
+    />
   )
 }
 

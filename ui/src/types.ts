@@ -342,14 +342,40 @@ export interface LoadedRule extends RuleSummary {
   content: string
 }
 
-export interface SubagentProviderConfig {
-  type: "openai-compatible"
-  base_url: string
+interface SubagentProviderShared {
   enabled: boolean
-  api_key?: string
-  headers?: Record<string, string>
   timeout: number
   description?: string
+}
+
+export type SubagentProviderConfig = SubagentProviderShared &
+  (
+    | {
+        type: "openai-compatible"
+        base_url: string
+        api_key?: string
+        headers?: Record<string, string>
+      }
+    | { type: "anthropic" | "google"; base_url: string; api_key?: string }
+    | { type: "openai-chatgpt" }
+  )
+
+export interface SubagentDiscoveredModel {
+  id: string
+  name: string
+  description?: string
+  context_window?: number
+  max_output_tokens?: number
+  thinking?: SubagentThinkingConfig
+}
+
+export interface ChatGPTAuthStatus {
+  connected: boolean
+  authorized: boolean
+  email?: string
+  expiresAt?: number
+  pending: boolean
+  error?: string
 }
 
 export type SubagentThinkingConfig =
@@ -374,7 +400,8 @@ export interface SubagentModelProfile {
   name: string
   description: string
   enabled: boolean
-  context_window: number
+  execution_mode?: "sync" | "async"
+  context_window?: number
   max_output_tokens?: number
   thinking: SubagentThinkingConfig
   temperature?: number
@@ -382,6 +409,48 @@ export interface SubagentModelProfile {
 }
 
 export interface SubagentConfig {
+  limits: { max_depth: number; max_children_per_agent: number }
   providers: Record<string, SubagentProviderConfig>
   models: Record<string, SubagentModelProfile>
+}
+
+export type SubagentSessionStatus = "running" | "completed" | "failed"
+
+export interface SubagentSessionEvent {
+  id: string
+  role: "user" | "assistant" | "tool" | "guidance"
+  text: string
+  time: string
+  status?: "running" | "completed" | "failed" | "queued" | "delivered"
+  tool?: string
+  input?: string
+}
+
+export interface SubagentSessionSummary {
+  job_id: string
+  profile: string
+  provider: string
+  model: string
+  title: string
+  parent_id?: string
+  owner_agent_id?: string
+  worker_agent_id?: string
+  status: SubagentSessionStatus
+  created_at: string
+  updated_at: string
+  pending_guidance: number
+}
+
+export interface SubagentSessionDetail extends SubagentSessionSummary {
+  session_id: string
+  depth: number
+  events: SubagentSessionEvent[]
+  result?: {
+    profile: string
+    provider: string
+    model: string
+    content: string
+    usage?: Record<string, unknown>
+  }
+  error?: string
 }

@@ -154,6 +154,7 @@ let mcpServers: McpServerMap = {
 }
 
 let subagentConfig: SubagentConfig = {
+  limits: { max_depth: 5, max_children_per_agent: 12 },
   providers: {},
   models: {},
 }
@@ -360,7 +361,10 @@ export async function setMockUnlimitedContext(agentId: string, unlimited: boolea
   updateAgent(agentId, (agent) => ({
     ...agent,
     contextBudget: {
-      tokens: 0, inputTokens: 0, outputTokens: 0, threshold: 400_000,
+      tokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      threshold: 400_000,
       ...agent.contextBudget,
       unlimited,
     },

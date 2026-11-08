@@ -233,7 +233,7 @@ export function renderCurrentToolContracts(): string {
     "- Projects: project_manage actions=list|upsert|remove|use|resolve|grant_once|grant_all_session|revoke_all_session. Activate/switch with action=use + project_id; clear for machine/global work with action=use + project_id=null.",
     "- Skills: skill_search action=search (default) or action=load + name; skill_manage handles create|edit|delete.",
     "- Capabilities: capability_list action=list (default) or action=health.",
-    "- Subagents: subagent_run runs an explicit model, auto-routes when model is omitted, or only selects with action=route.",
+    "- Subagents: subagent_run runs or auto-routes. mode=sync waits; mode=async starts a job and returns job_id. A later tool result announces completion; subagent_get(job_id) retrieves it. action=route only selects.",
     "- Rules: rule_resolve action=resolve (default) or action=load; rule_manage handles create|edit|delete|import|export.",
     "- Durable jobs: job_manage action=start|list|read|wait|cancel. bash foreground wait expiry may return running=true + job_id; emit a short progress heartbeat, then continue with job_manage action=wait using roughly 30-second waits instead of ending the task.",
     "- Nodes: node_manage action=list|upsert|remove|probe|tool_search|tool_call.",

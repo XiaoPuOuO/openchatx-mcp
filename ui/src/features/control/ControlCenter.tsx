@@ -96,7 +96,11 @@ export function ControlCenter({ onBack }: { onBack: () => void }) {
   }, [load])
 
   const pendingApprovals = useMemo(
-    () => (control?.approvals ?? []).filter((approval) => approval.status === "pending"),
+    () =>
+      (control?.approvals ?? []).filter(
+        (approval) =>
+          approval.status === "pending" && !approval.sessionId?.startsWith("subagent-session-")
+      ),
     [control?.approvals]
   )
   const runningProcesses = useMemo(
@@ -197,7 +201,7 @@ export function ControlCenter({ onBack }: { onBack: () => void }) {
       />
 
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 px-4 py-4 md:px-5 md:py-5">
-        <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border bg-card shadow-sm md:grid-cols-[210px_minmax(0,1fr)]">
+        <div className="control-layout grid min-h-0 flex-1 overflow-hidden rounded-xl border bg-card shadow-sm md:grid-cols-[210px_minmax(0,1fr)]">
           <nav className="flex gap-1 overflow-x-auto border-b p-2 md:min-h-0 md:flex-col md:overflow-y-auto md:border-r md:border-b-0 md:p-3">
             {CONTROL_PAGES.map((item) => {
               const Icon = item.icon

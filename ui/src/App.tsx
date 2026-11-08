@@ -6,11 +6,13 @@ import {
   FileText,
   FolderKanban,
   Gauge,
+  Menu,
   PackageOpen,
   RefreshCw,
   ServerCog,
   Settings,
   ShieldAlert,
+  X,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
@@ -26,14 +28,15 @@ import { ProjectManager } from "./features/projects/ProjectManager"
 import { SettingsPage } from "./features/settings/SettingsPage"
 import { StatusPage } from "./features/status/StatusPage"
 import { CapabilityStoreManager } from "./features/store/CapabilityStoreManager"
+import { SubagentActivity } from "./features/subagents/SubagentActivity"
 import { SubagentManager } from "./features/subagents/SubagentManager"
 import { SummaryManager } from "./features/summaries/SummaryManager"
 import { ToolboxManager } from "./features/toolboxes/ToolboxManager"
 import { useAgents } from "./hooks/useAgents"
 import { useI18n } from "./i18n"
-import { sessionSummary } from "./lib/session-summary"
 import {
   fetchRecoveryState,
+  fetchSubagentSessions,
   fetchUpdateCheck,
   installOpenChatXUpdate,
   type RecoveryState,
@@ -44,6 +47,8 @@ import {
   type RuntimeControlState,
   setAgentAccessPaused,
 } from "./lib/runtime-control-api"
+import { sessionSummary } from "./lib/session-summary"
+import type { SubagentSessionSummary } from "./types"
 
 type View =
   | "dashboard"
@@ -51,6 +56,7 @@ type View =
   | "summaries"
   | "store"
   | "subagents"
+  | "subagent-activity"
   | "toolboxes"
   | "mcp-servers"
   | "status"
@@ -86,7 +92,10 @@ const SYSTEM_NAV = NAV_ITEMS.filter((item) => ["status", "control", "settings"].
 
 export function App() {
   const [view, setView] = useState<View>("dashboard")
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [focusedMcpServerId, setFocusedMcpServerId] = useState<string>()
+  const [focusedSubagent, setFocusedSubagent] = useState<{ jobId: string; agentId: string }>()
+  const [subagentSessions, setSubagentSessions] = useState<SubagentSessionSummary[]>([])
   const { agents, connected, loading, error, removeAgent } = useAgents()
   const { t } = useI18n()
   const [now, setNow] = useState(Date.now())
@@ -163,16 +172,46 @@ export function App() {
     }
   }
 
-  const chatAgents = agents
+  useEffect(() => {
+    let mounted = true
+    const refresh = () => {
+      void fetchSubagentSessions()
+        .then((sessions) => {
+          if (mounted) setSubagentSessions(sessions)
+        })
+        .catch(() => undefined)
+    }
+    refresh()
+    const timer = window.setInterval(refresh, 2_000)
+    return () => {
+      mounted = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  const workerAgentIds = new Set(
+    subagentSessions.map((session) => session.worker_agent_id).filter(Boolean)
+  )
+  const chatAgents = agents.filter((agent) => !workerAgentIds.has(agent.id))
   const activeCount = chatAgents.filter((agent) => now - agent.lastSeenAt < 30_000).length
-  const sidebarSessions = sessionSummary(agents, now)
+  const sidebarSessions = sessionSummary(chatAgents, now)
   const titleKey = NAV_ITEMS.find((item) => item.id === view)?.labelKey
   const title = titleKey ? t(titleKey) : "OpenChatX"
 
   const navigate = (next: View) => {
     setFocusedMcpServerId(undefined)
+    setMobileNavOpen(false)
     setView(next)
   }
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [mobileNavOpen])
 
   const page = useMemo(() => {
     const back = () => setView("dashboard")
@@ -185,6 +224,15 @@ export function App() {
         return <CapabilityStoreManager onBack={back} />
       case "subagents":
         return <SubagentManager onBack={back} />
+      case "subagent-activity":
+        return (
+          <SubagentActivity
+            key={focusedSubagent?.agentId ?? "all"}
+            onBack={back}
+            initialSessionId={focusedSubagent?.jobId}
+            agentFilter={focusedSubagent?.agentId}
+          />
+        )
       case "toolboxes":
         return <ToolboxManager onBack={back} />
       case "mcp-servers":
@@ -207,6 +255,11 @@ export function App() {
         return (
           <Dashboard
             agents={chatAgents}
+            subagents={subagentSessions}
+            onOpenSubagent={(jobId, agentId) => {
+              setFocusedSubagent({ jobId, agentId })
+              setView("subagent-activity")
+            }}
             activeCount={activeCount}
             connected={connected}
             loading={loading}
@@ -224,8 +277,9 @@ export function App() {
   }, [
     view,
     focusedMcpServerId,
-    agents,
     chatAgents,
+    subagentSessions,
+    focusedSubagent,
     activeCount,
     connected,
     loading,
@@ -238,13 +292,29 @@ export function App() {
   return (
     <div className="app-shell">
       {showOnboarding ? <Onboarding onComplete={() => setShowOnboarding(false)} /> : null}
-      <aside className="app-sidebar">
+      {mobileNavOpen && (
+        <button
+          className="mobile-nav-backdrop"
+          type="button"
+          aria-label={t("nav.closeMenu")}
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <aside className={`app-sidebar ${mobileNavOpen ? "app-sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <img src="/ui/openchatx-mcp-icon.png" alt="" className="size-8 rounded-[9px]" />
           <div className="min-w-0">
             <div className="truncate text-[13px] font-semibold">OpenChatX</div>
             <div className="truncate text-[11px] text-muted-foreground">{t("app.subtitle")}</div>
           </div>
+          <button
+            type="button"
+            className="mobile-nav-close"
+            aria-label={t("nav.closeMenu")}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <X className="size-5" />
+          </button>
         </div>
 
         <nav className="sidebar-nav" aria-label="OpenChatX">
@@ -316,11 +386,40 @@ export function App() {
       </aside>
 
       <section className="app-main">
+        <header className="mobile-app-header">
+          <button
+            type="button"
+            className="mobile-nav-toggle"
+            aria-label={t("nav.openMenu")}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <Menu className="size-5" />
+          </button>
+          <div className="mobile-app-identity">
+            <span className="mobile-app-brand">OpenChatX</span>
+            <span className="mobile-app-divider">/</span>
+            <span className="mobile-app-title">{title}</span>
+          </div>
+          <span
+            className={connected ? "status-dot status-dot-online" : "status-dot"}
+            role="img"
+            aria-label={connected ? t("sidebar.connected") : t("dashboard.reconnecting")}
+          />
+        </header>
         {view === "dashboard" ? (
           <PageHeader icon={Gauge} title={title} subtitle={t("app.subtitle")} />
         ) : null}
 
-        <div className={view === "dashboard" ? "app-content" : "app-content embedded-page"}>
+        <div
+          className={
+            view === "dashboard"
+              ? "app-content"
+              : view === "subagent-activity"
+                ? "app-content embedded-page subagent-view"
+                : "app-content embedded-page"
+          }
+        >
           {runtimeControl?.accessMode === "full-access" ? (
             <div className="mx-5 mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
               {t("control.banner.fullAccess")}
@@ -386,6 +485,8 @@ export function App() {
 
 function Dashboard({
   agents,
+  subagents,
+  onOpenSubagent,
   activeCount,
   connected,
   loading,
@@ -399,6 +500,8 @@ function Dashboard({
   noAgentsHint,
 }: {
   agents: ReturnType<typeof useAgents>["agents"]
+  subagents: SubagentSessionSummary[]
+  onOpenSubagent: (jobId: string, agentId: string) => void
   activeCount: number
   connected: boolean
   loading: boolean
@@ -451,6 +554,8 @@ function Dashboard({
               <AgentCard
                 key={agent.id}
                 agent={agent}
+                subagents={subagents.filter((session) => session.owner_agent_id === agent.id)}
+                onOpenSubagent={(jobId) => onOpenSubagent(jobId, agent.id)}
                 now={now}
                 onDelete={() => onRemoveAgent(agent.id)}
               />

@@ -15,7 +15,11 @@ test("Provider Hub installs local presets without requiring an API key", async (
   const presets = hub.presets()
   assert.ok(presets.some((preset) => preset.id === "ollama" && preset.local))
   const config = hub.installPreset("ollama")
-  assert.equal(config.providers.ollama?.base_url, "http://127.0.0.1:11434/v1")
+  assert.equal(config.providers.ollama?.type, "openai-compatible")
+  assert.equal(
+    "base_url" in config.providers.ollama ? config.providers.ollama.base_url : undefined,
+    "http://127.0.0.1:11434/v1"
+  )
   assert.equal(config.providers.ollama?.enabled, true)
 })
 
@@ -44,5 +48,9 @@ test("Provider Hub can preserve an OpenAI API key supplied by the desktop enviro
 
   const hub = new ProviderHub(join(root, "subagents.json"))
   const config = hub.installPreset("openai")
-  assert.equal(config.providers.openai?.api_key, "sk-preserved-test-key")
+  assert.ok(config.providers.openai)
+  assert.equal(
+    "api_key" in config.providers.openai ? config.providers.openai.api_key : undefined,
+    "sk-preserved-test-key"
+  )
 })

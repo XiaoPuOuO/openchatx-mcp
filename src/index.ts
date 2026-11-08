@@ -31,6 +31,7 @@ import { RecentWorkService } from "./sessions/recent-work.js"
 import { synchronizeAgentInstructions } from "./state/agent-instructions.js"
 import { GithubCommunityStore } from "./store/github-community-store.js"
 import { CapabilityStoreService } from "./store/store-service.js"
+import { ChatGPTAuth } from "./subagents/chatgpt-auth.js"
 import { loadSubagentConfig } from "./subagents/config.js"
 import { SmartModelRouter } from "./subagents/router.js"
 import { SubagentRuntime } from "./subagents/runtime.js"
@@ -65,6 +66,13 @@ agentObserver.onSessionEvicted((sessionId) => {
       `Failed to release evicted session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`
     )
   })
+  try {
+    subagentRuntime.removeOwnerSession(sessionId)
+  } catch (error) {
+    console.warn(
+      `Failed to clear subagents for evicted session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
 })
 agentObserver.setSessionRetention(MCP_CONFIG.sessions.maxRetained)
 await synchronizeAgentInstructions(
@@ -87,7 +95,11 @@ const externalMcp = await createExternalMcpRegistry(
 if (operationalState.safeMode.enabled) {
   MCP_CONFIG.externalMcp.configFile = safeModeMcpConfig
 }
-const subagentRuntime = new SubagentRuntime(loadSubagentConfig(MCP_CONFIG.subagents.configFile))
+const chatgptAuth = new ChatGPTAuth()
+const subagentRuntime = new SubagentRuntime(
+  loadSubagentConfig(MCP_CONFIG.subagents.configFile),
+  chatgptAuth
+)
 subagentRuntime.startWatching(MCP_CONFIG.subagents.configFile)
 const toolboxRegistry = new ToolboxRegistry(
   operationalState.safeMode.enabled ? safeModeToolboxRoot : MCP_CONFIG.toolboxes.root
@@ -188,33 +200,41 @@ const platformOverview = new PlatformOverviewService({
   agents: agentObserver,
 })
 
+const agentServerFactory = createMcpServerFactory({
+  externalMcp,
+  toolboxRegistry,
+  interactiveShellManager,
+  bashProcessManager,
+  webPageOpener,
+  subagentRuntime,
+  jobManager,
+  capabilityHealth,
+  capabilityRegistry,
+  capabilityStore,
+  providerHub,
+  smartRouter,
+  projectRegistry,
+  projectScope,
+  goalRegistry,
+  goalScope,
+  summaryRegistry,
+  agentTeams,
+  workflows,
+  nodes,
+  contextBudget,
+  runtimeControl,
+})
+subagentRuntime.enableAgentSessions(
+  agentServerFactory,
+  agentObserver,
+  join(MCP_CONFIG.stateDir, "subagent-sessions.db"),
+  runtimeControl
+)
+
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>
 try {
   running = await startMcpHttpServer({
-    createMcpServer: createMcpServerFactory({
-      externalMcp,
-      toolboxRegistry,
-      interactiveShellManager,
-      bashProcessManager,
-      webPageOpener,
-      subagentRuntime,
-      jobManager,
-      capabilityHealth,
-      capabilityRegistry,
-      capabilityStore,
-      providerHub,
-      smartRouter,
-      projectRegistry,
-      projectScope,
-      goalRegistry,
-      goalScope,
-      summaryRegistry,
-      agentTeams,
-      workflows,
-      nodes,
-      contextBudget,
-      runtimeControl,
-    }),
+    createMcpServer: agentServerFactory,
     auditLogger,
     // No authStore: the private Secure MCP Tunnel is the credential on every
     // surface. OpenAI issues different subjects per client app, so subject
@@ -222,6 +242,7 @@ try {
     agentObserver,
     toolboxRegistry,
     subagentRuntime,
+    chatgptAuth,
     externalMcp,
     capabilityHealth,
     capabilityRegistry,

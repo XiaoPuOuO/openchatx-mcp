@@ -19,6 +19,8 @@ import type {
   RuleSummary,
   RuntimeSettings,
   SubagentConfig,
+  SubagentSessionDetail,
+  SubagentSessionSummary,
   TemporarySummary,
   ToolboxSnapshot,
 } from "../types"
@@ -36,6 +38,15 @@ import {
   steerMockAgent,
   subscribeToMockAgents,
 } from "./mock-api"
+import { decideApproval, type RuntimeApproval } from "./runtime-control-api"
+import {
+  mockDecideSubagentApproval,
+  mockDeleteSubagentSession,
+  mockSteerSubagent,
+  mockSubagentApprovals,
+  mockSubagentSession,
+  mockSubagentSessions,
+} from "./subagent-mock"
 
 const MOCK_DASHBOARD = import.meta.env.VITE_MOCK_DASHBOARD === "1"
 
@@ -846,12 +857,127 @@ export async function openMcpConfigInFinder(): Promise<boolean> {
   return true
 }
 
+export async function fetchSubagentSessions(): Promise<SubagentSessionSummary[]> {
+  if (MOCK_DASHBOARD) return mockSubagentSessions()
+  const response = await fetch("/ui/api/subagents/sessions")
+  if (!response.ok) throw new Error(`Failed to load subagent sessions (HTTP ${response.status}).`)
+  const body = (await response.json()) as { sessions: SubagentSessionSummary[] }
+  return body.sessions
+}
+
+export async function fetchSubagentApprovals(sessionId: string): Promise<RuntimeApproval[]> {
+  if (MOCK_DASHBOARD) return mockSubagentApprovals(sessionId)
+  const response = await fetch("/ui/api/approvals")
+  if (!response.ok) throw new Error(`Failed to load approvals (HTTP ${response.status}).`)
+  const body = (await response.json()) as { approvals: RuntimeApproval[] }
+  return body.approvals.filter(
+    (approval) => approval.sessionId === sessionId && approval.status === "pending"
+  )
+}
+
+export async function decideSubagentApproval(
+  id: string,
+  decision: "approve-once" | "allow-operation" | "deny"
+): Promise<void> {
+  if (MOCK_DASHBOARD) return mockDecideSubagentApproval(id)
+  await decideApproval(id, decision)
+}
+
+export async function deleteSubagentSession(id: string): Promise<void> {
+  if (MOCK_DASHBOARD) return mockDeleteSubagentSession(id)
+  const response = await fetch(`/ui/api/subagents/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
+    throw new Error(body?.error ?? `Failed to delete subagent session (HTTP ${response.status}).`)
+  }
+}
+
+export async function fetchSubagentSession(id: string): Promise<SubagentSessionDetail> {
+  if (MOCK_DASHBOARD) return mockSubagentSession(id)
+  const response = await fetch(`/ui/api/subagents/sessions/${encodeURIComponent(id)}`)
+  if (!response.ok) throw new Error(`Failed to load subagent session (HTTP ${response.status}).`)
+  const body = (await response.json()) as { session: SubagentSessionDetail }
+  return body.session
+}
+
+export async function steerSubagentSession(
+  id: string,
+  message: string
+): Promise<SubagentSessionDetail> {
+  if (MOCK_DASHBOARD) return mockSteerSubagent(id, message)
+  const response = await fetch(`/ui/api/subagents/sessions/${encodeURIComponent(id)}/steer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { session?: SubagentSessionDetail; error?: string }
+    | undefined
+  if (!response.ok || !body?.session) {
+    throw new Error(body?.error ?? `Failed to send guidance (HTTP ${response.status}).`)
+  }
+  return body.session
+}
+
 export async function fetchSubagentConfig(): Promise<SubagentConfig> {
   if (MOCK_DASHBOARD) return fetchMockSubagentConfig()
   const response = await fetch("/ui/api/subagents")
   if (!response.ok) throw new Error(`Failed to load subagent config (${response.status})`)
   const body = (await response.json()) as { config?: SubagentConfig }
-  return body.config ?? { providers: {}, models: {} }
+  return (
+    body.config ?? {
+      limits: { max_depth: 5, max_children_per_agent: 12 },
+      providers: {},
+      models: {},
+    }
+  )
+}
+
+export async function fetchChatGPTAuthStatus(): Promise<import("../types").ChatGPTAuthStatus> {
+  if (MOCK_DASHBOARD) return { connected: false, authorized: false, pending: false }
+  return subagentApiRequest("/ui/api/subagents/chatgpt/status")
+}
+
+export async function beginChatGPTLogin(): Promise<{ authorizationUrl: string }> {
+  return subagentApiRequest("/ui/api/subagents/chatgpt/login", "POST")
+}
+
+export async function disconnectChatGPT(): Promise<{ revoked: boolean }> {
+  return subagentApiRequest("/ui/api/subagents/chatgpt/logout", "POST")
+}
+
+export async function fetchSubagentModels(
+  providerId: string
+): Promise<import("../types").SubagentDiscoveredModel[]> {
+  const { models } = await subagentApiRequest<{
+    models: import("../types").SubagentDiscoveredModel[]
+  }>(`/ui/api/subagents/${encodeURIComponent(providerId)}/models`)
+  return models
+}
+
+export async function fetchSubagentModelDetails(
+  providerId: string,
+  modelId: string
+): Promise<import("../types").SubagentDiscoveredModel> {
+  const { model } = await subagentApiRequest<{ model: import("../types").SubagentDiscoveredModel }>(
+    `/ui/api/subagents/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`
+  )
+  return model
+}
+
+async function subagentApiRequest<T>(url: string, method = "GET"): Promise<T> {
+  if (MOCK_DASHBOARD)
+    throw new Error("Live Subagent provider discovery requires the OpenChatX runtime.")
+  const response = await fetch(url, { method })
+  const body = (await response.json().catch(() => undefined)) as
+    | (T & { error?: string })
+    | undefined
+  if (!response.ok)
+    throw new Error(body?.error ?? `Subagent request failed (HTTP ${response.status})`)
+  if (!body) throw new Error("Empty Subagent response.")
+  return body
 }
 
 export async function saveSubagentConfig(

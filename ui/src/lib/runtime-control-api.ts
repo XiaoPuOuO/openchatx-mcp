@@ -10,6 +10,7 @@ export type RuntimeApproval = {
   reason: string
   createdAt: string
   status: "pending" | "approved" | "approved-once" | "denied" | "consumed"
+  sessionId?: string
   input: unknown
   source?: { kind: "builtin" | "toolbox" | "mcp"; id?: string }
 }

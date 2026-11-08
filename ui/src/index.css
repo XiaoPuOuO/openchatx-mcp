@@ -746,6 +746,31 @@ button {
   color: var(--destructive);
 }
 
+.subagent-diff-row {
+  display: grid;
+  grid-template-columns: 38px 38px 18px minmax(0, 1fr);
+  min-width: 0;
+  align-items: start;
+}
+
+.subagent-diff-gutter {
+  min-height: 20px;
+  border-right: 1px solid var(--border);
+  padding-right: 8px;
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.subagent-diff-add {
+  background: color-mix(in srgb, var(--syntax-addition) 12%, transparent);
+}
+
+.subagent-diff-remove {
+  background: color-mix(in srgb, var(--syntax-deletion) 12%, transparent);
+}
+
 .mcp-tool-description {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -825,6 +850,51 @@ button {
   padding-right: 24px;
 }
 
+/* Subagent sessions fill the remaining app viewport instead of using a
+   viewport-minus-header guess. Only the session list and transcript scroll. */
+.app-content.subagent-view {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.subagent-workspace {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 258px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 1600px;
+  margin-inline: auto;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.embedded-page > main > .subagent-workspace {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 1600px;
+  min-height: 0;
+  overflow: hidden;
+  margin-inline: auto;
+  padding: 0;
+}
+
+@media (max-width: 730px) {
+  .subagent-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(148px, 26%) minmax(0, 1fr);
+  }
+
+  .subagent-workspace > aside {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
 .embedded-page [class*="bg-muted/20"] {
   background: transparent;
 }
@@ -852,32 +922,324 @@ button {
   }
 }
 
+/* The mobile shell uses a real navigation drawer, not a permanently
+   compressed desktop sidebar. The main content owns the available width. */
+.mobile-app-header,
+.mobile-nav-close,
+.mobile-nav-toggle,
+.mobile-nav-backdrop,
+.mobile-session-back {
+  display: none;
+}
+
 @media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 320px;
+    height: 100%;
+    overflow: hidden;
+  }
+
   .app-shell {
-    grid-template-columns: 64px minmax(0, 1fr);
+    display: block;
+    width: 100%;
+    height: 100dvh;
+  }
+
+  .app-main {
+    width: 100%;
+    height: 100dvh;
+  }
+
+  .mobile-app-header {
+    display: flex;
+    flex: 0 0 auto;
+    min-width: 0;
+    height: 52px;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding: 0 14px;
+    background: var(--header-background);
+  }
+
+  .mobile-nav-toggle,
+  .mobile-nav-close {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--foreground);
+  }
+
+  .mobile-nav-toggle:hover,
+  .mobile-nav-close:hover {
+    background: var(--muted);
+  }
+
+  .mobile-app-identity {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+  }
+
+  .mobile-app-brand {
+    flex: 0 0 auto;
+    font-weight: 700;
+  }
+  .mobile-app-divider {
+    color: var(--muted-foreground);
+  }
+  .mobile-app-title {
+    overflow: hidden;
+    color: var(--muted-foreground);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    z-index: 80;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    background: rgb(0 0 0 / 0.45);
+  }
+
+  .app-sidebar {
+    position: fixed;
+    z-index: 81;
+    inset: 0 auto 0 0;
+    width: min(304px, 86vw);
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition:
+      transform 180ms ease,
+      visibility 180ms ease;
+    box-shadow: 12px 0 36px rgb(0 0 0 / 0.12);
+    pointer-events: none;
+  }
+
+  .app-sidebar-open {
+    visibility: visible;
+    transform: translateX(0);
+    pointer-events: auto;
   }
 
   .sidebar-brand {
-    justify-content: center;
-    padding-inline: 8px;
+    justify-content: flex-start;
+    padding: 12px 12px 8px;
   }
 
   .sidebar-brand > div,
   .sidebar-item span,
   .sidebar-footer {
-    display: none;
+    display: block;
   }
 
+  .mobile-nav-close {
+    margin-left: auto;
+  }
+
+  .sidebar-nav {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .sidebar-section-label {
+    padding-block: 8px 5px;
+  }
   .sidebar-item {
-    justify-content: center;
-    padding: 0;
+    height: 42px;
+    justify-content: flex-start;
+    padding: 0 12px;
+  }
+
+  .app-content {
+    min-height: 0;
+    overscroll-behavior: contain;
   }
 
   .dashboard-page {
-    width: min(100% - 28px, 1180px);
+    width: 100%;
+    padding: 18px 14px max(24px, env(safe-area-inset-bottom, 0px));
+  }
+  .page-heading {
+    margin-bottom: 16px;
+  }
+  .page-heading h2 {
+    font-size: 22px;
+  }
+  .session-section {
+    margin-top: 20px;
+  }
+  .session-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-strip-item {
+    min-height: 80px;
+    padding: 12px;
+  }
+  .session-delete-button {
+    opacity: 1;
+  }
+
+  .page-header {
+    height: auto;
+    min-height: 52px;
+    flex: 0 0 auto;
+  }
+  .page-header-inner {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 9px 12px;
+  }
+  .page-header-leading {
+    min-height: 32px;
+    flex: 1 1 auto;
+  }
+  .page-header-icon,
+  .page-header-separator,
+  .page-header-subtitle {
+    display: none;
+  }
+  .page-header-title {
+    font-size: 15px;
+  }
+  .page-header-back {
+    min-width: 36px;
+    padding-inline: 8px;
+    font-size: 0;
+  }
+  .page-header-back svg {
+    width: 17px;
+    height: 17px;
+  }
+  .page-header-actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    gap: 7px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .page-header-actions::-webkit-scrollbar {
+    display: none;
+  }
+  .page-header-actions > * {
+    flex-shrink: 0;
+  }
+
+  .app-main > .page-header {
+    display: none;
+  }
+
+  .embedded-page > main {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .embedded-page > main > div:not(.subagent-workspace),
+  .embedded-page > main > section {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 12px;
+  }
+  .embedded-page > main > div[class*="lg:grid-cols-"] {
+    align-content: start;
+    gap: 12px;
+  }
+  .embedded-page > main > div[class*="lg:grid-cols-"] > :first-child {
+    max-height: min(34dvh, 270px);
+    min-width: 0;
+  }
+  .embedded-page > main > div[class*="lg:grid-cols-"] > :nth-child(2) {
+    min-width: 0;
+    min-height: min(45dvh, 380px);
+  }
+
+  .subagent-workspace {
+    display: flex;
+    width: 100%;
+    min-height: 0;
+    flex-direction: column;
+  }
+  .embedded-page .subagent-workspace > aside,
+  .embedded-page .subagent-workspace > section {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    border: 0;
+  }
+  .subagent-workspace[data-mobile-panel="sessions"] > section,
+  .subagent-workspace[data-mobile-panel="detail"] > aside {
+    display: none;
+  }
+
+  .mobile-session-back {
+    display: flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--foreground);
+  }
+  .mobile-session-back:hover {
+    background: var(--muted);
+  }
+  .subagent-workspace section .tool-code-surface {
+    max-width: 100%;
+  }
+  .subagent-workspace section pre {
+    max-width: 100%;
+  }
+  .settings-layout,
+  .control-layout {
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .toolbar-state span {
     display: none;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    max-width: 100%;
+  }
+
+  .subagent-workspace section textarea {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar {
+    transition: none;
   }
 }

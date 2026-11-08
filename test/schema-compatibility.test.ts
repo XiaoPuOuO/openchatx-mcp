@@ -40,7 +40,11 @@ test("published OpenChatX schemas stay OpenAI-compatible", { timeout: 20_000 }, 
             bashProcessManager: bashProcesses,
             externalMcp,
             webPageOpener: new WebPageOpener(),
-            subagentRuntime: new SubagentRuntime({ providers: {}, models: {} }),
+            subagentRuntime: new SubagentRuntime({
+              limits: { max_depth: 5, max_children_per_agent: 12 },
+              providers: {},
+              models: {},
+            }),
           },
           { toolOutput }
         ),

@@ -25,6 +25,7 @@ import { registerSessionHistoryRoutes } from "../sessions/dashboard-routes.js"
 import type { RecentWorkService } from "../sessions/recent-work.js"
 import { handleCapabilityInstall } from "../store/dashboard-install.js"
 import type { CapabilityStoreService } from "../store/store-service.js"
+import type { ChatGPTAuth } from "../subagents/chatgpt-auth.js"
 import {
   loadSubagentConfig,
   redactSubagentConfig,
@@ -42,6 +43,7 @@ import type { AgentObserver } from "./observer.js"
 export interface DashboardServices {
   toolboxRegistry?: ToolboxRegistry
   subagentRuntime?: SubagentRuntime
+  chatgptAuth?: ChatGPTAuth
   externalMcp?: ExternalMcpRegistry
   capabilityHealth?: CapabilityHealthService
   capabilityRegistry?: CapabilityRegistry
@@ -66,6 +68,7 @@ export function createDashboardRouter(
   const {
     toolboxRegistry,
     subagentRuntime,
+    chatgptAuth,
     externalMcp,
     capabilityHealth,
     capabilityRegistry,
@@ -83,7 +86,7 @@ export function createDashboardRouter(
   } = services
   const router = Router()
 
-  registerAgentRoutes(router, agentObserver, contextBudget)
+  registerAgentRoutes(router, agentObserver, contextBudget, subagentRuntime)
   registerJobRoutes(router, jobManager)
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
   registerStoreRoutes(router, capabilityStore)
@@ -264,9 +267,101 @@ export function createDashboardRouter(
     })
   })
 
+  registerSubagentSessionRoutes(router, subagentRuntime)
+
+  router.get("/api/subagents/chatgpt/status", async (_req, res) => {
+    try {
+      if (!chatgptAuth) throw new Error("ChatGPT sign-in is unavailable.")
+      res.json(await chatgptAuth.status())
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.post("/api/subagents/chatgpt/login", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!chatgptAuth) throw new Error("ChatGPT sign-in is unavailable.")
+      res.json(await chatgptAuth.begin())
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.post("/api/subagents/chatgpt/logout", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!chatgptAuth) throw new Error("ChatGPT sign-in is unavailable.")
+      res.json(await chatgptAuth.disconnect())
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.get("/api/subagents/:providerId/models", async (req, res) => {
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.json({ models: await subagentRuntime.availableModels(req.params.providerId) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.get("/api/subagents/:providerId/models/:modelId", async (req, res) => {
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.json({
+        model: await subagentRuntime.modelDetails(req.params.providerId, req.params.modelId),
+      })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
   const dashboardDir = fileURLToPath(new URL("../../ui/dist/", import.meta.url))
   router.use(expressStatic(dashboardDir, { index: "index.html" }))
   return router
+}
+
+function registerSubagentSessionRoutes(
+  router: ReturnType<typeof Router>,
+  subagentRuntime: SubagentRuntime | undefined
+): void {
+  router.get("/api/subagents/sessions", (_req, res) => {
+    res.json({ sessions: subagentRuntime?.listSessions() ?? [] })
+  })
+  router.get("/api/subagents/sessions/:id", (req, res) => {
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.json({ session: subagentRuntime.sessionSnapshot(req.params.id) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+  router.delete("/api/subagents/sessions/:id", (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.json({ deleted: subagentRuntime.deleteSession(req.params.id) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
+  router.post("/api/subagents/sessions/:id/steer", (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : ""
+      res.status(202).json({ session: subagentRuntime.steerSession(req.params.id, message) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
 }
 
 function isSameOriginAction(req: import("express").Request): boolean {
@@ -652,7 +747,8 @@ function editableSettings(config: ReturnType<typeof loadPublicConfig>) {
 function registerAgentRoutes(
   router: ReturnType<typeof Router>,
   agentObserver: AgentObserver,
-  contextBudget?: ContextBudgetGuard
+  contextBudget?: ContextBudgetGuard,
+  subagentRuntime?: SubagentRuntime
 ): void {
   router.get("/api/agents", (_req, res) => {
     const agents = agentObserver.listAgents().map((agent) => {
@@ -691,6 +787,7 @@ function registerAgentRoutes(
     }
     try {
       await contextBudget?.removeSession(sessionId)
+      subagentRuntime?.removeOwnerSession(sessionId)
       agentObserver.deleteAgent(req.params.agentId)
       res.status(204).end()
     } catch (error) {
@@ -1014,8 +1111,9 @@ function preserveRedactedSecrets(existing: SubagentConfig, incoming: unknown): u
     const previous = existing.providers[id]
     if (!previous) continue
     const provider = { ...rawProvider }
-    if (provider.api_key === "<redacted>") provider.api_key = previous.api_key
-    if (isRecord(provider.headers) && previous.headers) {
+    if (provider.api_key === "<redacted>" && "api_key" in previous)
+      provider.api_key = previous.api_key
+    if (isRecord(provider.headers) && "headers" in previous && previous.headers) {
       provider.headers = Object.fromEntries(
         Object.entries(provider.headers).map(([key, value]) => [
           key,

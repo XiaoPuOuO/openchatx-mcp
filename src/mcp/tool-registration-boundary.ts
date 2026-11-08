@@ -4,6 +4,7 @@ import { getAgentIdentity } from "../agent/context.js"
 import type { AgentObserver } from "../agent/observer.js"
 import type { RuntimeControlService, RuntimeToolSource } from "../runtime/runtime-control.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
+import type { SubagentRuntime } from "../subagents/runtime.js"
 import { timelineRegistry } from "../timeline/timeline-registry.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
@@ -30,6 +31,7 @@ export interface ToolRegistrationBoundaryOptions {
   contextBudget?: ContextBudgetGuard
   progressHeartbeat?: ProgressHeartbeatGuard
   runtimeControl?: RuntimeControlService
+  subagentRuntime?: SubagentRuntime
 }
 
 const USER_INTERRUPT_GRACE_MS = 350
@@ -172,7 +174,7 @@ async function prepareToolModelResult(input: {
     input.options.progressHeartbeat,
     input.agent
   )
-  return applyContextBudgetNotice({
+  const withBudget = await applyContextBudgetNotice({
     contextBudget: input.options.contextBudget,
     observer: input.options.agentObserver,
     agent: input.agent,
@@ -181,6 +183,14 @@ async function prepareToolModelResult(input: {
     result: withEvents,
     suppressNotice: false,
   })
+  return appendSubagentNotices(
+    withBudget,
+    input.name,
+    input.argumentsValue,
+    input.agent,
+    input.options,
+    isAsyncSubagentStart(input.toolResult)
+  )
 }
 
 function settleObservedToolCall(input: {
@@ -297,7 +307,7 @@ async function prepareErrorModelResult(input: {
     input.options.progressHeartbeat,
     input.agent
   )
-  return applyContextBudgetNotice({
+  const withBudget = await applyContextBudgetNotice({
     contextBudget: input.options.contextBudget,
     observer: input.options.agentObserver,
     agent: input.agent,
@@ -306,6 +316,32 @@ async function prepareErrorModelResult(input: {
     result: withProgress,
     suppressNotice: false,
   })
+  return appendSubagentNotices(
+    withBudget,
+    input.name,
+    input.argumentsValue,
+    input.agent,
+    input.options
+  )
+}
+
+function appendSubagentNotices(
+  result: unknown,
+  name: string,
+  args: Record<string, unknown>,
+  agent: ReturnType<typeof getAgentIdentity>,
+  options: ToolRegistrationBoundaryOptions,
+  justStartedJob = false
+): unknown {
+  if (justStartedJob || (name === "subagent_run" && args.mode === "async")) return result
+  const messages = options.subagentRuntime?.drainNotifications(agent?.sessionId ?? "unscoped") ?? []
+  return appendToolEvents(result, messages)
+}
+
+function isAsyncSubagentStart(result: unknown): boolean {
+  if (!isRecord(result) || !isRecord(result.structuredContent)) return false
+  const details = result.structuredContent
+  return typeof details.job_id === "string" && details.status === "running"
 }
 
 export function installToolRegistrationBoundary(

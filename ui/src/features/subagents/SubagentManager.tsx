@@ -1,27 +1,42 @@
-import { BrainCircuit, CirclePlus, FolderOpen, Save, Trash2 } from "lucide-react"
+import { BrainCircuit, ChevronDown, CirclePlus, FolderOpen, Save, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { PageHeader } from "../../components/PageHeader"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
 import { useI18n } from "../../i18n"
-import { fetchSubagentConfig, openSubagentConfigInFinder, saveSubagentConfig } from "../../lib/api"
+import {
+  beginChatGPTLogin,
+  disconnectChatGPT,
+  fetchChatGPTAuthStatus,
+  fetchSubagentConfig,
+  openSubagentConfigInFinder,
+  saveSubagentConfig,
+} from "../../lib/api"
 import type {
+  ChatGPTAuthStatus,
   SubagentConfig,
+  SubagentDiscoveredModel,
   SubagentModelProfile,
   SubagentProviderConfig,
   SubagentThinkingConfig,
 } from "../../types"
+import { ModelSelector, NewModelPicker } from "./ModelSelector"
 
 const INPUT_CLASS =
   "h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-neutral-400"
 const TEXTAREA_CLASS =
   "min-h-24 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-neutral-400"
 
-type Selection = { kind: "provider" | "model"; id: string }
+type Selection = { kind: "provider" | "model" | "new-model"; id: string }
+type ProviderChoice = "chatgpt" | "claude" | "gemini" | "openai" | "custom"
 
 export function SubagentManager({ onBack }: { onBack: () => void }) {
   const { t } = useI18n()
-  const [config, setConfig] = useState<SubagentConfig>({ providers: {}, models: {} })
+  const [config, setConfig] = useState<SubagentConfig>({
+    limits: { max_depth: 5, max_children_per_agent: 12 },
+    providers: {},
+    models: {},
+  })
   const [selection, setSelection] = useState<Selection>()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -52,42 +67,63 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
     selection?.kind === "provider" ? config.providers[selection.id] : undefined
   const selectedModel = selection?.kind === "model" ? config.models[selection.id] : undefined
 
-  function addProvider() {
-    const id = nextId("provider", config.providers)
+  function addProvider(choice: ProviderChoice) {
+    let id = choice === "custom" ? "custom" : choice
+    let suffix = 2
+    while (config.providers[id]) id = `${choice}-${suffix++}`
+    const provider: SubagentProviderConfig =
+      choice === "chatgpt"
+        ? { type: "openai-chatgpt", enabled: true, timeout: 120000 }
+        : {
+            type:
+              choice === "claude"
+                ? "anthropic"
+                : choice === "gemini"
+                  ? "google"
+                  : "openai-compatible",
+            base_url:
+              choice === "claude"
+                ? "https://api.anthropic.com/v1"
+                : choice === "gemini"
+                  ? "https://generativelanguage.googleapis.com/v1beta"
+                  : choice === "openai"
+                    ? "https://api.openai.com/v1"
+                    : "http://127.0.0.1:8000/v1",
+            enabled: true,
+            timeout: 120000,
+          }
     setConfig((current) => ({
       ...current,
       providers: {
+        [id]: provider,
         ...current.providers,
-        [id]: {
-          type: "openai-compatible",
-          base_url: "http://127.0.0.1:8000/v1",
-          enabled: true,
-          timeout: 120000,
-        },
       },
     }))
     setSelection({ kind: "provider", id })
   }
 
-  function addModel() {
-    const provider = Object.keys(config.providers)[0]
-    if (!provider) {
-      setError(t("subagents.noProviders"))
-      return
-    }
-    const id = nextId("model", config.models)
+  function addModel(provider: string) {
+    setSelection({ kind: "new-model", id: provider })
+  }
+
+  function createModel(provider: string, discovered: SubagentDiscoveredModel) {
+    const id = nextId(discovered.id, config.models)
     setConfig((current) => ({
       ...current,
       models: {
         ...current.models,
         [id]: {
           provider,
-          model: "model-id",
-          name: id,
-          description: "Describe what this model is best used for.",
+          model: discovered.id,
+          name: discovered.id,
+          description: discovered.description?.trim() || `Subagent using ${discovered.id}.`,
           enabled: true,
-          context_window: 131072,
-          thinking: { mode: "none" },
+          execution_mode: "sync",
+          ...(discovered.context_window ? { context_window: discovered.context_window } : {}),
+          ...(discovered.max_output_tokens
+            ? { max_output_tokens: discovered.max_output_tokens }
+            : {}),
+          thinking: discovered.thinking ?? { mode: "none" },
         },
       },
     }))
@@ -116,6 +152,7 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
     if (selection.kind === "provider") {
       if (config.providers[nextId]) return
       setConfig((current) => ({
+        ...current,
         providers: Object.fromEntries(
           Object.entries(current.providers).map(([id, value]) => [
             id === selection.id ? nextId : id,
@@ -149,6 +186,7 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
     if (selection.kind === "provider") {
       if (!window.confirm(t("subagents.deleteProvider", { id: selection.id }))) return
       setConfig((current) => ({
+        ...current,
         providers: Object.fromEntries(
           Object.entries(current.providers).filter(([id]) => id !== selection.id)
         ),
@@ -215,30 +253,47 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
 
       <div className="mx-auto grid max-w-[1500px] gap-5 px-5 py-6 lg:h-[calc(100dvh-178px)] lg:min-h-[560px] lg:grid-cols-[340px_1fr] lg:px-8">
         <Card className="flex min-h-0 flex-col overflow-hidden lg:h-full">
-          <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto p-3">
-            <ListSection
-              title={t("subagents.providers")}
-              ids={Object.keys(config.providers)}
-              selected={selection}
-              kind="provider"
-              empty={t("subagents.noProviders")}
-              onSelect={(id) => setSelection({ kind: "provider", id })}
-              onAdd={addProvider}
-              addLabel={t("subagents.addProvider")}
-            />
-            <ListSection
-              title={t("subagents.models")}
-              ids={Object.keys(config.models)}
-              labels={Object.fromEntries(
-                Object.entries(config.models).map(([id, model]) => [id, model.name])
-              )}
-              selected={selection}
-              kind="model"
-              empty={t("subagents.noModels")}
-              onSelect={(id) => setSelection({ kind: "model", id })}
-              onAdd={addModel}
-              addLabel={t("subagents.addModel")}
-            />
+          <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("subagents.providers")}
+            </h2>
+            <select
+              className={INPUT_CLASS}
+              aria-label={t("subagents.addProvider")}
+              value=""
+              onChange={(event) => {
+                if (event.target.value) addProvider(event.target.value as ProviderChoice)
+              }}
+            >
+              <option value="">+ {t("subagents.addProvider")}</option>
+              <option value="chatgpt">ChatGPT (OAuth / Codex quota)</option>
+              <option value="claude">Claude API Key</option>
+              <option value="gemini">Gemini API Key</option>
+              <option value="openai">OpenAI API Key</option>
+              <option value="custom">{t("subagents.customProvider")}</option>
+            </select>
+            {Object.keys(config.providers).length === 0 ? (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                {t("subagents.noProviders")}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {Object.keys(config.providers).map((providerId) => (
+                  <ProviderGroup
+                    key={providerId}
+                    id={providerId}
+                    enabled={config.providers[providerId].enabled}
+                    models={Object.entries(config.models).filter(
+                      ([, model]) => model.provider === providerId
+                    )}
+                    selected={selection}
+                    onSelectProvider={() => setSelection({ kind: "provider", id: providerId })}
+                    onSelectModel={(id) => setSelection({ kind: "model", id })}
+                    onAddModel={() => addModel(providerId)}
+                  />
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -248,6 +303,13 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
               <CardContent className="py-24 text-center text-sm text-muted-foreground">
                 {t("subagents.select")}
               </CardContent>
+            ) : selection.kind === "new-model" && config.providers[selection.id] ? (
+              <NewModelPicker
+                key={selection.id}
+                providerId={selection.id}
+                onCreate={(discovered) => createModel(selection.id, discovered)}
+                onCancel={() => setSelection({ kind: "provider", id: selection.id })}
+              />
             ) : selectedProvider ? (
               <ProviderEditor
                 id={selection.id}
@@ -258,6 +320,7 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
               />
             ) : selectedModel ? (
               <ModelEditor
+                key={`${selection.id}:${selectedModel.provider}`}
                 id={selection.id}
                 model={selectedModel}
                 providerIds={Object.keys(config.providers)}
@@ -304,39 +367,60 @@ function ProviderEditor({
             />
           </Field>
           <Field label={t("subagents.providerType")}>
-            <input className={INPUT_CLASS} value={t("subagents.openaiCompatible")} disabled />
+            <input
+              className={INPUT_CLASS}
+              value={
+                provider.type === "openai-chatgpt"
+                  ? "ChatGPT OAuth (subscription)"
+                  : provider.type === "anthropic"
+                    ? "Anthropic Messages API"
+                    : provider.type === "google"
+                      ? "Gemini API"
+                      : t("subagents.openaiCompatible")
+              }
+              disabled
+            />
           </Field>
         </div>
         <Toggle
           enabled={provider.enabled}
           onChange={(enabled) => onChange({ ...provider, enabled })}
         />
-        <Field label={t("subagents.baseUrl")}>
-          <input
-            className={INPUT_CLASS}
-            value={provider.base_url}
-            onChange={(event) => onChange({ ...provider, base_url: event.target.value })}
-          />
-        </Field>
-        <Field label={t("subagents.apiKey")}>
-          <input
-            className={INPUT_CLASS}
-            type="password"
-            value={provider.api_key ?? ""}
-            onChange={(event) =>
-              onChange({ ...provider, api_key: event.target.value || undefined })
-            }
-          />
-        </Field>
-        <Field label={t("subagents.headers")}>
-          <textarea
-            className={TEXTAREA_CLASS}
-            value={recordToLines(provider.headers)}
-            onChange={(event) =>
-              onChange({ ...provider, headers: linesToRecord(event.target.value) })
-            }
-          />
-        </Field>
+        {provider.type === "openai-chatgpt" ? (
+          <ChatGPTLoginPanel />
+        ) : (
+          <>
+            <Field label={t("subagents.baseUrl")}>
+              <input
+                className={INPUT_CLASS}
+                value={provider.base_url}
+                onChange={(event) => onChange({ ...provider, base_url: event.target.value })}
+              />
+            </Field>
+            <Field label={t("subagents.apiKey")}>
+              <input
+                className={INPUT_CLASS}
+                type="password"
+                autoComplete="off"
+                value={provider.api_key ?? ""}
+                onChange={(event) =>
+                  onChange({ ...provider, api_key: event.target.value || undefined })
+                }
+              />
+            </Field>
+            {provider.type === "openai-compatible" && (
+              <Field label={t("subagents.headers")}>
+                <textarea
+                  className={TEXTAREA_CLASS}
+                  value={recordToLines(provider.headers)}
+                  onChange={(event) =>
+                    onChange({ ...provider, headers: linesToRecord(event.target.value) })
+                  }
+                />
+              </Field>
+            )}
+          </>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("subagents.timeout")}>
             <input
@@ -359,6 +443,90 @@ function ProviderEditor({
         </div>
       </CardContent>
     </>
+  )
+}
+
+function ChatGPTLoginPanel() {
+  const { t } = useI18n()
+  const [status, setStatus] = useState<ChatGPTAuthStatus>()
+  const [error, setError] = useState<string>()
+  const [url, setUrl] = useState<string>()
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const refresh = () =>
+      void fetchChatGPTAuthStatus()
+        .then((value) => {
+          if (active) setStatus(value)
+        })
+        .catch((failure) => {
+          if (active) setError(String(failure))
+        })
+    refresh()
+    const interval = window.setInterval(refresh, 2500)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  async function login() {
+    // Open the window in the click handler to avoid browser popup blocking.
+    const popup = window.open("", "_blank")
+    setBusy(true)
+    setError(undefined)
+    try {
+      const { authorizationUrl } = await beginChatGPTLogin()
+      setUrl(authorizationUrl)
+      if (popup) popup.location.href = authorizationUrl
+    } catch (failure) {
+      popup?.close()
+      setError(failure instanceof Error ? failure.message : String(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function logout() {
+    setBusy(true)
+    setError(undefined)
+    try {
+      await disconnectChatGPT()
+      setStatus(await fetchChatGPTAuthStatus())
+      setUrl(undefined)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4 text-sm">
+      <p className="text-muted-foreground">{t("subagents.oauthHint")}</p>
+      <p>
+        {status?.authorized
+          ? `${t("subagents.connected")}: ${status.email ?? "ChatGPT"}`
+          : t("subagents.notConnected")}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busy} onClick={() => void login()}>
+          {t("subagents.connectChatGPT")}
+        </Button>
+        {status?.connected && (
+          <Button variant="outline" disabled={busy} onClick={() => void logout()}>
+            {t("subagents.disconnectChatGPT")}
+          </Button>
+        )}
+      </div>
+      {url && !status?.authorized && (
+        <a className="underline" href={url} target="_blank" rel="noreferrer">
+          {t("subagents.openSignIn")}
+        </a>
+      )}
+      {(error ?? status?.error) && <p className="text-destructive">{error ?? status?.error}</p>}
+    </div>
   )
 }
 
@@ -430,10 +598,20 @@ function ModelEditor({
             </select>
           </Field>
           <Field label={t("subagents.modelId")}>
-            <input
-              className={INPUT_CLASS}
+            <ModelSelector
+              key={model.provider}
+              providerId={model.provider}
               value={model.model}
-              onChange={(event) => onChange({ ...model, model: event.target.value })}
+              onSelect={(discovered) =>
+                onChange({
+                  ...model,
+                  model: discovered.id,
+                  name: model.name.trim() ? model.name : discovered.id,
+                  context_window: discovered.context_window,
+                  max_output_tokens: discovered.max_output_tokens,
+                  thinking: discovered.thinking ?? { mode: "none" },
+                })
+              }
             />
           </Field>
         </div>
@@ -450,9 +628,12 @@ function ModelEditor({
               className={INPUT_CLASS}
               type="number"
               min={1}
-              value={model.context_window}
+              value={model.context_window ?? ""}
               onChange={(event) =>
-                onChange({ ...model, context_window: Number(event.target.value) })
+                onChange({
+                  ...model,
+                  context_window: event.target.value ? Number(event.target.value) : undefined,
+                })
               }
             />
           </Field>
@@ -659,57 +840,110 @@ function ModelEditor({
   )
 }
 
-function ListSection({
-  title,
-  ids,
-  labels,
+function ProviderGroup({
+  id,
+  enabled,
+  models,
   selected,
-  kind,
-  empty,
-  onSelect,
-  onAdd,
-  addLabel,
+  onSelectProvider,
+  onSelectModel,
+  onAddModel,
 }: {
-  title: string
-  ids: string[]
-  labels?: Record<string, string>
+  id: string
+  enabled: boolean
+  models: Array<[string, SubagentModelProfile]>
   selected?: Selection
-  kind: Selection["kind"]
-  empty: string
-  onSelect: (id: string) => void
-  onAdd: () => void
-  addLabel: string
+  onSelectProvider: () => void
+  onSelectModel: (id: string) => void
+  onAddModel: () => void
 }) {
+  const { t } = useI18n()
+  const [expanded, setExpanded] = useState(true)
+  const selectedProvider = selected?.kind === "provider" && selected.id === id
+  const selectedModel = models.some(
+    ([modelId]) => selected?.kind === "model" && selected.id === modelId
+  )
+
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {title}
-        </h2>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onAdd}>
-          <CirclePlus className="size-3.5" /> {addLabel}
+    <section
+      className={`rounded-lg border p-2 ${selectedProvider || selectedModel ? "border-border bg-muted/20" : "border-border/70"}`}
+    >
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onSelectProvider}
+          className={`min-w-0 flex flex-1 items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold ${selectedProvider ? "bg-muted" : "hover:bg-muted/60"}`}
+        >
+          <StatusLight enabled={enabled} />
+          <span className="min-w-0 truncate">{id}</span>
+        </button>
+        <span className="text-xs tabular-nums text-muted-foreground">{models.length}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={onAddModel}
+          aria-label={`${t("subagents.addModel")}: ${id}`}
+          title={`${t("subagents.addModel")}: ${id}`}
+        >
+          <CirclePlus className="size-4" />
         </Button>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={`${expanded ? t("subagents.collapseModels") : t("subagents.expandModels")}: ${id}`}
+          title={expanded ? t("subagents.collapseModels") : t("subagents.expandModels")}
+          onClick={() => setExpanded((current) => !current)}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ChevronDown className={`size-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
+        </button>
       </div>
-      {ids.length === 0 ? (
-        <p className="px-2 py-3 text-xs text-muted-foreground">{empty}</p>
-      ) : (
-        <div className="space-y-1">
-          {ids.map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onSelect(id)}
-              className={`w-full rounded-lg px-3 py-2 text-left ${selected?.kind === kind && selected.id === id ? "bg-muted" : "hover:bg-muted/60"}`}
-            >
-              <div className="truncate text-sm font-medium">{labels?.[id] ?? id}</div>
-              {labels?.[id] && labels[id] !== id ? (
-                <div className="truncate text-[11px] text-muted-foreground">{id}</div>
-              ) : null}
-            </button>
-          ))}
+      {expanded && (
+        <div className="ml-3 border-l border-border/70 pl-3">
+          <h3 className="mb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {t("subagents.models")}
+          </h3>
+          {models.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">{t("subagents.noModels")}</p>
+          ) : (
+            <div className="space-y-1">
+              {models.map(([modelId, model]) => (
+                <button
+                  key={modelId}
+                  type="button"
+                  onClick={() => onSelectModel(modelId)}
+                  className={`w-full rounded-md px-2 py-2 text-left ${selected?.kind === "model" && selected.id === modelId ? "bg-muted" : "hover:bg-muted/60"}`}
+                >
+                  <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                    <StatusLight enabled={model.enabled} />
+                    <span className="min-w-0 truncate">{model.name}</span>
+                  </span>
+                  {model.name !== modelId ? (
+                    <span className="block truncate pl-4 text-[11px] text-muted-foreground">
+                      {modelId}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </section>
+  )
+}
+
+function StatusLight({ enabled }: { enabled: boolean }) {
+  const { t } = useI18n()
+  const label = enabled ? t("common.enabled") : t("subagents.disabled")
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={`inline-block size-2 shrink-0 rounded-full ${enabled ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
+    />
   )
 }
 
@@ -761,10 +995,10 @@ function Field({
 
 function nextId(prefix: string, values: Record<string, unknown>): string {
   let index = 1
-  let id = `new-${prefix}`
+  let id = prefix
   while (values[id]) {
     index += 1
-    id = `new-${prefix}-${index}`
+    id = `${prefix}-${index}`
   }
   return id
 }

@@ -1,0 +1,1140 @@
+import type { SubagentSessionDetail, SubagentSessionEvent, SubagentSessionSummary } from "../types"
+import type { RuntimeApproval } from "./runtime-control-api"
+
+const now = Date.now()
+const ago = (seconds: number) => new Date(now - seconds * 1000).toISOString()
+
+const mockApprovals: RuntimeApproval[] = [
+  {
+    id: "demo-subagent-approval",
+    fingerprint: "mock-fixture",
+    sessionId: "demo-session-01",
+    toolName: "bash",
+    category: "filesystem-destructive",
+    reason: "Deleting temporary build files requires authorization.",
+    createdAt: ago(35),
+    status: "pending",
+    input: { command: "rm -rf ./dist/mock-build" },
+  },
+]
+
+export async function mockSubagentApprovals(sessionId: string): Promise<RuntimeApproval[]> {
+  return copy(mockApprovals.filter((item) => item.sessionId === sessionId))
+}
+
+export async function mockDecideSubagentApproval(id: string): Promise<void> {
+  const index = mockApprovals.findIndex((item) => item.id === id)
+  if (index === -1) throw new Error("Approval not found")
+  mockApprovals.splice(index, 1)
+}
+
+// A long terminal result for exercising independent vertical and horizontal scrolling.
+const mockLongShellOutput = [
+  "$ npm run typecheck && node --test test/subagent-sessions.test.ts",
+  "TypeScript: 0 errors",
+  "TAP version 13",
+  ...Array.from(
+    { length: 620 },
+    (_, i) =>
+      `ok ${i + 1} - session/spec-${String(i + 1).padStart(3, "0")}: tool routing, model response, and async guidance`
+  ),
+  "# tests 620",
+  "# pass 620",
+  "# fail 0",
+  "# FINAL OUTPUT LINE — the terminal viewport can scroll to the end.",
+].join("\n")
+
+const complexTaskEvents: SubagentSessionEvent[] = [
+  {
+    id: "complex-001",
+    time: ago(3600),
+    role: "user",
+    text: "請把 OpenChatX Subagent 做成能真正執行任務的完整 Agent Session：支援 ChatGPT OAuth / API Key Provider、工具呼叫、Project Routing 權限、父子代理、Async Job 與即時引導。建立可監控的 UI，但**不要替換正在執行的 App，也不要 Commit / Push**。先檢查架構，再實作、測試與 Mock 預覽。",
+  },
+  {
+    id: "complex-002",
+    time: ago(3520),
+    role: "assistant",
+    text: "我會分成四個階段：① 檢查現有 Subagent Runtime 與權限邊界；② 補上 Provider 與工具呼叫循環；③ 建立 Session 與 UI 事件串流；④ 在 Mock 中驗證多個同模型子代理、遞迴委派及中途引導。先從只讀檢查開始。",
+  },
+  {
+    id: "complex-003",
+    time: ago(3460),
+    role: "tool",
+    text: "Projects:\n- openchatx (active, read/write/shell)\n- vdine-api (read)\nWorkspace: /Users/demo/MyProject/openchatx-mcp\nProject routing: resolved",
+    tool: "project_manage",
+    input: '{"action":"list"}',
+    status: "completed",
+  },
+  {
+    id: "complex-004",
+    time: ago(3435),
+    role: "tool",
+    text: "src/subagents/config.ts\nsrc/subagents/runtime.ts\nsrc/subagents/router.ts\nsrc/subagents/agent-sessions.ts\nsrc/subagents/agent-provider.ts\nsrc/subagents/chatgpt-auth.ts",
+    tool: "glob",
+    input: '{"pattern":"src/subagents/**/*.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-005",
+    time: ago(3390),
+    role: "tool",
+    text: "Read 180 lines. Existing implementation sends a one-shot chat-completion request. No persisted messages, no tool-call loop, and no external steering queue.",
+    tool: "file_read",
+    input: '{"filePath":"src/subagents/runtime.ts","offset":1,"limit":180}',
+    status: "completed",
+  },
+  {
+    id: "complex-006",
+    time: ago(3345),
+    role: "tool",
+    text: "Found 24 matches:\nsrc/mcp/tool-registration-boundary.ts: enforceConversationRouting(...)\nsrc/mcp/server-factory.ts: createMcpServerFactory(...)\nsrc/tools/subagents/subagent-tools.ts: subagent_run / subagent_get",
+    tool: "grep",
+    input:
+      '{"pattern":"registerTool|enforceConversationRouting|subagent_run","path":"src","include":"*.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-007",
+    time: ago(3280),
+    role: "assistant",
+    text: "第一個缺口已確認：Subagent 原本只會呼叫一次模型 API。要讓它與一般 Agent 相同，必須保留每輪訊息及 tool call / tool result，並共用原本的 MCP 授權邊界，不能把 Shell 或檔案操作直接接到模型上。",
+  },
+  {
+    id: "complex-008",
+    time: ago(3235),
+    role: "tool",
+    text: "Available: mcp server factory, tool registration boundary, InMemoryTransport, AgentObserver, runtime-control authorization.",
+    tool: "tool_search",
+    input: '{"query":"MCP server factory and in-memory client bridge"}',
+    status: "completed",
+  },
+  {
+    id: "complex-009",
+    time: ago(3190),
+    role: "tool",
+    text: "Routing guard:\n- start_here initializes context\n- pending Project routing blocks normal tools\n- every tool call is checked at execution time\nApproval and full-access mode are applied by RuntimeControl.",
+    tool: "file_read",
+    input: '{"filePath":"src/mcp/tool-registration-boundary.ts","offset":490,"limit":140}',
+    status: "completed",
+  },
+  {
+    id: "complex-010",
+    time: ago(3150),
+    role: "tool",
+    text: "AgentIdentity fields: sessionId, agent, taskSlug, projectId, projectRouting.\nContext uses async-local storage. Nested tool calls can inherit parent metadata.",
+    tool: "file_read",
+    input: '{"filePath":"src/agent/context.ts","offset":1,"limit":145}',
+    status: "completed",
+  },
+  {
+    id: "complex-011",
+    time: ago(3090),
+    role: "assistant",
+    text: "設計採用 **一個 Job 對應一個獨立 Session**。同一個模型可以同時有多個 Job。每個 Session 保存任務標題、父 Session、ChatGPT owner、訊息歷史、工具事件和待送達引導；工具則透過 InMemory MCP Client 走原有審批流程。",
+  },
+  {
+    id: "complex-012",
+    time: ago(3050),
+    role: "tool",
+    text: "Patch applied. Added subagent session manager with unique job_id and session_id.",
+    tool: "apply_patch",
+    input:
+      '{"patch":"*** Add File: src/subagents/agent-sessions.ts\\n+ Session state and event history\\n+ Async jobs, steering queue and nesting limit\\n*** End Patch"}',
+    status: "completed",
+  },
+  {
+    id: "complex-013",
+    time: ago(3005),
+    role: "tool",
+    text: "Patch applied. Tool bridge now invokes registered OpenChatX MCP tools under the session identity.",
+    tool: "apply_patch",
+    input:
+      '{"patch":"*** Add File: src/subagents/agent-tool-bridge.ts\\n+ InMemory MCP transport\\n+ agent-scoped identity\\n+ tool call / tool result adapter\\n*** End Patch"}',
+    status: "completed",
+  },
+  {
+    id: "complex-014",
+    time: ago(2960),
+    role: "tool",
+    text: "Patch applied. Sync waits for a completed result; Async immediately returns a job_id.",
+    tool: "apply_patch",
+    input:
+      '{"patch":"*** Update File: src/subagents/runtime.ts\\n+ enableAgentSessions(...)\\n+ delegate run/startAsync/getJob\\n*** End Patch"}',
+    status: "completed",
+  },
+  {
+    id: "complex-015",
+    time: ago(2910),
+    role: "tool",
+    text: "Patch applied. subagent_steer accepts job_id and guidance text; active requests are not interrupted.",
+    tool: "apply_patch",
+    input:
+      '{"patch":"*** Update File: src/tools/subagents/subagent-tools.ts\\n+ subagent_steer\\n+ subagent_get\\n*** End Patch"}',
+    status: "completed",
+  },
+  {
+    id: "complex-016",
+    time: ago(2850),
+    role: "assistant",
+    text: "Session 與 MCP 工具橋接已接上。接著檢查 TypeScript、權限傳遞和中斷行為；如果 Project Routing 尚未決定，子代理不應該被允許直接執行 `bash`。",
+  },
+  {
+    id: "complex-017",
+    time: ago(2800),
+    role: "tool",
+    text: "src/subagents/agent-tool-bridge.ts(94,12): error TS2322: Type 'unknown' is not assignable to type 'Record<string, unknown>'.\nFound 1 error.",
+    tool: "bash",
+    input: '{"command":"npm run typecheck"}',
+    status: "failed",
+  },
+  {
+    id: "complex-018",
+    time: ago(2740),
+    role: "tool",
+    text: "The SDK result accepts unknown structuredContent. The adapter narrowed text content but not the object payload.",
+    tool: "file_read",
+    input: '{"filePath":"src/subagents/agent-tool-bridge.ts","offset":78,"limit":35}',
+    status: "completed",
+  },
+  {
+    id: "complex-019",
+    time: ago(2690),
+    role: "tool",
+    text: "Edit applied. Tool output is narrowed at the external-data boundary.",
+    tool: "file_edit",
+    input:
+      '{"filePath":"src/subagents/agent-tool-bridge.ts","oldString":"return result.structuredContent","newString":"return isRecord(result.structuredContent) ? result.structuredContent : {}"}',
+    status: "completed",
+  },
+  {
+    id: "complex-020",
+    time: ago(2640),
+    role: "tool",
+    text: mockLongShellOutput,
+    tool: "bash",
+    input: '{"command":"npm run typecheck && node --test test/subagent-sessions.test.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-021",
+    time: ago(2580),
+    role: "assistant",
+    text: "第一輪測試已通過，包含工具呼叫、遞迴委派與異步引導。不過目前只證明執行路徑，還要把 Provider 能力與 UI 事件傳遞接上，再補充錯誤復原。",
+  },
+  {
+    id: "complex-022",
+    time: ago(2500),
+    role: "tool",
+    text: "Found ChatGPT OAuth service and OpenAI Responses adapter. Subscription OAuth is distinct from API-key billing.",
+    tool: "tool_search",
+    input: '{"query":"OpenAI OAuth ChatGPT plan usage Responses API model list"}',
+    status: "completed",
+  },
+  {
+    id: "complex-023",
+    time: ago(2440),
+    role: "tool",
+    text: "OAuth supports PKCE, nonce/state verification, refresh token rotation and a localhost callback. Token storage uses restricted file permissions.",
+    tool: "file_read",
+    input: '{"filePath":"src/subagents/chatgpt-auth.ts","offset":100,"limit":110}',
+    status: "completed",
+  },
+  {
+    id: "complex-024",
+    time: ago(2380),
+    role: "tool",
+    text: "Updated the Responses request to include function tools, encrypted reasoning continuation and function_call_output for subsequent turns.",
+    tool: "file_edit",
+    input:
+      '{"filePath":"src/subagents/agent-provider.ts","oldString":"generateChatGPT(input)","newString":"generateChatGPTWithTools(input)"}',
+    status: "completed",
+  },
+  {
+    id: "complex-025",
+    time: ago(2310),
+    role: "tool",
+    text: "✔ Claude native Messages API\n✔ Gemini native generateContent\n✔ ChatGPT SSE completion detection\n✔ Model metadata\n4 passed.",
+    tool: "bash",
+    input: '{"command":"node --test test/subagent-provider-modes.test.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-026",
+    time: ago(2220),
+    role: "assistant",
+    text: "Provider 端使用相同 Session Loop，但保留不同的原生 API 協定。ChatGPT OAuth 的額度與一般 OpenAI API Key 分離；模型能力由 Provider API 或已知規格表提供，未知值不虛構。",
+  },
+  {
+    id: "complex-027",
+    time: ago(2140),
+    role: "tool",
+    text: "Subagent started: subagent-demo-07",
+    tool: "subagent_run",
+    input:
+      '{"action":"run","mode":"async","model":"gpt-6.1-sol","task":"獨立審查 OAuth PKCE、token refresh 與認證安全性"}',
+    status: "completed",
+  },
+  {
+    id: "complex-028",
+    time: ago(2060),
+    role: "tool",
+    text: "Subagent started: subagent-demo-08",
+    tool: "subagent_run",
+    input:
+      '{"action":"run","mode":"async","model":"gpt-6.1-sol","task":"獨立檢查 Async guidance 在完成／重啟邊界的競態"}',
+    status: "completed",
+  },
+  {
+    id: "complex-029",
+    time: ago(1985),
+    role: "tool",
+    text: "Checked 2 files. 1 formatting warning fixed; no errors.",
+    tool: "bash",
+    input:
+      '{"command":"npx biome check src/subagents/agent-provider.ts src/subagents/agent-tool-bridge.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-030",
+    time: ago(1900),
+    role: "assistant",
+    text: "我已委派兩個平行子任務：OAuth 安全性、Async 引導競態。主工作階段繼續完成 Dashboard UI，兩個子代理的結果會以獨立 Job ID 回傳，不會共用對話紀錄。",
+  },
+  {
+    id: "complex-031",
+    time: ago(1810),
+    role: "guidance",
+    text: "先不要做任何 App 安裝、部署或 Commit；重點放在 Mock UI 和權限邊界。新增的引導訊息要能在工具執行途中排隊。",
+    status: "delivered",
+  },
+  {
+    id: "complex-032",
+    time: ago(1760),
+    role: "assistant",
+    text: "已收到引導。我會保留目前執行中的 OpenChatX，僅改原始碼與 Mock 預覽。正在執行的 MCP 工具不會被引導打斷，訊息會在下一個模型回合送達。",
+  },
+  {
+    id: "complex-033",
+    time: ago(1690),
+    role: "tool",
+    text: "Project scope: openchatx. No access outside the active project has been granted.",
+    tool: "tool_call",
+    input: '{"tool":"builtin:project_manage","arguments_json":"{\\"action\\":\\"list\\"}"}',
+    status: "completed",
+  },
+  {
+    id: "complex-034",
+    time: ago(1640),
+    role: "tool",
+    text: "Tools available during pending routing: start_here, glob, project_manage. Shell remains restricted until routing is resolved.",
+    tool: "tool_call",
+    input:
+      '{"tool":"builtin:tool_search","arguments_json":"{\\"query\\":\\"project routing before shell\\"}"}',
+    status: "completed",
+  },
+  {
+    id: "complex-035",
+    time: ago(1570),
+    role: "tool",
+    text: "✔ pending routing blocks file edits\n✔ unrelated session cannot get child job\n✔ permitted session inherits project scope\n3 passed.",
+    tool: "bash",
+    input: '{"command":"node --test test/subagent-routing.test.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-036",
+    time: ago(1495),
+    role: "assistant",
+    text: "權限測試符合預期：未完成 Project Routing 的子代理不能直接呼叫寫入工具，已授權 Session 才能依相同 Project 範圍執行。這部分不會為方便 Subagent 而放寬。",
+  },
+  {
+    id: "complex-037",
+    time: ago(1455),
+    role: "tool",
+    text: "status: running\nlast_activity: checking OAuth callback, PKCE challenge and token refresh",
+    tool: "subagent_get",
+    input: '{"job_id":"subagent-demo-07"}',
+    status: "completed",
+  },
+  {
+    id: "complex-038",
+    time: ago(1405),
+    role: "tool",
+    text: "UI uses transcript events and periodic polling. Main AgentCard needs per-job links and Chat-style timeline.",
+    tool: "file_read",
+    input: '{"filePath":"ui/src/features/subagents/SubagentActivity.tsx","offset":1,"limit":220}',
+    status: "completed",
+  },
+  {
+    id: "complex-039",
+    time: ago(1345),
+    role: "tool",
+    text: 'diff --git a/ui/src/features/subagents/SubagentActivity.tsx b/ui/src/features/subagents/SubagentActivity.tsx\n--- a/ui/src/features/subagents/SubagentActivity.tsx\n+++ b/ui/src/features/subagents/SubagentActivity.tsx\n@@ -214,10 +214,13 @@ function SubagentActivity() {\n   const selected = detail?.job_id === selectedId ? detail : undefined\n-  const name = selected?.profile ?? "Subagent"\n+  const name = selected?.title ?? selected?.profile ?? "Subagent"\n+  const currentJobId = selected?.job_id\n   const childSessions = sessions.filter((session) => session.parent_id === selected?.job_id)\n \n   return (\n-    <div className="flex flex-col">\n+    <div className="grid min-h-0 grid-cols-[258px_1fr]">\n       <aside className="border-r">\n+        <h2 className="truncate text-sm font-semibold">{name}</h2>\n+        <span className="font-mono text-xs">{currentJobId}</span>\n       </aside>\n@@ -304,8 +307,12 @@ function SubagentActivity() {\n       <section className="flex flex-col">\n-        {selected.events.map((event) => <div>{event.text}</div>)}\n+        {selected.events.map((event) => (\n+          <ActivityEntry key={event.id} event={event} />\n+        ))}\n+        <GuidanceComposer sessionId={selected.job_id} />\n       </section>\n     </div>\n   )',
+    tool: "apply_patch",
+    input:
+      '{"patch":"*** Update File: ui/src/features/subagents/SubagentActivity.tsx\\n+ Job title, session navigation\\n+ tool events and guidance\\n*** End Patch"}',
+    status: "completed",
+  },
+  {
+    id: "complex-040",
+    time: ago(1300),
+    role: "tool",
+    text: "ChatGPT owner card now exposes running and completed subagents.",
+    tool: "apply_patch",
+    input: JSON.stringify({
+      patch:
+        '*** Begin Patch\n*** Update File: ui/src/features/dashboard/AgentCard.tsx\n@@\n-  const active = now - agent.lastSeenAt < 30_000\n+  const active = now - agent.lastSeenAt < 30_000\n+  const runningJobs = subagents.filter((job) => job.status === "running")\n@@\n-      <SteerComposer agent={agent} />\n+      <SubagentList sessions={subagents} running={runningJobs.length} />\n+      <SteerComposer agent={agent} />\n*** Update File: ui/src/features/subagents/SubagentActivity.tsx\n@@\n-  const title = selected?.profile ?? ""\n+  const title = selected?.title ?? ""\n+  const jobId = selected?.job_id\n*** End Patch',
+    }),
+    status: "completed",
+  },
+  {
+    id: "complex-041",
+    time: ago(1240),
+    role: "tool",
+    text: "ui/src/features/subagents/SubagentActivity.tsx(215,8): error TS2322: Property 'parent_id' can be undefined.\nBuild failed.",
+    tool: "bash",
+    input: '{"command":"npm --prefix ui run build"}',
+    status: "failed",
+  },
+  {
+    id: "complex-042",
+    time: ago(1185),
+    role: "tool",
+    text: "Removed non-null assertion; parent navigation now checks the session relationship.",
+    tool: "file_edit",
+    input:
+      '{"filePath":"ui/src/features/subagents/SubagentActivity.tsx","oldString":"selectSession(selected.parent_id!)","newString":"if (selected.parent_id) selectSession(selected.parent_id)"}',
+    status: "completed",
+  },
+  {
+    id: "complex-043",
+    time: ago(1110),
+    role: "tool",
+    text: "✔ UI TypeScript\n✔ Vite build\nGenerated 17 assets. Build completed.",
+    tool: "bash",
+    input: '{"command":"npm --prefix ui run build"}',
+    status: "completed",
+  },
+  {
+    id: "complex-044",
+    time: ago(1040),
+    role: "assistant",
+    text: "Dashboard UI 可查看主工作階段下的多個子代理。下一步會測試「同一模型建立多個 Session」與「引導在工具返回前送達」，避免 UI 把模型 Profile 誤當成唯一工作階段。",
+  },
+  {
+    id: "complex-045",
+    time: ago(995),
+    role: "tool",
+    text: "status: completed\nResult: OAuth callback requires state/nonce validation; refresh tokens should never appear in tool previews. No credential exposure found in fixture.",
+    tool: "subagent_get",
+    input: '{"job_id":"subagent-demo-07"}',
+    status: "completed",
+  },
+  {
+    id: "complex-046",
+    time: ago(941),
+    role: "tool",
+    text: "Guidance queued for subagent-demo-08.",
+    tool: "subagent_steer",
+    input:
+      '{"job_id":"subagent-demo-08","message":"請另外檢查最後一次模型回覆結束時，排隊中的 guidance 不能遺失"}',
+    status: "completed",
+  },
+  {
+    id: "complex-047",
+    time: ago(872),
+    role: "tool",
+    text: "✖ steering queued during final response was not delivered.\nExpected resumed session; received completed state.\n1 failed.",
+    tool: "bash",
+    input: '{"command":"node --test test/subagent-sessions.test.ts"}',
+    status: "failed",
+  },
+  {
+    id: "complex-048",
+    time: ago(833),
+    role: "tool",
+    text: "Found completion path and execute(...).finally. Pending guidance is still queued after completion in a narrow race.",
+    tool: "grep",
+    input:
+      '{"pattern":"guidance.length|session.status|finally","path":"src/subagents/agent-sessions.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-049",
+    time: ago(788),
+    role: "tool",
+    text: "Patched the completion boundary to resume a session when guidance is queued rather than marking it terminal.",
+    tool: "file_edit",
+    input:
+      '{"filePath":"src/subagents/agent-sessions.ts","oldString":"session.executing = false","newString":"session.executing = false; if (session.guidance.length) resumeSession()"}',
+    status: "completed",
+  },
+  {
+    id: "complex-050",
+    time: ago(722),
+    role: "tool",
+    text: "✔ independent session identity\n✔ async steer while running\n✔ guidance delivered after tool completion\n✔ completed session resumed with new instructions\n4 passed.",
+    tool: "bash",
+    input: '{"command":"node --test test/subagent-sessions.test.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-051",
+    time: ago(665),
+    role: "assistant",
+    text: "已修復一個真實的邊界問題：當引導剛好在最終回覆期間送達時，Session 原本可能先變成 Completed。修正後會重新排入下一輪，並保留同一個 Job ID 與對話歷史。",
+  },
+  {
+    id: "complex-052",
+    time: ago(612),
+    role: "guidance",
+    text: "UI 請更接近 OpenCode：右側氣泡代表使用者訊息，模型回覆只顯示 Markdown；工具群組預設收合。注意不要露出任何 API Key。",
+    status: "delivered",
+  },
+  {
+    id: "complex-053",
+    time: ago(564),
+    role: "assistant",
+    text: "會把介面保持精簡：任務／引導靠右、子代理回覆靠左、工具操作連續群組折疊；API Key 等敏感參數會在事件預覽中遮蔽。",
+  },
+  {
+    id: "complex-054",
+    time: ago(510),
+    role: "tool",
+    text: "## develop...origin/develop\n M src/subagents/agent-sessions.ts\n M ui/src/features/subagents/SubagentActivity.tsx\n?? ui/src/lib/subagent-mock.ts\nNo commit created.",
+    tool: "bash",
+    input: '{"command":"git status --short --branch"}',
+    status: "completed",
+  },
+  {
+    id: "complex-055",
+    time: ago(469),
+    role: "tool",
+    text: "Checked 273 files. No errors.\n3 non-blocking informational findings.",
+    tool: "bash",
+    input: '{"command":"npm run lint"}',
+    status: "completed",
+  },
+  {
+    id: "complex-056",
+    time: ago(426),
+    role: "tool",
+    text: "✔ OAuth/provider message contract\n✔ recursive agent delegation\n✔ session routing isolation\n✔ multi-job same-model concurrency\n✔ async guidance completion\n12 passed.",
+    tool: "bash",
+    input:
+      '{"command":"node --test test/subagent-sessions.test.ts test/subagent-provider-modes.test.ts"}',
+    status: "completed",
+  },
+  {
+    id: "complex-057",
+    time: ago(362),
+    role: "tool",
+    text: "Subagent started: subagent-demo-04.",
+    tool: "subagent_run",
+    input: '{"action":"run","mode":"async","model":"gpt-6.1-sol","task":"獨立驗證工具授權結果"}',
+    status: "completed",
+  },
+  {
+    id: "complex-058",
+    time: ago(326),
+    role: "tool",
+    text: "status: running\nlast_activity: inspect project_manage and access-mode boundaries",
+    tool: "subagent_get",
+    input: '{"job_id":"subagent-demo-04"}',
+    status: "completed",
+  },
+  {
+    id: "complex-059",
+    time: ago(289),
+    role: "tool",
+    text: "status: running\nlast_activity: testing concurrent guidance during a long tool call",
+    tool: "subagent_get",
+    input: '{"job_id":"subagent-demo-08"}',
+    status: "completed",
+  },
+  {
+    id: "complex-060",
+    time: ago(249),
+    role: "assistant",
+    text: "完成了多模型協定及 Async 檢查。目前三個子代理分別負責 OAuth、安全權限和競態回歸；整體修改仍留在本機，接著確認 Mock 畫面尺寸、折疊狀態及導覽。",
+  },
+  {
+    id: "complex-061",
+    time: ago(212),
+    role: "tool",
+    text: "200 OK\nMock UI served on localhost. No production API calls.",
+    tool: "bash",
+    input: '{"command":"curl -fsS -o /dev/null -w \'%{http_code}\' http://127.0.0.1:5176/ui/"}',
+    status: "completed",
+  },
+  {
+    id: "complex-062",
+    time: ago(181),
+    role: "tool",
+    text: "Browser tab opened: OpenChatX Mock UI. Viewport 1440 × 900.",
+    tool: "tool_call",
+    input:
+      '{"tool":"mcp:browser:open","arguments_json":"{\\"url\\":\\"http://127.0.0.1:5176/ui/\\"}"}',
+    status: "completed",
+  },
+  {
+    id: "complex-063",
+    time: ago(149),
+    role: "tool",
+    text: "Found 8 action groups. All groups initially collapsed. Expanding group reveals tool rows; expanding tool row reveals input and output.",
+    tool: "tool_call",
+    input:
+      '{"tool":"mcp:browser:inspect","arguments_json":"{\\"selector\\":\\"[data-testid=subagent-action-group]\\"}"}',
+    status: "completed",
+  },
+  {
+    id: "complex-064",
+    time: ago(125),
+    role: "assistant",
+    text: "Mock UI 已能以同一模型執行多個獨立 Session，並完整展開工具結果。瀏覽器檢查已確認滾動容器高度與收合狀態。接下來只剩最後一輪權限／引導回歸，仍不會替換 App。",
+  },
+  {
+    id: "complex-065",
+    time: ago(95),
+    role: "tool",
+    text: "status: completed\nResult: Project routing and authorization checks passed under the inherited session context.",
+    tool: "subagent_get",
+    input: '{"job_id":"subagent-demo-04"}',
+    status: "completed",
+  },
+  {
+    id: "complex-066",
+    time: ago(70),
+    role: "tool",
+    text: "Guidance queued for subagent-demo-08. Existing tool call continues.",
+    tool: "subagent_steer",
+    input:
+      '{"job_id":"subagent-demo-08","message":"最後請確認結果摘要必須指出未驗證的 Provider 行為"}',
+    status: "completed",
+  },
+  {
+    id: "complex-067",
+    time: ago(42),
+    role: "tool",
+    text: "TypeScript: 0 errors.\nSession regression suite still running…",
+    tool: "bash",
+    input: '{"command":"npm run typecheck && node --test test/subagent-sessions.test.ts"}',
+    status: "running",
+  },
+  {
+    id: "complex-068",
+    time: ago(22),
+    role: "assistant",
+    text: "已整理出目前結果：OAuth 資料未外洩、Project Routing 依授權運作，且 UI 支援同模型多 Session。還在等待 Async 競態測試最後一輪輸出，確認後才會回報主模型。",
+    status: "running",
+  },
+  {
+    id: "complex-069",
+    time: ago(5),
+    role: "tool",
+    text: "Running final targeted regression…",
+    tool: "bash",
+    input: '{"command":"node --test test/subagent-sessions.test.ts --test-name-pattern=\'steer\'"}',
+    status: "running",
+  },
+]
+
+const sessions: SubagentSessionDetail[] = [
+  {
+    job_id: "subagent-demo-01",
+    session_id: "demo-session-01",
+    title: "完成 Subagent 全功能工作階段、OAuth 與 Async 引導整合",
+    owner_agent_id: "agent-1",
+    worker_agent_id: "agent-sub-01",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    status: "running",
+    depth: 1,
+    pending_guidance: 0,
+    created_at: ago(3680),
+    updated_at: ago(3),
+    events: complexTaskEvents,
+  },
+  {
+    job_id: "subagent-demo-02",
+    session_id: "demo-session-02",
+    title: "整理 Session API 與事件串流",
+    owner_agent_id: "agent-1",
+    worker_agent_id: "agent-sub-02",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    status: "running",
+    depth: 1,
+    pending_guidance: 0,
+    created_at: ago(4820),
+    updated_at: ago(18),
+    events: [
+      {
+        id: "8",
+        role: "user",
+        time: ago(292),
+        text: "檢查子代理 Session 列表與事件串流資料結構，確保多個相同模型的工作階段可以正確區分。",
+      },
+      {
+        id: "9",
+        role: "assistant",
+        time: ago(281),
+        text: "每個子代理使用獨立 job_id，列表會保留任務名稱及父工作階段。",
+      },
+      {
+        id: "10",
+        role: "tool",
+        tool: "file_read",
+        input: '{"filePath":"src/subagents/agent-sessions.ts"}',
+        time: ago(215),
+        status: "completed",
+        text: "已讀取 agent-sessions.ts，確認 Session ID 與 Job ID 各自唯一。",
+      },
+      {
+        id: "11",
+        role: "tool",
+        tool: "bash",
+        input: '{"command":"npm run typecheck"}',
+        time: ago(18),
+        status: "running",
+        text: "Running TypeScript typecheck…",
+      },
+    ],
+  },
+  {
+    job_id: "subagent-demo-03",
+    session_id: "demo-session-03",
+    title: "補強 SSE 串流錯誤處理",
+    owner_agent_id: "agent-1",
+    worker_agent_id: "agent-sub-03",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    status: "completed",
+    depth: 1,
+    pending_guidance: 0,
+    created_at: ago(5150),
+    updated_at: ago(115),
+    events: [
+      {
+        id: "12",
+        role: "user",
+        time: ago(480),
+        text: "確認串流遭中斷時能正確回報失敗，不要當成成功完成。",
+      },
+      {
+        id: "13",
+        role: "tool",
+        tool: "bash",
+        input: '{"command":"node --test test/subagent-runtime.test.ts"}',
+        time: ago(270),
+        status: "completed",
+        text: "3 tests passed. No failures.",
+      },
+      {
+        id: "14",
+        role: "assistant",
+        time: ago(115),
+        text: "已確認 SSE 完成事件的判斷流程。沒有觀察到結果遺失，錯誤時會明確標記失敗。",
+      },
+    ],
+    result: {
+      profile: "gpt-6.1-sol",
+      provider: "chatgpt",
+      model: "gpt-6.1-sol",
+      content: "SSE 串流錯誤處理檢查完成。",
+    },
+  },
+  {
+    job_id: "subagent-demo-04",
+    session_id: "demo-session-04",
+    title: "獨立驗證工具授權結果",
+    owner_agent_id: "agent-1",
+    worker_agent_id: "agent-sub-04",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    parent_id: "subagent-demo-01",
+    status: "completed",
+    depth: 2,
+    pending_guidance: 0,
+    created_at: ago(265),
+    updated_at: ago(105),
+    events: [
+      { id: "15", role: "user", time: ago(265), text: "獨立驗證 OpenChatX 工具的權限與審批流程。" },
+      {
+        id: "16",
+        role: "tool",
+        tool: "project_manage",
+        input: '{"action":"list"}',
+        time: ago(228),
+        status: "completed",
+        text: "找到已註冊的 Project；權限設定保持不變。",
+      },
+      {
+        id: "17",
+        role: "assistant",
+        time: ago(105),
+        text: "驗證完成。子代理遵循相同的工具授權邊界，沒有繞過 Project Routing。",
+      },
+    ],
+    result: {
+      profile: "gpt-6.1-sol",
+      provider: "chatgpt",
+      model: "gpt-6.1-sol",
+      content: "子代理權限檢查完成。",
+    },
+  },
+  {
+    job_id: "subagent-demo-07",
+    session_id: "demo-session-07",
+    title: "獨立審查 OAuth PKCE、token refresh 與認證安全性",
+    owner_agent_id: "agent-1",
+    worker_agent_id: "agent-sub-07",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    parent_id: "subagent-demo-01",
+    status: "completed",
+    depth: 2,
+    pending_guidance: 0,
+    created_at: ago(2140),
+    updated_at: ago(995),
+    events: [
+      {
+        id: "child7-001",
+        role: "user",
+        time: ago(2140),
+        text: "請獨立審查 OpenChatX 的 ChatGPT OAuth：PKCE、state / nonce、token refresh、權限範圍與憑證洩漏風險。只讀檢查，不修改主工作階段設定。",
+      },
+      {
+        id: "child7-002",
+        role: "assistant",
+        time: ago(2110),
+        text: "我會先檢查 OAuth 授權回呼與憑證寫入流程，再對照模型呼叫與工具日誌，確認令牌不會被送到 UI。",
+      },
+      {
+        id: "child7-003",
+        role: "tool",
+        time: ago(2065),
+        text: "Read 230 lines. PKCE verifier/challenge, random state, nonce and local callback are present.",
+        tool: "file_read",
+        input: '{"filePath":"src/subagents/chatgpt-auth.ts","offset":1,"limit":230}',
+        status: "completed",
+      },
+      {
+        id: "child7-004",
+        role: "tool",
+        time: ago(1980),
+        text: "OAuth token exchange includes code_verifier; callback validates state and nonce.",
+        tool: "grep",
+        input:
+          '{"pattern":"client_id|redirect_uri|code_verifier|state|nonce","path":"src/subagents"}',
+        status: "completed",
+      },
+      {
+        id: "child7-005",
+        role: "tool",
+        time: ago(1850),
+        text: "Token use limited to provider inference and model discovery. No token values are placed in session events.",
+        tool: "grep",
+        input: '{"pattern":"accessToken|refreshToken|Authorization","path":"src/subagents"}',
+        status: "completed",
+      },
+      {
+        id: "child7-006",
+        role: "assistant",
+        time: ago(1710),
+        text: "確認身份憑證儲存與模型請求已分開。下一步測試令牌過期、callback state 不一致及錯誤回應的記錄方式。",
+      },
+      {
+        id: "child7-007",
+        role: "tool",
+        time: ago(1570),
+        text: "✔ OAuth state mismatch rejected\n✔ Refresh failure requests reauthentication\n✔ Unauthorized model requests rejected\n3 passed.",
+        tool: "bash",
+        input: '{"command":"node --test test/chatgpt-auth.test.ts"}',
+        status: "completed",
+      },
+      {
+        id: "child7-008",
+        role: "tool",
+        time: ago(1390),
+        text: "Tool argument previews apply key-based redaction before UI exposure.",
+        tool: "file_read",
+        input: '{"filePath":"src/subagents/agent-sessions.ts","offset":430,"limit":55}',
+        status: "completed",
+      },
+      {
+        id: "child7-009",
+        role: "tool",
+        time: ago(1260),
+        text: "✔ nested API keys redacted\n✔ token fields redacted\n✔ nonsecret arguments preserved",
+        tool: "bash",
+        input:
+          '{"command":"node --test test/subagent-sessions.test.ts --test-name-pattern=\'redacts\'"}',
+        status: "completed",
+      },
+      {
+        id: "child7-010",
+        role: "assistant",
+        time: ago(1070),
+        text: "**審查完成**：PKCE、state／nonce、刷新流程及 API Key/ChatGPT OAuth 分離路徑都具備必要驗證。工具事件需持續遮蔽 `authorization`、`token`、`password` 類欄位；未用真實登入憑證進行端到端測試。",
+      },
+    ],
+    result: {
+      profile: "gpt-6.1-sol",
+      provider: "chatgpt",
+      model: "gpt-6.1-sol",
+      content: "OAuth 回呼與 token 使用路徑完成靜態及 Mock 驗證；沒有使用真實帳號或憑證。",
+    },
+  },
+  {
+    job_id: "subagent-demo-08",
+    session_id: "demo-session-08",
+    title: "Async 引導佇列、完成／重啟競態與通知測試",
+    owner_agent_id: "agent-1",
+    worker_agent_id: "agent-sub-08",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    parent_id: "subagent-demo-01",
+    status: "running",
+    depth: 2,
+    pending_guidance: 1,
+    created_at: ago(2060),
+    updated_at: ago(14),
+    events: [
+      {
+        id: "child8-001",
+        role: "user",
+        time: ago(2060),
+        text: "模擬長時間工具執行：當主模型或 UI 在子代理處理工具途中送入引導，必須排隊；模型回合結束時不能丟失，且仍可用 subagent_get 查詢最終回覆。",
+      },
+      {
+        id: "child8-002",
+        role: "assistant",
+        time: ago(2020),
+        text: "我會建立可控制工具完成時間的測試伺服器，分別覆蓋執行中、完成邊界、重新引導與父子 Session 隔離。",
+      },
+      {
+        id: "child8-003",
+        role: "tool",
+        time: ago(1970),
+        text: "Found execute(), processTurn(), deliverGuidance() and status transition logic.",
+        tool: "file_read",
+        input: '{"filePath":"src/subagents/agent-sessions.ts","offset":185,"limit":235}',
+        status: "completed",
+      },
+      {
+        id: "child8-004",
+        role: "tool",
+        time: ago(1895),
+        text: "subagent_steer queues guidance by job ID; the tool can be called asynchronously from a different turn.",
+        tool: "file_read",
+        input: '{"filePath":"src/tools/subagents/subagent-tools.ts","offset":130,"limit":105}',
+        status: "completed",
+      },
+      {
+        id: "child8-005",
+        role: "assistant",
+        time: ago(1810),
+        text: "第一個風險位於最後一次模型回覆與 Session Completed 狀態切換之間。我會將引導注入該邊界，確認不會提前清除佇列。",
+      },
+      {
+        id: "child8-006",
+        role: "tool",
+        time: ago(1760),
+        text: "✖ expected a resumed session after late guidance\nActual: completed\n1 failed",
+        tool: "bash",
+        input:
+          '{"command":"node --test test/subagent-sessions.test.ts --test-name-pattern=\'completion\'"}',
+        status: "failed",
+      },
+      {
+        id: "child8-007",
+        role: "guidance",
+        time: ago(941),
+        text: "請另外測試最後回覆剛完成、尚未關閉 MCP 連線時收到新引導的情形。",
+        status: "delivered",
+      },
+      {
+        id: "child8-008",
+        role: "assistant",
+        time: ago(901),
+        text: "已收到新引導。確實找到一個 race：completion 標記後仍可能出現 pending guidance，應重新觸發 execute() 而非丟棄。",
+      },
+      {
+        id: "child8-009",
+        role: "tool",
+        time: ago(855),
+        text: "Added post-completion queue check and resume path.",
+        tool: "file_edit",
+        input:
+          '{"filePath":"src/subagents/agent-sessions.ts","oldString":"session.executing = false","newString":"checkPendingGuidanceAndResume()"}',
+        status: "completed",
+      },
+      {
+        id: "child8-010",
+        role: "tool",
+        time: ago(723),
+        text: "✔ steering during tool call\n✔ multiple queued guidance messages\n✔ resume after completed\n✔ session ownership\n4 passed",
+        tool: "bash",
+        input: '{"command":"node --test test/subagent-sessions.test.ts"}',
+        status: "completed",
+      },
+      {
+        id: "child8-011",
+        role: "assistant",
+        time: ago(610),
+        text: "測試已涵蓋執行中與完成邊界的引導。佇列可在下一回合被消耗，仍沿用相同 Job ID。接著檢查是否會重複通知主模型。",
+      },
+      {
+        id: "child8-012",
+        role: "tool",
+        time: ago(298),
+        text: "✔ notification appended once to next tool output\n✔ no duplicate after acknowledgement\n2 passed",
+        tool: "bash",
+        input: '{"command":"node --test test/subagent-notifications.test.ts"}',
+        status: "completed",
+      },
+      {
+        id: "child8-013",
+        role: "guidance",
+        time: ago(70),
+        text: "最後請確認結果摘要必須明確指出尚未使用真實 Provider API 驗證的部分。",
+        status: "queued",
+      },
+      {
+        id: "child8-014",
+        role: "tool",
+        time: ago(17),
+        text: "Final regression running. Guidance remains queued until the next model turn.",
+        tool: "bash",
+        input: '{"command":"npm run typecheck && node --test test/subagent-sessions.test.ts"}',
+        status: "running",
+      },
+    ],
+  },
+  {
+    job_id: "subagent-demo-05",
+    session_id: "demo-session-05",
+    title: "驗證圖片生成 Provider 的回傳契約",
+    owner_agent_id: "agent-2",
+    worker_agent_id: "agent-sub-05",
+    profile: "gpt-6.1-sol",
+    provider: "chatgpt",
+    model: "gpt-6.1-sol",
+    status: "running",
+    depth: 1,
+    pending_guidance: 0,
+    created_at: ago(180),
+    updated_at: ago(22),
+    events: [
+      {
+        id: "18",
+        role: "user",
+        time: ago(180),
+        text: "核對圖片生成 MCP 的回傳格式與工具錯誤處理。",
+      },
+      {
+        id: "19",
+        role: "tool",
+        tool: "tool_search",
+        input: '{"query":"image generation"}',
+        time: ago(98),
+        status: "completed",
+        text: "Image capability: available.",
+      },
+      {
+        id: "20",
+        role: "assistant",
+        time: ago(22),
+        status: "running",
+        text: "正在檢查回應資料及錯誤分類。",
+      },
+    ],
+  },
+  {
+    job_id: "subagent-demo-06",
+    session_id: "demo-session-06",
+    title: "分析 Qwen Provider 的回應延遲",
+    owner_agent_id: "agent-3",
+    worker_agent_id: "agent-sub-06",
+    profile: "qwen3.8-flash",
+    provider: "VDineApp",
+    model: "qwen3.8-flash",
+    status: "failed",
+    depth: 1,
+    pending_guidance: 0,
+    created_at: ago(1350),
+    updated_at: ago(1150),
+    events: [
+      { id: "21", role: "user", time: ago(1350), text: "分析 Qwen API 的回應時間並回報超時情形。" },
+      {
+        id: "22",
+        role: "tool",
+        tool: "tool_call",
+        input: '{"tool":"mcp:provider:probe","arguments_json":"{}"}',
+        time: ago(1150),
+        status: "failed",
+        text: "Provider API 回傳 HTTP 503。",
+      },
+    ],
+    error: "Provider API 回傳 HTTP 503。",
+  },
+]
+
+function copy<T>(value: T): T {
+  return structuredClone(value)
+}
+
+export async function mockDeleteSubagentSession(id: string): Promise<void> {
+  const ids = new Set([id])
+  let count = 0
+  do {
+    count = ids.size
+    for (const session of sessions) {
+      if (session.parent_id && ids.has(session.parent_id)) ids.add(session.job_id)
+    }
+  } while (ids.size !== count)
+  if (!sessions.some((session) => session.job_id === id))
+    throw new Error("Unknown mock subagent session.")
+  for (let index = sessions.length - 1; index >= 0; index--) {
+    if (ids.has(sessions[index].job_id)) sessions.splice(index, 1)
+  }
+}
+
+export async function mockSubagentSessions(): Promise<SubagentSessionSummary[]> {
+  return copy(sessions.map(({ events, result, error, session_id, depth, ...summary }) => summary))
+}
+
+export async function mockSubagentSession(id: string): Promise<SubagentSessionDetail> {
+  const found = sessions.find((session) => session.job_id === id)
+  if (!found) throw new Error("Unknown mock subagent session.")
+  return copy(found)
+}
+
+export async function mockSteerSubagent(
+  id: string,
+  message: string
+): Promise<SubagentSessionDetail> {
+  const found = sessions.find((session) => session.job_id === id)
+  if (!found) throw new Error("Unknown mock subagent session.")
+  const trimmed = message.trim()
+  if (!trimmed) throw new Error("Guidance cannot be empty.")
+  found.events.push({
+    id: `demo-guidance-${found.events.length}`,
+    role: "guidance",
+    text: trimmed,
+    status: "queued",
+    time: new Date().toISOString(),
+  })
+  found.status = "running"
+  found.pending_guidance += 1
+  found.updated_at = new Date().toISOString()
+  return copy(found)
+}

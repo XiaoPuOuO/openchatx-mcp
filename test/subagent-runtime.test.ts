@@ -12,7 +12,11 @@ test("subagent runtime hot-reloads direct config file edits", async (t) => {
   const root = await tempDir(t, "openchatx-subagent-watch-")
   const configPath = join(root, "subagents.json")
   await writeFile(configPath, JSON.stringify({ providers: {}, models: {} }))
-  const runtime = new SubagentRuntime({ providers: {}, models: {} })
+  const runtime = new SubagentRuntime({
+    limits: { max_depth: 5, max_children_per_agent: 12 },
+    providers: {},
+    models: {},
+  })
   runtime.startWatching(configPath)
   t.after(() => runtime.close())
 
@@ -70,6 +74,7 @@ test("subagent runtime sends only curated profile settings to an OpenAI-compatib
   assert.ok(address && typeof address === "object")
 
   const config: SubagentConfig = {
+    limits: { max_depth: 5, max_children_per_agent: 12 },
     providers: {
       local: {
         type: "openai-compatible",
@@ -86,6 +91,7 @@ test("subagent runtime sends only curated profile settings to an OpenAI-compatib
         description: "Fast chores",
         enabled: true,
         context_window: 131072,
+        execution_mode: "sync",
         tags: [],
         cost_tier: "medium",
         thinking: {
@@ -124,6 +130,7 @@ test("subagent runtime validates configured thinking effort and optional max out
   assert.ok(address && typeof address === "object")
 
   const runtime = new SubagentRuntime({
+    limits: { max_depth: 5, max_children_per_agent: 12 },
     providers: {
       local: {
         type: "openai-compatible",
@@ -140,6 +147,7 @@ test("subagent runtime validates configured thinking effort and optional max out
         description: "Complex work",
         enabled: true,
         context_window: 262144,
+        execution_mode: "sync",
         max_output_tokens: 12000,
         tags: [],
         cost_tier: "medium",

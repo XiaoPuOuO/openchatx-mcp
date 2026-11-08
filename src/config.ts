@@ -192,6 +192,6 @@ export function buildMcpInstructions(): string {
     "- Use skill_manage to create, edit, or delete user-owned skills. Capability Store operations are lazy and compressed into store_browse, store_manage, and store_skill; discover them with tool_search first.\n" +
     "- Rules use two compact tools. rule_resolve resolves applicable rules by query/paths (default action) or loads one exact rule with action=load plus toolbox_id/name. rule_manage handles create/edit/delete/import/export. Always rules are injected by start_here.\n" +
     "- MCP server management and other platform administration are lazy. Discover mcp_server_list/mcp_server_manage or the relevant tool with tool_search before calling tool_call.\n" +
-    "- Use subagent_list when you need profile details. subagent_run runs an explicit model, auto-routes when model is omitted, or returns a route with action=route. Never assume unlisted provider models are available."
+    "- Use subagent_list for model profiles. subagent_run runs or routes; mode=sync waits for completion, mode=async returns a job_id and keeps working in the background. A completed job is announced at the end of a later tool response; call subagent_get(job_id) for its result. Never assume unlisted provider models are available."
   )
 }

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { runWithAgent } from "../src/agent/context.js"
+
 import { ToolError } from "../src/mcp/tool-error.js"
 import {
   type AccessMode,
@@ -15,6 +17,7 @@ type ApprovalInput = {
   category: string
   reason: string
   argumentsValue: Record<string, unknown>
+  sessionId?: string
   source?: { kind: "builtin" | "toolbox" | "mcp"; id?: string }
 }
 
@@ -45,7 +48,10 @@ function createHarness(
         request.category
       )
       const existing = records.find(
-        (approval) => approval.fingerprint === fingerprint && approval.status === "pending"
+        (approval) =>
+          approval.fingerprint === fingerprint &&
+          approval.sessionId === request.sessionId &&
+          approval.status === "pending"
       )
       if (existing) return existing
       requests.push(request)
@@ -58,6 +64,7 @@ function createHarness(
         createdAt: "2026-10-03T00:00:00.000Z",
         status: "pending",
         input: request.argumentsValue,
+        ...(request.sessionId ? { sessionId: request.sessionId } : {}),
         ...(request.source ? { source: request.source } : {}),
       }
       records.push(approval)
@@ -70,11 +77,19 @@ function createHarness(
         decision === "approve" ? "approved" : decision === "deny" ? "denied" : "consumed"
       return approval
     },
-    async isApproved(toolName: string, argumentsValue: Record<string, unknown>, category: string) {
+    async isApproved(
+      toolName: string,
+      argumentsValue: Record<string, unknown>,
+      category: string,
+      inheritedSessions: readonly string[] = []
+    ) {
       const fingerprint = approvalFingerprint(toolName, argumentsValue, category)
       return records.some(
         (approval) =>
           approval.fingerprint === fingerprint &&
+          (approval.sessionId
+            ? inheritedSessions.includes(approval.sessionId)
+            : inheritedSessions.length === 0) &&
           (approval.status === "approved" || approval.status === "approved-once")
       )
     },
@@ -357,4 +372,91 @@ test("agent pause overrides full-access mode", async () => {
     () => runtime.authorize({ toolName: "file_read", argumentsValue: { filePath: "a.txt" } }),
     (error: unknown) => error instanceof ToolError && error.code === "AGENT_ACCESS_PAUSED"
   )
+})
+
+test("subagents inherit parent approvals without granting their new permissions upward", async () => {
+  const { runtime, requests } = createHarness("allow-low-risk")
+  runtime.registerAgentParent("child", "parent")
+  runtime.registerAgentParent("grandchild", "child")
+
+  const inherited = { toolName: "bash", argumentsValue: { command: "rm parent-approved.txt" } }
+  const parentWait = runWithAgent("parent", () => runtime.authorize(inherited))
+  const parentApproval = await waitForPendingApproval(runtime)
+  assert.equal(parentApproval.sessionId, "parent")
+  await runtime.decideApproval(parentApproval.id, "allow-operation")
+  await parentWait
+  await runWithAgent("child", () => runtime.authorize(inherited))
+  await runWithAgent("grandchild", () => runtime.authorize(inherited))
+  assert.equal(requests.length, 1)
+
+  const childOnly = { toolName: "bash", argumentsValue: { command: "rm child-only.txt" } }
+  const childWait = runWithAgent("child", () => runtime.authorize(childOnly))
+  const childApproval = await waitForPendingApproval(runtime)
+  assert.equal(childApproval.sessionId, "child")
+  await runtime.decideApproval(childApproval.id, "allow-operation")
+  await childWait
+  await runWithAgent("grandchild", () => runtime.authorize(childOnly))
+
+  const parentDenied = runWithAgent("parent", () => runtime.authorize(childOnly))
+  const newApproval = await waitForPendingApproval(runtime)
+  assert.equal(newApproval.sessionId, "parent")
+  await runtime.decideApproval(newApproval.id, "deny")
+  await assert.rejects(
+    parentDenied,
+    (error: unknown) => error instanceof ToolError && error.code === "APPROVAL_DENIED"
+  )
+  assert.equal(requests.length, 3)
+
+  // Full Access overrides per-action checks, even for nested agents.
+  await runtime.setAccessMode("full-access")
+  await runWithAgent("grandchild", () =>
+    runtime.authorize({
+      toolName: "bash",
+      argumentsValue: { command: "rm never-approved.txt" },
+    })
+  )
+  assert.equal(requests.length, 3)
+})
+
+test("always-allow decisions made inside a subagent remain scoped to that agent tree", async () => {
+  const { runtime, requests } = createHarness("allow-low-risk")
+  runtime.registerAgentParent("child", "parent")
+  runtime.registerAgentParent("grandchild", "child")
+  const childWait = runWithAgent("child", () =>
+    runtime.authorize({
+      toolName: "bash",
+      argumentsValue: { command: "rm first-child.txt" },
+    })
+  )
+  const approval = await waitForPendingApproval(runtime)
+  await runtime.decideApproval(approval.id, "always-allow")
+  await childWait
+  await runWithAgent("child", () =>
+    runtime.authorize({
+      toolName: "bash",
+      argumentsValue: { command: "rm second-child.txt" },
+    })
+  )
+  await runWithAgent("grandchild", () =>
+    runtime.authorize({
+      toolName: "bash",
+      argumentsValue: { command: "rm third-child.txt" },
+    })
+  )
+  assert.equal(requests.length, 1)
+
+  const parentWait = runWithAgent("parent", () =>
+    runtime.authorize({
+      toolName: "bash",
+      argumentsValue: { command: "rm parent.txt" },
+    })
+  )
+  const parentApproval = await waitForPendingApproval(runtime)
+  assert.equal(parentApproval.sessionId, "parent")
+  await runtime.decideApproval(parentApproval.id, "deny")
+  await assert.rejects(
+    parentWait,
+    (error: unknown) => error instanceof ToolError && error.code === "APPROVAL_DENIED"
+  )
+  assert.equal(requests.length, 2)
 })

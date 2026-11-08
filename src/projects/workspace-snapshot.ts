@@ -198,7 +198,9 @@ export class ProjectWorkspaceService {
       providers: Object.entries(config.providers).map(([id, provider]) => ({
         id,
         enabled: provider.enabled,
-        baseUrl: safeProviderBaseUrl(provider.base_url),
+        baseUrl: safeProviderBaseUrl(
+          "base_url" in provider ? provider.base_url : "https://api.openai.com/v1"
+        ),
       })),
       models: Object.entries(config.models).map(([id, model]) => ({
         id,
@@ -220,7 +222,7 @@ export class ProjectWorkspaceService {
       const configured = config.providers[provider.id]
       if (!configured) continue
       configured.enabled = provider.enabled
-      configured.base_url = provider.baseUrl
+      if ("base_url" in configured) configured.base_url = provider.baseUrl
       changed = true
     }
     for (const model of snapshot.environment.models) {

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
+import { getAgentIdentity } from "../agent/context.js"
 import { ToolError } from "../mcp/tool-error.js"
 import { desktopNotificationService } from "../notifications/notification-service.js"
 import {
@@ -70,11 +71,36 @@ export function currentRuntimeExecutionGrant(): RuntimeExecutionGrant | undefine
 
 export class RuntimeControlService {
   private readonly approvalWaiters = new Map<string, Set<(decision: ApprovalWaitResult) => void>>()
+  private readonly parentSessions = new Map<string, string>()
+  private readonly scopedCategories = new Map<string, Set<string>>()
 
   constructor(
     private readonly approvals: ApprovalStoreLike = new ApprovalStore(),
     private readonly stateStore: RuntimeStateStore = DEFAULT_STATE_STORE
   ) {}
+
+  registerAgentParent(childSessionId: string, parentSessionId: string): void {
+    if (!childSessionId || !parentSessionId || childSessionId === parentSessionId)
+      throw new Error("Invalid subagent parent session.")
+    this.parentSessions.set(childSessionId, parentSessionId)
+  }
+
+  clearAgentScope(sessionId: string): void {
+    this.parentSessions.delete(sessionId)
+    this.scopedCategories.delete(sessionId)
+  }
+
+  private inheritedSessions(): string[] {
+    const sessionId = getAgentIdentity()?.sessionId
+    if (!sessionId) return []
+    const seen = new Set<string>()
+    let current: string | undefined = sessionId
+    while (current && !seen.has(current)) {
+      seen.add(current)
+      current = this.parentSessions.get(current)
+    }
+    return [...seen]
+  }
 
   async snapshot(): Promise<RuntimeControlSnapshot> {
     const state = await this.stateStore.load()
@@ -128,7 +154,9 @@ export class RuntimeControlService {
     if (state.accessMode === "always-question") {
       await this.requireApproval(resolvedInput, category, reason, false)
     } else if (risk.level === "approval" && policy === "ask") {
-      await this.requireApproval(resolvedInput, category, reason)
+      const inherited = this.inheritedSessions()
+      if (!inherited.some((id) => this.scopedCategories.get(id)?.has(category)))
+        await this.requireApproval(resolvedInput, category, reason)
     }
 
     return {
@@ -184,6 +212,14 @@ export class RuntimeControlService {
     }
 
     if (decision === "always-allow") {
+      if (approval.sessionId && this.parentSessions.has(approval.sessionId)) {
+        const categories = this.scopedCategories.get(approval.sessionId) ?? new Set<string>()
+        categories.add(approval.category)
+        this.scopedCategories.set(approval.sessionId, categories)
+        const result = await this.approvals.decide(id, "dismiss")
+        this.resolveApprovalWaiters(id, "approved")
+        return result
+      }
       await this.stateStore.update((state) => {
         if (approval.category.startsWith("permissions:") && approval.source?.id) {
           const permissions = approval.category
@@ -243,9 +279,10 @@ export class RuntimeControlService {
     reason: string,
     reuseApproved = true
   ): Promise<void> {
+    const inherited = this.inheritedSessions()
     if (
       reuseApproved &&
-      (await this.approvals.isApproved(input.toolName, input.argumentsValue, category))
+      (await this.approvals.isApproved(input.toolName, input.argumentsValue, category, inherited))
     )
       return
     const approval = await this.approvals.request({
@@ -253,11 +290,14 @@ export class RuntimeControlService {
       category,
       reason,
       argumentsValue: input.argumentsValue,
+      ...(getAgentIdentity()?.sessionId ? { sessionId: getAgentIdentity()?.sessionId } : {}),
       ...(input.source ? { source: input.source } : {}),
     })
-    await desktopNotificationService
-      .notify("approvalRequired", "OpenChatX approval required", reason)
-      .catch(() => undefined)
+    if (!this.parentSessions.has(getAgentIdentity()?.sessionId ?? "")) {
+      await desktopNotificationService
+        .notify("approvalRequired", "OpenChatX approval required", reason)
+        .catch(() => undefined)
+    }
     const decision = await this.waitForApproval(approval.id, input.signal)
     if (decision === "denied") {
       throw new ToolError("APPROVAL_DENIED", `${reason} The user denied this action.`)
