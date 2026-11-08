@@ -178,7 +178,37 @@ async function ensureBundledTunnelClient(): Promise<string> {
 
   await mkdir(extracted, { recursive: true })
   const url = `https://github.com/openai/tunnel-client/releases/download/${tunnelClientVersion}/${assetName}`
-  run("/usr/bin/curl", ["--fail", "--location", "--output", archive, url])
+  try {
+    run("/usr/bin/curl", [
+      "--fail",
+      "--location",
+      "--retry",
+      "2",
+      "--retry-delay",
+      "2",
+      "--max-time",
+      "90",
+      "--output",
+      archive,
+      url,
+    ])
+  } catch (error) {
+    console.warn(
+      `Direct tunnel-client download failed; trying GitHub Release API: ${String(error)}`
+    )
+    run("gh", [
+      "release",
+      "download",
+      tunnelClientVersion,
+      "--repo",
+      "openai/tunnel-client",
+      "--pattern",
+      assetName,
+      "--dir",
+      releaseCache,
+      "--clobber",
+    ])
+  }
   run("/usr/bin/unzip", ["-q", "-o", archive, "-d", extracted])
   await chmod(executable, 0o755)
   return executable

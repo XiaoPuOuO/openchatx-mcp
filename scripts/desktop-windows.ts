@@ -3,6 +3,7 @@ import { existsSync } from "node:fs"
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
 import process from "node:process"
+import { setTimeout as delay } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 
 type WindowsArch = "x64" | "arm64"
@@ -184,10 +185,28 @@ async function ensureWindowsTunnelClient(): Promise<string> {
   await mkdir(releaseCache, { recursive: true })
 
   if (!(await exists(archive))) {
-    await download(
-      `https://github.com/openai/tunnel-client/releases/download/${tunnelClientVersion}/${assetName}`,
-      archive
-    )
+    try {
+      await download(
+        `https://github.com/openai/tunnel-client/releases/download/${tunnelClientVersion}/${assetName}`,
+        archive
+      )
+    } catch (error) {
+      console.warn(
+        `Direct tunnel-client download failed; trying GitHub Release API: ${String(error)}`
+      )
+      run("gh", [
+        "release",
+        "download",
+        tunnelClientVersion,
+        "--repo",
+        "openai/tunnel-client",
+        "--pattern",
+        assetName,
+        "--dir",
+        releaseCache,
+        "--clobber",
+      ])
+    }
   }
   if (!(await exists(extracted))) {
     await mkdir(extracted, { recursive: true })
@@ -401,14 +420,39 @@ async function extractZip(archive: string, destination: string): Promise<void> {
 }
 
 async function download(url: string, destination: string): Promise<void> {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "OpenChatX-Desktop-Packager" },
-    redirect: "follow",
-  })
-  if (!response.ok) throw new Error(`Download failed ${response.status}: ${url}`)
-  const bytes = Buffer.from(await response.arrayBuffer())
-  await mkdir(dirname(destination), { recursive: true })
-  await writeFile(destination, bytes)
+  const attempts = 4
+  const retryableStatuses = new Set([408, 429, 500, 502, 503, 504])
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let response: Response
+    try {
+      response = await fetch(url, {
+        headers: { "User-Agent": "OpenChatX-Desktop-Packager" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(90_000),
+      })
+    } catch (error) {
+      if (attempt === attempts) throw error
+      console.warn(`Download connection failed (attempt ${attempt}/${attempts}); retrying ${url}`)
+      await delay(attempt * 2_000)
+      continue
+    }
+
+    if (!response.ok) {
+      await response.body?.cancel()
+      if (attempt === attempts || !retryableStatuses.has(response.status))
+        throw new Error(`Download failed ${response.status}: ${url}`)
+      console.warn(
+        `Download returned HTTP ${response.status} (attempt ${attempt}/${attempts}); retrying ${url}`
+      )
+      await delay(attempt * 2_000)
+      continue
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer())
+    await mkdir(dirname(destination), { recursive: true })
+    await writeFile(destination, bytes)
+    return
+  }
 }
 
 async function findFile(directory: string, filename: string): Promise<string | undefined> {
