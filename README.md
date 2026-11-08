@@ -168,9 +168,8 @@ Useful links:
 
 | Feature | What it does |
 | --- | --- |
-| MCP Servers | Connect local or remote MCP servers behind one OpenChatX connection; handle OAuth sign-in when required |
-| Dot mode | Run a separate MCP listener and tunnel for ChatGPT Dot, with independent sessions and configurable external MCP exposure |
-| Runtime health | Inspect capability status, sign-in requirements, and memory usage in the Dashboard |
+| MCP Servers | Connect local or remote MCP servers behind one OpenChatX connection, sign in with OAuth when needed, and enable or disable individual tools |
+| Runtime health | Check capability status, sign-in requirements, and memory usage from the Dashboard |
 | Toolboxes | Add or manage custom TypeScript tools |
 | Skills | Portable `SKILL.md` workflows, loaded only when needed |
 | Rules | Persistent `.mdc` rules with Always / Auto Attached / Agent Requested / Manual modes |
@@ -178,14 +177,61 @@ Useful links:
 | Projects | Bind work to a primary folder and optional additional folders, with workspace-scoped access |
 | Goals & workflows | Track longer-running tasks and compose reusable capabilities |
 | Summaries | Continue long-running work across fresh ChatGPT conversations with UUID handoffs |
-| Subagents | Delegate work to explicitly configured model profiles |
+| Subagents | Run independent, tool-using agents in parallel or nested sessions; follow their progress, guide them, and manage approvals |
+| Model providers | Configure ChatGPT account access, Anthropic, Gemini, OpenAI, or OpenAI-compatible and local model endpoints |
+| Permissions | Choose an access mode, review sensitive actions, and pause agent access when necessary |
+| Mobile Dashboard | Use the responsive Dashboard on your phone, optionally through a private Tailscale connection |
 | Capability Store | Install built-ins or inspect/install GitHub-hosted community capabilities |
-| Dashboard | Manage ChatGPT and Dot sessions, temporary Summaries, tools, Skills, Rules, MCP servers, Projects, status, and more |
-| Languages | English, Traditional Chinese, Japanese, and Russian interface translations |
+| Dashboard | Manage ChatGPT and Subagent sessions, temporary Summaries, tools, Skills, Rules, MCP servers, Projects, and system status |
+| Languages | English, Traditional Chinese, Japanese, Russian, and Vietnamese interface translations |
 
-### ChatGPT Dot support
+### Subagents and model providers
 
-Dot mode exposes **a separate MCP endpoint and secure tunnel** alongside the regular ChatGPT connection. Its sessions appear on the dedicated Dot page rather than in the normal workspace overview. Configure its listener, port, and tunnel profile under **Settings → Dot Mode**; the Dot tunnel must use a different Tunnel ID from the primary tunnel. External MCP servers can be selectively exposed to Dot from the MCP server settings. Only enable access to servers you trust.
+Subagents can work on separate tasks with their own conversation histories and access to the enabled OpenChatX tools. Delegate work synchronously or asynchronously, run independent jobs in parallel, or allow subagents to delegate further within configured limits. You can keep using the main chat while asynchronous work runs.
+
+From **Dashboard → Subagents**, connect a supported provider, discover available models, and create model profiles. Options include ChatGPT account sign-in (when your account permits it), Anthropic, Gemini, OpenAI, and OpenAI-compatible APIs, including local model servers. Set each profile's reasoning controls and context/output limits where supported. Under **Settings → Subagents**, set the maximum delegation depth and number of children per agent.
+
+Open **Subagent Sessions** to follow each session's messages and tool calls, send guidance while it runs, continue a finished session with new instructions, handle tool approvals, or delete a session and its descendants. Subagents follow the same OpenChatX access and approval boundaries as the parent agent.
+
+### Access the Dashboard from your phone with Tailscale
+
+You can use the responsive OpenChatX Dashboard from another device on your private Tailscale network without exposing the MCP endpoint to the public internet:
+
+1. Install and connect Tailscale yourself on your computer and phone, using the same tailnet.
+2. Open **OpenChatX → Settings → General → Tailscale mobile access**, enable it, and enter this computer's Tailscale IPv4 address.
+3. On your phone, visit `http://<TAILSCALE-IP>:8001/ui/` (replace `8001` if you changed the Runtime port).
+
+OpenChatX manages the internal proxy port and Tailscale Serve mapping automatically, including reconnect recovery. You do not need to configure a separate proxy port. Only `/ui` is forwarded; `/mcp` remains blocked. The Dashboard can perform administrative actions, so restrict which devices can reach it through your tailnet access policies. Tailscale is not installed or signed in by OpenChatX. See [Tailscale mobile access](wiki/pages/operations/tailscale-mobile-access.md).
+
+### Access modes and recovery
+
+Under **Settings → Trust**, choose **Always Question** (ask before tool actions), **Allow Low Risk** (allow low-risk actions and request approval for higher-risk ones), or **Full Access** (bypass ordinary approval boundaries; use only on a trusted computer). Approval requests can be approved once, allowed for an operation, or denied. You can pause agent access from the Dashboard and use Safe Mode to recover from problematic extensions. These OpenChatX controls are separate from ChatGPT's MCP app permission settings.
+
+### Suggested Dot preferences for ChatGPT Pro users
+
+If your ChatGPT Pro account has access to Dots, ask your Dot to save the following as your working preferences when collaborating with OpenChatX. This configures **Dot's behavior**, not a separate OpenChatX Dot listener or tunnel; actual tool access still depends on your connected apps and permissions.
+
+```text
+Communication
+- Be concise and lead with the answer. Skip greetings and restating the question.
+- Clearly distinguish verified information, inference, and unconfirmed details. Never present a guess as fact.
+- Start with a summary; expand when details are useful. Avoid generic, overconfident, AI-sounding copy.
+- Stay quiet when there is nothing to do or report. Describe progress accurately.
+
+Working style
+- After receiving an assignment, continue working toward completion. A progress update does not mean the work is finished; do not wait to be reminded.
+- When one part is blocked, continue independent work. Do not duplicate work that another agent is doing or has completed.
+- Focus on the requested outcome and use sufficient direct verification. Avoid repeated investigations, audits, and endless confirmation loops.
+- Do not create unnecessary backups, parallel versions, temporary scripts, or reports. Preserve necessary results and safely clean up your temporary files.
+- Make changes only when they offer a concrete benefit; do not create changes simply to appear busy.
+
+Tools
+- Unless explicitly requested, do not switch to Work mode. Prefer creating your own parallel subagents and letting them use OpenChatX capabilities; minimize direct OpenChatX use.
+- Parallel subagents are allowed when responsibilities are separated and their work cannot overwrite one another. Report whether they are actually running.
+
+Other
+- Work on multiple projects concurrently without letting them block one another. Never push, merge, deploy, or use real customer data without explicit authorization.
+```
 
 ### MCP sign-in and status
 

@@ -119,6 +119,8 @@ jobs:
             --issuer "$APPLE_NOTARY_ISSUER_ID"
       - name: Build signed/notarized desktop
         run: npm run desktop:notarize
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: npm run desktop:smoke
       - name: Name release artifacts
         shell: bash
@@ -172,6 +174,8 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
       - name: Build signed x64 desktop
         run: npm run desktop:build
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: npm run desktop:smoke
       - name: Package signed x64 app for notarization
         run: ditto -c -k --keepParent dist-desktop/OpenChatX.app dist-desktop/OpenChatX-macos-x64-prebuilt.app.zip
@@ -277,6 +281,8 @@ jobs:
         run: node --import tsx --test test/host-platform.test.ts test/config.test.ts test/state-setup.test.ts test/schema-compatibility.test.ts test/desktop-runtime.test.ts test/integrations/file-transfer.ts
       - name: Build unsigned desktop and installer
         run: node --import tsx scripts/desktop-windows.ts installer ${{ matrix.arch }}
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Smoke test x64 runtime
         if: matrix.arch == 'x64'
         run: npm run desktop:windows:smoke
