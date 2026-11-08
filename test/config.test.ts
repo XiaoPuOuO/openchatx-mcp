@@ -45,6 +45,7 @@ test("loads and validates OpenChatX TOML config", async (t) => {
     port: 8001,
     shell: { path: "/bin/zsh", rtk: false },
     tunnel: { profile: "personal", health_port: 8181 },
+    tailnet_ui: { enabled: false, ip: "", cli_path: "", socket_path: "" },
     dot: {
       enabled: false,
       port: 8002,

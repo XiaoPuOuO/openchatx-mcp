@@ -18,6 +18,7 @@ import type { McpServerFactory } from "../mcp/server-factory.js"
 import type { PlatformOverviewService } from "../platform/overview.js"
 import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { ProjectWorkspaceService } from "../projects/workspace-snapshot.js"
+import { loadPublicConfig } from "../public-config.cjs"
 import type { SystemRecoveryService } from "../recovery/system-recovery.js"
 import type { RuntimeProcessService } from "../runtime/process-service.js"
 import type { RuntimeControlService } from "../runtime/runtime-control.js"
@@ -29,6 +30,7 @@ import type { SummaryRegistry } from "../summaries/summary-registry.js"
 import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { asRecord } from "../utils.js"
 import type { McpAuditLogger, McpAuditRequest } from "./audit/audit-log.js"
+import { TailnetUiManager } from "./tailnet-ui.js"
 
 const MCP_ROUTE = /^\/mcp$/u
 
@@ -104,6 +106,7 @@ export async function startMcpHttpServer(
     jobManager,
   } = services
   const requestRuntime = new AsyncLocalStorage<RequestRuntimeContext>()
+  const tailnetUi = new TailnetUiManager(port, MCP_CONFIG.stateDir)
 
   const app = createMcpExpressApp({ host, jsonLimit: "10mb" })
   const mcpHandler = createMcpHandler(
@@ -147,6 +150,7 @@ export async function startMcpHttpServer(
         projectWorkspaces,
         recentWork,
         jobManager,
+        tailnetUi,
       })
     )
 
@@ -187,6 +191,7 @@ export async function startMcpHttpServer(
 
   const httpServer = createServer(app)
   let boundPort: number
+  let tailnetReconcileTimer: ReturnType<typeof setInterval> | undefined
   try {
     await listen(httpServer, port, host)
 
@@ -195,6 +200,25 @@ export async function startMcpHttpServer(
       throw new Error("HTTP server did not expose a TCP address.")
     }
     boundPort = address.port
+    try {
+      await tailnetUi.apply(loadPublicConfig(MCP_CONFIG.publicConfigFile).tailnet_ui)
+    } catch (error) {
+      // An optional Tailnet UI must not prevent the local MCP runtime from starting.
+      console.error("Optional Tailnet UI is unavailable:", error)
+    }
+    // Tailscale may start after OpenChatX or lose its Serve state on reconnect.
+    // Reconcile the configured, app-owned forward without exposing /mcp.
+    tailnetReconcileTimer = setInterval(() => {
+      try {
+        const settings = loadPublicConfig(MCP_CONFIG.publicConfigFile).tailnet_ui
+        void tailnetUi.apply(settings).catch((error: unknown) => {
+          console.error("Could not reconcile Tailnet UI:", error)
+        })
+      } catch (error) {
+        console.error("Could not read Tailnet UI settings:", error)
+      }
+    }, 30_000)
+    tailnetReconcileTimer.unref()
   } catch (error) {
     const httpClose = closeHttpServerIfListening(httpServer)
     await Promise.allSettled([mcpHandler.close(), httpClose])
@@ -209,7 +233,12 @@ export async function startMcpHttpServer(
     close: async () => {
       if (closed) return
       closed = true
-      await Promise.allSettled([mcpHandler.close(), closeHttpServerIfListening(httpServer)])
+      if (tailnetReconcileTimer) clearInterval(tailnetReconcileTimer)
+      await Promise.allSettled([
+        tailnetUi.close(),
+        mcpHandler.close(),
+        closeHttpServerIfListening(httpServer),
+      ])
     },
   }
 }

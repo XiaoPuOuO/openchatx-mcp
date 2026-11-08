@@ -437,6 +437,73 @@ function GeneralSettingsPage({
           </Field>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="text-sm font-semibold">{t("settings.tailnetUi.title")}</div>
+          <p className="text-xs text-muted-foreground">{t("settings.tailnetUi.description")}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3">
+            <span className="text-sm">{t("settings.tailnetUi.enabled")}</span>
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={settings.tailnet_ui.enabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  tailnet_ui: { ...settings.tailnet_ui, enabled: event.target.checked },
+                })
+              }
+            />
+          </label>
+          <Field label={t("settings.tailnetUi.ip")} hint={t("settings.tailnetUi.ipHint")}>
+            <input
+              className={INPUT_CLASS}
+              placeholder="100.82.192.72"
+              value={settings.tailnet_ui.ip}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  tailnet_ui: { ...settings.tailnet_ui, ip: event.target.value },
+                })
+              }
+            />
+          </Field>
+          <details className="space-y-3 rounded-lg border p-3">
+            <summary className="cursor-pointer text-sm">{t("settings.tailnetUi.advanced")}</summary>
+            <div className="grid gap-3 pt-3">
+              <Field label={t("settings.tailnetUi.cli")}>
+                <input
+                  className={INPUT_CLASS}
+                  placeholder="Auto-detect"
+                  value={settings.tailnet_ui.cli_path}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      tailnet_ui: { ...settings.tailnet_ui, cli_path: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+              <Field label={t("settings.tailnetUi.socket")}>
+                <input
+                  className={INPUT_CLASS}
+                  placeholder="System default"
+                  value={settings.tailnet_ui.socket_path}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      tailnet_ui: { ...settings.tailnet_ui, socket_path: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+            </div>
+          </details>
+          <p className="text-xs text-muted-foreground">{t("settings.tailnetUi.security")}</p>
+        </CardContent>
+      </Card>
     </>
   )
 }

@@ -70,6 +70,18 @@ export const en = {
   "settings.tunnel": "Tunnel",
   "settings.tunnelProfile": "Profile",
   "settings.tunnelHealthPort": "Health Port",
+  "settings.tailnetUi.title": "Tailscale mobile access",
+  "settings.tailnetUi.description":
+    "Install and connect Tailscale yourself. OpenChatX then creates a private UI endpoint; it never installs or signs in to Tailscale.",
+  "settings.tailnetUi.enabled": "Enable private Tailnet UI access",
+  "settings.tailnetUi.ip": "This computer's Tailscale IPv4",
+  "settings.tailnetUi.ipHint":
+    "Enter this Mac's 100.x Tailscale IP. The phone must join the same tailnet.",
+  "settings.tailnetUi.advanced": "Advanced: Tailscale CLI and socket",
+  "settings.tailnetUi.cli": "Tailscale CLI path (blank for automatic lookup)",
+  "settings.tailnetUi.socket": "Tailscale socket path (blank for default)",
+  "settings.tailnetUi.security":
+    "Only /ui is accessible; /mcp stays blocked. The UI includes administrative actions available to other authorized tailnet devices.",
   "settings.restartHint":
     "Save, then use More → Restart Runtime. Closing the window does not restart the Runtime.",
   "settings.savedRestart":

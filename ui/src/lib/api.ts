@@ -56,6 +56,7 @@ export async function fetchRuntimeSettings(): Promise<RuntimeSettings> {
       port: 3333,
       shell: { path: "/bin/zsh", rtk: false },
       tunnel: { profile: "openchatx", health_port: 8080 },
+      tailnet_ui: { enabled: false, ip: "", cli_path: "", socket_path: "" },
       context: { warning_threshold: 400_000 },
       sessions: { max_retained: 30 },
     }

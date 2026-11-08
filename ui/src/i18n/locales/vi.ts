@@ -74,6 +74,17 @@ export const vi = {
   "settings.tunnel": "Tunnel",
   "settings.tunnelProfile": "Hồ sơ",
   "settings.tunnelHealthPort": "Cổng kiểm tra trạng thái",
+  "settings.tailnetUi.title": "Truy cập từ điện thoại qua Tailscale",
+  "settings.tailnetUi.description":
+    "Tự cài đặt và kết nối Tailscale. OpenChatX chỉ tạo cổng UI riêng tư.",
+  "settings.tailnetUi.enabled": "Bật truy cập UI qua Tailnet",
+  "settings.tailnetUi.ip": "Địa chỉ IPv4 Tailscale của máy này",
+  "settings.tailnetUi.ipHint": "Nhập địa chỉ 100.x của Mac này. Điện thoại phải cùng tailnet.",
+  "settings.tailnetUi.advanced": "Nâng cao: CLI và socket Tailscale",
+  "settings.tailnetUi.cli": "Đường dẫn CLI Tailscale (trống để tự tìm)",
+  "settings.tailnetUi.socket": "Đường dẫn socket Tailscale (trống để mặc định)",
+  "settings.tailnetUi.security":
+    "Chỉ cho phép /ui; /mcp bị chặn. Thiết bị được phép trong tailnet có thể sử dụng chức năng quản trị trong UI.",
   "settings.restartHint":
     "Lưu, sau đó chọn Thêm → Khởi động lại Runtime. Chỉ đóng cửa sổ sẽ không khởi động lại Runtime.",
   "settings.savedRestart":

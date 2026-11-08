@@ -60,6 +60,12 @@ export interface RuntimeSettings {
     profile: string
     health_port: number
   }
+  tailnet_ui: {
+    enabled: boolean
+    ip: string
+    cli_path: string
+    socket_path: string
+  }
   context: {
     warning_threshold: number
   }

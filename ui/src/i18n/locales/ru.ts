@@ -70,6 +70,18 @@ export const ru = {
   "settings.tunnel": "Туннель",
   "settings.tunnelProfile": "Профиль",
   "settings.tunnelHealthPort": "Порт проверки состояния",
+  "settings.tailnetUi.title": "Мобильный доступ через Tailscale",
+  "settings.tailnetUi.description":
+    "Установите и подключите Tailscale самостоятельно. OpenChatX создаёт только частный доступ к UI.",
+  "settings.tailnetUi.enabled": "Разрешить UI через Tailnet",
+  "settings.tailnetUi.ip": "Tailscale IPv4 этого компьютера",
+  "settings.tailnetUi.ipHint":
+    "Введите адрес 100.x этого Mac. Телефон должен быть в той же сети tailnet.",
+  "settings.tailnetUi.advanced": "Дополнительно: CLI и Socket Tailscale",
+  "settings.tailnetUi.cli": "Путь к CLI Tailscale (пусто — авто)",
+  "settings.tailnetUi.socket": "Путь к сокету Tailscale (пусто — стандартный)",
+  "settings.tailnetUi.security":
+    "Доступен только /ui, а /mcp заблокирован. Устройства с доступом к tailnet могут управлять настройками через UI.",
   "settings.restartHint":
     "После сохранения выберите More → Restart Runtime. Простое закрытие окна не перезапускает Runtime.",
   "settings.savedRestart":

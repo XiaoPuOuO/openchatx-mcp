@@ -70,6 +70,18 @@ export const ja: Messages = {
   "settings.tunnel": "Tunnel",
   "settings.tunnelProfile": "Profile",
   "settings.tunnelHealthPort": "Health Port",
+  "settings.tailnetUi.title": "Tailscale モバイルアクセス",
+  "settings.tailnetUi.description":
+    "Tailscale は利用者がインストール・接続します。OpenChatX はプライベートな UI 入口のみ作成します。",
+  "settings.tailnetUi.enabled": "Tailnet 内の UI アクセスを有効にする",
+  "settings.tailnetUi.ip": "このコンピューターの Tailscale IPv4",
+  "settings.tailnetUi.ipHint":
+    "この Mac の 100.x アドレスを入力します。スマートフォンも同じ tailnet に参加してください。",
+  "settings.tailnetUi.advanced": "詳細：Tailscale CLI と Socket",
+  "settings.tailnetUi.cli": "Tailscale CLI パス（空欄なら自動検索）",
+  "settings.tailnetUi.socket": "Tailscale Socket パス（空欄なら標準設定）",
+  "settings.tailnetUi.security":
+    "/ui のみ許可し、/mcp は遮断します。許可された tailnet デバイスは UI の管理機能を使用できます。",
   "settings.restartHint":
     "保存後、More → Restart Runtime を使用してください。ウィンドウを閉じるだけでは Runtime は再起動しません。",
   "settings.savedRestart":

@@ -69,6 +69,18 @@ export const zhTW: Messages = {
   "settings.tunnel": "Tunnel",
   "settings.tunnelProfile": "Profile",
   "settings.tunnelHealthPort": "Health Port",
+  "settings.tailnetUi.title": "Tailscale 手機存取",
+  "settings.tailnetUi.description":
+    "先自行安裝並連線 Tailscale，再由 OpenChatX 建立私人網路內的 UI 入口。此功能不會安裝或登入 Tailscale。",
+  "settings.tailnetUi.enabled": "啟用私人網路 UI 存取",
+  "settings.tailnetUi.ip": "這台電腦的 Tailscale IPv4",
+  "settings.tailnetUi.ipHint":
+    "輸入這台 Mac 在 Tailscale 中的 100.x IP；手機需加入同一個 tailnet。",
+  "settings.tailnetUi.advanced": "進階：Tailscale CLI 與 Socket",
+  "settings.tailnetUi.cli": "Tailscale CLI 路徑（留空自動尋找）",
+  "settings.tailnetUi.socket": "Tailscale Socket 路徑（留空使用預設）",
+  "settings.tailnetUi.security":
+    "僅允許 /ui；/mcp 不會透過此入口開放。請留意 UI 包含管理操作，網內允許存取的裝置可能使用這些功能。",
   "settings.restartHint": "儲存後請使用 More → Restart Runtime；只關閉視窗不會重新啟動 Runtime。",
   "settings.savedRestart":
     "設定已儲存。請使用 More → Restart Runtime 套用變更；只關閉視窗並不算重新啟動。",

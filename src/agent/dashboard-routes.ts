@@ -21,6 +21,7 @@ import type { SystemRecoveryService } from "../recovery/system-recovery.js"
 import { registerRuntimeControlRoutes } from "../runtime/dashboard-routes.js"
 import type { RuntimeProcessService } from "../runtime/process-service.js"
 import type { RuntimeControlService } from "../runtime/runtime-control.js"
+import type { TailnetUiManager } from "../server/tailnet-ui.js"
 import { registerSessionHistoryRoutes } from "../sessions/dashboard-routes.js"
 import type { RecentWorkService } from "../sessions/recent-work.js"
 import { handleCapabilityInstall } from "../store/dashboard-install.js"
@@ -41,6 +42,7 @@ import { checkForOpenChatXUpdate } from "../update/version-check.js"
 import type { AgentObserver } from "./observer.js"
 
 export interface DashboardServices {
+  tailnetUi?: TailnetUiManager
   toolboxRegistry?: ToolboxRegistry
   subagentRuntime?: SubagentRuntime
   chatgptAuth?: ChatGPTAuth
@@ -83,9 +85,9 @@ export function createDashboardRouter(
     projectWorkspaces,
     recentWork,
     jobManager,
+    tailnetUi,
   } = services
   const router = Router()
-
   registerAgentRoutes(router, agentObserver, contextBudget, subagentRuntime)
   registerJobRoutes(router, jobManager)
   registerCapabilityRoutes(router, capabilityHealth, capabilityRegistry)
@@ -101,7 +103,7 @@ export function createDashboardRouter(
   registerRuleRoutes(router, toolboxRegistry)
   registerToolboxRoutes(router, toolboxRegistry)
   registerPlatformRoute(router, platformOverview)
-  registerSettingsRoutes(router, contextBudget, agentObserver)
+  registerSettingsRoutes(router, contextBudget, agentObserver, tailnetUi)
 
   router.get("/api/events", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream")
@@ -682,7 +684,8 @@ function registerRuleRoutes(
 function registerSettingsRoutes(
   router: ReturnType<typeof Router>,
   contextBudget?: ContextBudgetGuard,
-  agentObserver?: AgentObserver
+  agentObserver?: AgentObserver,
+  tailnetUi?: TailnetUiManager
 ): void {
   router.get("/api/settings", (_req, res) => {
     try {
@@ -693,7 +696,7 @@ function registerSettingsRoutes(
     }
   })
 
-  router.put("/api/settings", (req, res) => {
+  router.put("/api/settings", async (req, res) => {
     try {
       const current = loadPublicConfig(MCP_CONFIG.publicConfigFile)
       const body = isRecord(req.body) ? req.body : {}
@@ -708,6 +711,10 @@ function registerSettingsRoutes(
           ...current.tunnel,
           ...(isRecord(body.tunnel) ? body.tunnel : {}),
         },
+        tailnet_ui: {
+          ...current.tailnet_ui,
+          ...(isRecord(body.tailnet_ui) ? body.tailnet_ui : {}),
+        },
         context: {
           ...current.context,
           ...(isRecord(body.context) ? body.context : {}),
@@ -717,6 +724,7 @@ function registerSettingsRoutes(
           ...(isRecord(body.sessions) ? body.sessions : {}),
         },
       }
+      await tailnetUi?.apply(next.tailnet_ui)
       const saved = savePublicConfig(next, MCP_CONFIG.publicConfigFile)
       contextBudget?.setWarningThreshold(saved.context.warning_threshold)
       MCP_CONFIG.sessions.maxRetained = saved.sessions.max_retained
@@ -739,6 +747,7 @@ function editableSettings(config: ReturnType<typeof loadPublicConfig>) {
     port: config.port,
     shell: config.shell,
     tunnel: config.tunnel,
+    tailnet_ui: config.tailnet_ui,
     context: config.context,
     sessions: config.sessions,
   }
