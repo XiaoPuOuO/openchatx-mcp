@@ -13,7 +13,9 @@ import { z } from "zod"
 import {
   getAgentIdentity,
   runWithAgent,
+  runWithAgentId,
   setAgentProjectId,
+  setAgentSkillSelection,
   setAgentTaskSlug,
 } from "../src/agent/context.js"
 import { createAgentObserver } from "../src/agent/observer.js"
@@ -152,6 +154,7 @@ test("Subagent sessions perform real tool calls, recursively delegate and accept
       choices: [
         { message: { role: "assistant", content, ...(calls ? { tool_calls: calls } : {}) } },
       ],
+      usage: { completion_tokens_details: { reasoning_tokens: 9 } },
     })
     let response: unknown
     if (task === "parent" && last?.role === "user") {
@@ -181,6 +184,24 @@ test("Subagent sessions perform real tool calls, recursively delegate and accept
       ])
     } else if (task === "echo task") {
       response = answer(`Tool result: ${last?.content}`)
+    } else if (task === "plan task" && last?.role === "user") {
+      response = answer("", [
+        {
+          id: "plan-call",
+          type: "function",
+          function: {
+            name: "subagent_plan",
+            arguments: JSON.stringify({
+              steps: [
+                { description: "Inspect files", status: "completed" },
+                { description: "Implement fix", status: "in_progress" },
+              ],
+            }),
+          },
+        },
+      ])
+    } else if (task === "plan task") {
+      response = answer("Plan saved.")
     } else if (task === "long log" && last?.role === "user") {
       response = answer("", [
         {
@@ -285,6 +306,17 @@ test("Subagent sessions perform real tool calls, recursively delegate and accept
   assert.match(echo.content, /tool invoked/u)
   assert.equal(inheritedRouting, "unscoped")
 
+  const planned = await runWithAgent("parent-conversation", () =>
+    runtime.run({ profileId: "fixture", task: "plan task" })
+  )
+  assert.equal(planned.content, "Plan saved.")
+  const planJob = runtime.listSessions().find((session) => session.title === "plan task")
+  assert.ok(planJob)
+  assert.deepEqual(runtime.sessionSnapshot(planJob.job_id).plan, [
+    { description: "Inspect files", status: "completed" },
+    { description: "Implement fix", status: "in_progress" },
+  ])
+
   const longLogResult = await runWithAgent("parent-conversation", () =>
     runtime.run({ profileId: "fixture", task: "long log" })
   )
@@ -305,6 +337,11 @@ test("Subagent sessions perform real tool calls, recursively delegate and accept
     .find((session) => session.title === "echo task" && session.owner_agent_id === parentAgentId)
   assert.ok(first)
   assert.ok(runtime.sessionSnapshot(first.job_id).events.some((event) => event.role === "tool"))
+  assert.ok(
+    runtime
+      .sessionSnapshot(first.job_id)
+      .events.some((event) => event.role === "thinking" && event.reasoningTokens === 9)
+  )
   assert.ok(first.worker_agent_id)
   assert.ok(
     runtime
@@ -333,11 +370,25 @@ test("Subagent sessions perform real tool calls, recursively delegate and accept
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await Promise.all([mcp.connect(serverTransport), steeringClient.connect(clientTransport)])
   t.after(() => Promise.allSettled([mcp.close(), steeringClient.close()]))
+  const steeringAgentId = "123e4567-e89b-42d3-a456-426614174000"
   const steered = await runWithAgent("parent-conversation", () =>
-    steeringClient.callTool({
-      name: "subagent_steer",
-      arguments: { job_id: pending.job_id, message: "Please focus on safety." },
-    })
+    runWithAgentId(
+      steeringAgentId,
+      () => {
+        setAgentTaskSlug("subagent-steer-test")
+        setAgentProjectId(undefined)
+        setAgentSkillSelection(null)
+        return steeringClient.callTool({
+          name: "subagent_steer",
+          arguments: {
+            job_id: pending.job_id,
+            message: "Please focus on safety.",
+            agent_id: steeringAgentId,
+          },
+        })
+      },
+      "parent-conversation"
+    )
   )
   assert.notEqual(steered.isError, true, JSON.stringify(steered.content))
   for (
@@ -385,6 +436,37 @@ test("Subagent sessions perform real tool calls, recursively delegate and accept
       (session) => session?.profile === "fixture" && session.owner_agent_id === parentAgentId
     )
   )
+
+  // Manual stop aborts in-flight model work, keeps its history and does not mark failure.
+  const beforeStopRequestCount = requests
+  const toStop = runWithAgent("parent-conversation", () =>
+    runtime.startAsync({ profileId: "fixture", task: "guide" }, "parent-conversation")
+  )
+  // Ensure the model request is actually pending, rather than stopping before fetch.
+  for (let i = 0; i < 100; i++) {
+    if (requests > beforeStopRequestCount) break
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  }
+  assert.ok(requests > beforeStopRequestCount)
+  assert.throws(() => runtime.stopSession(toStop.job_id, "different-user"), /not found/u)
+  const stopped = runtime.stopSession(toStop.job_id, "parent-conversation")
+  assert.equal(stopped.status, "stopped")
+  assert.equal(stopped.error, undefined)
+  assert.ok(stopped.events.some((event) => event.role === "user"))
+  assert.ok(stopped.events.every((event) => event.status !== "running"))
+  assert.equal(runtime.getJob(toStop.job_id, "parent-conversation").status, "stopped")
+  await new Promise((resolve) => setTimeout(resolve, 110))
+  assert.equal(runtime.sessionSnapshot(toStop.job_id).status, "stopped")
+  // A stopped session still owns its slot and can be continued with guidance.
+  const resumed = runtime.steerSession(toStop.job_id, "continue", "parent-conversation")
+  assert.equal(resumed.job_id, toStop.job_id)
+  for (
+    let i = 0;
+    i < 100 && runtime.getJob(toStop.job_id, "parent-conversation").status === "running";
+    i++
+  )
+    await new Promise((resolve) => setTimeout(resolve, 12))
+  assert.equal(runtime.getJob(toStop.job_id, "parent-conversation").status, "completed")
 
   // Delete a parent while another async job is active; it must not recreate rows.
   const stillRunning = runWithAgent("parent-conversation", () =>

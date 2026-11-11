@@ -53,6 +53,17 @@ export function registerJobTools(
       context
     ) => {
       try {
+        const progressToken = context.mcpReq._meta?.progressToken
+        let progress = 0
+        const onProgress =
+          progressToken === undefined
+            ? undefined
+            : async (message: string): Promise<void> => {
+                await context.mcpReq.notify({
+                  method: "notifications/progress",
+                  params: { progressToken, progress: ++progress, message },
+                })
+              }
         return await executeJobAction(
           jobs,
           projectScope,
@@ -68,7 +79,8 @@ export function registerJobTools(
             kill_after_ms,
             max_bytes,
           },
-          context.mcpReq.signal
+          context.mcpReq.signal,
+          onProgress
         )
       } catch (error) {
         throw toToolError(error, "JOB_MANAGE_FAILED")
@@ -92,7 +104,8 @@ async function executeJobAction(
     kill_after_ms?: number
     max_bytes: number
   },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (message: string) => Promise<void>
 ) {
   switch (input.action) {
     case "start":
@@ -102,7 +115,14 @@ async function executeJobAction(
     case "read":
       return readJob(jobs, input.id, input.max_bytes)
     case "wait":
-      return waitJob(jobs, input.id, input.cursor, input.wait_ms, input.max_bytes, signal)
+      return waitJob(jobs, {
+        id: input.id,
+        cursor: input.cursor,
+        waitMs: input.wait_ms,
+        maxBytes: input.max_bytes,
+        signal,
+        onProgress,
+      })
     case "cancel":
       return cancelJob(jobs, input.id)
   }
@@ -142,16 +162,44 @@ async function startJob(
   }
 }
 
-async function waitJob(
-  jobs: JobManager,
-  id: string | undefined,
-  cursor: number,
-  waitMs: number,
-  maxBytes: number,
+interface JobWaitOptions {
+  id?: string
+  cursor: number
+  waitMs: number
+  maxBytes: number
   signal?: AbortSignal
-) {
+  onProgress?: (message: string) => Promise<void>
+}
+
+async function waitForJobProgress(
+  jobs: JobManager,
+  id: string,
+  options: JobWaitOptions & { onProgress: (message: string) => Promise<void> }
+): Promise<Awaited<ReturnType<JobManager["wait"]>>> {
+  const { cursor, waitMs, maxBytes, signal, onProgress } = options
+  const deadline = Date.now() + waitMs
+  let streamedCursor = cursor
+  while (Date.now() < deadline) {
+    const part = await jobs.wait(
+      id,
+      Math.min(750, Math.max(0, deadline - Date.now())),
+      streamedCursor,
+      16 * 1024,
+      signal
+    )
+    streamedCursor = part.nextCursor
+    if (part.output) await onProgress(part.output).catch(() => undefined)
+    if (part.job.status !== "running") break
+  }
+  return jobs.wait(id, 0, cursor, maxBytes, signal)
+}
+
+async function waitJob(jobs: JobManager, options: JobWaitOptions) {
+  const { id, cursor, waitMs, maxBytes, signal, onProgress } = options
   if (!id) throw new Error("id is required for action=wait.")
-  const result = await jobs.wait(id, waitMs, cursor, maxBytes, signal)
+  const result = onProgress
+    ? await waitForJobProgress(jobs, id, { ...options, onProgress })
+    : await jobs.wait(id, waitMs, cursor, maxBytes, signal)
   return {
     structuredContent: {
       ...result,

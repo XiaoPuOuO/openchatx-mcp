@@ -12,16 +12,23 @@
     "mock": "VITE_MOCK_DASHBOARD=1 vite",
     "preview": "vite preview"
   },
+  "overrides": {
+    "katex": "$katex"
+  },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-slot": "^1.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "highlight.js": "^11.12.0",
+    "katex": "^0.19.1",
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {

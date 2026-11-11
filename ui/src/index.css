@@ -922,6 +922,131 @@ button {
   }
 }
 
+/* Subagent transcript Markdown (Tailwind's preflight resets native Markdown styles). */
+.subagent-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.subagent-markdown > :first-child {
+  margin-top: 0;
+}
+.subagent-markdown > :last-child {
+  margin-bottom: 0;
+}
+.subagent-markdown p,
+.subagent-markdown ul,
+.subagent-markdown ol,
+.subagent-markdown blockquote,
+.subagent-markdown pre,
+.subagent-markdown table {
+  margin-block: 0.65em;
+}
+
+.subagent-markdown :is(h1, h2, h3, h4) {
+  margin-block: 1.2em 0.45em;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.subagent-markdown h1 {
+  font-size: 1.5em;
+}
+.subagent-markdown h2 {
+  font-size: 1.3em;
+}
+.subagent-markdown h3 {
+  font-size: 1.15em;
+}
+.subagent-markdown :is(strong, b) {
+  font-weight: 700;
+}
+
+.subagent-markdown ul {
+  list-style: disc outside;
+  padding-left: 1.5em;
+}
+.subagent-markdown ol {
+  list-style: decimal outside;
+  padding-left: 1.5em;
+}
+.subagent-markdown li > p {
+  margin-block: 0.25em;
+}
+.subagent-markdown li > :is(ul, ol) {
+  margin-block: 0.3em;
+}
+.subagent-markdown li:has(> input[type="checkbox"]) {
+  list-style: none;
+}
+.subagent-markdown a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.subagent-markdown blockquote {
+  padding-left: 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+.subagent-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin-block: 1.3em;
+}
+.subagent-markdown code:not(pre code) {
+  border-radius: 4px;
+  background: var(--muted);
+  padding: 0.12em 0.32em;
+  font-size: 0.9em;
+}
+.subagent-markdown pre {
+  max-width: 100%;
+  max-height: 440px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--shell-background);
+  padding: 0.85em 1em;
+  font-size: 0.88em;
+  line-height: 1.55;
+}
+.subagent-markdown pre code {
+  background: transparent;
+  padding: 0;
+  white-space: pre;
+}
+.subagent-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.subagent-markdown th,
+.subagent-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.65em;
+  text-align: left;
+}
+.subagent-markdown th {
+  background: var(--muted);
+  font-weight: 650;
+}
+.subagent-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.35em;
+}
+.subagent-markdown .katex {
+  font-size: 1.04em;
+}
+.subagent-markdown input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--primary);
+}
+
 /* The mobile shell uses a real navigation drawer, not a permanently
    compressed desktop sidebar. The main content owns the available width. */
 .mobile-app-header,

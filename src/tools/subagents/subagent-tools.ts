@@ -6,6 +6,44 @@ import { toToolError } from "../../mcp/tool-error.js"
 import type { SmartModelRouter } from "../../subagents/router.js"
 import type { SubagentRuntime } from "../../subagents/runtime.js"
 
+function registerSubagentPlanTool(server: McpServer, runtime: SubagentRuntime): void {
+  server.registerTool(
+    "subagent_plan",
+    {
+      description:
+        "Set or update the current subagent's structured task plan. Use for multi-step tasks; mark each step pending, in_progress, completed, or blocked. Updates appear in the subagent session UI.",
+      inputSchema: z.object({
+        steps: z
+          .array(
+            z.object({
+              description: z.string().trim().min(1).max(240),
+              status: z.enum(["pending", "in_progress", "completed", "blocked"]),
+            })
+          )
+          .min(1)
+          .max(20),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ steps }) => {
+      try {
+        const session = runtime.updateSessionPlan(getAgentIdentity()?.sessionId ?? "", steps)
+        return {
+          structuredContent: { job_id: session.job_id, plan: session.plan },
+          content: [{ type: "text" as const, text: "Subagent plan updated." }],
+        }
+      } catch (error) {
+        throw toToolError(error, "SUBAGENT_PLAN_FAILED")
+      }
+    }
+  )
+}
+
 export function registerSubagentTools(
   server: McpServer,
   runtime: SubagentRuntime,
@@ -149,6 +187,8 @@ export function registerSubagentTools(
       }
     }
   )
+
+  registerSubagentPlanTool(server, runtime)
 
   server.registerTool(
     "subagent_steer",

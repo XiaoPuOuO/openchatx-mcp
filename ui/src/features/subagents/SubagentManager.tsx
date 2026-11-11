@@ -73,7 +73,7 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
     while (config.providers[id]) id = `${choice}-${suffix++}`
     const provider: SubagentProviderConfig =
       choice === "chatgpt"
-        ? { type: "openai-chatgpt", enabled: true, timeout: 120000 }
+        ? { type: "openai-chatgpt", enabled: true }
         : {
             type:
               choice === "claude"
@@ -90,7 +90,6 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
                     ? "https://api.openai.com/v1"
                     : "http://127.0.0.1:8000/v1",
             enabled: true,
-            timeout: 120000,
           }
     setConfig((current) => ({
       ...current,
@@ -324,6 +323,7 @@ export function SubagentManager({ onBack }: { onBack: () => void }) {
                 id={selection.id}
                 model={selectedModel}
                 providerIds={Object.keys(config.providers)}
+                modelIds={Object.keys(config.models).filter((key) => key !== selection.id)}
                 onRename={renameSelection}
                 onChange={updateModel}
                 onDelete={removeSelection}
@@ -422,15 +422,6 @@ function ProviderEditor({
           </>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("subagents.timeout")}>
-            <input
-              className={INPUT_CLASS}
-              type="number"
-              min={1}
-              value={provider.timeout}
-              onChange={(event) => onChange({ ...provider, timeout: Number(event.target.value) })}
-            />
-          </Field>
           <Field label={t("subagents.description")}>
             <input
               className={INPUT_CLASS}
@@ -534,6 +525,7 @@ function ModelEditor({
   id,
   model,
   providerIds,
+  modelIds,
   onRename,
   onChange,
   onDelete,
@@ -541,12 +533,14 @@ function ModelEditor({
   id: string
   model: SubagentModelProfile
   providerIds: string[]
+  modelIds: string[]
   onRename: (id: string) => void
   onChange: (model: SubagentModelProfile) => void
   onDelete: () => void
 }) {
   const { t } = useI18n()
   const [newEffortLevel, setNewEffortLevel] = useState("")
+  const [newToolPattern, setNewToolPattern] = useState("")
   const thinking = model.thinking
   const setThinkingMode = (mode: SubagentThinkingConfig["mode"]) => {
     const thinking: SubagentThinkingConfig =
@@ -621,6 +615,151 @@ function ModelEditor({
             value={model.description}
             onChange={(event) => onChange({ ...model, description: event.target.value })}
           />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t("subagents.agentMode")}>
+            <select
+              className={INPUT_CLASS}
+              value={model.agent_mode ?? "build"}
+              onChange={(event) =>
+                onChange({
+                  ...model,
+                  agent_mode: event.target.value as NonNullable<SubagentModelProfile["agent_mode"]>,
+                })
+              }
+            >
+              {["build", "plan", "explore", "review", "custom"].map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t("subagents.maxSteps")}>
+            <input
+              type="number"
+              className={INPUT_CLASS}
+              min={1}
+              max={2048}
+              value={model.max_steps ?? 512}
+              onChange={(event) => onChange({ ...model, max_steps: Number(event.target.value) })}
+            />
+          </Field>
+        </div>
+        <Field label={t("subagents.systemPrompt")}>
+          <textarea
+            className={TEXTAREA_CLASS}
+            value={model.system_prompt ?? ""}
+            onChange={(event) => onChange({ ...model, system_prompt: event.target.value })}
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={model.read_only ?? false}
+            onChange={(event) => onChange({ ...model, read_only: event.target.checked })}
+          />
+          {t("subagents.readOnly")}
+        </label>
+        <Field label={t("subagents.allowedPaths")} hint={t("subagents.allowedPathsHint")}>
+          <textarea
+            className={TEXTAREA_CLASS}
+            placeholder="src\ntest"
+            value={(model.allowed_paths ?? []).join("\n")}
+            onChange={(event) =>
+              onChange({
+                ...model,
+                allowed_paths: event.target.value
+                  .split("\n")
+                  .map((path) => path.trim())
+                  .filter(Boolean),
+              })
+            }
+          />
+        </Field>
+        <Field label={t("subagents.fallbackModels")}>
+          <div className="flex flex-wrap gap-3 rounded-md border p-3">
+            {modelIds.map((candidate) => (
+              <label key={candidate} className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={(model.fallback_models ?? []).includes(candidate)}
+                  onChange={(event) =>
+                    onChange({
+                      ...model,
+                      fallback_models: event.target.checked
+                        ? [...(model.fallback_models ?? []), candidate]
+                        : (model.fallback_models ?? []).filter((value) => value !== candidate),
+                    })
+                  }
+                />
+                {candidate}
+              </label>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("subagents.toolPermissions")}>
+          <div className="space-y-2 rounded-md border p-3">
+            {Object.entries(model.permissions ?? {}).map(([pattern, decision]) => (
+              <div key={pattern} className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate text-xs">{pattern}</code>
+                <select
+                  className={INPUT_CLASS}
+                  style={{ width: 105 }}
+                  value={decision}
+                  onChange={(event) =>
+                    onChange({
+                      ...model,
+                      permissions: {
+                        ...(model.permissions ?? {}),
+                        [pattern]: event.target.value as "allow" | "ask" | "deny",
+                      },
+                    })
+                  }
+                >
+                  <option value="allow">Allow</option>
+                  <option value="ask">Ask</option>
+                  <option value="deny">Deny</option>
+                </select>
+                <button
+                  type="button"
+                  aria-label={t("common.delete")}
+                  onClick={() =>
+                    onChange({
+                      ...model,
+                      permissions: Object.fromEntries(
+                        Object.entries(model.permissions ?? {}).filter(([key]) => key !== pattern)
+                      ),
+                    })
+                  }
+                >
+                  <Trash2 className="size-4 text-muted-foreground" />
+                </button>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <input
+                className={INPUT_CLASS}
+                value={newToolPattern}
+                onChange={(event) => setNewToolPattern(event.target.value)}
+                placeholder="bash / file_write / *"
+              />
+              <Button
+                type="button"
+                size="sm"
+                disabled={!newToolPattern.trim()}
+                onClick={() => {
+                  onChange({
+                    ...model,
+                    permissions: { ...(model.permissions ?? {}), [newToolPattern.trim()]: "ask" },
+                  })
+                  setNewToolPattern("")
+                }}
+              >
+                {t("subagents.addToolPermission")}
+              </Button>
+            </div>
+          </div>
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label={t("subagents.contextWindow")}>

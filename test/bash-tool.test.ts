@@ -6,7 +6,7 @@ import test from "node:test"
 import { Client } from "@modelcontextprotocol/client"
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 
-import { runWithAgent, setAgentTaskSlug } from "../src/agent/context.js"
+import { runWithAgentId, setAgentTaskSlug } from "../src/agent/context.js"
 import { createAgentObserver } from "../src/agent/observer.js"
 import { JobManager } from "../src/jobs/job-manager.js"
 import { installToolRegistrationBoundary } from "../src/mcp/tool-registration-boundary.js"
@@ -130,6 +130,68 @@ test("bash does not persist cwd or environment between calls", async (t) => {
   assert.match(output, /missing/u)
 })
 
+test("bash emits incremental MCP progress for long-running foreground commands", async (t) => {
+  const cwd = await tempDir(t, "openchatx-bash-progress-")
+  const client = await connectedBash(t)
+  const fragments: string[] = []
+  const result = await client.callTool(
+    {
+      name: "bash",
+      arguments: {
+        command: "printf 'phase-one\\n'; sleep 1; printf 'phase-two\\n'",
+        workdir: cwd,
+        timeout_ms: 5_000,
+      },
+    },
+    {
+      onprogress: (message) => {
+        if (message.message) fragments.push(message.message)
+      },
+    }
+  )
+  assert.equal(result.isError, undefined)
+  const output = (result.structuredContent as { output: string }).output
+  assert.match(output, /phase-one/u)
+  assert.match(output, /phase-two/u)
+  assert.ok(fragments.some((item) => item.includes("phase-one")))
+  assert.ok(fragments.some((item) => item.includes("phase-two")))
+})
+
+test("job_manage wait streams durable job logs without changing its final response", async (t) => {
+  const cwd = await tempDir(t, "openchatx-job-progress-")
+  const client = await connectedBash(t)
+  const created = await client.callTool({
+    name: "job_manage",
+    arguments: {
+      action: "start",
+      label: "Progress fixture",
+      cwd,
+      command: "printf 'step-one\\n'; sleep 1; printf 'step-two\\n'",
+    },
+  })
+  assert.equal(created.isError, undefined)
+  const started = created.structuredContent as { job: { id: string } }
+  const fragments: string[] = []
+  const result = await client.callTool(
+    {
+      name: "job_manage",
+      arguments: { action: "wait", id: started.job.id, cursor: 0, wait_ms: 5_000 },
+    },
+    {
+      onprogress: (progress) => {
+        if (progress.message) fragments.push(progress.message)
+      },
+    }
+  )
+  assert.equal(result.isError, undefined)
+  const payload = result.structuredContent as { job: { status: string }; output: string }
+  assert.equal(payload.job.status, "completed")
+  assert.match(payload.output, /step-one/u)
+  assert.match(payload.output, /step-two/u)
+  assert.ok(fragments.some((part) => part.includes("step-one")))
+  assert.ok(fragments.some((part) => part.includes("step-two")))
+})
+
 test("bash wait expiry promotes a live command to a durable job", async (t) => {
   const cwd = await tempDir(t, "openchatx-bash-promote-")
   const client = await connectedBash(t)
@@ -194,11 +256,17 @@ test("dashboard-style forced stop cancels the durable bash job and returns queue
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
   t.after(() => Promise.all([client.close(), server.close(), jobs.close()]))
 
-  const resultPromise = runWithAgent("bash-force-stop-session", () => {
+  const agentId = "123e4567-e89b-42d3-a456-426614174000"
+  const resultPromise = runWithAgentId(agentId, () => {
     setAgentTaskSlug("bash-force-stop")
     return client.callTool({
       name: "bash",
-      arguments: { command: "printf 'started\n'; sleep 30", workdir: cwd, timeout_ms: 30_000 },
+      arguments: {
+        command: "printf 'started\n'; sleep 30",
+        workdir: cwd,
+        timeout_ms: 30_000,
+        agent_id: agentId,
+      },
     })
   })
 

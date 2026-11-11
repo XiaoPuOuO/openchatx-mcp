@@ -143,7 +143,6 @@ export class ProviderHub {
             ? {
                 type: "openai-chatgpt",
                 enabled: true,
-                timeout: 120_000,
                 description: preset.description,
               }
             : {
@@ -151,7 +150,6 @@ export class ProviderHub {
                 base_url: baseUrlOverride ?? preset.baseUrl,
                 enabled: true,
                 ...(resolvedApiKey ? { api_key: resolvedApiKey } : {}),
-                timeout: 120_000,
                 description: preset.description,
               },
       },
@@ -179,7 +177,7 @@ export class ProviderHub {
     if (provider.type === "openai-chatgpt")
       return { provider: providerId, ok: false, error: "ChatGPT authentication is unavailable." }
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), Math.min(provider.timeout, 10_000))
+    const timeout = setTimeout(() => controller.abort(), 10_000)
     const apiKey =
       provider.api_key ?? (providerId === "openai" ? process.env.OPENAI_API_KEY : undefined)
     try {

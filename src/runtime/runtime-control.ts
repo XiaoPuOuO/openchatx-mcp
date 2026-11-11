@@ -166,6 +166,20 @@ export class RuntimeControlService {
     }
   }
 
+  /** Additional per-agent approvals cannot bypass the global runtime policy. */
+  async approveSubagentTool(
+    toolName: string,
+    argumentsValue: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<void> {
+    await this.requireApproval(
+      { toolName, argumentsValue, signal },
+      `subagent-tool:${toolName}`,
+      `This subagent requires approval to call ${toolName}.`,
+      false
+    )
+  }
+
   runWithGrant<T>(grant: RuntimeExecutionGrant, action: () => T): T {
     return executionGrant.run(grant, action)
   }

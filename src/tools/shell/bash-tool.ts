@@ -82,6 +82,17 @@ export function registerBashTool(
       context
     ) => {
       try {
+        const progressToken = context.mcpReq._meta?.progressToken
+        let progress = 0
+        const onProgress =
+          progressToken === undefined
+            ? undefined
+            : async (message: string): Promise<void> => {
+                await context.mcpReq.notify({
+                  method: "notifications/progress",
+                  params: { progressToken, progress: ++progress, message },
+                })
+              }
         return await executeBash({
           command,
           workdir,
@@ -91,6 +102,7 @@ export function registerBashTool(
           keep,
           maxOutputTokens: max_output_tokens,
           signal: context.mcpReq.signal,
+          ...(onProgress ? { onProgress } : {}),
           processManager,
           projectScope,
           jobManager,
@@ -111,6 +123,7 @@ interface BashExecutionInput {
   keep: boolean
   maxOutputTokens: number
   signal: AbortSignal
+  onProgress?: (output: string) => Promise<void>
   processManager?: BashProcessManager
   projectScope?: ProjectScope
   jobManager?: JobManager
@@ -141,6 +154,37 @@ async function runKeptCommand(command: string, cwd: string, processManager?: Bas
   }
 }
 
+/**
+ * Forward incremental stdout/stderr while retaining the original bounded
+ * result contract and the Durable Job's foreground wait semantics.
+ */
+async function waitForDurableProgress(
+  jobs: JobManager,
+  jobId: string,
+  input: BashExecutionInput
+): Promise<Awaited<ReturnType<JobManager["wait"]>>> {
+  if (!input.onProgress) return jobs.wait(jobId, input.waitMs, 0, MAX_CAPTURE_BYTES, input.signal)
+  const deadline = Date.now() + input.waitMs
+  let cursor = 0
+  while (Date.now() < deadline) {
+    const remaining = deadline - Date.now()
+    const part = await jobs.wait(
+      jobId,
+      Math.min(750, Math.max(0, remaining)),
+      cursor,
+      16 * 1024,
+      input.signal
+    )
+    cursor = part.nextCursor
+    if (part.output) {
+      // A disconnected MCP UI must not change the command's outcome.
+      await input.onProgress(part.output).catch(() => undefined)
+    }
+    if (part.job.status !== "running") break
+  }
+  return jobs.wait(jobId, 0, 0, MAX_CAPTURE_BYTES, input.signal)
+}
+
 async function runDurableCommand(
   command: string,
   cwd: string,
@@ -158,7 +202,7 @@ async function runDurableCommand(
   )
   let waited: Awaited<ReturnType<JobManager["wait"]>>
   try {
-    waited = await jobs.wait(job.id, input.waitMs, 0, MAX_CAPTURE_BYTES, input.signal)
+    waited = await waitForDurableProgress(jobs, job.id, input)
   } catch (error) {
     if (isUserForcedStop(input.signal.reason)) {
       await jobs.cancel(job.id)

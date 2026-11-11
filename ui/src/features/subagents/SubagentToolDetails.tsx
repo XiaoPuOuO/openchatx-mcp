@@ -286,6 +286,13 @@ export function ToolAction({ event }: { event: SubagentSessionEvent }) {
             )}
           </span>
         )}
+        {event.durationMs !== undefined && (
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+            {event.durationMs < 1000
+              ? `${event.durationMs}ms`
+              : `${(event.durationMs / 1000).toFixed(1)}s`}
+          </span>
+        )}
         {event.status === "running" ? (
           <LoaderCircle className="size-3 shrink-0 animate-spin text-muted-foreground" />
         ) : event.status === "failed" ? (

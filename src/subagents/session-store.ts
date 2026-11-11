@@ -5,7 +5,8 @@ import { DatabaseSync } from "node:sqlite"
 import { z } from "zod"
 
 import type { AgentMessage } from "./agent-provider.js"
-import type { SubagentEvent } from "./agent-sessions.js"
+import type { SubagentRunOverrides } from "./agent-run-options.js"
+import type { SubagentEvent, SubagentPlanStep, SubagentTokenUsage } from "./agent-sessions.js"
 import type { SubagentRunResult } from "./runtime.js"
 
 /** Session metadata, separate from the ordered model-message and UI-event records. */
@@ -24,10 +25,18 @@ export interface SessionRecord {
   projectRouting?: "pending" | "project" | "unscoped"
   projectExternalAccessAll?: boolean
   depth: number
-  status: "running" | "completed" | "failed"
+  status: "running" | "completed" | "failed" | "stopped"
   created_at: string
   updated_at: string
   pending_guidance: number
+  modelTurns?: number
+  active_profile?: string
+  overrides?: SubagentRunOverrides
+  compactions?: number
+  retry?: { attempt: number; reason: string; nextAt: string }
+  contextWindow?: number
+  usage?: SubagentTokenUsage
+  plan?: SubagentPlanStep[]
   bootstrapped: boolean
   notified: boolean
   result?: SubagentRunResult
@@ -40,6 +49,18 @@ const resultSchema: z.ZodType<SubagentRunResult> = z.object({
   model: z.string(),
   content: z.string(),
   usage: z.record(z.string(), z.unknown()).optional(),
+})
+
+const tokenUsageSchema: z.ZodType<SubagentTokenUsage> = z.object({
+  inputTokens: z.number().nonnegative().optional(),
+  outputTokens: z.number().nonnegative().optional(),
+  totalTokens: z.number().nonnegative().optional(),
+  lastInputTokens: z.number().nonnegative().optional(),
+})
+
+const planStepSchema: z.ZodType<SubagentPlanStep> = z.object({
+  description: z.string().min(1).max(240),
+  status: z.enum(["pending", "in_progress", "completed", "blocked"]),
 })
 
 const sessionSchema: z.ZodType<SessionRecord> = z.object({
@@ -57,10 +78,30 @@ const sessionSchema: z.ZodType<SessionRecord> = z.object({
   projectRouting: z.enum(["pending", "project", "unscoped"]).optional(),
   projectExternalAccessAll: z.boolean().optional(),
   depth: z.number().int(),
-  status: z.enum(["running", "completed", "failed"]),
+  status: z.enum(["running", "completed", "failed", "stopped"]),
   created_at: z.string(),
   updated_at: z.string(),
   pending_guidance: z.number().int(),
+  modelTurns: z.number().int().nonnegative().optional(),
+  active_profile: z.string().optional(),
+  overrides: z
+    .object({
+      thinking: z.boolean().optional(),
+      thinkingEffort: z.string().optional(),
+      maxOutputTokens: z.number().int().positive().optional(),
+    })
+    .optional(),
+  compactions: z.number().int().nonnegative().optional(),
+  retry: z
+    .object({
+      attempt: z.number().int().positive(),
+      reason: z.string(),
+      nextAt: z.string(),
+    })
+    .optional(),
+  contextWindow: z.number().int().positive().optional(),
+  usage: tokenUsageSchema.optional(),
+  plan: z.array(planStepSchema).max(20).optional(),
   bootstrapped: z.boolean(),
   notified: z.boolean(),
   result: resultSchema.optional(),
@@ -70,6 +111,15 @@ const sessionSchema: z.ZodType<SessionRecord> = z.object({
 const messageSchema: z.ZodType<AgentMessage> = z.object({
   role: z.enum(["system", "user", "assistant", "tool"]),
   content: z.string(),
+  attachments: z
+    .array(
+      z.object({
+        type: z.enum(["image", "audio"]),
+        mimeType: z.string(),
+        data: z.string(),
+      })
+    )
+    .optional(),
   calls: z
     .array(
       z.object({
@@ -86,12 +136,16 @@ const messageSchema: z.ZodType<AgentMessage> = z.object({
 
 const eventSchema: z.ZodType<SubagentEvent> = z.object({
   id: z.string(),
-  role: z.enum(["user", "assistant", "tool", "guidance"]),
+  role: z.enum(["user", "assistant", "tool", "guidance", "thinking", "harness"]),
   text: z.string(),
   time: z.string(),
-  status: z.enum(["running", "completed", "failed", "queued", "delivered"]).optional(),
+  status: z.enum(["running", "completed", "failed", "stopped", "queued", "delivered"]).optional(),
   tool: z.string().optional(),
   input: z.string().optional(),
+  reasoningTokens: z.number().nonnegative().optional(),
+  parallelBatch: z.string().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  action: z.enum(["compaction", "retry", "loop", "snapshot"]).optional(),
 })
 
 const CREATE_TABLES = `
@@ -111,6 +165,12 @@ CREATE TABLE message (
   data TEXT NOT NULL
 );
 CREATE INDEX message_job ON message(job_id, seq);
+-- All transcript rows stay immutable; only the model-visible checkpoint is replaced.
+CREATE TABLE context_state (
+  job_id TEXT PRIMARY KEY REFERENCES session(job_id) ON DELETE CASCADE,
+  after_seq INTEGER NOT NULL,
+  data TEXT NOT NULL
+);
 CREATE TABLE event (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   id TEXT UNIQUE NOT NULL,
@@ -183,10 +243,43 @@ export class SubagentSessionStore {
   }
 
   messages(id: string): AgentMessage[] {
-    return this.db
-      .prepare("SELECT data FROM message WHERE job_id=? ORDER BY seq")
-      .all(id)
+    const checkpoint = this.db
+      .prepare("SELECT after_seq, data FROM context_state WHERE job_id=?")
+      .get(id)
+    if (!checkpoint) {
+      return this.db
+        .prepare("SELECT data FROM message WHERE job_id=? ORDER BY seq")
+        .all(id)
+        .map((row) => messageSchema.parse(parseData(row)))
+    }
+    if (typeof checkpoint.data !== "string" || typeof checkpoint.after_seq !== "number")
+      throw new Error("Invalid Subagent context checkpoint.")
+    const active: unknown = JSON.parse(checkpoint.data)
+    const messages = z.array(messageSchema).parse(active)
+    const newer = this.db
+      .prepare("SELECT data FROM message WHERE job_id=? AND seq>? ORDER BY seq")
+      .all(id, checkpoint.after_seq)
       .map((row) => messageSchema.parse(parseData(row)))
+    return messages.concat(newer)
+  }
+
+  /** Replace only the active prompt. The complete original transcript remains on disk. */
+  replaceActiveContext(id: string, active: AgentMessage[]): void {
+    this.db.exec("BEGIN IMMEDIATE")
+    try {
+      const row = this.db.prepare("SELECT MAX(seq) AS last FROM message WHERE job_id=?").get(id)
+      const last = typeof row?.last === "number" ? row.last : 0
+      this.db
+        .prepare(
+          "INSERT INTO context_state(job_id,after_seq,data) VALUES(?,?,?) " +
+            "ON CONFLICT(job_id) DO UPDATE SET after_seq=excluded.after_seq,data=excluded.data"
+        )
+        .run(id, last, JSON.stringify(active))
+      this.db.exec("COMMIT")
+    } catch (error) {
+      this.db.exec("ROLLBACK")
+      throw error
+    }
   }
 
   appendMessage(id: string, message: AgentMessage): void {
@@ -292,6 +385,14 @@ function serializeSession(item: SessionRecord): string {
     created_at,
     updated_at,
     pending_guidance,
+    modelTurns,
+    active_profile,
+    overrides,
+    compactions,
+    retry,
+    contextWindow,
+    usage,
+    plan,
     bootstrapped,
     notified,
     result,
@@ -316,6 +417,14 @@ function serializeSession(item: SessionRecord): string {
     created_at,
     updated_at,
     pending_guidance,
+    modelTurns,
+    active_profile,
+    overrides,
+    compactions,
+    retry,
+    contextWindow,
+    usage,
+    plan,
     bootstrapped,
     notified,
     result,

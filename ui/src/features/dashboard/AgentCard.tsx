@@ -14,6 +14,7 @@ import { useState } from "react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader } from "../../components/ui/card"
+import { ConfirmDialog } from "../../components/ui/confirm-dialog"
 import { useI18n } from "../../i18n"
 import { setUnlimitedContext, stopAgentCall } from "../../lib/api"
 import type { Agent, AgentCall, SubagentSessionSummary } from "../../types"
@@ -38,6 +39,7 @@ export function AgentCard({
   const { t, locale } = useI18n()
   const [selectedCallId, setSelectedCallId] = useState<string>()
   const [deleting, setDeleting] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteError, setDeleteError] = useState<string>()
   const [stoppingCallId, setStoppingCallId] = useState<string>()
   const [stopError, setStopError] = useState<string>()
@@ -48,13 +50,16 @@ export function AgentCard({
   const selectedCall = recent.find((call) => call.id === selectedCallId)
 
   async function remove() {
-    if (!window.confirm(t("agent.deleteConfirm", { id: agent.id }))) return
+    if (deleting) return
     setDeleting(true)
     setDeleteError(undefined)
     try {
       await onDelete()
+      setDeleteDialogOpen(false)
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : String(error))
+      setDeleteDialogOpen(false)
+    } finally {
       setDeleting(false)
     }
   }
@@ -97,6 +102,19 @@ export function AgentCard({
             <p className="mt-1 truncate text-[12px] text-muted-foreground">
               {agent.taskSlug ?? t("agent.noTask")}
             </p>
+            {agent.agentId ? (
+              <p
+                className="mt-1 truncate font-mono text-[10px] text-muted-foreground"
+                title={agent.agentId}
+              >
+                Agent UUID: {agent.agentId}
+              </p>
+            ) : null}
+            {agent.contextBudget?.dot ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <Badge>Dot</Badge>
+              </div>
+            ) : null}
             {agent.projectId || agent.goalId ? (
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {agent.projectId ? (
@@ -151,7 +169,7 @@ export function AgentCard({
               disabled={deleting}
               aria-label={t("agent.delete")}
               title={t("agent.delete")}
-              onClick={() => void remove()}
+              onClick={() => setDeleteDialogOpen(true)}
             >
               {deleting ? (
                 <LoaderCircle className="size-3.5 animate-spin" />
@@ -231,6 +249,16 @@ export function AgentCard({
         <SteerComposer agent={agent} />
       </CardContent>
       <ToolCallModal call={selectedCall} onClose={() => setSelectedCallId(undefined)} />
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title={t("agent.delete")}
+        description={t("agent.deleteConfirm", { id: agent.id })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        confirming={deleting}
+        onConfirm={() => void remove()}
+      />
     </Card>
   )
 }
@@ -330,7 +358,9 @@ function SubagentStatusDot({ status }: { status: SubagentSessionSummary["status"
           ? "bg-emerald-500"
           : status === "completed"
             ? "bg-sky-500"
-            : "bg-rose-500"
+            : status === "stopped"
+              ? "bg-muted-foreground/60"
+              : "bg-rose-500"
       }`}
     />
   )

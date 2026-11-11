@@ -43,6 +43,7 @@ import {
   mockDecideSubagentApproval,
   mockDeleteSubagentSession,
   mockSteerSubagent,
+  mockStopSubagentSession,
   mockSubagentApprovals,
   mockSubagentSession,
   mockSubagentSessions,
@@ -816,6 +817,24 @@ export async function startMcpAuthorization(id: string): Promise<string> {
   return body.authorizationUrl
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+  const bridge = (
+    window as Window & {
+      webkit?: {
+        messageHandlers?: {
+          openExternal?: { postMessage: (message: string) => Promise<unknown> }
+        }
+      }
+    }
+  ).webkit?.messageHandlers?.openExternal
+  if (!bridge) return false
+  try {
+    return (await bridge.postMessage(url)) === true
+  } catch {
+    return false
+  }
+}
+
 export async function disconnectMcpAuthorization(id: string): Promise<void> {
   const response = await fetch(`/ui/api/mcp-servers/${encodeURIComponent(id)}/oauth/disconnect`, {
     method: "POST",
@@ -884,6 +903,19 @@ export async function decideSubagentApproval(
   await decideApproval(id, decision)
 }
 
+export async function stopSubagentSession(id: string): Promise<SubagentSessionDetail> {
+  if (MOCK_DASHBOARD) return mockStopSubagentSession(id)
+  const response = await fetch(`/ui/api/subagents/sessions/${encodeURIComponent(id)}/stop`, {
+    method: "POST",
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { session?: SubagentSessionDetail; error?: string }
+    | undefined
+  if (!response.ok || !body?.session)
+    throw new Error(body?.error ?? `Failed to stop subagent session (HTTP ${response.status}).`)
+  return body.session
+}
+
 export async function deleteSubagentSession(id: string): Promise<void> {
   if (MOCK_DASHBOARD) return mockDeleteSubagentSession(id)
   const response = await fetch(`/ui/api/subagents/sessions/${encodeURIComponent(id)}`, {
@@ -919,6 +951,66 @@ export async function steerSubagentSession(
   if (!response.ok || !body?.session) {
     throw new Error(body?.error ?? `Failed to send guidance (HTTP ${response.status}).`)
   }
+  return body.session
+}
+
+async function sessionAction(
+  id: string,
+  action: "rename" | "fork" | "retry",
+  payload?: Record<string, unknown>
+): Promise<SubagentSessionDetail> {
+  if (MOCK_DASHBOARD) return mockSubagentSession(id)
+  const response = await fetch(`/ui/api/subagents/sessions/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload ?? {}),
+  })
+  const body = (await response.json().catch(() => undefined)) as
+    | { session?: SubagentSessionDetail; error?: string }
+    | undefined
+  if (!response.ok || !body?.session)
+    throw new Error(body?.error ?? `Failed to ${action} session (HTTP ${response.status}).`)
+  return body.session
+}
+
+export function renameSubagentSession(id: string, title: string) {
+  return sessionAction(id, "rename", { title })
+}
+
+export function forkSubagentSession(id: string, message: string, throughTurn?: number) {
+  return sessionAction(id, "fork", {
+    message,
+    ...(throughTurn === undefined ? {} : { through_turn: throughTurn }),
+  })
+}
+
+export function retrySubagentSession(id: string) {
+  return sessionAction(id, "retry")
+}
+
+export function subagentExportUrl(id: string): string {
+  return `/ui/api/subagents/sessions/${encodeURIComponent(id)}/export`
+}
+
+export async function restoreSubagentSnapshot(
+  id: string,
+  snapshotId: string,
+  operation: "undo" | "redo"
+): Promise<SubagentSessionDetail> {
+  if (MOCK_DASHBOARD) return mockSubagentSession(id)
+  const response = await fetch(
+    `/ui/api/subagents/sessions/${encodeURIComponent(id)}/snapshots/${encodeURIComponent(snapshotId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation }),
+    }
+  )
+  const body = (await response.json().catch(() => undefined)) as
+    | { session?: SubagentSessionDetail; error?: string }
+    | undefined
+  if (!response.ok || !body?.session)
+    throw new Error(body?.error ?? `Failed to ${operation} snapshot.`)
   return body.session
 }
 

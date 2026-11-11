@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
+import { forgetAgentIdentity } from "./agent/context.js"
 import { createAgentObserver } from "./agent/observer.js"
 import { CapabilityRegistry } from "./capabilities/catalog.js"
 import { CapabilityHealthService } from "./capabilities/health.js"
@@ -61,6 +62,7 @@ await contextBudget.initialize()
 startMemoryMonitor(MCP_CONFIG.stateDir)
 const agentObserver = createAgentObserver()
 agentObserver.onSessionEvicted((sessionId) => {
+  forgetAgentIdentity(sessionId)
   void contextBudget.removeSession(sessionId).catch((error) => {
     console.warn(
       `Failed to release evicted session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`
@@ -228,7 +230,8 @@ subagentRuntime.enableAgentSessions(
   agentServerFactory,
   agentObserver,
   join(MCP_CONFIG.stateDir, "subagent-sessions.db"),
-  runtimeControl
+  runtimeControl,
+  projectRegistry
 )
 
 let running: Awaited<ReturnType<typeof startMcpHttpServer>>

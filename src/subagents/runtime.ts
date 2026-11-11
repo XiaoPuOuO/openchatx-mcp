@@ -4,8 +4,11 @@ import { basename, dirname } from "node:path"
 import process from "node:process"
 import type { AgentObserver } from "../agent/observer.js"
 import type { McpServerFactory } from "../mcp/server-factory.js"
+import type { ProjectRegistry } from "../projects/project-registry.js"
 import type { RuntimeControlService } from "../runtime/runtime-control.js"
+import { SubagentHookRegistry, type SubagentLifecycleEvent } from "./agent-hooks.js"
 import {
+  type SubagentPlanStep,
   type SubagentSessionSnapshot,
   type SubagentSessionSummary,
   SubagentSessions,
@@ -42,7 +45,7 @@ export interface SubagentRunResult {
   usage?: Record<string, unknown>
 }
 
-export type SubagentJobStatus = "running" | "completed" | "failed"
+export type SubagentJobStatus = "running" | "completed" | "failed" | "stopped"
 export interface SubagentJob {
   job_id: string
   profile: string
@@ -63,6 +66,17 @@ export class SubagentRuntime {
   private reloadTimer?: NodeJS.Timeout
   private readonly jobs = new Map<string, OwnedJob>()
   private sessions?: SubagentSessions
+  readonly hooks = new SubagentHookRegistry()
+
+  registerLifecycleHook(
+    listener: (event: SubagentLifecycleEvent) => void | Promise<void>
+  ): () => void {
+    return this.hooks.register(listener)
+  }
+
+  subscribeSessionChanges(listener: (id: string) => void): () => void {
+    return this.sessions?.subscribe(listener) ?? (() => undefined)
+  }
 
   constructor(
     private config: SubagentConfig,
@@ -73,7 +87,8 @@ export class SubagentRuntime {
     factory: McpServerFactory,
     observer: AgentObserver,
     storagePath: string,
-    runtimeControl?: RuntimeControlService
+    runtimeControl?: RuntimeControlService,
+    projectRegistry?: ProjectRegistry
   ): void {
     if (this.sessions) return
     this.sessions = new SubagentSessions(
@@ -82,6 +97,10 @@ export class SubagentRuntime {
         ...(runtimeControl ? { approvalScopes: runtimeControl } : {}),
         tools: factory,
         observer,
+        hooks: this.hooks,
+        ...(projectRegistry
+          ? { projectRoot: async (id: string) => (await projectRegistry.get(id)).path }
+          : {}),
         resolveProfile: (id) => this.lookup(id),
         apiKey: async (provider, providerId) => {
           if (provider.type !== "openai-chatgpt") return providerApiKey(provider, providerId)
@@ -101,9 +120,19 @@ export class SubagentRuntime {
     return this.config.limits
   }
 
+  stopSession(id: string, owner?: string): SubagentSessionSnapshot {
+    if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
+    return this.sessions.stopSession(id, owner)
+  }
+
   deleteSession(id: string, owner?: string): number {
     if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
     return this.sessions.deleteSession(id, owner)
+  }
+
+  updateSessionPlan(sessionId: string, steps: SubagentPlanStep[]): SubagentSessionSnapshot {
+    if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
+    return this.sessions.updateAgentPlan(sessionId, steps)
   }
 
   listSessions(): SubagentSessionSummary[] {
@@ -118,6 +147,30 @@ export class SubagentRuntime {
   steerSession(id: string, message: string, owner?: string): SubagentSessionSnapshot {
     if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
     return this.sessions.steer(id, message, owner)
+  }
+
+  async restoreSnapshot(
+    id: string,
+    snapshotId: string,
+    operation: "undo" | "redo"
+  ): Promise<SubagentSessionSnapshot> {
+    if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
+    return this.sessions.restoreSnapshot(id, snapshotId, operation)
+  }
+
+  renameSession(id: string, title: string): SubagentSessionSnapshot {
+    if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
+    return this.sessions.renameSession(id, title)
+  }
+
+  forkSession(id: string, message: string, throughTurn?: number): SubagentSessionSnapshot {
+    if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
+    return this.sessions.forkSession(id, message, undefined, throughTurn)
+  }
+
+  exportSession(id: string) {
+    if (!this.sessions) throw new Error("Subagent sessions are unavailable.")
+    return this.sessions.exportSession(id)
   }
 
   updateConfig(config: SubagentConfig): void {
@@ -175,6 +228,10 @@ export class SubagentRuntime {
         execution_mode: profile.execution_mode,
         tags: profile.tags,
         cost_tier: profile.cost_tier,
+        agent_mode: profile.agent_mode,
+        read_only: profile.read_only,
+        max_steps: profile.max_steps,
+        fallback_models: profile.fallback_models,
         thinking: profile.thinking,
       }))
   }
@@ -199,7 +256,7 @@ export class SubagentRuntime {
     const headers = discoveryHeaders(provider, key)
     const response = await fetch(url, {
       headers,
-      signal: AbortSignal.timeout(Math.min(provider.timeout, 20_000)),
+      signal: AbortSignal.timeout(20_000),
     })
     if (!response.ok) throw new Error(`Model discovery failed (HTTP ${response.status}).`)
     const data: unknown = await response.json()
@@ -229,7 +286,7 @@ export class SubagentRuntime {
     const base = provider.base_url.replace(TRAILING_SLASH_RE, "")
     const response = await fetch(`${base}/models/${encodeURIComponent(modelId)}`, {
       headers: discoveryHeaders(provider, key),
-      signal: AbortSignal.timeout(Math.min(provider.timeout, 20_000)),
+      signal: AbortSignal.timeout(20_000),
     })
     if (!response.ok) throw new Error(`Model detail lookup failed (HTTP ${response.status}).`)
     const payload: unknown = await response.json()
@@ -359,25 +416,9 @@ function providerApiKey(provider: SubagentProviderConfig, id: string): string | 
   return id === "openai" ? process.env.OPENAI_API_KEY : undefined
 }
 
-function requestSignal(
-  timeoutMs: number,
-  signal?: AbortSignal
-): { signal: AbortSignal; close: () => void } {
-  const controller = new AbortController()
-  if (signal?.aborted) controller.abort(signal.reason)
-  const timer = setTimeout(
-    () => controller.abort(new Error("Subagent request timed out.")),
-    timeoutMs
-  )
-  const abort = () => controller.abort(signal?.reason)
-  signal?.addEventListener("abort", abort, { once: true })
-  return {
-    signal: controller.signal,
-    close: () => {
-      clearTimeout(timer)
-      signal?.removeEventListener("abort", abort)
-    },
-  }
+function requestSignal(signal?: AbortSignal): { signal?: AbortSignal; close: () => void } {
+  // The active agent (or caller) controls cancellation; no elapsed-time cutoff.
+  return { signal, close: () => undefined }
 }
 
 async function runOpenAiCompatible(
@@ -386,7 +427,7 @@ async function runOpenAiCompatible(
   input: SubagentRunInput,
   signal?: AbortSignal
 ): Promise<SubagentRunResult> {
-  const request = requestSignal(provider.timeout, signal)
+  const request = requestSignal(signal)
   try {
     const body: Record<string, unknown> = {
       model: profile.model,
@@ -434,7 +475,7 @@ async function runAnthropic(
 ): Promise<SubagentRunResult> {
   const apiKey = providerApiKey(provider, profile.provider)
   if (!apiKey) throw new Error("Anthropic API Key is not configured.")
-  const request = requestSignal(provider.timeout, signal)
+  const request = requestSignal(signal)
   try {
     const body: Record<string, unknown> = {
       model: profile.model,
@@ -492,7 +533,7 @@ async function runGemini(
 ): Promise<SubagentRunResult> {
   const apiKey = providerApiKey(provider, profile.provider)
   if (!apiKey) throw new Error("Gemini API Key is not configured.")
-  const request = requestSignal(provider.timeout, signal)
+  const request = requestSignal(signal)
   try {
     const generationConfig: Record<string, unknown> = {
       ...(profile.temperature === undefined ? {} : { temperature: profile.temperature }),
@@ -561,12 +602,12 @@ function applyGeminiThinking(
 
 async function runChatGPT(
   profile: SubagentModelProfile,
-  provider: Extract<SubagentProviderConfig, { type: "openai-chatgpt" }>,
+  _provider: Extract<SubagentProviderConfig, { type: "openai-chatgpt" }>,
   input: SubagentRunInput,
   token: string,
   signal?: AbortSignal
 ): Promise<SubagentRunResult> {
-  const request = requestSignal(provider.timeout, signal)
+  const request = requestSignal(signal)
   try {
     const body: Record<string, unknown> = {
       model: profile.model,

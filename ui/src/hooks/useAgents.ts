@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { deleteAgent, fetchAgents, subscribeToAgents } from "../lib/api"
 import type { Agent } from "../types"
@@ -9,25 +9,49 @@ export function useAgents() {
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const eventVersion = useRef(0)
 
   useEffect(() => {
-    void fetchAgents()
-      .then((snapshot) => {
-        setAgents((current) => mergeInitialSnapshot(current, snapshot))
-      })
-      .catch((loadError) =>
-        setError(loadError instanceof Error ? loadError.message : String(loadError))
-      )
-      .finally(() => setLoading(false))
+    let active = true
+    const refresh = async () => {
+      const version = eventVersion.current
+      try {
+        const snapshot = await fetchAgents()
+        if (active && version === eventVersion.current) setAgents(snapshot)
+        if (active) setError(undefined)
+      } catch (loadError) {
+        if (active) setError(loadError instanceof Error ? loadError.message : String(loadError))
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
 
-    return subscribeToAgents((event) => {
-      setAgents((current) => {
-        if (event.type === "agent_removed") {
-          return current.filter((item) => item.id !== event.agentId)
-        }
-        return upsertAgentByActivity(current, event.agent)
-      })
-    }, setConnected)
+    const unsubscribe = subscribeToAgents(
+      (event) => {
+        eventVersion.current += 1
+        setAgents((current) => {
+          if (event.type === "agent_removed") {
+            return current.filter((item) => item.id !== event.agentId)
+          }
+          return upsertAgentByActivity(current, event.agent)
+        })
+      },
+      (isConnected) => {
+        setConnected(isConnected)
+        if (isConnected) void refresh()
+      }
+    )
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refresh()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    void refresh()
+
+    return () => {
+      active = false
+      unsubscribe()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
   }, [])
 
   const removeAgent = useCallback(async (agentId: string) => {
@@ -36,15 +60,4 @@ export function useAgents() {
   }, [])
 
   return { agents, connected, loading, error, removeAgent }
-}
-
-function mergeInitialSnapshot(current: Agent[], snapshot: Agent[]): Agent[] {
-  if (current.length === 0) return snapshot
-
-  const liveById = new Map(current.map((agent) => [agent.id, agent]))
-  const snapshotIds = new Set(snapshot.map((agent) => agent.id))
-  return [
-    ...snapshot.map((agent) => liveById.get(agent.id) ?? agent),
-    ...current.filter((agent) => !snapshotIds.has(agent.id)),
-  ]
 }

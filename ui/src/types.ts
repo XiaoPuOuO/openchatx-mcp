@@ -23,6 +23,7 @@ export interface AgentInstruction {
 
 export interface Agent {
   id: string
+  agentId?: string
   taskSlug?: string
   projectId?: string
   goalId?: string
@@ -36,6 +37,7 @@ export interface Agent {
     inputTokens: number
     outputTokens: number
     threshold: number
+    dot?: boolean
     unlimited?: boolean
   }
 }
@@ -350,7 +352,6 @@ export interface LoadedRule extends RuleSummary {
 
 interface SubagentProviderShared {
   enabled: boolean
-  timeout: number
   description?: string
 }
 
@@ -401,6 +402,13 @@ export type SubagentThinkingConfig =
     }
 
 export interface SubagentModelProfile {
+  agent_mode?: "build" | "plan" | "explore" | "review" | "custom"
+  system_prompt?: string
+  permissions?: Record<string, "allow" | "ask" | "deny">
+  read_only?: boolean
+  allowed_paths?: string[]
+  fallback_models?: string[]
+  max_steps?: number
   provider: string
   model: string
   name: string
@@ -420,16 +428,32 @@ export interface SubagentConfig {
   models: Record<string, SubagentModelProfile>
 }
 
-export type SubagentSessionStatus = "running" | "completed" | "failed"
+export type SubagentSessionStatus = "running" | "completed" | "failed" | "stopped"
 
 export interface SubagentSessionEvent {
   id: string
-  role: "user" | "assistant" | "tool" | "guidance"
+  role: "user" | "assistant" | "tool" | "guidance" | "thinking" | "harness"
   text: string
   time: string
-  status?: "running" | "completed" | "failed" | "queued" | "delivered"
+  status?: "running" | "completed" | "failed" | "stopped" | "queued" | "delivered"
   tool?: string
   input?: string
+  reasoningTokens?: number
+  parallelBatch?: string
+  durationMs?: number
+  action?: "compaction" | "retry" | "loop" | "snapshot"
+}
+
+export interface SubagentTokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  lastInputTokens?: number
+}
+
+export interface SubagentPlanStep {
+  description: string
+  status: "pending" | "in_progress" | "completed" | "blocked"
 }
 
 export interface SubagentSessionSummary {
@@ -445,12 +469,26 @@ export interface SubagentSessionSummary {
   created_at: string
   updated_at: string
   pending_guidance: number
+  modelTurns?: number
+  compactions?: number
+  retry?: { attempt: number; reason: string; nextAt: string }
+  contextWindow?: number
+  usage?: SubagentTokenUsage
+  plan?: SubagentPlanStep[]
 }
 
 export interface SubagentSessionDetail extends SubagentSessionSummary {
   session_id: string
   depth: number
   events: SubagentSessionEvent[]
+  active_turns?: number
+  snapshots?: Array<{
+    id: string
+    tool: string
+    time: string
+    applied: boolean
+    changes: Array<{ path: string; diff: string }>
+  }>
   result?: {
     profile: string
     provider: string

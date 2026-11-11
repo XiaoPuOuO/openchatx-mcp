@@ -640,6 +640,78 @@ const complexTaskEvents: SubagentSessionEvent[] = [
   },
 ]
 
+complexTaskEvents.push(
+  {
+    id: "complex-thinking-preview",
+    time: ago(3),
+    role: "thinking",
+    text: "已檢查 **Session 隔離** 與工具授權；下一步只呈現可公開的思考摘要。",
+    reasoningTokens: 126,
+    status: "completed",
+  },
+  {
+    id: "complex-markdown-preview",
+    time: ago(2),
+    role: "assistant",
+    status: "completed",
+    text: [
+      "## Markdown 與公式顯示驗證",
+      "",
+      "**重點：** 子代理支援表格、清單及數學公式。",
+      "",
+      "- 已完成工具紀錄",
+      "- **思考摘要** 僅來自 Provider 的實際回傳",
+      "",
+      "| 類型 | 結果 |",
+      "| --- | --- |",
+      "| Markdown | 正常 |",
+      "| LaTeX | 正常 |",
+      "",
+      "行內公式：\\(\\Delta_o = \\sum_{i=1}^{n} x_i\\)。",
+      "",
+      "\\[",
+      "E = mc^2",
+      "\\]",
+      "",
+      "程式碼原樣保留：`\\(x+1\\)`。",
+    ].join("\n"),
+  }
+)
+
+complexTaskEvents.push(
+  {
+    id: "complex-context-checkpoint",
+    time: ago(95),
+    role: "harness",
+    action: "compaction",
+    status: "completed",
+    text: "Context checkpoint #2: summarized 52 earlier messages; kept 9 recent messages.\n\n## Current State\nModel request and tool history have been compacted without removing the original SQLite transcript.",
+  },
+  {
+    id: "complex-model-retry",
+    time: ago(40),
+    role: "harness",
+    action: "retry",
+    status: "completed",
+    text: "Model request recovered after 1 retry.",
+  }
+)
+
+// One model turn can request five independent searches in parallel.
+for (let i = 1; i <= 5; i++) {
+  complexTaskEvents.push({
+    id: `complex-parallel-grep-${i}`,
+    time: ago(1),
+    role: "tool",
+    tool: "grep",
+    input: JSON.stringify({ pattern: `search-pattern-${i}`, path: "src/subagents" }),
+    text: `Found ${i * 3} matching lines in src/subagents.`,
+    status: i <= 3 ? "completed" : "running",
+    parallelBatch: "demo-grep-batch-5",
+    ...(i <= 3 ? { durationMs: i * 135 } : {}),
+  })
+}
+
 const sessions: SubagentSessionDetail[] = [
   {
     job_id: "subagent-demo-01",
@@ -655,6 +727,21 @@ const sessions: SubagentSessionDetail[] = [
     pending_guidance: 0,
     created_at: ago(3680),
     updated_at: ago(3),
+    modelTurns: 29,
+    compactions: 2,
+    contextWindow: 500000,
+    usage: {
+      inputTokens: 257840,
+      outputTokens: 47320,
+      totalTokens: 305160,
+      lastInputTokens: 187450,
+    },
+    plan: [
+      { description: "檢查執行流程、Project Routing 與安全邊界", status: "completed" },
+      { description: "實作多 Provider 工具迴圈與子代理委派", status: "completed" },
+      { description: "驗證五個 grep 同時執行及工具結果排序", status: "in_progress" },
+      { description: "確認審批、引導、取消與 UI 呈現", status: "pending" },
+    ],
     events: complexTaskEvents,
   },
   {
@@ -1090,6 +1177,29 @@ const sessions: SubagentSessionDetail[] = [
 
 function copy<T>(value: T): T {
   return structuredClone(value)
+}
+
+export async function mockStopSubagentSession(id: string): Promise<SubagentSessionDetail> {
+  const session = sessions.find((item) => item.job_id === id)
+  if (!session) throw new Error("Unknown mock subagent session.")
+  const ids = new Set([id])
+  let count = 0
+  do {
+    count = ids.size
+    for (const item of sessions) {
+      if (item.parent_id && ids.has(item.parent_id)) ids.add(item.job_id)
+    }
+  } while (count !== ids.size)
+  for (const item of sessions) {
+    if (!ids.has(item.job_id) || item.status !== "running") continue
+    item.status = "stopped"
+    item.updated_at = new Date().toISOString()
+    item.pending_guidance = 0
+    for (const event of item.events) {
+      if (event.status === "running" || event.status === "queued") event.status = "stopped"
+    }
+  }
+  return copy(session)
 }
 
 export async function mockDeleteSubagentSession(id: string): Promise<void> {

@@ -6,21 +6,33 @@ import {
   ChevronRight,
   CircleAlert,
   CornerDownRight,
+  Download,
+  GitFork,
   ListTree,
   LoaderCircle,
   MessageSquareText,
+  Pencil,
+  RotateCw,
+  Search,
+  Square,
   Trash2,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import ReactMarkdown from "react-markdown"
 
 import { Button } from "../../components/ui/button"
+import { ConfirmDialog } from "../../components/ui/confirm-dialog"
 import { useI18n } from "../../i18n"
 import {
   deleteSubagentSession,
   fetchSubagentSession,
   fetchSubagentSessions,
+  forkSubagentSession,
+  renameSubagentSession,
+  restoreSubagentSnapshot,
+  retrySubagentSession,
   steerSubagentSession,
+  stopSubagentSession,
+  subagentExportUrl,
 } from "../../lib/api"
 import type {
   SubagentSessionDetail,
@@ -28,7 +40,10 @@ import type {
   SubagentSessionStatus,
   SubagentSessionSummary,
 } from "../../types"
+import { groupActivity } from "./activity-blocks"
 import { SubagentApprovals } from "./SubagentApprovals"
+import { SubagentHarnessStatus } from "./SubagentHarnessStatus"
+import { SubagentMarkdown } from "./SubagentMarkdown"
 import { ToolAction } from "./SubagentToolDetails"
 
 const IS_MOCK = import.meta.env.VITE_MOCK_DASHBOARD === "1"
@@ -53,8 +68,11 @@ export function SubagentActivity({
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [error, setError] = useState<string>()
   const [runningOnly, setRunningOnly] = useState(false)
+  const [search, setSearch] = useState("")
   const timelineRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -77,9 +95,22 @@ export function SubagentActivity({
       }
     }
     void poll()
-    const timer = window.setInterval(() => void poll(), 2_000)
+    const stream =
+      !IS_MOCK && typeof EventSource !== "undefined"
+        ? new EventSource("/ui/api/subagents/events")
+        : undefined
+    stream?.addEventListener("open", () => void poll())
+    stream?.addEventListener("change", () => void poll())
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void poll()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    // Fallback if the EventSource connection is interrupted or unavailable.
+    const timer = window.setInterval(() => void poll(), stream ? 20_000 : 2_000)
     return () => {
       alive = false
+      stream?.close()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
       window.clearInterval(timer)
     }
   }, [agentFilter])
@@ -96,9 +127,28 @@ export function SubagentActivity({
       }
     }
     void poll()
-    const timer = window.setInterval(() => void poll(), 1_500)
+    const stream =
+      !IS_MOCK && typeof EventSource !== "undefined"
+        ? new EventSource("/ui/api/subagents/events")
+        : undefined
+    stream?.addEventListener("open", () => void poll())
+    stream?.addEventListener("change", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { jobId?: string }
+        if (data.jobId === selectedId) void poll()
+      } catch {
+        void poll()
+      }
+    })
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void poll()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    const timer = window.setInterval(() => void poll(), stream ? 20_000 : 1_500)
     return () => {
       alive = false
+      stream?.close()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
       window.clearInterval(timer)
     }
   }, [selectedId])
@@ -125,18 +175,80 @@ export function SubagentActivity({
     }
   }
 
+  async function stopSelected() {
+    if (!selectedId || stopping) return
+    setStopping(true)
+    setError(undefined)
+    try {
+      const next = await stopSubagentSession(selectedId)
+      setDetail(next)
+      setSessions(await fetchSubagentSessions())
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setStopping(false)
+    }
+  }
+
+  async function modifySelected(action: "rename" | "fork" | "retry") {
+    if (!selectedId) return
+    setError(undefined)
+    try {
+      let updated: SubagentSessionDetail
+      if (action === "rename") {
+        const next = window.prompt(t("subagents.renameSession"), selected?.title ?? "")
+        if (!next?.trim()) return
+        updated = await renameSubagentSession(selectedId, next.trim())
+      } else if (action === "fork") {
+        const maximum = selected?.active_turns ?? selected?.modelTurns ?? 0
+        const chosen = window.prompt(
+          t("subagents.forkThroughTurn", { count: maximum }),
+          String(maximum)
+        )
+        if (chosen === null) return
+        const throughTurn = Number(chosen.trim())
+        if (!Number.isSafeInteger(throughTurn) || throughTurn < 0 || throughTurn > maximum) {
+          setError(t("subagents.forkThroughTurn", { count: maximum }))
+          return
+        }
+        updated = await forkSubagentSession(
+          selectedId,
+          "Continue from this selected model turn.",
+          throughTurn
+        )
+        setSelectedId(updated.job_id)
+      } else updated = await retrySubagentSession(selectedId)
+      setDetail(updated)
+      setSessions(await fetchSubagentSessions())
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
+    }
+  }
+
+  async function changeFileSnapshot(snapshotId: string, operation: "undo" | "redo") {
+    if (!selectedId || !window.confirm(t("subagents.restoreSnapshotConfirm"))) return
+    setError(undefined)
+    try {
+      setDetail(await restoreSubagentSnapshot(selectedId, snapshotId, operation))
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
+    }
+  }
+
   async function deleteSelected() {
-    if (!selectedId || deleting || !window.confirm(t("subagents.deleteSessionConfirm"))) return
+    if (!selectedId || deleting) return
     setDeleting(true)
     setError(undefined)
     try {
       await deleteSubagentSession(selectedId)
+      setDeleteConfirmOpen(false)
       setDetail(undefined)
       setSelectedId(undefined)
       setMobilePanel("sessions")
       setSessions(await fetchSubagentSessions())
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
+      setDeleteConfirmOpen(false)
     } finally {
       setDeleting(false)
     }
@@ -155,7 +267,11 @@ export function SubagentActivity({
   )
   const runningCount = scopedSessions.filter((session) => session.status === "running").length
   const ordered = orderSessions(scopedSessions).filter(
-    (session) => !runningOnly || session.status === "running"
+    (session) =>
+      (!runningOnly || session.status === "running") &&
+      [session.title, session.profile, session.job_id].some((value) =>
+        value.toLowerCase().includes(search.trim().toLowerCase())
+      )
   )
   const selected = detail?.job_id === selectedId ? detail : undefined
 
@@ -203,6 +319,15 @@ export function SubagentActivity({
               {t("subagents.status.running")} {runningCount}
             </button>
           </div>
+          <label className="mt-2 flex items-center gap-2 rounded border bg-background px-2 text-muted-foreground">
+            <Search className="size-3.5 shrink-0" />
+            <input
+              className="h-8 w-full bg-transparent text-xs outline-none"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t("subagents.searchSessions")}
+            />
+          </label>
         </div>
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
           {scopedSessions.length === 0 && (
@@ -292,7 +417,65 @@ export function SubagentActivity({
                 <SessionStatus status={selected.status} />
                 <button
                   type="button"
-                  onClick={() => void deleteSelected()}
+                  title={t("subagents.renameSession")}
+                  aria-label={t("subagents.renameSession")}
+                  onClick={() => void modifySelected("rename")}
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                {selected.status !== "running" && (
+                  <>
+                    <button
+                      type="button"
+                      title={t("subagents.forkSession")}
+                      aria-label={t("subagents.forkSession")}
+                      onClick={() => void modifySelected("fork")}
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted"
+                    >
+                      <GitFork className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title={t("subagents.retrySession")}
+                      aria-label={t("subagents.retrySession")}
+                      onClick={() => void modifySelected("retry")}
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted"
+                    >
+                      <RotateCw className="size-3.5" />
+                    </button>
+                  </>
+                )}
+                {!IS_MOCK && (
+                  <a
+                    href={subagentExportUrl(selected.job_id)}
+                    title={t("subagents.exportSession")}
+                    aria-label={t("subagents.exportSession")}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted"
+                  >
+                    <Download className="size-3.5" />
+                  </a>
+                )}
+                {selected.status === "running" && (
+                  <button
+                    type="button"
+                    onClick={() => void stopSelected()}
+                    disabled={stopping}
+                    title={t("subagents.stopSession")}
+                    aria-label={t("subagents.stopSession")}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    data-testid="subagent-stop"
+                  >
+                    {stopping ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <Square className="size-3.5" />
+                    )}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(true)}
                   disabled={deleting}
                   title={t("subagents.deleteSession")}
                   aria-label={t("subagents.deleteSession")}
@@ -314,6 +497,56 @@ export function SubagentActivity({
                 </span>
               </div>
             </header>
+            <SubagentHarnessStatus
+              session={selected}
+              childCount={
+                scopedSessions.filter((item) => item.parent_id === selected.job_id).length
+              }
+            />
+            {(selected.snapshots?.length ?? 0) > 0 && (
+              <details className="shrink-0 border-b text-xs">
+                <summary className="cursor-pointer px-5 py-2 text-muted-foreground">
+                  {t("subagents.fileSnapshots")} · {selected.snapshots?.length ?? 0}
+                </summary>
+                <div className="max-h-64 space-y-2 overflow-auto border-t px-5 py-3">
+                  {selected.snapshots?.map((snapshot) => (
+                    <details key={snapshot.id} className="rounded border p-2">
+                      <summary className="cursor-pointer font-mono text-[11px]">
+                        {snapshot.tool} · {new Date(snapshot.time).toLocaleTimeString()}
+                        {snapshot.applied ? "" : ` · ${t("subagents.undone")}`}
+                      </summary>
+                      <div className="mt-2 space-y-2">
+                        {snapshot.changes.map((change) => (
+                          <div key={change.path}>
+                            <div className="truncate font-mono text-[11px]">{change.path}</div>
+                            <pre className="max-h-40 overflow-auto rounded bg-muted p-2 text-[10px]">
+                              {change.diff}
+                            </pre>
+                          </div>
+                        ))}
+                        {selected.status !== "running" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void changeFileSnapshot(
+                                snapshot.id,
+                                snapshot.applied ? "undo" : "redo"
+                              )
+                            }
+                          >
+                            {snapshot.applied
+                              ? t("subagents.undoSnapshot")
+                              : t("subagents.redoSnapshot")}
+                          </Button>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </details>
+            )}
 
             <div
               ref={timelineRef}
@@ -329,6 +562,12 @@ export function SubagentActivity({
                     )
                   )}
                 </div>
+                {selected.status !== "running" &&
+                  !selected.events.some((event) => event.role === "tool") && (
+                    <p className="mt-5 text-[11px] text-muted-foreground">
+                      {t("subagents.noToolCalls")}
+                    </p>
+                  )}
                 {selected.error && (
                   <div className="mt-7 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
                     <CircleAlert className="size-4 shrink-0" /> {selected.error}
@@ -404,48 +643,48 @@ export function SubagentActivity({
         )}
         {error && <p className="border-t px-5 py-2 text-xs text-destructive">{error}</p>}
       </section>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title={t("subagents.deleteSession")}
+        description={t("subagents.deleteSessionConfirm")}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        confirming={deleting}
+        onConfirm={() => void deleteSelected()}
+      />
     </div>
   )
 }
 
-type ActivityBlock =
-  | { kind: "message"; id: string; event: SubagentSessionEvent }
-  | { kind: "actions"; id: string; events: SubagentSessionEvent[] }
-
-function groupActivity(events: SubagentSessionEvent[]): ActivityBlock[] {
-  const result: ActivityBlock[] = []
-  let actions: SubagentSessionEvent[] = []
-  const flush = () => {
-    if (actions.length > 0) {
-      result.push({ kind: "actions", id: actions[0].id, events: actions })
-      actions = []
-    }
-  }
-  for (const event of events) {
-    if (event.role === "tool") {
-      actions.push(event)
-      continue
-    }
-    flush()
-    result.push({ kind: "message", id: event.id, event })
-  }
-  flush()
-  return result
-}
-
 function ToolGroup({ events }: { events: SubagentSessionEvent[] }) {
   const { t } = useI18n()
-  const names = [...new Set(events.map((event) => event.tool ?? t("subagents.toolActivity")))]
-  const running = events.some((event) => event.status === "running")
-  const failed = events.some((event) => event.status === "failed")
+  const calls = events.filter((event) => event.role === "tool")
+  const names = [...new Set(calls.map((event) => event.tool ?? t("subagents.toolActivity")))]
+  const running = calls.some((event) => event.status === "running")
+  const failed = calls.some((event) => event.status === "failed")
+  const batches = new Map<string, number>()
+  for (const call of calls) {
+    if (call.parallelBatch)
+      batches.set(call.parallelBatch, (batches.get(call.parallelBatch) ?? 0) + 1)
+  }
+  const peakParallel = Math.max(0, ...batches.values())
   return (
     <details className="group/actions py-1" data-testid="subagent-action-group">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded px-1 py-1.5 text-xs hover:bg-muted/35">
         <ChevronRight className="size-3 shrink-0 text-muted-foreground transition-transform group-open/actions:rotate-90" />
         <span className="shrink-0 font-medium text-foreground/85">
-          {t("subagents.usedTools", { count: events.length })}
+          {t("subagents.usedTools", { count: calls.length })}
         </span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{names.join(" · ")}</span>
+        {peakParallel > 1 && (
+          <span
+            className="shrink-0 tabular-nums text-[11px] text-muted-foreground"
+            data-testid="parallel-tool-badge"
+          >
+            {t("subagents.parallelPeak", { count: peakParallel })}
+          </span>
+        )}
         {running ? (
           <LoaderCircle className="size-3 shrink-0 animate-spin text-emerald-500" />
         ) : failed ? (
@@ -453,9 +692,13 @@ function ToolGroup({ events }: { events: SubagentSessionEvent[] }) {
         ) : null}
       </summary>
       <div className="ml-2 mt-1 space-y-0.5 border-l border-border/60 pl-3">
-        {events.map((event) => (
-          <ToolAction key={event.id} event={event} />
-        ))}
+        {events.map((event) =>
+          event.role === "tool" ? (
+            <ToolAction key={event.id} event={event} />
+          ) : (
+            <ActivityEntry key={event.id} event={event} />
+          )
+        )}
       </div>
     </details>
   )
@@ -465,12 +708,78 @@ function ActivityEntry({ event }: { event: SubagentSessionEvent }) {
   const { t } = useI18n()
   const fromUser = event.role === "user" || event.role === "guidance"
 
+  if (event.role === "harness") {
+    const title =
+      event.action === "compaction"
+        ? t("subagents.compactionEvent")
+        : event.action === "retry"
+          ? t("subagents.retryEvent")
+          : event.action === "snapshot"
+            ? t("subagents.fileSnapshots")
+            : t("subagents.loopEvent")
+    const detail = event.text.split("\n").slice(1).join("\n").trim()
+    return (
+      <details className="group/harness py-0.5 text-xs" data-testid="subagent-harness-event">
+        <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-muted-foreground hover:text-foreground">
+          {event.status === "running" ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : event.status === "failed" ? (
+            <CircleAlert className="size-3.5 text-destructive" />
+          ) : (
+            <RotateCw className="size-3.5" />
+          )}
+          <span className="shrink-0 font-medium">{title}</span>
+          <span className="min-w-0 flex-1 truncate">{event.text.split("\n")[0]}</span>
+          {detail && (
+            <ChevronRight className="size-3 shrink-0 transition-transform group-open/harness:rotate-90" />
+          )}
+        </summary>
+        {detail && (
+          <div className="ml-5 border-l border-border pl-3 py-1 text-foreground">
+            <SubagentMarkdown text={detail} />
+          </div>
+        )}
+      </details>
+    )
+  }
+
+  if (event.role === "thinking") {
+    return (
+      <details className="group/thinking py-1" data-testid="subagent-thinking">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded py-1 text-xs text-muted-foreground hover:text-foreground">
+          <BrainCircuit className="size-3.5 shrink-0" />
+          <span>{t("subagents.thinking")}</span>
+          {event.reasoningTokens !== undefined && (
+            <span className="text-[11px]">
+              · {t("subagents.thinkingTokens", { count: event.reasoningTokens })}
+            </span>
+          )}
+          {event.status === "running" && <LoaderCircle className="size-3 animate-spin" />}
+          <ChevronRight className="size-3 shrink-0 transition-transform group-open/thinking:rotate-90" />
+        </summary>
+        <div className="ml-5 mt-2 border-l border-border/60 pl-3 text-[12px] text-muted-foreground">
+          {event.text ? (
+            <div className="subagent-markdown text-foreground">
+              <SubagentMarkdown text={event.text} />
+            </div>
+          ) : (
+            <p>
+              {event.status === "running"
+                ? t("subagents.thinkingActive")
+                : t("subagents.thinkingUnavailable")}
+            </p>
+          )}
+        </div>
+      </details>
+    )
+  }
+
   if (fromUser) {
     return (
       <div className="flex justify-end py-1" data-testid="subagent-message">
         <div className="max-w-[80%] rounded-xl bg-muted px-4 py-3 text-[13px] leading-6 text-foreground sm:max-w-[72%]">
-          <div className="prose prose-sm max-w-none break-words text-foreground dark:prose-invert">
-            <ReactMarkdown>{event.text}</ReactMarkdown>
+          <div className="subagent-markdown text-foreground">
+            <SubagentMarkdown text={event.text} />
           </div>
           {event.status === "queued" && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">{t("subagents.queued")}</p>
@@ -486,8 +795,8 @@ function ActivityEntry({ event }: { event: SubagentSessionEvent }) {
   return (
     <div className="py-1 text-[13px] leading-7" data-testid="subagent-message">
       {event.text && (
-        <div className="prose prose-sm max-w-none break-words text-foreground dark:prose-invert">
-          <ReactMarkdown>{event.text}</ReactMarkdown>
+        <div className="subagent-markdown text-foreground">
+          <SubagentMarkdown text={event.text} />
         </div>
       )}
       {event.status === "running" && (
@@ -530,7 +839,9 @@ function SessionDot({ status }: { status: SubagentSessionStatus }) {
           ? "bg-emerald-500"
           : status === "completed"
             ? "bg-sky-500"
-            : "bg-rose-500"
+            : status === "stopped"
+              ? "bg-muted-foreground/60"
+              : "bg-rose-500"
       }`}
     />
   )
@@ -544,6 +855,8 @@ function SessionStatus({ status }: { status: SubagentSessionStatus }) {
         <LoaderCircle className="size-3 animate-spin" />
       ) : status === "completed" ? (
         <Check className="size-3" />
+      ) : status === "stopped" ? (
+        <Square className="size-3" />
       ) : (
         <CircleAlert className="size-3 text-destructive" />
       )}

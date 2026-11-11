@@ -2,7 +2,6 @@ import { execFile } from "node:child_process"
 import { mkdir, writeFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { static as expressStatic, Router } from "express"
-
 import type { CapabilityRegistry } from "../capabilities/catalog.js"
 import type { CapabilityHealthService } from "../capabilities/health.js"
 import { MCP_CONFIG } from "../config.js"
@@ -39,6 +38,7 @@ import type { ToolboxRegistry } from "../toolbox/registry.js"
 import { readAgentInstructionsTemplate } from "../tools/start-here/start-here.js"
 import { launchDesktopUpdate } from "../update/desktop-installer.js"
 import { checkForOpenChatXUpdate } from "../update/version-check.js"
+import { forgetAgentIdentity } from "./context.js"
 import type { AgentObserver } from "./observer.js"
 
 export interface DashboardServices {
@@ -331,6 +331,25 @@ function registerSubagentSessionRoutes(
   router: ReturnType<typeof Router>,
   subagentRuntime: SubagentRuntime | undefined
 ): void {
+  router.get("/api/subagents/events", (req, res) => {
+    if (!subagentRuntime) return void res.status(503).end()
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8")
+    res.setHeader("Cache-Control", "no-cache, no-transform")
+    res.setHeader("X-Accel-Buffering", "no")
+    res.flushHeaders()
+    res.write("event: ready\ndata: {}\n\n")
+    const unsubscribe = subagentRuntime.subscribeSessionChanges((jobId) => {
+      if (!res.destroyed) res.write(`event: change\ndata: ${JSON.stringify({ jobId })}\n\n`)
+    })
+    const heartbeat = setInterval(() => {
+      if (!res.destroyed) res.write(": keepalive\n\n")
+    }, 25_000)
+    heartbeat.unref()
+    req.on("close", () => {
+      unsubscribe()
+      clearInterval(heartbeat)
+    })
+  })
   router.get("/api/subagents/sessions", (_req, res) => {
     res.json({ sessions: subagentRuntime?.listSessions() ?? [] })
   })
@@ -353,6 +372,17 @@ function registerSubagentSessionRoutes(
     }
   })
 
+  router.post("/api/subagents/sessions/:id/stop", (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.json({ session: subagentRuntime.stopSession(req.params.id) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+
   router.post("/api/subagents/sessions/:id/steer", (req, res) => {
     if (!isSameOriginAction(req))
       return void res.status(403).json({ error: "Cross-origin request rejected" })
@@ -360,6 +390,84 @@ function registerSubagentSessionRoutes(
       if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
       const message = typeof req.body?.message === "string" ? req.body.message.trim() : ""
       res.status(202).json({ session: subagentRuntime.steerSession(req.params.id, message) })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+  router.post("/api/subagents/sessions/:id/rename", (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.json({
+        session: subagentRuntime.renameSession(req.params.id, String(req.body?.title ?? "")),
+      })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+  router.post("/api/subagents/sessions/:id/fork", (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      res.status(201).json({
+        session: subagentRuntime.forkSession(
+          req.params.id,
+          String(req.body?.message ?? ""),
+          req.body?.through_turn === undefined ? undefined : Number(req.body.through_turn)
+        ),
+      })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+  router.post("/api/subagents/sessions/:id/retry", (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      const current = subagentRuntime.sessionSnapshot(req.params.id)
+      if (current.status === "running")
+        return void res.status(409).json({ error: "Session is still running." })
+      res.status(202).json({
+        session: subagentRuntime.steerSession(
+          req.params.id,
+          "Resume the original task from the last safe checkpoint. Do not repeat completed side effects. Investigate the previous failure before retrying."
+        ),
+      })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+  router.post("/api/subagents/sessions/:id/snapshots/:snapshotId", async (req, res) => {
+    if (!isSameOriginAction(req))
+      return void res.status(403).json({ error: "Cross-origin request rejected" })
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      const operation = req.body?.operation
+      if (operation !== "undo" && operation !== "redo")
+        return void res.status(400).json({ error: "Expected operation undo or redo." })
+      res.json({
+        session: await subagentRuntime.restoreSnapshot(
+          req.params.id,
+          req.params.snapshotId,
+          operation
+        ),
+      })
+    } catch (error) {
+      toolboxError(res, error)
+    }
+  })
+  router.get("/api/subagents/sessions/:id/export", (req, res) => {
+    try {
+      if (!subagentRuntime) throw new Error("Subagent runtime is unavailable.")
+      const exported = subagentRuntime.exportSession(req.params.id)
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="subagent-${encodeURIComponent(req.params.id)}.json"`
+      )
+      res.json(exported)
     } catch (error) {
       toolboxError(res, error)
     }
@@ -797,6 +905,7 @@ function registerAgentRoutes(
     try {
       await contextBudget?.removeSession(sessionId)
       subagentRuntime?.removeOwnerSession(sessionId)
+      forgetAgentIdentity(sessionId)
       agentObserver.deleteAgent(req.params.agentId)
       res.status(204).end()
     } catch (error) {

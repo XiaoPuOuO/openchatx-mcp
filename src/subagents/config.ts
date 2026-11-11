@@ -4,7 +4,6 @@ import { z } from "zod"
 
 const sharedProviderFields = {
   enabled: z.boolean().default(true),
-  timeout: z.number().int().positive().default(120_000),
   description: z.string().optional(),
 }
 
@@ -48,7 +47,16 @@ const thinkingSchema = z.discriminatedUnion("mode", [
   }),
 ])
 
+export const subagentToolDecisionSchema = z.enum(["allow", "ask", "deny"])
+
 const modelProfileSchema = z.object({
+  agent_mode: z.enum(["build", "plan", "explore", "review", "custom"]).default("build"),
+  system_prompt: z.string().max(32_000).optional(),
+  permissions: z.record(z.string().min(1), subagentToolDecisionSchema).default({}),
+  read_only: z.boolean().default(false),
+  allowed_paths: z.array(z.string().trim().min(1)).max(32).optional(),
+  fallback_models: z.array(z.string().min(1)).max(8).default([]),
+  max_steps: z.number().int().min(1).max(2048).default(512),
   provider: z.string().min(1),
   model: z.string().min(1),
   name: z.string().min(1),
@@ -142,6 +150,13 @@ export function redactSubagentConfig(config: SubagentConfig): SubagentConfig {
 
 function validateModelReferences(config: SubagentConfig): void {
   for (const [id, model] of Object.entries(config.models)) {
+    if (model.fallback_models.includes(id))
+      throw new Error(`Model profile ${JSON.stringify(id)} cannot fall back to itself.`)
+    for (const fallback of model.fallback_models)
+      if (!config.models[fallback])
+        throw new Error(
+          `Model profile ${JSON.stringify(id)} references unknown fallback ${JSON.stringify(fallback)}.`
+        )
     if (!config.providers[model.provider]) {
       throw new Error(
         `Model profile ${JSON.stringify(id)} references unknown provider ${JSON.stringify(model.provider)}.`
