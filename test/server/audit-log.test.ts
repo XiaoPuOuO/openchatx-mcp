@@ -36,6 +36,7 @@ test("writes one compact YAML document for a shell command", async (t) => {
     await readFile(file, "utf8"),
     [
       "--- # bash - 275ms - 15 in - Aug 7 8:58 PM",
+      "rpc_request_id: 1",
       'workdir: "/workspace"',
       "command: |-",
       "  rg -n foo src",
@@ -155,7 +156,7 @@ test("puts audit heading before entry details with time last", async (t) => {
 
   assert.equal(
     await readFile(file, "utf8"),
-    "--- # toolbox_list - 0ms - 1 in - Aug 18 6:25 PM\nargs: {}\n\n"
+    "--- # toolbox_list - 0ms - 1 in - Aug 18 6:25 PM\nrpc_request_id: 1\nargs: {}\n\n"
   )
 })
 
@@ -324,20 +325,20 @@ test("correlates same-name batched calls by MCP request id", async (t) => {
   const auditRequest = logger.startRequest([
     {
       jsonrpc: "2.0",
-      id: 1,
+      id: "92708cc0-3f90-4e50-87c2-b1f20589e734/6u1m",
       method: "tools/call",
       params: { name: "toolbox_list", arguments: { marker: "first" } },
     },
     {
       jsonrpc: "2.0",
-      id: 2,
+      id: "92708cc0-3f90-4e50-87c2-b1f20589e734/li73",
       method: "tools/call",
       params: { name: "toolbox_list", arguments: { marker: "second" } },
     },
   ])
 
-  const second = auditRequest.claimTool(2, "toolbox_list")
-  const first = auditRequest.claimTool(1, "toolbox_list")
+  const second = auditRequest.claimTool("92708cc0-3f90-4e50-87c2-b1f20589e734/li73", "toolbox_list")
+  const first = auditRequest.claimTool("92708cc0-3f90-4e50-87c2-b1f20589e734/6u1m", "toolbox_list")
   assert.ok(second)
   assert.ok(first)
   second.finish()
@@ -345,6 +346,8 @@ test("correlates same-name batched calls by MCP request id", async (t) => {
 
   const log = await readFile(file, "utf8")
   assert.ok(log.indexOf('args: {"marker":"second"}') < log.indexOf('args: {"marker":"first"}'))
+  assert.match(log, /rpc_request_id: "92708cc0-3f90-4e50-87c2-b1f20589e734\/li73"/u)
+  assert.match(log, /rpc_request_id: "92708cc0-3f90-4e50-87c2-b1f20589e734\/6u1m"/u)
 })
 
 test("creates and repairs audit logs with owner-only permissions", async (t) => {
@@ -392,7 +395,7 @@ test("logs apply_patch bodies only when the tool fails", async (t) => {
   let log = await readFile(file, "utf8")
   assert.equal(
     log,
-    '--- # apply_patch - 51ms - 33 in - Aug 7 9:12 PM\ncwd: "/workspace/project"\npatch_chars: 68\n\n'
+    '--- # apply_patch - 51ms - 33 in - Aug 7 9:12 PM\nrpc_request_id: 2\ncwd: "/workspace/project"\npatch_chars: 68\n\n'
   )
   assert.doesNotMatch(log, /Begin Patch|Update File|old|new/u)
 
@@ -484,7 +487,10 @@ test("caps large ordinary tool arguments", async (t) => {
   call.finish({ httpStatus: 200, state: "finished" })
 
   const log = await readFile(file, "utf8")
-  assert.match(log, /^--- # skill_search - 0ms - \d+ in - Aug 7 10:00 PM\nargs: "/u)
+  assert.match(
+    log,
+    /^--- # skill_search - 0ms - \d+ in - Aug 7 10:00 PM\nrpc_request_id: 1\nargs: "/u
+  )
   assert.match(log, /chars omitted/u)
   assert.ok(log.length < 800)
 })

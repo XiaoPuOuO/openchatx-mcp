@@ -25,7 +25,7 @@ interface PendingAuditCall {
 
 export function createAuditRequest(
   payload: unknown,
-  startToolCall: (toolName: string, argumentsValue: unknown) => McpAuditCall,
+  startToolCall: (toolName: string, argumentsValue: unknown, requestId?: RequestId) => McpAuditCall,
   onToolList: () => void
 ): McpAuditRequest {
   const pending: PendingAuditCall[] = []
@@ -39,7 +39,7 @@ export function createAuditRequest(
     pending.push({
       requestId: parsed.requestId,
       name: parsed.name,
-      call: startToolCall(parsed.name, parsed.arguments),
+      call: startToolCall(parsed.name, parsed.arguments, parsed.requestId),
       claimed: false,
     })
   }

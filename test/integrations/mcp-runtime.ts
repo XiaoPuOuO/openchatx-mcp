@@ -3,7 +3,7 @@ import test from "node:test"
 
 import {
   getAgentIdentity,
-  runWithAgent,
+  runWithAgentId,
   setAgentGoalId,
   setAgentProjectId,
 } from "../../src/agent/context.js"
@@ -14,8 +14,30 @@ import { createMcpServerFactory } from "../../src/mcp/server-factory.js"
 import { startMcpHttpServer as startMcpHttpServerRaw } from "../../src/server/http-server.js"
 import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
+function hasAgentIdProperty(schema: unknown): boolean {
+  if (!isRecord(schema)) return false
+  if (isRecord(schema.properties) && "agent_id" in schema.properties) return true
+  return ["allOf", "anyOf", "oneOf"].some((key) => {
+    const branches = schema[key]
+    return Array.isArray(branches) && branches.some(hasAgentIdProperty)
+  })
+}
+
+function hasRequiredAgentId(schema: unknown): boolean {
+  if (!isRecord(schema)) return false
+  if (Array.isArray(schema.required) && schema.required.includes("agent_id")) return true
+  return ["allOf", "anyOf", "oneOf"].some((key) => {
+    const branches = schema[key]
+    return Array.isArray(branches) && branches.some(hasRequiredAgentId)
+  })
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) => {
-  const running = await startMcpHttpServer()
+  const running = await startMcpHttpServer({ profile: { tools: { skills: true } } })
   t.after(() => running.close())
   const connected = await connectClient(running.url, "tool-surface-client")
   t.after(() => connected.client.close())
@@ -28,6 +50,11 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   for (const tool of tools.tools) {
     assert.equal(tool.title, undefined)
     assert.equal((tool as unknown as Record<string, unknown>)._meta, undefined)
+    assert.ok(
+      hasAgentIdProperty(tool.inputSchema),
+      `${tool.name} must expose the stable Agent UUID field`
+    )
+    assert.ok(hasRequiredAgentId(tool.inputSchema), `${tool.name} must require agent_id`)
   }
   assert.deepEqual(
     tools.tools.map((tool) => tool.name),
@@ -57,8 +84,10 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
   assert.deepEqual(Object.keys(startHere.inputSchema.properties ?? {}), [
     "mode",
     "task_id",
+    "agent_id",
     "project_id",
   ])
+  assert.ok((startHere.inputSchema.required ?? []).includes("agent_id"))
   const bash = tools.tools.find((tool) => tool.name === "bash")
   const skillSearch = tools.tools.find((tool) => tool.name === "skill_search")
   const ruleManage = tools.tools.find((tool) => tool.name === "rule_manage")
@@ -99,6 +128,7 @@ test("publishes the assembled MCP tool surface", { timeout: 10_000 }, async (t) 
     "filePath",
     "content",
     "project_id",
+    "agent_id",
   ])
   assert.equal(fileWrite.outputSchema, undefined)
 })
@@ -192,6 +222,64 @@ test("one HTTP observer drives dashboard state and tool observation", {
   assert.equal(local?.recent[0]?.tool, "bash")
 })
 
+test("separates parallel Agents by stable UUID within one shared ChatGPT session", {
+  timeout: 10_000,
+}, async (t) => {
+  const agentObserver = createAgentObserver()
+  const running = await startMcpHttpServer({ agentObserver })
+  t.after(() => running.close())
+  const parentSession = "shared-parent-agent-uuid-session"
+  const first = await connectClient(
+    running.url,
+    "shared-parent-agent-a",
+    undefined,
+    false,
+    parentSession
+  )
+  const second = await connectClient(
+    running.url,
+    "shared-parent-agent-b",
+    undefined,
+    false,
+    parentSession
+  )
+  t.after(() => Promise.all([first.client.close(), second.client.close()]))
+  assert.notEqual(first.agentId, second.agentId)
+
+  for (const [client, task] of [
+    [first.client, "dot-task-a"],
+    [second.client, "dot-task-b"],
+  ] as const) {
+    const started = await client.callTool({
+      name: "start_here",
+      arguments: { mode: "general", task_id: task },
+    })
+    assert.notEqual(started.isError, true)
+    const toolResult = await client.callTool({
+      name: "bash",
+      arguments: { command: `printf ${task}` },
+    })
+    assert.notEqual(toolResult.isError, true)
+    assert.match(toolText(toolResult), new RegExp(task, "u"))
+  }
+
+  const agents = agentObserver.listAgents()
+  assert.equal(agents.length, 2)
+  assert.deepEqual(
+    agents
+      .map((agent) => agent.agentId)
+      .sort((left, right) => (left ?? "").localeCompare(right ?? "")),
+    [first.agentId, second.agentId].sort((left, right) => left.localeCompare(right))
+  )
+  assert.deepEqual(
+    agents
+      .map((agent) => agent.taskSlug)
+      .sort((left, right) => (left ?? "").localeCompare(right ?? "")),
+    ["dot-task-a", "dot-task-b"]
+  )
+  assert.ok(agents.every((agent) => agent.recent[0]?.tool === "bash"))
+})
+
 test("toggling unlimited context preserves an initialized session and its dashboard metadata", {
   timeout: 10_000,
 }, async (t) => {
@@ -202,7 +290,7 @@ test("toggling unlimited context preserves an initialized session and its dashbo
     {
       createMcpServer: createMcpServerFactory(
         { contextBudget: budget },
-        { tools: { shell: true, web: false } }
+        { tools: { shell: true, web: false, skills: false } }
       ),
       agentObserver: observer,
       contextBudget: budget,
@@ -224,7 +312,7 @@ test("toggling unlimited context preserves an initialized session and its dashbo
     arguments: { mode: "general", task_id: "keep-my-name" },
   })
   assert.notEqual(started.isError, true)
-  runWithAgent(sessionId, () => {
+  runWithAgentId(connected.agentId, () => {
     setAgentProjectId("project-one")
     setAgentGoalId("goal-one")
   })
@@ -254,7 +342,7 @@ test("toggling unlimited context preserves an initialized session and its dashbo
     })
     assert.equal(response.status, 200)
     const after = observer.listAgents()[0]
-    const identity = runWithAgent(sessionId, () => getAgentIdentity())
+    const identity = runWithAgentId(connected.agentId, () => getAgentIdentity())
     assert.equal(identity?.taskSlug, before.taskSlug)
     assert.equal(identity?.projectId, before.projectId)
     assert.equal(identity?.goalId, before.goalId)

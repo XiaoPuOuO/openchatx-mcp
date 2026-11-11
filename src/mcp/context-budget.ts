@@ -28,6 +28,7 @@ export interface ContextBudgetUsage {
   inputTokens: number
   outputTokens: number
   threshold: number
+  dot?: boolean
   unlimited?: boolean
 }
 
@@ -75,6 +76,10 @@ export class ContextBudgetGuard {
     if (toolName === "summarize" && typeof input.uuid === "string") return undefined
 
     const state = this.sessions.get(agent.sessionId) ?? { inputTokens: 0, outputTokens: 0 }
+    if (agent.isDot) {
+      state.dot = true
+      state.unlimited ??= true
+    }
     state.outputTokens += this.countTextTokens(serializeTextualValue(input))
 
     const modelOutput = modelFacingToolResultText(modelResult)
@@ -135,13 +140,14 @@ export class ContextBudgetGuard {
       inputTokens,
       outputTokens,
       threshold: this.warningThreshold,
+      ...(state?.dot ? { dot: true } : {}),
       ...(state?.unlimited ? { unlimited: true } : {}),
     }
   }
 
   async setUnlimitedSession(sessionId: string, unlimited: boolean): Promise<void> {
     const state = this.sessions.get(sessionId) ?? { inputTokens: 0, outputTokens: 0 }
-    state.unlimited = unlimited || undefined
+    state.unlimited = unlimited
     this.sessions.set(sessionId, state)
     await this.persist()
   }
@@ -222,38 +228,39 @@ function parsePersistedState(value: unknown): PersistedContextBudgetState {
   }
   const sessions: Record<string, SessionBudgetState> = {}
   for (const [sessionId, rawState] of Object.entries(value.sessions)) {
-    const legacyTokens =
-      isRecord(rawState) && typeof rawState.toolTokens === "number"
-        ? rawState.toolTokens
-        : undefined
-    const inputTokens =
-      isRecord(rawState) && typeof rawState.inputTokens === "number"
-        ? rawState.inputTokens
-        : legacyTokens
-    const outputTokens =
-      isRecord(rawState) && typeof rawState.outputTokens === "number" ? rawState.outputTokens : 0
-    if (
-      !isRecord(rawState) ||
-      typeof inputTokens !== "number" ||
-      !Number.isFinite(inputTokens) ||
-      inputTokens < 0 ||
-      !Number.isFinite(outputTokens) ||
-      outputTokens < 0 ||
-      (rawState.summaryUuid !== undefined && typeof rawState.summaryUuid !== "string") ||
-      !validOptionalBoolean(rawState.dot) ||
-      !validOptionalBoolean(rawState.unlimited)
-    ) {
-      throw new TypeError(`Invalid context budget state for session ${JSON.stringify(sessionId)}.`)
-    }
-    sessions[sessionId] = {
-      inputTokens,
-      outputTokens,
-      ...(typeof rawState.summaryUuid === "string" ? { summaryUuid: rawState.summaryUuid } : {}),
-      dot: rawState.dot === true || undefined,
-      unlimited: rawState.unlimited === true || undefined,
-    }
+    sessions[sessionId] = parseSessionBudgetState(sessionId, rawState)
   }
   return { sessions }
+}
+
+function parseSessionBudgetState(sessionId: string, rawState: unknown): SessionBudgetState {
+  const record = isRecord(rawState) ? rawState : undefined
+  const legacyTokens = typeof record?.toolTokens === "number" ? record.toolTokens : undefined
+  const inputTokens = typeof record?.inputTokens === "number" ? record.inputTokens : legacyTokens
+  const outputTokens = typeof record?.outputTokens === "number" ? record.outputTokens : 0
+  if (
+    !record ||
+    typeof inputTokens !== "number" ||
+    !Number.isFinite(inputTokens) ||
+    inputTokens < 0 ||
+    !Number.isFinite(outputTokens) ||
+    outputTokens < 0 ||
+    (record.summaryUuid !== undefined && typeof record.summaryUuid !== "string") ||
+    !validOptionalBoolean(record.dot) ||
+    !validOptionalBoolean(record.unlimited)
+  ) {
+    throw new TypeError(`Invalid context budget state for session ${JSON.stringify(sessionId)}.`)
+  }
+  let unlimited: boolean | undefined
+  if (typeof record.unlimited === "boolean") unlimited = record.unlimited
+  else if (record.dot === true) unlimited = true
+  return {
+    inputTokens,
+    outputTokens,
+    ...(typeof record.summaryUuid === "string" ? { summaryUuid: record.summaryUuid } : {}),
+    dot: record.dot === true || undefined,
+    unlimited,
+  }
 }
 
 function validOptionalBoolean(value: unknown): boolean {

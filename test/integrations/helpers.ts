@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { request as httpRequest } from "node:http"
 
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
@@ -32,7 +33,7 @@ const TEST_TOOLS = {
   fileRead: true,
   fileWrite: true,
   web: true,
-  skills: true,
+  skills: false,
   image: true,
 } satisfies McpRuntimeProfileOverrides["tools"]
 
@@ -117,7 +118,25 @@ async function connectClientWithMode(
         : undefined,
   })
   await client.connect(transport)
-  return { client, transport }
+  const agentId = randomUUID()
+  const originalCallTool = client.callTool.bind(client)
+  client.callTool = ((params, options) => {
+    const args = params.arguments ?? {}
+    return originalCallTool(
+      {
+        ...params,
+        arguments: {
+          ...(typeof args === "object" && args !== null ? args : {}),
+          agent_id:
+            typeof args === "object" && args !== null && "agent_id" in args
+              ? (args as Record<string, unknown>).agent_id
+              : agentId,
+        },
+      },
+      options
+    )
+  }) as Client["callTool"]
+  return { client, transport, agentId }
 }
 
 export function postWithHost(url: string, host: string, value: unknown): Promise<number> {

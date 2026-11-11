@@ -1,6 +1,7 @@
 import type { CallToolResult, McpServer, ServerContext } from "@modelcontextprotocol/server"
+import { z } from "zod"
 
-import { getAgentIdentity } from "../agent/context.js"
+import { getAgentIdentity, resolveAgentId, runWithAgentId } from "../agent/context.js"
 import type { AgentObserver } from "../agent/observer.js"
 import type { RuntimeControlService, RuntimeToolSource } from "../runtime/runtime-control.js"
 import type { McpAuditRequest } from "../server/audit/audit-log.js"
@@ -9,7 +10,6 @@ import { timelineRegistry } from "../timeline/timeline-registry.js"
 import { shellRunFileEditNotices } from "../tools/shell/apply-patch-guidance.js"
 import { START_HERE_TOOL_NAME } from "../tools/start-here/start-here.js"
 import type { ContextBudgetGuard } from "./context-budget.js"
-import type { ProgressHeartbeatGuard } from "./progress-heartbeat.js"
 import { ToolError, toToolError } from "./tool-error.js"
 import {
   appendInterruptedByUser,
@@ -26,10 +26,10 @@ import {
 
 export interface ToolRegistrationBoundaryOptions {
   structuredOutput: boolean
+  skillRoutingEnabled?: boolean
   agentObserver?: AgentObserver
   auditRequest?: McpAuditRequest
   contextBudget?: ContextBudgetGuard
-  progressHeartbeat?: ProgressHeartbeatGuard
   runtimeControl?: RuntimeControlService
   subagentRuntime?: SubagentRuntime
 }
@@ -38,6 +38,7 @@ const USER_INTERRUPT_GRACE_MS = 350
 
 interface RegisteredTool extends PreparedToolRegistration {
   callback: (...args: unknown[]) => unknown
+  callbackAcceptsInput: boolean
   source?: RuntimeToolSource
 }
 
@@ -64,6 +65,12 @@ async function runRegisteredTool(input: {
   const agent = getAgentIdentity()
   const fullAccess = (await input.options.runtimeControl?.snapshot())?.accessMode === "full-access"
   enforceConversationRouting(agent, input.name, input.argumentsValue, fullAccess)
+  enforceSkillRouting(
+    agent,
+    input.name,
+    input.argumentsValue,
+    input.options.skillRoutingEnabled === true
+  )
 
   const grant = await input.options.runtimeControl?.authorize({
     toolName: input.name,
@@ -141,7 +148,7 @@ async function executeRegisteredTool(
 ): Promise<unknown> {
   const callbackContext = withToolSignal(input.context, input.userStopController.signal)
   const execute = () =>
-    input.tool.acceptsInput
+    input.tool.callbackAcceptsInput
       ? input.tool.callback(input.inputValue, callbackContext)
       : input.tool.callback(callbackContext)
   const execution = Promise.resolve().then(() =>
@@ -166,13 +173,9 @@ async function prepareToolModelResult(input: {
   if (!input.tool.nativeContent && !input.structuredOutput) {
     projected = compactToolResult(input.name, normalized)
   }
-  const withEvents = appendProgressHeartbeat(
-    appendToolEvents(
-      projected,
-      collectToolEvents(input.name, input.argumentsValue, input.agent, input.options)
-    ),
-    input.options.progressHeartbeat,
-    input.agent
+  const withEvents = appendToolEvents(
+    projected,
+    collectToolEvents(input.name, input.argumentsValue, input.agent, input.options)
   )
   const withBudget = await applyContextBudgetNotice({
     contextBudget: input.options.contextBudget,
@@ -302,18 +305,13 @@ async function prepareErrorModelResult(input: {
     input.result,
     collectToolEvents(input.name, input.argumentsValue, input.agent, input.options)
   )
-  const withProgress = appendProgressHeartbeat(
-    withEvents,
-    input.options.progressHeartbeat,
-    input.agent
-  )
   const withBudget = await applyContextBudgetNotice({
     contextBudget: input.options.contextBudget,
     observer: input.options.agentObserver,
     agent: input.agent,
     name: input.name,
     input: input.argumentsValue,
-    result: withProgress,
+    result: withEvents,
     suppressNotice: false,
   })
   return appendSubagentNotices(
@@ -357,7 +355,8 @@ export function installToolRegistrationBoundary(
     name: string,
     tool: RegisteredTool,
     inputValue: unknown,
-    context: ServerContext
+    context: ServerContext,
+    identityError?: ToolError
   ): Promise<unknown> => {
     const argumentsValue = isRecord(inputValue) ? inputValue : {}
     const auditCall = options.auditRequest?.claimTool(context.mcpReq.id, name)
@@ -365,6 +364,7 @@ export function installToolRegistrationBoundary(
     const state: ToolDispatchState = {}
 
     try {
+      if (identityError) throw identityError
       const outcome = await runRegisteredTool({
         name,
         tool,
@@ -398,24 +398,184 @@ export function installToolRegistrationBoundary(
     config: ToolRegistrationConfig,
     callback: unknown
   ) => {
-    const registration = prepareToolRegistration(name, config, structuredOutput)
+    const callbackAcceptsInput = config.inputSchema !== undefined
+    const normalizedConfig = withAgentIdInputSchema(name, config)
+    const registration = prepareToolRegistration(name, normalizedConfig, structuredOutput)
 
-    if (typeof callback !== "function") return registerTool(name, config, callback)
-    const source = runtimeToolSource(config)
+    if (typeof callback !== "function") return registerTool(name, normalizedConfig, callback)
+    const source = runtimeToolSource(normalizedConfig)
     const tool: RegisteredTool = {
       callback: (...args: unknown[]) => callback(...args),
+      callbackAcceptsInput,
       ...registration,
       ...(source ? { source } : {}),
     }
-    const wrapped = tool.acceptsInput
-      ? (inputValue: unknown, context: ServerContext) =>
-          dispatchTool(name, tool, inputValue, context)
-      : (context: ServerContext) => dispatchTool(name, tool, undefined, context)
-    return registerTool(name, config, wrapped)
+    const wrapped = (inputValue: unknown, context: ServerContext) => {
+      const rawArguments = isRecord(inputValue) ? inputValue : {}
+      const requestedAgentId =
+        typeof rawArguments.agent_id === "string" ? rawArguments.agent_id : undefined
+      const { agent_id: _agentId, ...toolArguments } = rawArguments
+      const resolvedAgentId = resolveAgentId(requestedAgentId)
+      const identityError = !resolvedAgentId
+        ? new ToolError(
+            "AGENT_ID_REQUIRED",
+            "A valid agent_id UUID is required on every OpenChatX tool call. Reuse the same UUID returned by your start_here call."
+          )
+        : undefined
+      const callbackInput = callbackAcceptsInput ? toolArguments : undefined
+      const dispatch = () => dispatchTool(name, tool, callbackInput, context, identityError)
+      return resolvedAgentId ? runWithAgentId(resolvedAgentId, dispatch) : dispatch()
+    }
+    return registerTool(name, normalizedConfig, wrapped)
   }
   if (!Reflect.set(server, "registerTool", boundaryRegisterTool)) {
     throw new TypeError("Could not install the MCP tool registration boundary.")
   }
+}
+
+function withAgentIdInputSchema(
+  name: string,
+  config: ToolRegistrationConfig
+): ToolRegistrationConfig {
+  const agentIdSchema = z
+    .string()
+    .uuid()
+    .describe(
+      "Stable Agent UUID. Use the exact UUID returned by your first start_here call on every OpenChatX tool call."
+    )
+  const fieldSchema = agentIdSchema
+  if (config.inputSchema === undefined) {
+    return { ...config, inputSchema: z.object({ agent_id: fieldSchema }) }
+  }
+  if (!isRecord(config.inputSchema)) {
+    throw new TypeError(`Tool ${JSON.stringify(name)} must use an object input schema.`)
+  }
+  if (isZodType(config.inputSchema) && isExtendableInputSchema(config.inputSchema)) {
+    return {
+      ...config,
+      inputSchema: config.inputSchema.extend({ agent_id: fieldSchema }),
+    }
+  }
+  if (isZodType(config.inputSchema)) {
+    return {
+      ...config,
+      inputSchema: z.intersection(config.inputSchema, z.object({ agent_id: fieldSchema })),
+    }
+  }
+  if (isStandardSchemaInput(config.inputSchema)) {
+    return {
+      ...config,
+      inputSchema: withAgentIdStandardSchema(config.inputSchema),
+    }
+  }
+  if (
+    (config.inputSchema.type === "object" || isRecord(config.inputSchema.properties)) &&
+    (config.inputSchema.properties === undefined || isRecord(config.inputSchema.properties))
+  ) {
+    return { ...config, inputSchema: addAgentIdJsonSchema(config.inputSchema) }
+  }
+  if (!isZodRawShape(config.inputSchema)) {
+    throw new TypeError(`Tool ${JSON.stringify(name)} must use an object input schema.`)
+  }
+  return {
+    ...config,
+    inputSchema: z.object({
+      ...config.inputSchema,
+      agent_id: agentIdSchema,
+    }),
+  }
+}
+
+interface StandardSchemaInput extends Record<string, unknown> {
+  "~standard": {
+    validate(value: unknown): unknown | Promise<unknown>
+    jsonSchema: {
+      input(options: unknown): unknown
+      output(options: unknown): unknown
+    }
+  }
+}
+
+function isStandardSchemaInput(value: Record<string, unknown>): value is StandardSchemaInput {
+  const standard = value["~standard"]
+  if (!isRecord(standard) || !isRecord(standard.jsonSchema)) return false
+  return (
+    typeof standard.validate === "function" &&
+    typeof standard.jsonSchema.input === "function" &&
+    typeof standard.jsonSchema.output === "function"
+  )
+}
+
+function withAgentIdStandardSchema(schema: StandardSchemaInput): StandardSchemaInput {
+  const standard = schema["~standard"]
+  const validateOriginal = standard.validate
+  const jsonSchema = standard.jsonSchema
+  return {
+    ...schema,
+    "~standard": {
+      ...standard,
+      validate: async (value) => {
+        const input = isRecord(value) ? value : {}
+        const { agent_id, ...toolInput } = input
+        const result = await validateOriginal(toolInput)
+        if (!isRecord(result) || Array.isArray(result.issues)) return result
+        const validAgentId = z.string().uuid().safeParse(agent_id)
+        if (!validAgentId.success)
+          return { issues: [{ message: "agent_id must be a valid UUID." }] }
+        const parsedValue = isRecord(result.value) ? result.value : toolInput
+        return {
+          value: {
+            ...parsedValue,
+            agent_id,
+          },
+        }
+      },
+      jsonSchema: {
+        input: (options) => addAgentIdJsonSchema(jsonSchema.input(options)),
+        output: (options) => jsonSchema.output(options),
+      },
+    },
+  }
+}
+
+function addAgentIdJsonSchema(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) || (value.type !== "object" && !isRecord(value.properties))) {
+    throw new TypeError("OpenChatX Agent identity requires an object input schema.")
+  }
+  const properties = isRecord(value.properties) ? value.properties : {}
+  const required = Array.isArray(value.required)
+    ? value.required.filter((entry): entry is string => typeof entry === "string")
+    : []
+  const agentIdSchema = {
+    type: "string",
+    pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    description:
+      "Stable Agent UUID. Use the exact UUID returned by your first start_here call on every OpenChatX tool call.",
+  }
+  const schemaRequired = [...new Set([...required, "agent_id"])]
+  return {
+    ...value,
+    type: "object",
+    properties: { ...properties, agent_id: agentIdSchema },
+    required: schemaRequired,
+  }
+}
+
+function isExtendableInputSchema(value: Record<string, unknown>): value is Record<
+  string,
+  unknown
+> & {
+  extend: (shape: Record<string, unknown>) => unknown
+} {
+  return typeof value.extend === "function"
+}
+
+function isZodRawShape(value: Record<string, unknown>): value is z.ZodRawShape {
+  return Object.values(value).every(isZodType)
+}
+
+function isZodType(value: unknown): value is z.ZodType {
+  return isRecord(value) && typeof value.safeParse === "function"
 }
 
 async function waitForToolExecution(
@@ -467,15 +627,6 @@ function withToolSignal(context: ServerContext, localSignal: AbortSignal): Serve
       signal: AbortSignal.any([context.mcpReq.signal, localSignal]),
     },
   }
-}
-
-function appendProgressHeartbeat(
-  result: unknown,
-  progressHeartbeat: ProgressHeartbeatGuard | undefined,
-  agent: ReturnType<typeof getAgentIdentity>
-): unknown {
-  const instruction = progressHeartbeat?.record(agent)
-  return appendToolEvents(result, instruction ? [instruction] : [])
 }
 
 async function applyContextBudgetNotice(options: {
@@ -530,11 +681,43 @@ function isProjectRoutingTool(name: string, input: Record<string, unknown>): boo
     name === "glob"
   )
     return true
-  if (name.startsWith("project_")) return true
+  return isProjectAction(name, input)
+}
+
+function isProjectAction(name: string, input: Record<string, unknown>): boolean {
   return (
-    name === "tool_call" &&
-    typeof input.tool === "string" &&
-    input.tool.startsWith("builtin:project_")
+    name.startsWith("project_") ||
+    (name === "tool_call" &&
+      typeof input.tool === "string" &&
+      input.tool.startsWith("builtin:project_"))
+  )
+}
+
+function isSkillRoutingTool(name: string, input: Record<string, unknown>): boolean {
+  // Project routing remains possible while Skill routing is pending.
+  if (name === START_HERE_TOOL_NAME || name === "tool_search" || isProjectAction(name, input))
+    return true
+  if (name === "skill_search") return true
+  return name === "tool_call" && input.tool === "builtin:skill_search"
+}
+
+function enforceSkillRouting(
+  agent: ReturnType<typeof getAgentIdentity>,
+  name: string,
+  input: Record<string, unknown>,
+  enabled: boolean
+): void {
+  if (
+    !enabled ||
+    !agent?.taskSlug ||
+    agent.skillRouting === "selected" ||
+    agent.skillRouting === "skipped" ||
+    isSkillRoutingTool(name, input)
+  )
+    return
+  throw new ToolError(
+    "SKILL_ROUTING_REQUIRED",
+    "After Project routing, choose a Skill before normal work: call skill_search action=search with a query describing this task, then load an exact returned name with action=load. If no Skill applies, explicitly call action=load and omit name. If the user explicitly forbids Skills, use action=load with reason=user-forbids-skills and omit name. Project routing and Skill discovery/selection remain available until this choice is made."
   )
 }
 
@@ -565,7 +748,7 @@ function enforceConversationRouting(
   input: Record<string, unknown>,
   fullAccess: boolean
 ): void {
-  if (agent && name !== START_HERE_TOOL_NAME && !agent.taskSlug) {
+  if (agent?.parentSessionId && name !== START_HERE_TOOL_NAME && !agent.taskSlug) {
     throw new ToolError(
       "INITIALIZATION_REQUIRED",
       "openchatx-mcp has not been initialized for this conversation. Call `start_here` first, and follow the instructions."
@@ -574,7 +757,7 @@ function enforceConversationRouting(
   if (fullAccess || agent?.projectRouting !== "pending" || isProjectRoutingTool(name, input)) return
   throw new ToolError(
     "PROJECT_ROUTING_REQUIRED",
-    "Resolve Project routing before normal work with project_manage. For project work: action=list, action=upsert if needed, then action=use with project_id. For machine/global work: action=use with project_id=null. Do not bypass routing or reach for internal paths. Only glob is available while routing is pending."
+    "Resolve Project routing before Skill selection or normal work with project_manage. For project work: action=list, action=upsert if needed, then action=use with project_id. For machine/global work: action=use with project_id=null. Do not bypass routing or reach for internal paths. Only Project routing, start_here, tool_search, glob and summarize are available while routing is pending."
   )
 }
 

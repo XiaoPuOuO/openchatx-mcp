@@ -4,9 +4,11 @@ import test from "node:test"
 import {
   getAgentIdentity,
   initializeAgentProjectRouting,
+  recordAgentSkillSearch,
   runWithAgent,
   setAgentProjectId,
   setAgentProjectRoutingPending,
+  setAgentSkillSelection,
   setAgentTaskSlug,
 } from "../../src/agent/context.js"
 
@@ -52,5 +54,28 @@ test("tracks whether Project routing is pending, project-scoped, or explicitly u
 
     setAgentProjectId(undefined)
     assert.equal(getAgentIdentity()?.projectRouting, "unscoped")
+  })
+})
+
+test("requires a fresh Skill decision for each task and preserves it within the task", () => {
+  runWithAgent("agent-skill-routing", () => {
+    setAgentTaskSlug("task-one")
+    assert.equal(getAgentIdentity()?.skillRouting, "pending")
+
+    recordAgentSkillSearch(["coding.review"])
+    assert.equal(getAgentIdentity()?.skillRouting, "searched")
+    assert.deepEqual(getAgentIdentity()?.skillSearchResults, ["coding.review"])
+
+    setAgentSkillSelection("coding.review")
+    assert.equal(getAgentIdentity()?.skillRouting, "selected")
+    setAgentTaskSlug("task-one")
+    assert.equal(getAgentIdentity()?.skillRouting, "selected")
+    setAgentTaskSlug("task-two")
+    assert.equal(getAgentIdentity()?.skillRouting, "pending")
+    assert.deepEqual(getAgentIdentity()?.skillSearchResults, [])
+
+    recordAgentSkillSearch([])
+    setAgentSkillSelection(null)
+    assert.equal(getAgentIdentity()?.skillRouting, "skipped")
   })
 })

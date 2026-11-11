@@ -28,13 +28,21 @@ export class McpAuditLogger {
   startRequest(payload: unknown): McpAuditRequest {
     return createAuditRequest(
       payload,
-      (toolName, argumentsValue) => this.startToolCall(toolName, argumentsValue),
+      (toolName, argumentsValue, requestId) =>
+        this.startToolCall(toolName, argumentsValue, requestId),
       () => this.appendToolList()
     )
   }
 
-  private startToolCall(toolName: string, argumentsValue: unknown): McpAuditCall {
+  private startToolCall(
+    toolName: string,
+    argumentsValue: unknown,
+    rpcRequestId?: string | number
+  ): McpAuditCall {
     const identity = getAgentIdentity()
+    const requestArguments = isRecord(argumentsValue) ? argumentsValue : undefined
+    const agentId =
+      typeof requestArguments?.agent_id === "string" ? requestArguments.agent_id : identity?.agentId
     let agentLabel: string | undefined
     if (identity) {
       agentLabel = identity.taskSlug ? `${identity.agent}/${identity.taskSlug}` : identity.agent
@@ -84,6 +92,8 @@ export class McpAuditLogger {
             failureMessage,
             responseSummary: toolResponse,
             agentLabel,
+            agentId,
+            rpcRequestId,
           })
         )
       },
@@ -102,4 +112,8 @@ export class McpAuditLogger {
       console.warn(`Could not update MCP audit log: ${errorMessage(error)}`)
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

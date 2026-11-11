@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/client"
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { runWithAgent, setAgentTaskSlug } from "../../src/agent/context.js"
+import { runWithAgentId } from "../../src/agent/context.js"
 import { createAgentObserver } from "../../src/agent/observer.js"
 import { installToolRegistrationBoundary } from "../../src/mcp/tool-registration-boundary.js"
 
@@ -47,31 +47,58 @@ for (const structuredOutput of [false, true]) {
       Object.keys(
         listed.tools.find((tool) => tool.name === "with_input")?.inputSchema.properties ?? {}
       ),
-      ["name"]
+      ["name", "agent_id"]
     )
     assert.deepEqual(
       Object.keys(
         listed.tools.find((tool) => tool.name === "without_input")?.inputSchema.properties ?? {}
       ),
-      []
+      ["agent_id"]
+    )
+    assert.ok(
+      listed.tools
+        .find((tool) => tool.name === "with_input")
+        ?.inputSchema.required?.includes("agent_id")
+    )
+    assert.ok(
+      listed.tools
+        .find((tool) => tool.name === "without_input")
+        ?.inputSchema.required?.includes("agent_id")
     )
 
-    const loaded = await client.callTool({ name: "with_input", arguments: { name: " value " } })
+    const agentId = "123e4567-e89b-42d3-a456-426614174000"
+    const loaded = await client.callTool({
+      name: "with_input",
+      arguments: { name: " value ", agent_id: agentId },
+    })
     assert.notEqual(loaded.isError, true)
     assert.equal(inputCalls, 1)
     if (structuredOutput) assert.deepEqual(loaded.structuredContent, { name: "value" })
     else assert.equal(loaded.structuredContent, undefined)
 
-    const contextResult = await client.callTool({ name: "without_input", arguments: {} })
+    const missingAgentId = await client.callTool({
+      name: "with_input",
+      arguments: { name: "missing identity" },
+    })
+    assert.equal(missingAgentId.isError, true)
+    assert.equal(inputCalls, 1)
+
+    const contextResult = await client.callTool({
+      name: "without_input",
+      arguments: { agent_id: agentId },
+    })
     assert.notEqual(contextResult.isError, true)
     assert.equal(contextCalls, 1)
     assert.match(JSON.stringify(contextResult.content), /context received/u)
 
-    const invalid = await client.callTool({ name: "with_input", arguments: { name: 42 } })
+    const invalid = await client.callTool({
+      name: "with_input",
+      arguments: { name: 42, agent_id: agentId },
+    })
     assert.equal(invalid.isError, true)
     assert.equal(inputCalls, 1)
 
-    const thrown = await client.callTool({ name: "throwing", arguments: {} })
+    const thrown = await client.callTool({ name: "throwing", arguments: { agent_id: agentId } })
     assert.equal(thrown.isError, true)
     assert.match(JSON.stringify(thrown.content), /fixture failure/u)
   })
@@ -98,10 +125,12 @@ test("forced stop returns immediately with queued human instructions", async (t)
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
 
-  const resultPromise = runWithAgent("forced-stop-session", () => {
-    setAgentTaskSlug("forced-stop-test")
-    return client.callTool({ name: "blocking", arguments: {} })
-  })
+  const resultPromise = runWithAgentId("123e4567-e89b-42d3-a456-426614174000", () =>
+    client.callTool({
+      name: "blocking",
+      arguments: { agent_id: "123e4567-e89b-42d3-a456-426614174000" },
+    })
+  )
 
   await waitFor(() => observer.listAgents()[0]?.current?.status === "running")
   const agent = observer.listAgents()[0]
@@ -136,10 +165,12 @@ test("forced stop finishes an uncooperative tool after the interrupt grace perio
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
 
   const startedAt = Date.now()
-  const resultPromise = runWithAgent("uncooperative-stop-session", () => {
-    setAgentTaskSlug("uncooperative-stop-test")
-    return client.callTool({ name: "ignores_abort", arguments: {} })
-  })
+  const resultPromise = runWithAgentId("123e4567-e89b-42d3-a456-426614174000", () =>
+    client.callTool({
+      name: "ignores_abort",
+      arguments: { agent_id: "123e4567-e89b-42d3-a456-426614174000" },
+    })
+  )
 
   await waitFor(() => observer.listAgents()[0]?.current?.status === "running")
   const agent = observer.listAgents()[0]

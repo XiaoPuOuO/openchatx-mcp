@@ -159,11 +159,15 @@ test("aggregates a local stdio MCP and forwards tool calls", { timeout: 10_000 }
   )
   await client.callTool({
     name: "start_here",
-    arguments: { mode: "general", task_id: "external-stdio-test" },
+    arguments: {
+      mode: "general",
+      task_id: "external-stdio-test",
+      agent_id: "123e4567-e89b-42d3-a456-426614174000",
+    },
   })
   const result = await client.callTool({
     name: "local_test__echo",
-    arguments: { value: "hello" },
+    arguments: { value: "hello", agent_id: "123e4567-e89b-42d3-a456-426614174000" },
   })
   assert.equal(result.content.find((item) => item.type === "text")?.text, "stdio:hello")
   assert.deepEqual(result.structuredContent, { value: "hello", transport: "stdio" })
@@ -280,9 +284,16 @@ test("aggregates a remote HTTP MCP and tolerates unavailable peers", {
   await client.connect(new StreamableHTTPClientTransport(new URL(outer.url)))
   await client.callTool({
     name: "start_here",
-    arguments: { mode: "general", task_id: "external-http-test" },
+    arguments: {
+      mode: "general",
+      task_id: "external-http-test",
+      agent_id: "123e4567-e89b-42d3-a456-426614174000",
+    },
   })
-  const result = await client.callTool({ name: "remote__ping", arguments: { value: "ok" } })
+  const result = await client.callTool({
+    name: "remote__ping",
+    arguments: { value: "ok", agent_id: "123e4567-e89b-42d3-a456-426614174000" },
+  })
   assert.equal(result.content.find((item) => item.type === "text")?.text, "http:ok")
 })
 

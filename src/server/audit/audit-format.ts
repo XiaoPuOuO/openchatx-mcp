@@ -27,6 +27,8 @@ export function formatAuditEntry(input: {
   failureMessage?: string
   responseSummary: ToolResponseSummary
   agentLabel?: string
+  agentId?: string
+  rpcRequestId?: string | number
 }): string {
   const abnormal =
     input.httpStatus >= 400 || input.state !== "finished"
@@ -38,6 +40,8 @@ export function formatAuditEntry(input: {
   const heading = `--- # ${tagPrefix}${input.toolName} - ${input.durationMs}ms${tokenCounts}${abnormal} - ${formatAuditTime(input.time)}`
   const details = [
     formatAgentLabel(input.agentLabel),
+    formatAgentId(input.agentId),
+    formatRpcRequestId(input.rpcRequestId),
     formatArguments(input.toolName, input.argumentsValue, input.toolFailed, input.failureMessage),
     formatResponseSummary(input.toolName, input.responseSummary),
   ]
@@ -97,6 +101,18 @@ export function errorMessage(error: unknown): string {
 
 function formatAgentLabel(agentLabel: string | undefined): string {
   return agentLabel ? `session: ${yamlString(agentLabel)}` : ""
+}
+
+function formatAgentId(agentId: string | undefined): string {
+  return agentId ? `agent_id: ${yamlString(agentId)}` : ""
+}
+
+function formatRpcRequestId(requestId: string | number | undefined): string {
+  if (typeof requestId === "string" && requestId.length > 0)
+    return `rpc_request_id: ${yamlString(requestId)}`
+  if (typeof requestId === "number" && Number.isFinite(requestId))
+    return `rpc_request_id: ${requestId}`
+  return ""
 }
 
 function auditTag(input: {

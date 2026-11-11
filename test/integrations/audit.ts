@@ -12,6 +12,7 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
   const auditPath = join(root, "agent-commands.yaml")
   const running = await startMcpHttpServer({
     port: 0,
+    profile: { tools: { skills: true } },
     auditLogger: new McpAuditLogger(auditPath),
   })
   t.after(async () => {
@@ -31,16 +32,21 @@ test("audits tool calls made through the HTTP MCP boundary", { timeout: 10_000 }
     name: "start_here",
     arguments: { mode: "general", task_id: "audit-integration" },
   })
-  await connected.client.callTool({ name: "bash", arguments: { command: "printf audit" } })
   await connected.client.callTool({
     name: "skill_search",
     arguments: { query: "create skill" },
   })
+  await connected.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load" },
+  })
+  await connected.client.callTool({ name: "bash", arguments: { command: "printf audit" } })
 
   const log = await readFile(auditPath, "utf8")
   assert.match(log, /--- # bash /u)
   assert.match(log, /command: \|-/u)
   assert.match(log, /--- # skill_search /u)
-  assert.match(log, /session: "agent-1"/u)
+  assert.match(log, /session: "agent-\d+"/u)
+  assert.match(log, /agent_id: "[0-9a-f-]{36}"/u)
   assert.doesNotMatch(log, /child-session/u)
 })

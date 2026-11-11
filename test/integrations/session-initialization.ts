@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test, { after, before } from "node:test"
 
-import { getAgentIdentity, runWithAgent } from "../../src/agent/context.js"
+import { getAgentIdentity, runWithAgentId } from "../../src/agent/context.js"
 import { MCP_CONFIG } from "../../src/config.js"
 import { ProjectRegistry } from "../../src/projects/project-registry.js"
 import { ProjectScope } from "../../src/projects/project-scope.js"
@@ -21,6 +21,15 @@ import { connectClient, startMcpHttpServer, toolText } from "./helpers.js"
 
 const originalAgentInstructionsFile = MCP_CONFIG.agentInstructionsFile
 let agentInstructionsFixtureDir: string | undefined
+
+function assertStartHereOutput(
+  output: string,
+  agentId: string,
+  expectedInstructions?: string
+): void {
+  assert.ok(output.includes(`Your Agent UUID is \`${agentId}\`.`))
+  if (expectedInstructions) assert.ok(output.includes(expectedInstructions))
+}
 
 before(async () => {
   agentInstructionsFixtureDir = await mkdtemp(join(tmpdir(), "openchatx-start-here-default-"))
@@ -202,6 +211,98 @@ test("requires Project routing before normal work in a new session", {
   assert.notEqual(allowed.isError, true)
 })
 
+test("Project routing precedes Skill routing without either gate blocking the other", {
+  timeout: 10_000,
+}, async (t) => {
+  const stateDir = await mkdtemp(join(tmpdir(), "openchatx-project-skill-routing-"))
+  t.after(() => rm(stateDir, { recursive: true, force: true }))
+
+  const projectRegistry = new ProjectRegistry(join(stateDir, "projects.json"))
+  const projectScope = new ProjectScope(projectRegistry)
+  const running = await startMcpHttpServer({
+    projectRegistry,
+    projectScope,
+    profile: { tools: { skills: true } },
+  })
+  t.after(() => running.close())
+  const connected = await connectClient(
+    running.url,
+    "project-skill-routing-client",
+    undefined,
+    false,
+    "project-skill-routing-session"
+  )
+  t.after(() => connected.client.close())
+
+  const started = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "project-skill-order" },
+  })
+  assert.notEqual(started.isError, true)
+  assert.match(toolText(started), /Project routing.*Skill routing/u)
+
+  const prematureSkill = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { query: "review project" },
+  })
+  assert.equal(prematureSkill.isError, true)
+  assert.match(toolText(prematureSkill), /PROJECT_ROUTING_REQUIRED/u)
+
+  const projects = await connected.client.callTool({
+    name: "project_manage",
+    arguments: { action: "list" },
+  })
+  assert.notEqual(projects.isError, true)
+  const selectedProject = await connected.client.callTool({
+    name: "project_manage",
+    arguments: { action: "use", project_id: null },
+  })
+  assert.notEqual(selectedProject.isError, true)
+
+  const prematureWork = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf blocked" },
+  })
+  assert.equal(prematureWork.isError, true)
+  assert.match(toolText(prematureWork), /SKILL_ROUTING_REQUIRED/u)
+
+  // Project management remains accessible while a Skill decision is pending.
+  const projectsDuringSkill = await connected.client.callTool({
+    name: "project_manage",
+    arguments: { action: "list" },
+  })
+  assert.notEqual(projectsDuringSkill.isError, true)
+
+  const searched = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { action: "search", query: "review project" },
+  })
+  assert.notEqual(searched.isError, true)
+  const skipped = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load" },
+  })
+  assert.notEqual(skipped.isError, true)
+  const allowed = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf ready" },
+  })
+  assert.notEqual(allowed.isError, true)
+
+  // A new task resets only Skill routing; Project selection remains resolved.
+  await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "project-skill-next" },
+  })
+  const blockedNewTask = await connected.client.callTool({
+    name: "bash",
+    arguments: { command: "printf blocked-again" },
+  })
+  assert.equal(blockedNewTask.isError, true)
+  assert.match(toolText(blockedNewTask), /SKILL_ROUTING_REQUIRED/u)
+  assert.doesNotMatch(toolText(blockedNewTask), /PROJECT_ROUTING_REQUIRED/u)
+})
+
 test("summarize hands a temporary summary across ChatGPT sessions and consumes it once", {
   timeout: 10_000,
 }, async (t) => {
@@ -345,8 +446,9 @@ test("requires start_here once per ChatGPT session", { timeout: 10_000 }, async 
   assert.doesNotMatch(startInstructions, /\{\{MODE_INSTRUCTIONS\}\}/u)
   assert.match(startInstructions, /Mode: `coding`/u)
   assert.match(startInstructions, /Task ID: `startup-session`/u)
-  assert.equal(
+  assertStartHereOutput(
     startInstructions,
+    first.agentId,
     await buildStartHereInstructions("coding", undefined, undefined, { taskId: "startup-session" })
   )
 
@@ -386,12 +488,6 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
 
   let now = Date.now()
   t.mock.method(Date, "now", () => now)
-  const codingInstructions = await buildStartHereInstructions("coding", undefined, undefined, {
-    taskId: "initial-task",
-  })
-  const renamedInstructions = await buildStartHereInstructions("coding", undefined, undefined, {
-    taskId: "renamed-task",
-  })
   const simultaneous = await Promise.all([
     first.client.callTool({
       name: "start_here",
@@ -405,10 +501,10 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
   assert.ok(simultaneous.every((result) => !result.isError))
   const simultaneousText = simultaneous.map(toolText)
   assert.equal(
-    simultaneousText.filter((text) => text === codingInstructions || text === renamedInstructions)
-      .length,
+    simultaneousText.filter((text) => !/loaded recently by this agent/u.test(text)).length,
     1
   )
+  assert.ok(simultaneousText.every((text) => text.includes(first.agentId)))
   assert.equal(
     simultaneousText.filter((text) => /loaded recently by this agent/u.test(text)).length,
     1
@@ -421,7 +517,7 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
   })
   assert.match(toolText(duplicate), /loaded recently by this agent/u)
   assert.equal(
-    runWithAgent("start-cooldown-session-a", () => getAgentIdentity()?.taskSlug),
+    runWithAgentId(first.agentId, () => getAgentIdentity()?.taskSlug),
     "updated-task"
   )
 
@@ -429,16 +525,18 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
     name: "start_here",
     arguments: { mode: "general", task_id: "general-task" },
   })
-  assert.equal(
+  assertStartHereOutput(
     toolText(otherMode),
+    first.agentId,
     await buildStartHereInstructions("general", undefined, undefined, { taskId: "general-task" })
   )
   const otherAgent = await second.client.callTool({
     name: "start_here",
     arguments: { mode: "coding", task_id: "other-task" },
   })
-  assert.equal(
+  assertStartHereOutput(
     toolText(otherAgent),
+    second.agentId,
     await buildStartHereInstructions("coding", undefined, undefined, { taskId: "other-task" })
   )
 
@@ -447,8 +545,9 @@ test("suppresses duplicate start_here modes for five seconds per agent", {
     name: "start_here",
     arguments: { mode: "coding", task_id: "after-cooldown" },
   })
-  assert.equal(
+  assertStartHereOutput(
     toolText(expired),
+    first.agentId,
     await buildStartHereInstructions("coding", undefined, undefined, { taskId: "after-cooldown" })
   )
 })
@@ -514,12 +613,44 @@ test("searches skill metadata before loading full Markdown", {
     await rm(toolboxRoot, { recursive: true, force: true })
   })
 
+  const listedTools = await connected.client.listTools()
+  const skillSearchSchema = listedTools.tools.find(
+    (tool) => tool.name === "skill_search"
+  )?.inputSchema
+  assert.ok(skillSearchSchema)
+  assert.equal(
+    (skillSearchSchema.properties?.name as Record<string, unknown> | undefined)?.type,
+    "string"
+  )
+  assert.equal((skillSearchSchema.required ?? []).includes("name"), false)
+
   const started = await connected.client.callTool({
     name: "start_here",
     arguments: { mode: "general", task_id: "skill-search" },
   })
   const startText = toolText(started)
   assert.doesNotMatch(startText, /cooldown-skill/u)
+  assert.match(startText, /for each new `task_id`/u)
+  assert.match(startText, /Project first/u)
+  const repeatedStart = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-search" },
+  })
+  assert.notEqual(repeatedStart.isError, true)
+
+  const blockedBeforeSearch = await connected.client.callTool({
+    name: "skill_manage",
+    arguments: { action: "create", toolbox: "test-skills", name: "before-skill-selection" },
+  })
+  assert.equal(blockedBeforeSearch.isError, true)
+  assert.match(toolText(blockedBeforeSearch), /SKILL_ROUTING_REQUIRED/u)
+
+  const blockedLoadBeforeSearch = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load", name: "test-skills.cooldown-skill" },
+  })
+  assert.equal(blockedLoadBeforeSearch.isError, true)
+  assert.match(toolText(blockedLoadBeforeSearch), /SKILL_SEARCH_REQUIRED/u)
 
   const searched = await connected.client.callTool({
     name: "skill_search",
@@ -541,11 +672,120 @@ test("searches skill metadata before loading full Markdown", {
   assert.match(toolText(firstLoad), /Full instructions\./u)
   assert.match(toolText(secondLoad), /Full instructions\./u)
 
+  const allowedAfterLoad = await connected.client.callTool({
+    name: "skill_manage",
+    arguments: { action: "create", toolbox: "test-skills", name: "after-skill-load" },
+  })
+  assert.notEqual(allowedAfterLoad.isError, true)
+
+  // Reinitializing with the same task and mode preserves the Skill selection.
+  const reinitialized = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-search" },
+  })
+  assert.notEqual(reinitialized.isError, true)
+  const stillAllowed = await connected.client.callTool({
+    name: "skill_manage",
+    arguments: { action: "create", toolbox: "test-skills", name: "same-task-allowed" },
+  })
+  assert.notEqual(stillAllowed.isError, true)
+
+  // A new task_id requires a fresh search even if the mode is unchanged.
+  const changedTask = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-search-next" },
+  })
+  assert.notEqual(changedTask.isError, true)
+  const blockedAgain = await connected.client.callTool({
+    name: "skill_manage",
+    arguments: { action: "create", toolbox: "test-skills", name: "before-second-selection" },
+  })
+  assert.equal(blockedAgain.isError, true)
+  assert.match(toolText(blockedAgain), /SKILL_ROUTING_REQUIRED/u)
+  const staleLoad = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load", name: "test-skills.cooldown-skill" },
+  })
+  assert.equal(staleLoad.isError, true)
+  assert.match(toolText(staleLoad), /SKILL_SEARCH_REQUIRED/u)
+  await connected.client.callTool({ name: "skill_search", arguments: { query: "cooldown skill" } })
+  const reloaded = await connected.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load", name: "test-skills.cooldown-skill" },
+  })
+  assert.notEqual(reloaded.isError, true)
+
   const missing = await connected.client.callTool({
     name: "skill_search",
     arguments: { action: "load", name: "test-skills.missing-skill" },
   })
-  assert.match(toolText(missing), /Unknown toolbox skill/u)
+  assert.match(toolText(missing), /SKILL_SEARCH_REQUIRED/u)
+
+  const noSkillClient = await connectClient(
+    running.url,
+    "skill-skip-client",
+    undefined,
+    false,
+    "skill-skip-session"
+  )
+  t.after(() => noSkillClient.client.close())
+  await noSkillClient.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-skip" },
+  })
+  const noMatches = await noSkillClient.client.callTool({
+    name: "skill_search",
+    arguments: { action: "search", query: "unrelated astronomy observatory task" },
+  })
+  assert.doesNotMatch(toolText(noMatches), /cooldown-skill/u)
+  const explicitNoSkill = await noSkillClient.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load" },
+  })
+  assert.notEqual(explicitNoSkill.isError, true)
+  assert.match(toolText(explicitNoSkill), /no-suitable-skill/u)
+  await noSkillClient.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-skip-optional-name" },
+  })
+  await noSkillClient.client.callTool({
+    name: "skill_search",
+    arguments: { action: "search", query: "unrelated astronomy observatory task" },
+  })
+  const omittedNameNoSkill = await noSkillClient.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load" },
+  })
+  assert.notEqual(omittedNameNoSkill.isError, true)
+  assert.match(toolText(omittedNameNoSkill), /no-suitable-skill/u)
+  const allowedAfterSkip = await noSkillClient.client.callTool({
+    name: "skill_manage",
+    arguments: { action: "create", toolbox: "test-skills", name: "after-null-selection" },
+  })
+  assert.notEqual(allowedAfterSkip.isError, true)
+
+  const forbiddenClient = await connectClient(
+    running.url,
+    "skill-forbidden-client",
+    undefined,
+    false,
+    "skill-forbidden-session"
+  )
+  t.after(() => forbiddenClient.client.close())
+  await forbiddenClient.client.callTool({
+    name: "start_here",
+    arguments: { mode: "general", task_id: "skill-forbidden" },
+  })
+  const forbidden = await forbiddenClient.client.callTool({
+    name: "skill_search",
+    arguments: { action: "load", reason: "user-forbids-skills" },
+  })
+  assert.notEqual(forbidden.isError, true)
+  const allowedAfterForbidden = await forbiddenClient.client.callTool({
+    name: "skill_manage",
+    arguments: { action: "create", toolbox: "test-skills", name: "after-forbidden-skip" },
+  })
+  assert.notEqual(allowedAfterForbidden.isError, true)
 })
 
 test("prefers repo-local .openchatx prompt overrides and falls back to bundled prompts", async (t) => {
@@ -618,8 +858,9 @@ test("keeps a ChatGPT session locked when start_here fails", { timeout: 10_000 }
     name: "start_here",
     arguments: { mode: "coding", task_id: "retry-startup" },
   })
-  assert.equal(
+  assertStartHereOutput(
     toolText(retry),
+    connected.agentId,
     await buildStartHereInstructions("coding", undefined, undefined, { taskId: "retry-startup" })
   )
   const allowed = await connected.client.callTool({
@@ -646,11 +887,15 @@ test("does not require start_here when no ChatGPT session is provided", {
   const instructions = await buildStartHereInstructions("coding", undefined, undefined, {
     taskId: "local-startup",
   })
-  for (let call = 0; call < 2; call += 1) {
-    const started = await connected.client.callTool({
-      name: "start_here",
-      arguments: { mode: "coding", task_id: "local-startup" },
-    })
-    assert.equal(toolText(started), instructions)
-  }
+  const first = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "local-startup" },
+  })
+  assertStartHereOutput(toolText(first), connected.agentId, instructions)
+  const repeated = await connected.client.callTool({
+    name: "start_here",
+    arguments: { mode: "coding", task_id: "local-startup" },
+  })
+  assertStartHereOutput(toolText(repeated), connected.agentId)
+  assert.match(toolText(repeated), /loaded recently by this agent/u)
 })

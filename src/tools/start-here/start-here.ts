@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url"
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 
-import { initializeAgentProjectRouting, setAgentTaskSlug } from "../../agent/context.js"
+import {
+  getAgentIdentity,
+  initializeAgentProjectRouting,
+  setAgentTaskSlug,
+} from "../../agent/context.js"
 import { createAgentLoadDeduper } from "../../agent/load-deduper.js"
 import type { CapabilityDescriptor } from "../../capabilities/catalog.js"
 import { MCP_CONFIG } from "../../config.js"
@@ -33,6 +37,7 @@ export type CapabilityCatalog = CapabilityDescriptor[]
 export interface StartHereTemplateContext {
   mode: string
   taskId: string
+  agentId?: string
   modeInstructions: string
   projectContext: string
   goalContext: string
@@ -57,10 +62,16 @@ export function registerStartHereTool(
     START_HERE_TOOL_NAME,
     {
       description:
-        "Initialize openchatx-mcp once per conversation. Loads the selected Deep Work mode, returns a lightweight capability catalog for MCP servers/subagents/custom toolboxes, and unlocks the other tools.",
+        "Initialize or refresh openchatx-mcp for this Agent. Before your first call, generate a UUID v4 and pass it as agent_id. Remember it and pass the exact same agent_id on every OpenChatX tool call and every subsequent start_here call. Skill routing resets only when task_id changes.",
       inputSchema: z.object({
         mode: z.enum([firstMode, ...remainingModes]),
         task_id: z.string().min(1).max(128),
+        agent_id: z
+          .string()
+          .uuid()
+          .describe(
+            "Required stable UUID for this Agent. Generate a UUID v4 if you do not already have one; never change it on later calls."
+          ),
         project_id: z
           .string()
           .min(1)
@@ -75,6 +86,8 @@ export function registerStartHereTool(
       },
     },
     async ({ mode, task_id, project_id }) => {
+      const agentId = getAgentIdentity()?.agentId
+      if (!agentId) throw new Error("start_here requires a valid agent_id UUID.")
       const { value: modeInstructions, reused } = await loadStartInstructions(mode, async () => {
         const selected = await readStartPrompt(mode)
         return selected.prompt.trim()
@@ -94,6 +107,7 @@ export function registerStartHereTool(
         ? renderAlwaysAppliedRules(await alwaysAppliedRules())
         : ""
       const template = await readAgentInstructionsTemplate()
+      const identityNotice = renderAgentIdentityNotice(agentId)
       const instructions = `${renderStartHereTemplate(template, {
         mode,
         taskId: task_id,
@@ -107,17 +121,22 @@ export function registerStartHereTool(
         content: [
           {
             type: "text",
-            text: reused
-              ? [
-                  `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
-                  projectContext,
-                  goalContext,
-                  capabilities,
-                  ruleContext,
-                ]
-                  .filter(Boolean)
-                  .join("\n\n")
-              : instructions,
+            text: [
+              identityNotice,
+              reused
+                ? [
+                    `Mode ${JSON.stringify(mode)} was loaded recently by this agent; reuse the previously returned instructions.`,
+                    projectContext,
+                    goalContext,
+                    capabilities,
+                    ruleContext,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n")
+                : instructions,
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
           },
         ],
       }
@@ -170,7 +189,7 @@ function renderProjectContext(
     return [
       "# Projects",
       "No Projects are registered yet.",
-      "Project routing is required before normal work. For project work, use project_manage action=list, upsert if needed, then action=use. For machine/global work, call project_manage action=use with project_id=null. Only glob is available before routing is resolved.",
+      "Project routing is required before Skill selection and normal work. For project work, use project_manage action=list, upsert if needed, then action=use. For machine/global work, call project_manage action=use with project_id=null. Only routing and discovery tools are available before routing is resolved.",
     ].join("\n")
   }
   return [
@@ -223,7 +242,19 @@ export async function buildStartHereInstructions(
     capabilityCatalog: context.capabilityCatalog ?? "",
     alwaysRules: context.alwaysRules ?? "",
   })
-  return `${rendered}\n\n${renderCurrentToolContracts()}`.trim()
+  const identityNotice = context.agentId ? renderAgentIdentityNotice(context.agentId) : ""
+  return [identityNotice, rendered, renderCurrentToolContracts()]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim()
+}
+
+function renderAgentIdentityNotice(agentId: string): string {
+  return [
+    "# Agent identity",
+    `Your Agent UUID is \`${agentId}\`.`,
+    "Remember this exact UUID. Include it as agent_id on every OpenChatX tool call and every later start_here call. Never generate a replacement unless you have permanently lost this identity.",
+  ].join("\n")
 }
 
 export function renderCurrentToolContracts(): string {
@@ -231,7 +262,10 @@ export function renderCurrentToolContracts(): string {
     "# Current OpenChatX Tool Contracts",
     "These runtime-owned contracts are authoritative for the current tool surface.",
     "- Projects: project_manage actions=list|upsert|remove|use|resolve|grant_once|grant_all_session|revoke_all_session. Activate/switch with action=use + project_id; clear for machine/global work with action=use + project_id=null.",
-    "- Skills: skill_search action=search (default) or action=load + name; skill_manage handles create|edit|delete.",
+    "- Routing order: start_here -> Project routing (project_manage action=use or already active) -> Skill routing -> normal tools and Subagents.",
+    "- Agent identity: generate one UUID v4 before the first start_here call and pass it as agent_id. Remember it and include the same agent_id on every OpenChatX tool call and every later start_here call. If multiple Agents share one MCP session, omitting agent_id is rejected as ambiguous.",
+    "- Skills: for every new task_id, after Project routing, search with skill_search action=search, then load an exact returned name with action=load + name. If none fits, use action=load and omit name; this is the explicit no-Skill selection. If the user forbids Skills, use action=load + reason=user-forbids-skills and omit name. Repeated start_here with the same task_id preserves a completed Skill decision. skill_manage handles create|edit|delete.",
+    "If SKILL_ROUTING_REQUIRED is returned, complete Skill search and selection before normal work or delegation. Do not bypass the gate through subagents or tool_call.",
     "- Capabilities: capability_list action=list (default) or action=health.",
     "- Subagents: subagent_run runs or auto-routes. mode=sync waits; mode=async starts a job and returns job_id. A later tool result announces completion; subagent_get(job_id) retrieves it. action=route only selects.",
     "- Rules: rule_resolve action=resolve (default) or action=load; rule_manage handles create|edit|delete|import|export.",

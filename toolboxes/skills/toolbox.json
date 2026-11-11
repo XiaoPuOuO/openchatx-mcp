@@ -6,7 +6,7 @@
   "tools": {
     "skill_search": {
       "enabled": true,
-      "description": "Search reusable skills or load one exact skill."
+      "description": "Search task-relevant Skills, then load one exact match or explicitly select null when none applies."
     },
     "skill_manage": {
       "enabled": true,

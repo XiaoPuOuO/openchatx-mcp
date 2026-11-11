@@ -7,10 +7,12 @@ import test from "node:test"
 import type { AgentIdentity } from "../src/agent/context.js"
 import { ContextBudgetGuard } from "../src/mcp/context-budget.js"
 
-function identity(sessionId: string): AgentIdentity {
+function identity(sessionId: string, agentId?: string, isDot = false): AgentIdentity {
   return {
     sessionId,
     agent: `agent-${sessionId}`,
+    ...(agentId ? { agentId } : {}),
+    ...(isDot ? { isDot: true } : {}),
     projectRouting: "unscoped",
   }
 }
@@ -52,6 +54,36 @@ test("unlimited setting survives guard restart", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test("Dot origin automatically enables and persists unlimited context", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "context-dot-unlimited-"))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const statePath = join(directory, "state.json")
+  const guard = new ContextBudgetGuard(20, (value) => value.length, statePath)
+  await guard.initialize()
+  const agent = identity(
+    "agent:123e4567-e89b-42d3-a456-426614174000",
+    "123e4567-e89b-42d3-a456-426614174000",
+    true
+  )
+
+  const warning = await guard.record(
+    agent,
+    "grep",
+    { pattern: "x".repeat(30) },
+    textResult("result")
+  )
+
+  assert.equal(warning, undefined)
+  assert.equal(guard.usage(agent)?.dot, true)
+  assert.equal(guard.usage(agent)?.unlimited, true)
+  await guard.close()
+
+  const restarted = new ContextBudgetGuard(20, (value) => value.length, statePath)
+  await restarted.initialize()
+  assert.equal(restarted.usage(agent)?.dot, true)
+  assert.equal(restarted.usage(agent)?.unlimited, true)
 })
 
 test("defaults the session warning threshold to 400k tokens", () => {

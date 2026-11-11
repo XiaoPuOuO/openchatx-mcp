@@ -1,5 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
+import {
+  getAgentIdentity,
+  recordAgentSkillSearch,
+  setAgentSkillSelection,
+} from "../../agent/context.js"
 import { ToolError, toToolError } from "../../mcp/tool-error.js"
 import type { ToolboxRegistry } from "../../toolbox/registry.js"
 import { MAX_SKILL_SEARCH_RESULTS, SkillCatalogError, type SkillSummary } from "./skill-catalog.js"
@@ -8,11 +13,13 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
   server.registerTool(
     "skill_search",
     {
-      description: "Search reusable skills, or load one exact skill with action=load and name.",
+      description:
+        "Mandatory task routing: search skills for each new task, then load one exact returned name. If no skill applies, explicitly choose action=load and omit name to select no Skill. If the user forbids Skills, use reason=user-forbids-skills without searching.",
       inputSchema: z.object({
         action: z.enum(["search", "load"]).default("search"),
         query: z.string().min(1).optional(),
         name: z.string().min(1).optional(),
+        reason: z.enum(["no-suitable-skill", "user-forbids-skills"]).optional(),
         limit: z.number().int().min(1).max(MAX_SKILL_SEARCH_RESULTS).default(5),
       }),
       annotations: {
@@ -22,33 +29,11 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
         openWorldHint: false,
       },
     },
-    async ({ action, query, name, limit }, ctx) => {
+    async ({ action, query, name, reason, limit }, ctx) => {
       try {
-        if (action === "load") {
-          if (!toolboxes) throw new Error("Toolbox runtime is unavailable.")
-          if (!name) throw new Error("name is required for action=load.")
-          const loaded = await toolboxes.readSkill(name, ctx.mcpReq.signal)
-          return {
-            structuredContent: {
-              name,
-              path: loaded.path,
-              markdown: loaded.content,
-            },
-            content: [],
-          }
-        }
+        if (action === "load") return await loadSkill(toolboxes, name, reason, ctx.mcpReq.signal)
         if (!query) throw new Error("query is required for action=search.")
-        const available = (await toolboxes?.listSkills(ctx.mcpReq.signal)) ?? []
-        const matches = searchCombinedSkills(available, query, limit)
-        return {
-          structuredContent: {
-            skills: matches.map(({ name: skillName, description }) => ({
-              name: skillName,
-              ...(description ? { description } : {}),
-            })),
-          },
-          content: [],
-        }
+        return await searchSkills(toolboxes, query, limit, ctx.mcpReq.signal)
       } catch (error) {
         throw skillToolError(error)
       }
@@ -99,6 +84,70 @@ export function registerSkillTools(server: McpServer, toolboxes?: ToolboxRegistr
       }
     }
   )
+}
+
+async function searchSkills(
+  toolboxes: ToolboxRegistry | undefined,
+  query: string,
+  limit: number,
+  signal: AbortSignal
+) {
+  const available = (await toolboxes?.listSkills(signal)) ?? []
+  const matches = searchCombinedSkills(available, query, limit)
+  recordAgentSkillSearch(matches.map(({ name }) => name))
+  return {
+    structuredContent: {
+      skills: matches.map(({ name, description }) => ({
+        name,
+        ...(description ? { description } : {}),
+      })),
+    },
+    content: [],
+  }
+}
+
+async function loadSkill(
+  toolboxes: ToolboxRegistry | undefined,
+  name: string | null | undefined,
+  reason: "no-suitable-skill" | "user-forbids-skills" | undefined,
+  signal: AbortSignal
+) {
+  const agent = getAgentIdentity()
+  if (name === null || name === undefined) {
+    if (agent?.taskSlug && agent.skillRouting !== "searched" && reason !== "user-forbids-skills") {
+      throw new ToolError(
+        "SKILL_SEARCH_REQUIRED",
+        "Search for task-relevant Skills before selecting no Skill. To select no Skill, omit name on action=load. The only exception is an explicit user instruction not to use Skills; then pass reason=user-forbids-skills and omit name."
+      )
+    }
+    setAgentSkillSelection(null)
+    return {
+      structuredContent: {
+        name: null,
+        selected: false,
+        reason: reason ?? "no-suitable-skill",
+      },
+      content: [],
+    }
+  }
+  if (!name) throw new Error("name is required for action=load; use null to select no Skill.")
+  if (agent?.taskSlug && !agent.skillSearchResults?.includes(name)) {
+    throw new ToolError(
+      "SKILL_SEARCH_REQUIRED",
+      `Search for this task first, then load an exact returned Skill name. ${JSON.stringify(name)} was not in the latest search results.`
+    )
+  }
+  if (!toolboxes) throw new Error("Toolbox runtime is unavailable.")
+  const loaded = await toolboxes.readSkill(name, signal)
+  setAgentSkillSelection(name)
+  return {
+    structuredContent: {
+      name,
+      path: loaded.path,
+      markdown: loaded.content,
+    },
+    content: [],
+  }
 }
 
 async function manageSkill(

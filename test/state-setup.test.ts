@@ -24,8 +24,9 @@ test("state setup creates AGENTS.md without creating a global skills catalog", a
   assert.match(agentsTemplate, /Mode: `\{\{MODE\}\}`/u)
   assert.match(agentsTemplate, /Task ID: `\{\{TASK_ID\}\}`/u)
   assert.match(agentsTemplate, /## Agent Skills/u)
-  assert.match(agentsTemplate, /If the match is uncertain or no suitable Skill is found/u)
-  assert.match(agentsTemplate, /user explicitly asks not to use them/u)
+  assert.match(agentsTemplate, /MUST search with `skill_search action=search`/u)
+  assert.match(agentsTemplate, /omit `name`/u)
+  assert.match(agentsTemplate, /user explicitly forbids Skills/u)
   assert.match(agentsTemplate, /\{\{CAPABILITY_CATALOG\}\}/u)
   await assert.rejects(stat(join(stateDir, "skills")), /ENOENT/u)
 

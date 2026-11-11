@@ -29,6 +29,7 @@ interface AgentInstructionSnapshot {
 
 export interface AgentSnapshot {
   id: string
+  agentId?: string
   taskSlug?: string
   projectId?: string
   goalId?: string
@@ -42,6 +43,7 @@ export interface AgentSnapshot {
     inputTokens: number
     outputTokens: number
     threshold: number
+    dot?: boolean
     unlimited?: boolean
   }
 }
@@ -94,6 +96,7 @@ export interface AgentObserver {
           inputTokens: number
           outputTokens: number
           threshold: number
+          dot?: boolean
           unlimited?: boolean
         }
       | undefined
@@ -152,6 +155,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     if (!identity) return undefined
     const existing = agentsBySession.get(identity.sessionId)
     if (existing) {
+      existing.agentId = identity.agentId
       existing.taskSlug = identity.taskSlug
       existing.projectId = identity.projectId
       existing.goalId = identity.goalId
@@ -162,6 +166,7 @@ export function createAgentObserver(now: () => number = () => Date.now()): Agent
     const timestamp = now()
     const state: AgentState = {
       id: identity.agent,
+      agentId: identity.agentId,
       taskSlug: identity.taskSlug,
       projectId: identity.projectId,
       goalId: identity.goalId,
@@ -457,6 +462,7 @@ function latestActiveCall(calls: Map<string, AgentCallSnapshot>): AgentCallSnaps
 function toSnapshot(agent: AgentState): AgentSnapshot {
   return {
     id: agent.id,
+    agentId: agent.agentId,
     taskSlug: agent.taskSlug,
     projectId: agent.projectId,
     goalId: agent.goalId,

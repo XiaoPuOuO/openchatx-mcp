@@ -56,7 +56,6 @@ import { registerWebTool } from "../tools/web/web-tool.js"
 import { registerWorkflowTools } from "../tools/workflows/workflow-tools.js"
 import type { WorkflowService } from "../workflows/workflow-service.js"
 import { ContextBudgetGuard } from "./context-budget.js"
-import { ProgressHeartbeatGuard } from "./progress-heartbeat.js"
 import { installToolRegistrationBoundary } from "./tool-registration-boundary.js"
 
 export interface CreateMcpServerOptions {
@@ -83,7 +82,6 @@ export interface CreateMcpServerOptions {
   auditRequest?: McpAuditRequest
   agentObserver?: AgentObserver
   contextBudget?: ContextBudgetGuard
-  progressHeartbeat?: ProgressHeartbeatGuard
   runtimeControl?: RuntimeControlService
 }
 
@@ -142,7 +140,6 @@ export function createMcpServerFactory(
 ): McpServerFactory {
   const profile = snapshotMcpRuntimeProfile(profileOverrides)
   const contextBudget = services.contextBudget ?? new ContextBudgetGuard()
-  const progressHeartbeat = new ProgressHeartbeatGuard()
   return (context = {}) =>
     createMcpServer(
       {
@@ -150,7 +147,6 @@ export function createMcpServerFactory(
         auditRequest: context.auditRequest,
         agentObserver: context.agentObserver,
         contextBudget,
-        progressHeartbeat,
       },
       profile
     )
@@ -162,10 +158,13 @@ function createMcpServer(options: CreateMcpServerOptions, profile: McpRuntimePro
   })
   installToolRegistrationBoundary(server, {
     structuredOutput: profile.toolOutput === "structured",
+    skillRoutingEnabled: options.toolboxRegistry
+      ? options.toolboxRegistry.isToolboxEnabled("skills") &&
+        options.toolboxRegistry.isToolEnabled("skills", "skill_search")
+      : profile.tools.skills,
     agentObserver: options.agentObserver,
     auditRequest: options.auditRequest,
     contextBudget: options.contextBudget,
-    progressHeartbeat: options.progressHeartbeat,
     runtimeControl: options.runtimeControl,
     subagentRuntime: options.subagentRuntime,
   })
