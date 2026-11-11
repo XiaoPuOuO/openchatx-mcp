@@ -251,7 +251,8 @@ final class RuntimeSupervisor: NSObject {
             "OPENCHATX_EXTERNAL_MCP_CONFIG": configDirectory.appendingPathComponent("mcp-servers.json").path,
             "OPENCHATX_SUBAGENT_CONFIG": configDirectory.appendingPathComponent("subagents.json").path,
             "OPENCHATX_TOOLBOX_ROOT": appSupport.appendingPathComponent("toolboxes").path,
-            "OPENCHATX_AUDIT_LOG": logsDirectory.appendingPathComponent("agent-commands.yaml").path
+            "OPENCHATX_AUDIT_LOG": logsDirectory.appendingPathComponent("agent-commands.yaml").path,
+            "OPENCHATX_SESSION_DIAGNOSTICS": "1"
         ]) { _, new in new }
         let log = try openLog("runtime.log")
         process.standardOutput = log
@@ -731,7 +732,7 @@ private extension NSToolbarItem.Identifier {
     static let moreActions = NSToolbarItem.Identifier("openchatx.more-actions")
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply, NSToolbarDelegate {
     private let supervisor = RuntimeSupervisor()
     private var window: NSWindow!
     private var webView: WKWebView!
@@ -912,7 +913,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         root.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = root
 
-        webView = WKWebView()
+        let webViewConfiguration = WKWebViewConfiguration()
+        let userContentController = WKUserContentController()
+        userContentController.addScriptMessageHandler(
+            self,
+            contentWorld: .page,
+            name: "openExternal"
+        )
+        webViewConfiguration.userContentController = userContentController
+        webView = WKWebView(frame: .zero, configuration: webViewConfiguration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -1029,6 +1038,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             NSWorkspace.shared.open(url)
         }
         return nil
+    }
+
+    func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage,
+        replyHandler: @escaping (Any?, String?) -> Void
+    ) {
+        guard
+            message.name == "openExternal",
+            message.frameInfo.isMainFrame,
+            let rawURL = message.body as? String,
+            let url = URL(string: rawURL),
+            let scheme = url.scheme?.lowercased(),
+            ["http", "https"].contains(scheme),
+            url.host != nil
+        else {
+            replyHandler(false, "Invalid external URL.")
+            return
+        }
+        let opened = NSWorkspace.shared.open(url)
+        replyHandler(opened, opened ? nil : "macOS could not open the external URL.")
     }
 
     func webView(

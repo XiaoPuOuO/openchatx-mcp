@@ -17,6 +17,7 @@ import {
   disconnectMcpAuthorization,
   fetchCapabilityHealth,
   fetchMcpServers,
+  openExternalUrl,
   openMcpConfigInFinder,
   refreshMcpServers,
   saveMcpServers,
@@ -243,8 +244,6 @@ export function McpServerManager({
 
   async function connectAccount() {
     if (!selectedId || selected?.type !== "remote") return
-    // Open during the user gesture, before asynchronous discovery; avoids popup blocking.
-    const popup = window.open("", "_blank")
     setAuthBusy(true)
     setError(undefined)
     setAuthorizationUrl(undefined)
@@ -253,19 +252,16 @@ export function McpServerManager({
       setServers(saved.servers)
       const url = await startMcpAuthorization(selectedId)
       setAwaitingAuthId(selectedId)
-      if (popup) {
-        popup.location.replace(url)
+      if (await openExternalUrl(url)) {
+        setAuthorizationUrl(undefined)
         setMessage(t("mcp.oauthWaiting"))
       } else {
-        // WKWebView delegates new windows to the system browser and returns null.
-        // Never navigate the desktop dashboard away from OpenChatX.
         setAuthorizationUrl(url)
         setMessage(t("mcp.oauthOpenLink"))
       }
       const snapshot = await fetchMcpServers()
       setAuthorization(snapshot.authorization ?? {})
     } catch (authError) {
-      popup?.close()
       setAwaitingAuthId(undefined)
       setError(authError instanceof Error ? authError.message : String(authError))
     } finally {
