@@ -1,0 +1,47 @@
+# OpenChatX 變更紀錄 — 2026-11-12
+
+## 目的
+
+完善 Subagent Agent Harness 與工作階段管理，統一 Agent 身分識別，並改善 Dot 自動辨識、MCP OAuth 外部連結及長時間工具呼叫體驗。
+
+## Added
+
+- 擴充 Subagent Harness：加入生命週期 Hooks、工具權限與路徑範圍、平行唯讀工具呼叫、Agent Program、模型 fallback、context compaction、錯誤復原及檔案快照。
+- 擴充 Subagent 工作階段管理：支援停止、重新命名、分支、重試、匯出、快照復原，以及結構化 Plan。
+- Subagent Dashboard 新增即時事件更新、Harness 狀態、思考／工具活動區塊、平行工具統計、Markdown／GFM／數學公式呈現及多語系文案。
+- Bash 與 Durable Job 的 wait 流程支援增量進度通知，保留原本的最終結果格式。
+- Dashboard 顯示 Agent UUID 與 Dot 標記。
+
+## Changed
+
+- 所有 OpenChatX 工具一律要求有效 UUID v4 格式的 `agent_id`；Agent 必須在首次 `start_here` 前建立 UUID，後續所有工具呼叫沿用同一值。移除依 Parent Session 推斷 Agent 身分的 fallback。
+- Audit Log 獨立記錄 `agent_id`，方便直接對應不同 Agent。
+- `windowId` 僅用於辨識 Dot 來源，不再作為 Agent 身分或 Session Key。偵測到 Dot 後自動啟用 Unlimited Context，並持久化 Dot／Unlimited 狀態。
+- 預設路由順序固定為 Project routing → Skill search/load；每個新 `task_id` 都必須搜尋技能，沒有適用技能時以省略 `name` 的 `action=load` 明確選擇不使用技能。
+- 移除每 10 次工具呼叫的 Progress Heartbeat、UUID 重複提醒及「說明下一步」提示。
+- Subagent Provider 不再設定固定 request timeout；Provider 設定介面同步移除 timeout 欄位。
+- macOS WKWebView 新增安全的 HTTP／HTTPS 外部連結橋接，MCP OAuth 可直接交由系統瀏覽器開啟。
+- Subagent UI 加入數學公式、GFM 與語法呈現所需依賴。
+
+## Fixed
+
+- 修正 Agent UUID 缺漏時可能錯誤沿用其他 Agent 身分的問題。
+- 修正 Dot 工作階段未自動套用 Unlimited Context 的問題。
+- 修正 Dashboard Agent 快照更新與頁面重新顯示後的資料同步。
+- 修正桌面 App 內 MCP OAuth 授權連結無法直接開啟系統瀏覽器的問題。
+
+## Breaking Changes
+
+- 所有 OpenChatX 工具呼叫（包含經 OpenChatX 包裝的外部 MCP 工具）都必須提供有效的 `agent_id`。未提供或格式錯誤會在執行前被拒絕。
+- Dot 自動判定依據為 MCP 請求 `_meta.windowId`；Agent UUID 與 Dot 來源標記是兩個獨立欄位。
+
+## 本地 CI
+
+- Root／UI lockfile 安裝與 setup 初始化：通過。
+- `npm audit --audit-level=high`：通過。
+- Root Biome lint、TypeScript typecheck：通過。
+- UI Biome lint：通過（0 errors、0 warnings）。
+- Root／UI production build：通過。
+- `npm run test:ci`：87 個測試檔全部通過。
+- macOS `desktop:build` 與 `desktop:smoke`：通過。
+- Vite 仍提示主 JavaScript chunk 大於 500 kB；不影響本次 build 成功。
