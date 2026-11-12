@@ -1,13 +1,14 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { createServer, type Server } from "node:http"
 import process from "node:process"
-import type {
-  OAuthClientInformationContext,
-  OAuthClientMetadata,
-  OAuthClientProvider,
-  OAuthDiscoveryState,
-  StoredOAuthClientInformation,
-  StoredOAuthTokens,
+import {
+  auth,
+  type OAuthClientInformationContext,
+  type OAuthClientMetadata,
+  type OAuthClientProvider,
+  type OAuthDiscoveryState,
+  type StoredOAuthClientInformation,
+  type StoredOAuthTokens,
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client"
 import { AsyncEntry } from "@napi-rs/keyring"
@@ -27,6 +28,7 @@ export interface McpOAuthState {
 interface StoredSession {
   clients?: Record<string, StoredOAuthClientInformation>
   tokens?: StoredOAuthTokens
+  tokensExpiresAt?: number
   verifier?: string
   discovery?: OAuthDiscoveryState
 }
@@ -77,10 +79,15 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
   private loading?: Promise<StoredSession>
   private writeQueue: Promise<void> = Promise.resolve()
   private hasTokens = false
+  private expiresAt?: number
   expectedState?: string
 
   get hasOAuthTokens(): boolean {
     return this.hasTokens
+  }
+
+  get tokenExpiresAt(): number | undefined {
+    return this.expiresAt
   }
 
   constructor(
@@ -88,7 +95,8 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
     readonly config: RemoteConfig,
     private readonly redirect: (url: URL) => void | Promise<void>,
     port = CALLBACK_PORT,
-    store?: OAuthSecretStore
+    store?: OAuthSecretStore,
+    private readonly onTokensSaved?: (expiresAt?: number) => void
   ) {
     this.entry =
       store ??
@@ -121,6 +129,8 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
         const value = password ? (JSON.parse(password) as StoredSession) : {}
         this.record = value
         this.hasTokens = Boolean(value.tokens?.access_token)
+        this.expiresAt = value.tokensExpiresAt
+        this.onTokensSaved?.(this.expiresAt)
         return value
       })
     }
@@ -170,6 +180,12 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
   async saveTokens(tokens: StoredOAuthTokens, ctx?: OAuthClientInformationContext): Promise<void> {
     // Tokens without a resolvable issuer are rejected instead of crossing AS boundaries.
     if (!tokens.issuer && !ctx?.issuer) throw new Error("OAuth token issuer missing")
+    const expiresAt =
+      typeof tokens.expires_in === "number" &&
+      Number.isFinite(tokens.expires_in) &&
+      tokens.expires_in > 0
+        ? Date.now() + tokens.expires_in * 1000
+        : undefined
     await this.save((stored) => {
       const issuer = tokens.issuer ?? ctx?.issuer
       // OAuth refresh responses may omit refresh_token when it has not rotated.
@@ -183,7 +199,10 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
         ...(tokens.refresh_token || !refresh ? {} : { refresh_token: refresh }),
         issuer,
       }
+      stored.tokensExpiresAt = expiresAt
     })
+    this.expiresAt = expiresAt
+    this.onTokensSaved?.(expiresAt)
   }
 
   state(): string {
@@ -222,10 +241,17 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
   ): Promise<void> {
     await this.save((stored) => {
       if (scope === "all" || scope === "client") stored.clients = undefined
-      if (scope === "all" || scope === "tokens") stored.tokens = undefined
+      if (scope === "all" || scope === "tokens") {
+        stored.tokens = undefined
+        stored.tokensExpiresAt = undefined
+      }
       if (scope === "all" || scope === "verifier") stored.verifier = undefined
       if (scope === "all" || scope === "discovery") stored.discovery = undefined
     })
+    if (scope === "all" || scope === "tokens") {
+      this.expiresAt = undefined
+      this.onTokensSaved?.(undefined)
+    }
   }
 
   async disconnect(revoke = false): Promise<void> {
@@ -235,6 +261,8 @@ export class KeyringOAuthProvider implements OAuthClientProvider {
     this.record = undefined
     this.loading = undefined
     this.hasTokens = false
+    this.expiresAt = undefined
+    this.onTokensSaved?.(undefined)
     this.expectedState = undefined
   }
 
@@ -289,6 +317,8 @@ export class ExternalMcpOAuth {
   private readonly transports = new Map<string, StreamableHTTPClientTransport>()
   private readonly pending = new Map<string, PendingLogin>()
   private readonly states = new Map<string, McpOAuthState>()
+  private readonly refreshTimers = new Map<string, NodeJS.Timeout>()
+  private readonly refreshing = new Map<string, Promise<void>>()
   private server?: Server
   private serverReady?: Promise<void>
   private onAuthorized?: (id: string) => Promise<void>
@@ -328,7 +358,7 @@ export class ExternalMcpOAuth {
 
   requiresAuth(id: string): boolean {
     const status = this.status(id).status
-    return status === "auth_required" || status === "authorizing"
+    return status === "auth_required" || status === "authorizing" || status === "error"
   }
 
   provider(id: string, config: RemoteConfig): OAuthClientProvider {
@@ -340,7 +370,8 @@ export class ExternalMcpOAuth {
       config,
       (url) => this.offerLogin(id, created, url),
       this.port,
-      this.storeFactory?.(id, config)
+      this.storeFactory?.(id, config),
+      (expiresAt) => this.scheduleRefresh(id, created, expiresAt)
     )
     this.providers.set(key, created)
     return created
@@ -348,6 +379,77 @@ export class ExternalMcpOAuth {
 
   track(id: string, transport: StreamableHTTPClientTransport): void {
     this.transports.set(id, transport)
+  }
+
+  async refreshNow(id: string): Promise<void> {
+    const provider = [...this.providers.values()].find((candidate) => candidate.id === id)
+    if (!provider) throw new Error(`OAuth provider for MCP ${id} is unavailable.`)
+    const status = this.status(id).status
+    if (status === "auth_required" || status === "authorizing") return
+    const active = this.refreshing.get(id)
+    if (active !== undefined) return active
+
+    const currentTransport = this.transports.get(id)
+    const temporary = currentTransport === undefined
+    const transport =
+      currentTransport ??
+      new StreamableHTTPClientTransport(new URL(provider.config.url), { authProvider: provider })
+    if (temporary) this.track(id, transport)
+
+    const operation = (async () => {
+      try {
+        await auth(provider, { serverUrl: provider.config.url })
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : "Unknown automatic OAuth renewal error."
+        this.states.set(id, {
+          status: "error",
+          detail: `Automatic OAuth renewal failed: ${detail}`,
+        })
+        throw error
+      } finally {
+        if (temporary && this.pending.get(id)?.transport !== transport) {
+          if (this.transports.get(id) === transport) this.transports.delete(id)
+          await transport.close().catch(() => undefined)
+        }
+      }
+    })()
+    this.refreshing.set(id, operation)
+    try {
+      await operation
+    } finally {
+      if (this.refreshing.get(id) === operation) this.refreshing.delete(id)
+    }
+  }
+
+  private scheduleRefresh(
+    id: string,
+    _provider: KeyringOAuthProvider,
+    expiresAt: number | undefined
+  ): void {
+    const previous = this.refreshTimers.get(id)
+    if (previous) clearTimeout(previous)
+    this.refreshTimers.delete(id)
+    if (!expiresAt) return
+
+    const remaining = expiresAt - Date.now()
+    const refreshIn = Math.max(100, remaining - Math.min(60_000, Math.max(100, remaining * 0.2)))
+    const timer = setTimeout(() => {
+      this.refreshTimers.delete(id)
+      void this.refreshNow(id).catch((error: unknown) => {
+        console.warn(
+          `External MCP ${id}: automatic OAuth renewal failed (${error instanceof Error ? error.message : String(error)})`
+        )
+      })
+    }, refreshIn)
+    timer.unref()
+    this.refreshTimers.set(id, timer)
+  }
+
+  private clearRefreshTimer(id: string): void {
+    const timer = this.refreshTimers.get(id)
+    if (timer) clearTimeout(timer)
+    this.refreshTimers.delete(id)
   }
 
   private async offerLogin(id: string, provider: KeyringOAuthProvider, url: URL): Promise<void> {
@@ -376,12 +478,18 @@ export class ExternalMcpOAuth {
     const state = this.status(id)
     const pending = this.pending.get(id)
     if (!pending || state.status !== "auth_required") {
-      throw new Error("No pending OAuth login. Refresh the MCP connection first.")
+      throw new Error(
+        state.detail ??
+          (state.status === "none"
+            ? "The MCP server did not request OAuth authorization. It may already be connected."
+            : "No pending OAuth login. Refresh the MCP connection first.")
+      )
     }
     return { authorizationUrl: pending.url }
   }
 
   async disconnect(id: string, config: RemoteConfig, revoke = true): Promise<void> {
+    this.clearRefreshTimer(id)
     const key = mcpOAuthAccount(id, config.url, config.oauthClientId, config.oauthClientMetadataUrl)
     const provider =
       this.providers.get(key) ??
@@ -401,10 +509,28 @@ export class ExternalMcpOAuth {
     this.states.delete(id)
   }
 
-  clearPending(id: string): void {
+  async prepareAuthorization(id: string): Promise<void> {
+    this.clearRefreshTimer(id)
+    const pending = this.pending.get(id)
     this.pending.delete(id)
     this.transports.delete(id)
-    this.states.delete(id)
+    for (const provider of this.providers.values()) {
+      if (provider.id === id) provider.expectedState = undefined
+    }
+    if (pending) await pending.transport.close().catch(() => undefined)
+    this.states.set(id, { status: "authorizing" })
+  }
+
+  markConnected(id: string): void {
+    if (this.states.get(id)?.status === "authorizing") this.states.delete(id)
+  }
+
+  failAuthorization(
+    id: string,
+    detail = "The MCP server did not start an OAuth authorization flow. Check its URL and OAuth configuration, then retry."
+  ): void {
+    if (this.states.get(id)?.status === "auth_required") return
+    this.states.set(id, { status: "error", detail })
   }
 
   private async ensureCallback(): Promise<void> {
@@ -480,6 +606,9 @@ export class ExternalMcpOAuth {
   }
 
   async close(): Promise<void> {
+    for (const timer of this.refreshTimers.values()) clearTimeout(timer)
+    this.refreshTimers.clear()
+    await Promise.allSettled(this.refreshing.values())
     const pending = [...this.pending.values()]
     this.pending.clear()
     this.transports.clear()

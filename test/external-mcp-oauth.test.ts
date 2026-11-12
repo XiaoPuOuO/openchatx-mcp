@@ -173,9 +173,26 @@ test("expired OAuth login is not offered again and releases its pending transpor
   const before = Date.now()
   t.mock.method(Date, "now", () => before + 11 * 60_000)
   assert.equal(manager.status("expired").status, "error")
-  assert.throws(() => manager.begin("expired"), /No pending OAuth login/)
+  assert.equal(manager.requiresAuth("expired"), true)
+  assert.throws(() => manager.begin("expired"), /Authorization request expired/)
   t.mock.restoreAll()
   assert.equal(closed, 1)
+
+  await manager.prepareAuthorization("expired")
+  assert.equal(manager.status("expired").status, "authorizing")
+  assert.equal(manager.requiresAuth("expired"), true)
+  manager.track("expired", {
+    async close() {
+      closed += 1
+    },
+  } as unknown as StreamableHTTPClientTransport)
+  provider.state()
+  await provider.redirectToAuthorization(new URL("https://auth.example.com/authorize?retry=1"))
+  assert.equal(manager.status("expired").status, "auth_required")
+  assert.equal(
+    manager.begin("expired").authorizationUrl,
+    "https://auth.example.com/authorize?retry=1"
+  )
 })
 
 test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
@@ -186,7 +203,10 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
   let challenge = ""
   let exchanged = 0
   let refreshed = 0
-  let expired = false
+  let accessToken = "mock-access"
+  let refreshToken = "refresh-1"
+  let rejectNextAccessToken = false
+  let rejectRefreshToken = false
   const server = createHttpServer(async (req, res) => {
     const url = new URL(req.url ?? "/", base || "http://127.0.0.1")
     const json = (data: unknown, status = 200) => {
@@ -220,11 +240,14 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
     if (url.pathname === "/token") {
       const params = new URLSearchParams(Buffer.concat(chunks).toString())
       if (params.get("grant_type") === "refresh_token") {
-        assert.equal(params.get("refresh_token"), "refresh-1")
+        assert.equal(params.get("refresh_token"), refreshToken)
+        if (rejectRefreshToken) return json({ error: "invalid_grant" }, 400)
         refreshed++
+        accessToken = `refreshed-access-${refreshed}`
+        refreshToken = `refresh-${refreshed + 1}`
         return json({
-          access_token: "refreshed-access",
-          refresh_token: "refresh-2",
+          access_token: accessToken,
+          refresh_token: refreshToken,
           token_type: "Bearer",
           expires_in: 3600,
         })
@@ -238,17 +261,18 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
       assert.equal(params.get("resource"), `${base}/mcp`)
       assert.equal(params.get("code"), "valid-code")
       exchanged++
+      accessToken = "mock-access"
+      refreshToken = "refresh-1"
       return json({
-        access_token: "mock-access",
-        refresh_token: "refresh-1",
+        access_token: accessToken,
+        refresh_token: refreshToken,
         token_type: "Bearer",
-        expires_in: 3600,
+        expires_in: exchanged === 1 || exchanged === 3 ? 2 : 3600,
       })
     }
     if (url.pathname === "/mcp") {
-      if (
-        req.headers.authorization !== (expired ? "Bearer refreshed-access" : "Bearer mock-access")
-      ) {
+      if (rejectNextAccessToken || req.headers.authorization !== `Bearer ${accessToken}`) {
+        rejectNextAccessToken = false
         res.writeHead(401, {
           "www-authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"`,
         })
@@ -324,11 +348,55 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
   assert.equal(registry.authorization?.().protected?.status, "none")
   assert.equal(registry.authorization?.().protected?.oauthDetected, true)
 
-  expired = true
+  await new Promise((resolve) => setTimeout(resolve, 1_900))
+  assert.equal(refreshed, 1)
+  assert.equal(refreshToken, "refresh-2")
+  assert.equal(registry.authorization?.().protected?.status, "none")
+
+  await registry.restartAuthorization?.("protected")
+  const reauthorize = new URL(registry.beginAuthorization?.("protected").authorizationUrl ?? "")
+  challenge = reauthorize.searchParams.get("code_challenge") ?? ""
+  assert.ok(challenge)
+  const reauthorizeState = reauthorize.searchParams.get("state")
+  assert.ok(reauthorizeState)
+  const reauthorizeCallback = new URL(reauthorize.searchParams.get("redirect_uri") ?? "")
+  reauthorizeCallback.searchParams.set("state", reauthorizeState)
+  reauthorizeCallback.searchParams.set("code", "valid-code")
+  assert.equal((await fetch(reauthorizeCallback)).status, 200)
+  assert.equal(exchanged, 2)
+  assert.deepEqual(registry.connectedServers, ["protected"])
+  assert.equal(registry.authorization?.().protected?.status, "none")
+
+  rejectNextAccessToken = true
   const result = await registry.call("mcp:protected:echo", {})
   assert.match(JSON.stringify(result), /connected/)
   assert.deepEqual(registry.connectedServers, ["protected"])
-  assert.equal(refreshed, 1)
+  assert.equal(refreshed, 2)
+
+  rejectNextAccessToken = true
+  rejectRefreshToken = true
+  await assert.rejects(
+    registry.call("mcp:protected:echo", {}),
+    /requires user authentication in MCP Manager/
+  )
+  assert.equal(registry.authorization?.().protected?.status, "auth_required")
+  const expiredAuthorize = new URL(
+    registry.beginAuthorization?.("protected").authorizationUrl ?? ""
+  )
+  challenge = expiredAuthorize.searchParams.get("code_challenge") ?? ""
+  assert.ok(challenge)
+  const expiredState = expiredAuthorize.searchParams.get("state")
+  assert.ok(expiredState)
+  const expiredCallback = new URL(expiredAuthorize.searchParams.get("redirect_uri") ?? "")
+  expiredCallback.searchParams.set("state", expiredState)
+  expiredCallback.searchParams.set("code", "valid-code")
+  assert.equal((await fetch(expiredCallback)).status, 200)
+  assert.equal(exchanged, 3)
+  assert.deepEqual(registry.connectedServers, ["protected"])
+  assert.equal(registry.authorization?.().protected?.status, "none")
+  rejectRefreshToken = false
+  const resumed = await registry.call("mcp:protected:echo", {})
+  assert.match(JSON.stringify(resumed), /connected/)
 
   // After a runtime restart the saved OAuth token must still identify this
   // as an OAuth MCP, rather than hiding its account-management controls.
@@ -340,4 +408,7 @@ test("protected MCP completes SDK discovery, PKCE, DCR and reconnect", {
   assert.deepEqual(registry.connectedServers, ["protected"])
   assert.equal(registry.authorization?.().protected?.status, "none")
   assert.equal(registry.authorization?.().protected?.oauthDetected, true)
+  await new Promise((resolve) => setTimeout(resolve, 1_900))
+  assert.equal(refreshed, 3)
+  assert.deepEqual(registry.connectedServers, ["protected"])
 })

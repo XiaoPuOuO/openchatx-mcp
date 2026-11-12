@@ -188,28 +188,19 @@ export async function createExternalMcpRegistry(
     get toolCount() {
       return registrations.length
     },
-    authorization() {
-      return Object.fromEntries(
-        Object.entries(config).map(([id, server]) => [
-          id,
-          server.type === "remote"
-            ? { ...oauth.status(id), redirectUrl: oauth.redirectUrl }
-            : oauth.status(id),
-        ])
-      )
-    },
-    beginAuthorization(id) {
-      const server = config[id]
-      if (server?.type !== "remote" || !server.enabled || !shouldUseMcpOAuth(server))
-        throw new Error("OAuth is not enabled for this MCP server.")
-      return oauth.begin(id)
-    },
+    authorization: () => getMcpAuthorization(config, oauth),
+    beginAuthorization: (id) => beginMcpAuthorization(config, oauth, id),
     async restartAuthorization(id) {
       const server = config[id]
       if (server?.type !== "remote" || !server.enabled || !shouldUseMcpOAuth(server))
         throw new Error("OAuth is not enabled for this MCP server.")
-      await oauth.provider(id, server).invalidateCredentials?.("tokens")
-      await reloadRegistry(true)
+      await restartMcpAuthorization(
+        id,
+        server,
+        oauth,
+        () => reloadRegistry(true),
+        () => connections.some((connection) => connection.id === id)
+      )
     },
     async disconnectAuthorization(id) {
       const server = config[id]
@@ -324,6 +315,45 @@ export async function createExternalMcpRegistry(
       await oauth.close()
     },
   }
+}
+
+function getMcpAuthorization(
+  config: ReturnType<typeof loadExternalMcpConfig>,
+  oauth: ExternalMcpOAuth
+): Record<string, McpOAuthState> {
+  return Object.fromEntries(
+    Object.entries(config).map(([id, server]) => [
+      id,
+      server.type === "remote"
+        ? { ...oauth.status(id), redirectUrl: oauth.redirectUrl }
+        : oauth.status(id),
+    ])
+  )
+}
+
+function beginMcpAuthorization(
+  config: ReturnType<typeof loadExternalMcpConfig>,
+  oauth: ExternalMcpOAuth,
+  id: string
+): { authorizationUrl: string } {
+  const server = config[id]
+  if (server?.type !== "remote" || !server.enabled || !shouldUseMcpOAuth(server))
+    throw new Error("OAuth is not enabled for this MCP server.")
+  return oauth.begin(id)
+}
+
+async function restartMcpAuthorization(
+  id: string,
+  server: Extract<ExternalMcpServerConfig, { type: "remote" }>,
+  oauth: ExternalMcpOAuth,
+  reload: () => Promise<void>,
+  isConnected: () => boolean
+): Promise<void> {
+  await oauth.prepareAuthorization(id)
+  await oauth.provider(id, server).invalidateCredentials?.("tokens")
+  await reload()
+  if (isConnected()) oauth.markConnected(id)
+  else if (oauth.status(id).status === "authorizing") oauth.failAuthorization(id)
 }
 
 async function cleanupRetiredOAuthServers(
@@ -461,13 +491,23 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
   }
 
   const recordFailure = async (id: string, error: unknown): Promise<void> => {
-    await stopActiveConnection(id)
-    if (access.oauth.requiresAuth(id)) {
+    const oauthStatus = access.oauth.status(id).status
+    if (oauthStatus === "auth_required" || oauthStatus === "authorizing") {
       const server = access.getConfig()[id]
       if (server)
         runtimeProcessRegistry.update(ensureProcessRecord(id, server), {
           status: "stopped",
           detail: "Authentication required in MCP Manager.",
+        })
+      return
+    }
+    await stopActiveConnection(id)
+    if (oauthStatus === "error") {
+      const server = access.getConfig()[id]
+      if (server)
+        runtimeProcessRegistry.update(ensureProcessRecord(id, server), {
+          status: "stopped",
+          detail: "OAuth authorization failed. Retry in MCP Manager.",
         })
       return
     }
@@ -607,6 +647,12 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
   ): Promise<unknown> => {
     if (signal?.aborted) throw signal.reason ?? error
     await recordFailure(serverId, error)
+    if (access.oauth.requiresAuth(serverId)) {
+      throw new Error(
+        `External MCP ${serverId} requires user authentication in MCP Manager before it can reconnect.`,
+        { cause: error }
+      )
+    }
     await delay(100)
     const connection = await reconnect(serverId, true)
     if (!connection) throw error
@@ -622,6 +668,9 @@ function createExternalMcpSupervisor(access: SupervisorAccess): ExternalMcpSuper
   ): Promise<unknown> => {
     if (manuallyStopped.has(serverId)) {
       throw new Error(`External MCP ${serverId} is stopped by the user.`)
+    }
+    if (access.oauth.requiresAuth(serverId)) {
+      throw new Error(`External MCP ${serverId} requires user authentication in MCP Manager.`)
     }
     const connection =
       access.getConnections().find((candidate) => candidate.id === serverId) ??

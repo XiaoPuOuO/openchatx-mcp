@@ -1,0 +1,42 @@
+# OpenChatX 變更紀錄 — 2026-11-13
+
+## 目的
+
+修正遠端 MCP OAuth Session 到期後無法自動續期的問題，並將套件版本升級至 1.4.0。
+
+## Added
+
+- 儲存 OAuth Access Token 的到期時間，並在到期前自動執行 Refresh Token 流程。
+- OpenChatX 啟動後，從 Keychain Session 還原 Token 到期排程。
+- OAuth 自動續期加入併發保護，避免同一 MCP 同時執行多次刷新。
+
+## Changed
+
+- OAuth 續期統一使用 MCP SDK 的授權流程，沿用既有 issuer、PKCE、client registration 與 refresh-token rotation 處理。
+- Supervisor 在 OAuth 重新授權期間不再將待授權狀態當成一般連線故障反覆重連。
+- OAuth 刷新失敗或 Refresh Token 失效時，保留授權狀態並引導重新登入；授權完成後重新建立 MCP 連線。
+- 套件版本升級至 1.4.0。
+
+## Fixed
+
+- 修正 Access Token 到期後，必須等工具呼叫收到 401 才嘗試續期的問題。
+- 修正 Refresh Token 回傳 `invalid_grant` 時，工具呼叫可能進入一般 Supervisor 重連流程、無法正確完成重新授權的問題。
+- 修正重新授權完成後，MCP 連線未能自動恢復的問題。
+
+## Breaking Changes
+
+- 無。
+
+## 注意事項
+
+- Authorization Server 提供 `expires_in` 時，OpenChatX 會依到期時間提前刷新；若未提供，仍保留收到 401 後由 MCP SDK 觸發的刷新流程。
+- 若 Refresh Token 已失效，仍需使用者完成一次互動式重新登入。
+
+## 本地 CI
+
+- `npm run lint`：通過，0 errors、0 warnings；Biome 回報 5 項既有 info 訊息。
+- `npm run typecheck`：通過。
+- `npm run build`：通過。
+- OAuth／External MCP 相關測試（`test/external-mcp-oauth.test.ts`、`test/external-mcp.test.ts`）：通過。
+- `npm audit --audit-level=high`：通過，0 vulnerabilities。
+- `npm ci --force`：未執行；執行請求遭環境安全檢查阻擋，驗證使用既有已安裝依賴。
