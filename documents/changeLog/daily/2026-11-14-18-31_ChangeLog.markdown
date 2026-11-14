@@ -1,0 +1,32 @@
+# 更新紀錄：2026-11-14 18:31
+
+## 摘要
+修正 Subagent 工作階段刪除與 Dashboard 同步問題，並改善 Windows Desktop 診斷資料匯出流程。
+
+## 影響範圍
+- 後端：Agent Dashboard API、Subagent SQLite 工作階段儲存。
+- 前端：Subagent 工作階段列表、設定中的診斷資料匯出。
+- Windows Desktop：WebView2 下載處理與繁體中文介面文字。
+
+## 變更內容
+
+### Fixed
+- 刪除 Subagent 工作階段時，不再同步執行完整 SQLite 資料庫壓縮及 WAL 強制截斷，降低大量工作階段刪除時造成 Desktop UI 卡住的風險。
+- 工作階段超過保留上限而自動淘汰後，Dashboard 仍會透過 SSE 即時更新，並每 10 秒重新同步，避免頁面長時間保留已刪除的卡片。
+- 對已被保留策略淘汰的 Agent 再次執行刪除時，API 會以成功結果處理，不再顯示誤導性的「agent not found」。
+- Windows Desktop 匯出診斷資料時，改由 WebView2 下載事件顯示儲存對話框，讓使用者選擇檔案位置；取消儲存時會取消下載。
+
+## Breaking Changes
+- 無。
+
+## 注意事項
+- Dashboard 的 SSE 即時更新仍保留；10 秒同步是補漏機制，僅在頁面可見時執行。
+- 本次未變更資料庫 schema，也未變更版本號或建立 Release。
+
+## 本地 CI
+- Root：`npm run lint`、`npm run typecheck`、`npm run build` 通過。Biome 顯示 5 項 info 級提示，0 errors、0 warnings。
+- UI：`npm --prefix ui run lint`、`npm --prefix ui exec -- tsc -b --pretty false`、`npm --prefix ui run build` 通過。
+- 相關測試：`test/agent/dashboard-routes.test.ts`、`test/agent/observer.test.ts`、`test/subagent-sessions.test.ts`，24/24 通過。
+- 完整測試：`npm run test:ci`，88 個測試檔全部通過。
+- Windows Desktop：`dotnet build desktop/windows/OpenChatX.Windows.csproj --configuration Release` 成功；SDK 回報 1 項 MSB3277 WindowsBase 參考版本警告，0 errors。
+- 未執行依賴重新安裝；本次沒有依賴或 lockfile 變更，使用現有安裝完成驗證。
