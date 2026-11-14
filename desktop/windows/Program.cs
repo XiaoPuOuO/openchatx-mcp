@@ -108,6 +108,42 @@ internal sealed class MainForm : Form
                 if (GetNavigationDisposition(args.Uri) == NavigationDisposition.External)
                     OpenExternal(args.Uri);
             };
+            _webView.CoreWebView2.DownloadStarting += (_, args) =>
+            {
+                if (!Uri.TryCreate(args.DownloadOperation.Uri, UriKind.Absolute, out var downloadUri) ||
+                    !downloadUri.IsLoopback ||
+                    !string.Equals(
+                        downloadUri.AbsolutePath,
+                        "/ui/api/diagnostics/export",
+                        StringComparison.Ordinal
+                    ))
+                    return;
+
+                var fileName = Path.GetFileName(downloadUri.LocalPath);
+                if (string.IsNullOrWhiteSpace(fileName))
+                    fileName = "openchatx-diagnostics.json";
+
+                using var dialog = new SaveFileDialog
+                {
+                    Title = DesktopLocalization.T("Save diagnostic bundle"),
+                    FileName = fileName,
+                    Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                    DefaultExt = "json",
+                    AddExtension = true,
+                    OverwritePrompt = true
+                };
+
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    args.ResultFilePath = dialog.FileName;
+                    args.Handled = true;
+                }
+                else
+                {
+                    args.Cancel = true;
+                    args.Handled = true;
+                }
+            };
             _webView.CoreWebView2.NavigationStarting += (_, args) =>
             {
                 switch (GetNavigationDisposition(args.Uri))

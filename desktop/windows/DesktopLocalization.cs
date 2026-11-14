@@ -34,6 +34,7 @@ internal static class DesktopLocalization
             "Tunnel Connected" => "Đã kết nối Tunnel",
             "Connect Tunnel…" => "Kết nối Tunnel…",
             "Open Logs" => "Mở nhật ký",
+            "Save diagnostic bundle" => "Lưu gói chẩn đoán",
             "Starting local capability runtime…" => "Đang khởi động Runtime cục bộ…",
             "OpenChatX could not start." => "Không thể khởi động OpenChatX.",
             "OpenChatX's embedded browser did not initialize within 15 seconds." =>

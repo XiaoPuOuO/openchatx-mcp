@@ -902,7 +902,7 @@ function DiagnosticsSettingsPage({
         <CardContent className="space-y-2">
           <Button
             variant="outline"
-            onClick={() => window.open("/ui/api/diagnostics/export", "_blank")}
+            onClick={() => window.location.assign("/ui/api/diagnostics/export")}
           >
             {t("settings.diagnostics.export")}
           </Button>
