@@ -15,14 +15,14 @@ test("macOS updater only accepts official OpenChatX app archives", () => {
   assert.equal(
     isTrustedMacOSUpdateAsset(
       "OpenChatX-macos-arm64.app.zip",
-      "https://github.com/XiaoPuOuO/openchatx-mcp/releases/download/v1.2.3/OpenChatX-macos-arm64.app.zip"
+      "https://github.com/WealthyV/openchatx-mcp/releases/download/v1.2.3/OpenChatX-macos-arm64.app.zip"
     ),
     true
   )
   assert.equal(
     isTrustedMacOSUpdateAsset(
       "OpenChatX-macos-arm64.dmg",
-      "https://github.com/XiaoPuOuO/openchatx-mcp/releases/download/v1.2.3/OpenChatX-macos-arm64.dmg"
+      "https://github.com/WealthyV/openchatx-mcp/releases/download/v1.2.3/OpenChatX-macos-arm64.dmg"
     ),
     false
   )

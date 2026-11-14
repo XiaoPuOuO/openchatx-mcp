@@ -7,9 +7,8 @@ import process from "node:process"
 
 import { MCP_CONFIG } from "../config.js"
 import { updateOperationalState } from "../recovery/operational-state.js"
-import type { UpdateCheckResult } from "./version-check.js"
+import { type UpdateCheckResult, RELEASE_DOWNLOAD_PREFIX } from "./version-check.js"
 
-const RELEASE_DOWNLOAD_PREFIX = "https://github.com/XiaoPuOuO/openchatx-mcp/releases/download/"
 const SAFE_SEGMENT = /[^0-9A-Za-z._-]+/gu
 const WINDOWS_INSTALLER_NAME_PATTERN = /^OpenChatX-Setup-(?:x64|arm64)\.exe$/u
 const DECIMAL_PID_PATTERN = /^\d+$/u

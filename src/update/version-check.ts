@@ -4,7 +4,9 @@ import { MCP_CONFIG } from "../config.js"
 import { desktopNotificationService } from "../notifications/notification-service.js"
 import { loadOperationalState, updateOperationalState } from "../recovery/operational-state.js"
 
-const RELEASES_URL = "https://api.github.com/repos/XiaoPuOuO/openchatx-mcp/releases?per_page=20"
+const RELEASE_REPO_SLUG = "WealthyV/openchatx-mcp"
+const RELEASES_URL = `https://api.github.com/repos/${RELEASE_REPO_SLUG}/releases?per_page=20`
+export const RELEASE_DOWNLOAD_PREFIX = `https://github.com/${RELEASE_REPO_SLUG}/releases/download/`
 const CACHE_MS = 6 * 60 * 60 * 1_000
 const VERSION_PREFIX_PATTERN = /^v/iu
 const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u
