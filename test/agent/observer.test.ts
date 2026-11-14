@@ -382,6 +382,21 @@ test("evicts the least recently active sessions beyond the retention limit", () 
     ["newest", "middle"]
   )
   assert.deepEqual(evicted, ["session-oldest"])
+  const removedEvents: string[] = []
+  observer.subscribe((event) => {
+    if (event.type === "agent_removed") removedEvents.push(event.agentId)
+  })
+  timestamp += 1_000
+  observer.updateContextBudget(
+    { sessionId: "session-newest", agent: "newest" },
+    { tokens: 0, inputTokens: 0, outputTokens: 0, threshold: 1 }
+  )
+  timestamp += 1_000
+  observer.updateContextBudget(
+    { sessionId: "session-next", agent: "next" },
+    { tokens: 0, inputTokens: 0, outputTokens: 0, threshold: 1 }
+  )
+  assert.deepEqual(removedEvents, ["middle"])
 })
 
 test("keeps running sessions even while over the retention limit", () => {

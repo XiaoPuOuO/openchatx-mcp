@@ -46,11 +46,17 @@ export function useAgents() {
     }
     document.addEventListener("visibilitychange", onVisibilityChange)
     void refresh()
+    // SSE provides immediate updates; polling reconciles missed events and
+    // silently disconnected streams so evicted sessions cannot remain overnight.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh()
+    }, 10_000)
 
     return () => {
       active = false
       unsubscribe()
       document.removeEventListener("visibilitychange", onVisibilityChange)
+      window.clearInterval(timer)
     }
   }, [])
 

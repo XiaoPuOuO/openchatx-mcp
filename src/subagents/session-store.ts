@@ -194,7 +194,8 @@ export class SubagentSessionStore {
       rmSync(`${filename}${suffix}`, { force: true })
     this.db = new DatabaseSync(filename)
     chmodSync(filename, 0o600)
-    this.db.exec("PRAGMA auto_vacuum = FULL")
+    // This database is reset on runtime startup; avoid synchronous full-file compaction
+    // on every session deletion. SQLite reuses freed pages and checkpoints WAL automatically.
     this.db.exec("PRAGMA journal_mode = WAL")
     this.db.exec("PRAGMA synchronous = NORMAL")
     this.db.exec(CREATE_TABLES)
@@ -316,7 +317,6 @@ export class SubagentSessionStore {
     const ids = this.subtreeIds(id)
     if (!ids.length) return []
     this.db.prepare("DELETE FROM session WHERE job_id=?").run(id)
-    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)")
     return ids
   }
 
@@ -347,7 +347,6 @@ export class SubagentSessionStore {
     const ids = rows.flatMap((row) => (typeof row.job_id === "string" ? [row.job_id] : []))
     if (!ids.length) return []
     this.db.prepare("DELETE FROM session WHERE root_owner=?").run(ownerId)
-    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)")
     return ids
   }
 

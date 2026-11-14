@@ -898,10 +898,9 @@ function registerAgentRoutes(
 
   router.delete("/api/agents/:agentId", async (req, res) => {
     const sessionId = agentObserver.sessionIdForAgent(req.params.agentId)
-    if (!sessionId) {
-      res.status(404).json({ error: "agent not found" })
-      return
-    }
+    // Retention may already have evicted this Agent. DELETE is idempotent so a
+    // stale Dashboard card can still be dismissed without surfacing a false error.
+    if (!sessionId) return void res.status(204).end()
     try {
       await contextBudget?.removeSession(sessionId)
       subagentRuntime?.removeOwnerSession(sessionId)
