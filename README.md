@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest"><strong>Download latest release</strong></a>
+  <a href="https://github.com/WealthyV/openchatx-mcp/releases/latest"><strong>Download latest release</strong></a>
 </p>
 
 <p align="center">
@@ -80,7 +80,7 @@ Portable ZIPs are also available.
 
 Latest release:
 
-https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest
+https://github.com/WealthyV/openchatx-mcp/releases/latest
 
 ## Connect OpenChatX to ChatGPT
 
@@ -338,7 +338,7 @@ Use this only if you do not want the Desktop App.
 
 ```bash
 brew install ripgrep
-git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+git clone https://github.com/WealthyV/openchatx-mcp.git
 cd openchatx-mcp
 npm ci
 npm run setup -- --config-only
@@ -348,7 +348,7 @@ npm run setup -- --config-only
 
 ```powershell
 winget install BurntSushi.ripgrep.MSVC
-git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+git clone https://github.com/WealthyV/openchatx-mcp.git
 Set-Location openchatx-mcp
 npm ci
 npm run setup -- --config-only

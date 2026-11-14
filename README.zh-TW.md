@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest"><strong>下載最新版</strong></a>
+  <a href="https://github.com/WealthyV/openchatx-mcp/releases/latest"><strong>下載最新版</strong></a>
 </p>
 
 > [!IMPORTANT]
@@ -75,7 +75,7 @@ Windows on ARM 下載：
 
 最新版：
 
-https://github.com/XiaoPuOuO/openchatx-mcp/releases/latest
+https://github.com/WealthyV/openchatx-mcp/releases/latest
 
 ## 連接到 ChatGPT
 
@@ -333,7 +333,7 @@ Rules 可以和 Cursor `.mdc`、Claude Rules、`AGENTS.md` 匯入 / 匯出。
 
 ```bash
 brew install ripgrep
-git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+git clone https://github.com/WealthyV/openchatx-mcp.git
 cd openchatx-mcp
 npm ci
 npm run setup -- --config-only
@@ -343,7 +343,7 @@ npm run setup -- --config-only
 
 ```powershell
 winget install BurntSushi.ripgrep.MSVC
-git clone https://github.com/XiaoPuOuO/openchatx-mcp.git
+git clone https://github.com/WealthyV/openchatx-mcp.git
 Set-Location openchatx-mcp
 npm ci
 npm run setup -- --config-only
